@@ -8,6 +8,12 @@
 ;;; is inert; no caller receives this binding or the pending entry.
 (define g3c4-trainable-constructor-fault-hook
   (lambda (phase entry) #t))
+;;; Fixture-only mutable dispatch. The shipped binding delegates exactly once
+;;; to I2; the topology negative can withhold that registration before prepare.
+(define g3c4-trainable-tie-register-internal
+  (lambda (parent handle)
+    (i2-module-register-tied-parameter-internal!
+      parent "weight" handle)))
 
 (define (g3c4-trainable-tokenizer-entry tokenizer operation)
   (let ((entry (t1-private-entry tokenizer)))
@@ -236,8 +242,8 @@
                         (vector-ref canonical-entry 0)
                         '("token_embedding" "weight")
                         canonical-prefix-index)))
-                (i2-module-register-tied-parameter-internal!
-                  parent "weight" (vector-ref canonical-handles 10)))
+                (g3c4-trainable-tie-register-internal
+                  parent (vector-ref canonical-handles 10)))
               (let ((schedule
                       (module-construction-parameters-internal
                         (vector-ref construction 1))))

@@ -23,6 +23,10 @@ aggregate. Reset still requires slot 74 and train mode; release can use slot 75
 after eval mode drift. No workspace stage/commit/release API is introduced here.
 
 The source fixture extends the exact C4 topology test with train/eval/return-to-
-train, swapped handles and C2 `[2,4]` position negatives. Its compiled
+train, swapped handles and C2 `[2,4]` position negatives. The source union
+includes the independently accepted slot-74 repair and fixes slot 75's same
+boolean comparison guard; a focused mutation test pins both forms. The prior
+`f61436de` recipe remains sealed and unrun because it predates those repairs.
+An exact-union compiled
 normal/repeat/sanitizer and feature-off gate is pending. This leaf is not C4
 workspace, numerical training, checkpoint or continuation admission.

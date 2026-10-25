@@ -2219,12 +2219,24 @@ scoped-pin status. The [P1 topology leaf](g3/G3_R_C4_P1_TOPOLOGY_STATUS_LEAF.md)
 is a source-only candidate: it appends status-only slot 74 without changing
 slots 0–73 or the feature-off ABI, and has an unrun fixture for the exact C4
 tree, ordered handles/tie, CPU f32 provider, `[4,4]` position shape and
-negative controls. A [private native source candidate](g3/G3_R_C4_NATIVE_SEALED_OWNER_TOPOLOGY_LEAF.md)
-implements the sealed-owner scoped-pin status behind
-`ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE`;
-local Clang normal and ASan/UBSan passed 25 checks each, and feature-off
-compilation omitted its symbol. No pinned compiled gate has run for this leaf.
-The combined authority requires an exact live
+negative controls. The C4 constructor is independently compiled at
+`g3r-c4-trainable-constructor-5503bb2b-attempt3/SHA256SUMS-RUN`
+(SHA-256 `899c2b238127af698475fb6947ad72f8e385dea36b613853a12552fcb835a3d6`).
+The first slot-74 cut was **NONACCEPTING** because its fixture tried to rebind
+a loaded I2 lexical. A private delegate restored the missing-tie negative;
+subsequent diagnostics isolated a boolean-call guard defect and a recipe-only
+missing M3T bridge flag. The corrected exact-source compiled slot-74 receipt
+`g3r-c4-p1-topology-0ed895a6-attempt2/SHA256SUMS-RUN`
+(SHA-256 `34d3341206289c6d9771888f633bdf900c90a8cba48619e96ebb459b21acd03f`)
+is independently accepted for bounded topology status: 60/60 sealed files,
+launcher/Docker zero, normal/repeat 11 byte-identical checks, seeded control
+25 checks, review seal
+`22f9156e53caed11e03f3dc28c3f0ff9b365b9bdee523de45a9fd16a24362dc1`.
+A [private native source candidate](g3/G3_R_C4_NATIVE_SEALED_OWNER_TOPOLOGY_LEAF.md)
+implements sealed-owner scoped-pin status behind
+`ET_G3R_C4_OWNER_TOPOLOGY_PRIVATE`; local Clang normal and ASan/UBSan passed
+25 checks each, and feature-off compilation omitted its symbol. No pinned
+compiled gate has run for this leaf. The combined authority requires an exact live
 owner-to-P1 handle association proof and a swapped-handle negative; the first
 gate can claim topology/owner identity only. Active generation, workspace and
 trainer lease exclusion depend on later C4 ledgers, so full workspace
@@ -2252,7 +2264,11 @@ It addresses the exact release-after-eval topology dependency while slot 74
 remains train-only. Focused source checks pass; its compiled fixture and a
 workspace live-edge implementation remain pending. The append-only slot 75
 also requires an exact successor to the inherited E3/TR3 P1 structural
-checkers; their accepted slot 0–74 pins remain unchanged.
+checkers; their accepted slot 0–74 pins remain unchanged. The reviewed
+`f61436de` compiled recipe remains **UNRUN** because its source predates the
+accepted slot-74 repair and carries the same boolean-call defect in slot 75.
+An isolated source union fixes both status guards and retains the constructor's
+missing-tie negative; it needs a fresh exact-source compiled recipe and review.
 
 The [native live-context exclusion leaf](g3/G3_R_C4_NATIVE_CONTEXT_EXCLUSION_LEAF.md)
 adds a source-private read-only status for the first create prerequisite. It

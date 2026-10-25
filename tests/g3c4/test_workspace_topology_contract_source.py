@@ -97,15 +97,30 @@ class WorkspaceTopologyContractSource(unittest.TestCase):
             "(tr3-fixed-distinct? supplied shell index)",
             "(tr3-fixed-distinct? carriers (vector-ref raw 6) index)",
             "(tr3-fixed-dimension=? (car shape) 4)",
-            "(protected-storage-comparison-active?)",
+            "(protected-storage-comparison-active? 2)",
         ):
             self.assertIn(phrase, leaf)
+        self.assertNotIn("((protected-storage-comparison-active?) 2)", leaf)
+        for function in ("c4-topology-status", "c4-lifetime-topology-status"):
+            guard = leaf.split(f"(define ({function} model supplied)", 1)[1].split(
+                "    (else", 1
+            )[0]
+            exact = "\n    (protected-storage-comparison-active? 2)"
+            malformed = "\n    ((protected-storage-comparison-active?) 2)"
+            self.assertIn(exact, guard)
+            self.assertNotIn(malformed, guard)
+            mutant = guard.replace(exact, malformed, 1)
+            self.assertNotIn(exact, mutant)
+            self.assertIn(malformed, mutant)
         for forbidden in ("module-parameters", "commit-module-observation!",
                           "finalize-modules!", "shell-for-raw", "p1-native-"):
             self.assertNotIn(forbidden, leaf)
 
     def test_fixture_has_exact_negative_categories(self) -> None:
         fixture = source("tests/g3c4/p1_train_topology_status_test.esk")
+        self.assertIn("(set! g3c4-trainable-tie-register-internal", fixture)
+        self.assertIn("(set! g3c4-trainable-tie-register-internal saved-tie-register)", fixture)
+        self.assertNotIn("(set! i2-module-register-tied-parameter-internal!", fixture)
         for label in ("missing tied binding at construction",
                       "wrong tie publishes no live entry", "foreign shell",
                       "swapped handles", "forged head/tie shell",

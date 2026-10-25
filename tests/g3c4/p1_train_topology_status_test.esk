@@ -39,15 +39,15 @@
 ;;; A construction with no tied binding must be rejected before publication.
 ;;; The trusted status itself cannot mutate a finalized P1 binding to forge
 ;;; this case; its exact equality branch is pinned by the source checker.
-(define saved-tie-register i2-module-register-tied-parameter-internal!)
+(define saved-tie-register g3c4-trainable-tie-register-internal)
 (define before-wrong-tie (vector-ref g3c4-model-registry 0))
-(set! i2-module-register-tied-parameter-internal!
-  (lambda (module name handle) #t))
+(set! g3c4-trainable-tie-register-internal
+  (lambda (parent handle) #t))
 (reject-internal "missing tied binding at construction"
   (lambda ()
     (g3c4-model-create-trainable-internal
       c4-config c4-tokenizer c4-initializer)))
-(set! i2-module-register-tied-parameter-internal! saved-tie-register)
+(set! g3c4-trainable-tie-register-internal saved-tie-register)
 (check "wrong tie publishes no live entry"
   (and (not (eq? before-wrong-tie (vector-ref g3c4-model-registry 0)))
        (eq? (vector-ref (car (vector-ref g3c4-model-registry 0)) 2) 'dead)
