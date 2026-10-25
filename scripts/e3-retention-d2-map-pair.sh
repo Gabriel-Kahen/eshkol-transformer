@@ -18,7 +18,7 @@ for mode in d2-fault d2-map-fault d2-control; do
   printf '%s\n' "$status" >"$out/$name.exit"
   sample=0
   if [[ "$mode" == d2-map-fault ]]; then
-    pattern='^E3-RETENTION-D2-MAP before=[0-9]+ after-arm=[0-9]+ caught=[0-9]+ after-map=[0-9]+ after-call=[0-9]+ after-checks=[0-9]+ after-retry=[0-9]+$'
+    pattern='^E3-RETENTION-D2-MAP before=[0-9]+ after-arm=[0-9]+ caught=[0-9]+ before-map=[0-9]+ after-map=[0-9]+ after-call=[0-9]+ after-checks=[0-9]+ after-retry=[0-9]+$'
   else
     pattern="^E3-RETENTION-D2-ARENA mode=$mode before=[0-9]+ after-arm=[0-9]+ after-call=[0-9]+ after-checks=[0-9]+ after-retry=[0-9]+$"
   fi

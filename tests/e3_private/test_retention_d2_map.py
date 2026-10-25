@@ -54,12 +54,15 @@ class D2MapProbeTest(unittest.TestCase):
                        '(e3-test-retention-probe 23)', '(e3-test-retention-probe 24)',
                        '(e3-test-retention-call! model dataset frame destinations cursor modes'):
             self.assertIn(anchor, probe)
+        before = '(vector-set! samples 3 (__arena-used))'
+        mapper = '(e3-note-caught-error! entry 5 caught inspect-args)'
+        after = '(vector-set! samples 4 (__arena-used))'
+        self.assertIn(before + '\n                ' + mapper + '\n                ' + after,
+                      probe)
         self.assertLess(probe.index('(vector-set! samples 2 (__arena-used))'),
-                        probe.index('(e3-note-caught-error!'))
-        self.assertLess(probe.index('(e3-note-caught-error!'),
-                        probe.index('(vector-set! samples 3 (__arena-used))'))
-        self.assertLess(probe.index('(vector-set! samples 3 (__arena-used))'),
-                        probe.index('(vector-set! samples 4 (__arena-used))'))
+                        probe.index(before))
+        self.assertLess(probe.index(after),
+                        probe.index('(vector-set! samples 5 (__arena-used))'))
 
     def test_fresh_control_runs_after_map_failure(self):
         subprocess.run(['bash', '-n', str(PAIR)], check=True)
@@ -89,6 +92,31 @@ printf 'E3-RETENTION-D2-ARENA mode=%s before=1 after-arm=1 after-call=2 after-ch
             self.assertEqual(result.stdout.splitlines(),
                              ['normal-a\td2-fault\t0\t1',
                               'normal-a\td2-map-fault\t23\t0',
+                              'normal-a\td2-control\t0\t1'])
+
+    def test_map_marker_requires_separate_pre_map_sample(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / 'corpus').mkdir()
+            runtime = root / 'fake-runtime'
+            runtime.write_text('''#!/usr/bin/env bash
+if [[ "$2" == d2-map-fault ]]; then
+  printf 'E3-RETENTION-D2-MAP before=1 after-arm=1 caught=2 after-map=3 after-call=3 after-checks=3 after-retry=3\\n'
+else
+  printf 'E3-RETENTION-D2-ARENA mode=%s before=1 after-arm=1 after-call=2 after-checks=2 after-retry=2\\n' "$2"
+fi
+''')
+            runtime.chmod(0o755)
+            time_tool = root / 'fake-time'
+            time_tool.write_text('#!/usr/bin/env bash\nshift 4\nexec "$@"\n')
+            time_tool.chmod(0o755)
+            result = subprocess.run(['bash', str(PAIR), str(root), str(runtime),
+                                     str(root / 'corpus'), 'normal-a', '0', '10',
+                                     str(time_tool)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(result.stdout.splitlines(),
+                             ['normal-a\td2-fault\t0\t1',
+                              'normal-a\td2-map-fault\t0\t0',
                               'normal-a\td2-control\t0\t1'])
 
 
