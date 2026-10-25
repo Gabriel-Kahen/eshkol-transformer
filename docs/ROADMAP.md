@@ -2452,6 +2452,14 @@ draft v3 was never run. This establishes the exact same-image receipt-to-TR3
 seam, not restored parameter-bit parity, generation or persisted fresh-process
 continuation.
 
+The proposed [same-trained-C2 fresh-process bit and P1/G1 comparison](g3/G3_R_TRAINED_FRESH_BIT_G1_COMPARISON_CONTRACT.md)
+uses the accepted budget-one replay pair: its C2 bytes equal the fa9 trained
+checkpoint, while its G3RCV1 policy permits one G1. The accepted same-registry
+replay receipt proves a G1 comparison but exports only a pass marker. A sealed
+producer bit/trace transcript and a reviewed single-registry reader/replay
+source union are required before cross-process parameter and G1 parity can be
+claimed. This contract is proposed; source and compiled comparison are unrun.
+
 The earlier G3-R C2 SAVE continuation on `0581426b` sealed a failed runtime
 receipt at `g3-save-0581426b-cont-attempt1/SHA256SUMS-RUN`: its compiled
 no-SAVE control left output absent and its compiled public LOAD/SAVE producer
