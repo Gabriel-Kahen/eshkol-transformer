@@ -176,7 +176,7 @@ The first runner attempt at `cf6afa4e` remains nonaccepting because an invalid
 f32 object parity assertion stopped before its native fixture. This leaf
 still does not authenticate O2, exclude graph leases or revoke authority.
 
-## Next private O2 association and TR3 lease preflight
+## Private O2 association and TR3 lease preflight
 
 The next feature-local `ET_G3R_O2_GRAPH_PREFLIGHT_PRIVATE` leaf enrolls one
 exact O2 Scheme shell, registry record and native receiver in a private
@@ -197,7 +197,16 @@ The TR3 check uses the source-private fixed P1 capture and the current
 enrolled record overlapping the candidate model, optimizer, module, handle
 or carrier identities. It observes only; it neither unenrolls a trainer nor
 changes the optimizer. The candidate O2 enrollment is not a retirement
-witness and grants no graph revocation authority. This source and its focused
-native fixture are staged for independent review; the composed Eshkol fixture
-and pinned compiled gate remain **NOT RUN**. Their link closure must add the
-genuine O2 and TR3/T2/D2 sources beyond the accepted M3T constructor archive.
+witness and grants no graph revocation authority. Exact source `e778928c` /
+tree `6a76c9fc` passed a pinned one-universe normal/repeat gate with genuine
+same-model/same-O2 TR3 lease overlap: candidate Eshkol 16 checks twice,
+ordinary feature-off twice, native identity 123 checks twice, and ordinary
+O2/M3 object parity against accepted `5504b2a9` source. The accepted v5 receipt
+is `g3r-o2-lease-e778928c-v5-attempt1/SHA256SUMS-RUN` (SHA-256
+`60ba890bb2007622831c04e0096769594dbb285257839dbd4a040b40d4e6dcbf`);
+independent result review is
+`g3r-o2-lease-independent-review-20261025/SHA256SUMS-REVIEW` (SHA-256
+`181c79b7f84dbda800ef89af4f165fb8910e0af4eb105c34ebb59fa2589bc7cf`).
+V1 through v4 remain sealed nonaccepting recipe/closure predecessors. This
+gate establishes read-only identity and live-lease exclusion only; O2 witness,
+graph revocation, restore, replay and sanitizer admission remain **NOT RUN**.

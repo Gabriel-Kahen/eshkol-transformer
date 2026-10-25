@@ -2753,26 +2753,32 @@ M3T/f32 object hashes with unchanged I2 bridge parity. The accepted receipt is
 Independent source/test/result review is sealed at
 `g3r-native-binding-independent-review-20261025/SHA256SUMS-REVIEW`
 (SHA-256 `85fc6cb0f789e25e3ff98890557b04eb624f0eeff03d7882fc47dce3fa64512d`).
-The v1 attempt remains nonaccepting. O2 identity, active leases, graph
-revocation, restore and replay remain unproved.
+The v1 attempt remains nonaccepting. At this native-binding gate, O2 identity,
+active leases, graph revocation, restore and replay remained unproved.
 
-A separate private O2 association/TR3 lease preflight is staged on
-`codex/g3r-o2-lease-preflight-20261025`. Its feature-only native status ABI
+A separate private O2 association/TR3 lease preflight passed a focused compiled
+normal/repeat gate on `codex/g3r-o2-lease-preflight-20261025`, source
+`e778928c` / tree `6a76c9fc`. Its feature-only native status ABI
 compares each of the accepted sealed M3T owner's 14 parameters, P1 shells and
 canonical storage owners with the exact live O2 optimizer entry. A candidate
 sidecar enrolls the exact O2 Scheme shell, registry record and native receiver
 only after that check, the graph identity check and read-only TR3 fixed-P1
 capture/active-lease overlap exclusion. Preflight repeats those admissions
-without mutation. Local Clang 22 native normal/repeat passes 123 checks per
-run, source checker passes, and ordinary and prior G3-R O2/M3T objects retain
-byte parity with the accepted `5504b2a9` base. Independent source/test review
-accepts source `41da9e6b` as bounded. The fixture now also requests a genuine
-TR3 lease for the enrolled candidate model and optimizer, checks live overlap,
-then releases that lease and rechecks admission; this added control and the
-composed Eshkol gate remain uncompiled. The existing M3T constructor archive
-lacks the O2/TR3/T2/D2 link closure needed for that gate. This leaf
-does not produce an O2 witness, revoke graph authority, restore, replay or
-claim sanitizer admission.
+without mutation. The compiled candidate fixture acquires a genuine TR3 lease
+for that same model and optimizer, rejects overlap, releases the lease, then
+rechecks admission. The v5 one-universe M3T/O2/TR3/T2/D2 gate passed candidate
+Eshkol 16 checks twice, ordinary feature-off twice, and native 123 checks
+twice, with empty stderr and byte-identical ordinary O2/M3 objects against
+accepted `5504b2a9` source. Its receipt is
+`g3r-o2-lease-e778928c-v5-attempt1/SHA256SUMS-RUN` (SHA-256
+`60ba890bb2007622831c04e0096769594dbb285257839dbd4a040b40d4e6dcbf`);
+independent result review is
+`g3r-o2-lease-independent-review-20261025/SHA256SUMS-REVIEW` (SHA-256
+`181c79b7f84dbda800ef89af4f165fb8910e0af4eb105c34ebb59fa2589bc7cf`).
+The sealed v1 through v4 attempts remain nonaccepting: duplicate M3T link,
+ordinary caller load order, baseline O2 source basename, and native fixture
+compile flags respectively. This leaf does not produce an O2 witness, revoke
+graph authority, restore, replay or claim sanitizer admission.
 
 The [conditional public manual tensor/facade proposal](g3/G3_G_C2_PUBLIC_MANUAL_PROPOSAL.md)
 now specifies a separate diagnostic-C2 revision-3 tuple: A0's two manual
