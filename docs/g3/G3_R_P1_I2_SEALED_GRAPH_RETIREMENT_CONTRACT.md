@@ -141,7 +141,7 @@ shell arguments. It checks the sealed M3T ledger and native owner/successor,
 the retained I2/P1 sidecars, the current 14 canonical paths and tied alias.
 It mutates no authority and returns only `#t`, not a retirement witness.
 Focused forged, stale and changed-graph negatives run beside ordinary M3T
-feature-off parity. Its source checker passes; independent review and a pinned
+feature-off parity. Its source checker and independent source review pass; a pinned
 compiled gate remain pending. Native owner parameter lookup does not prove
 each P1 handle is still bound to that same native parameter. O2 identity,
 consumer/lease exclusion, revocation and teardown remain separate gates.

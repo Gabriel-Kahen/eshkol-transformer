@@ -2707,10 +2707,10 @@ candidate retirement, C2 restore, SAVE, replay, generation, or composed
 sanitizer claim from this gate.
 
 A separate private read-only graph identity leaf is staged on
-`codex/g3r-graph-preflight-leaf-20261025`. It authenticates the exact sealed
+`codex/g3r-graph-preflight-m3t-admitted-20261025`. It authenticates the exact sealed
 M3T ledger and model, I2/P1 sidecars, current fixed 14 paths/tied alias,
-and native owner/successor liveness. Its source checker passes; independent
-review and a pinned compiled candidate/feature-off gate are pending. This
+and native owner/successor liveness. Its source checker and independent
+source review pass; a pinned compiled candidate/feature-off gate is pending. This
 does not check native parameter-to-handle bindings, O2 or lease conflicts,
 or produce a revocation witness. Graph retirement, restore and replay remain
 unimplemented.
