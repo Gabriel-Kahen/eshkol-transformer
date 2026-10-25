@@ -734,6 +734,18 @@ and C2 operational passed on `a2ce9526`. Remaining corrections, fresh exact-head
 CI, CPU-v1 runtime admission and main merge remain held. The immutable result
 receipt is under `integration-a2ce9526-20261024/ADDENDUM-ci-result.md`.
 
+The next integration-only source correction repins the three remaining
+`a2ce9526` failure causes: the unconditional M3 resource include in its
+ordered native closure (and 28 dependent G3 source-closure lists), the private
+CPU4 E3 metrics consumer in the exact inventory, and seven D2 resource
+dependencies across six ordered object depfiles. The D2 mutation gate now
+deletes the required header from both checkpoint and E3-D2 depfiles. GCC and
+Clang preprocessing agree with the M3/D2 orders; focused M3, E3 inventory,
+negative and CI topology checks pass. Twenty-six affected G3 source checkers
+pass; the G3-R RNG import checker still rejects `calloc(` in unchanged
+`g3t_transport.c`, an independent source gate. No compiled/runtime or hosted
+result on this correction is claimed; PR #214 remains draft and main unmerged.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,

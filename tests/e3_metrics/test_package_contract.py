@@ -16,7 +16,8 @@ HEADER = "include/eshkol_transformer/e3_evaluation_metrics_abi.h"
 OBJECT = "e3_evaluation_metrics_provider.o"
 ACCESSOR = "et_e3_metrics_kernel_provider_v1"
 PROVIDER_FILES = (SOURCE, HEADER)
-CONSUMER_FILES = ("src/eshkol_transformer/e3_frame.c",)
+CONSUMER_FILES = ("src/eshkol_transformer/e3_frame.c",
+                  "src/eshkol_transformer/e3_cpu4_frame.c")
 SOURCE_PATTERN = re.compile(
     r"ET_E3_EVALUATION_METRICS_ABI|et_e3_metrics_kernel_provider_v1")
 

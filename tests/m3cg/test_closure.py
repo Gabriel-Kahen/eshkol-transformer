@@ -5,6 +5,14 @@ import unittest
 from tests.m3cg.check_closure import ROOT, normalized
 
 class Closure(unittest.TestCase):
+    def test_resource_include_tracks_ordered_native_closure(self):
+        source = (ROOT / 'src/eshkol_transformer/m3_model.c').read_text()
+        self.assertIn('#include "../../native/cpuv1_resource_m3.inc"', source)
+        native = (ROOT / 'native/m3_package_native_source_closure.txt').read_text().splitlines()
+        anchor = native.index('include/eshkol_transformer/a2_attention_abi.h')
+        self.assertEqual(native[anchor + 1], 'native/cpuv1_resource_m3.inc')
+        self.assertEqual(native[anchor + 2], 'native/n2_primitives_provider.c')
+
     def test_repository_and_pinned_compiler_are_only_roots(self):
         with tempfile.TemporaryDirectory() as temp:
             compiler = Path(temp) / 'compiler'

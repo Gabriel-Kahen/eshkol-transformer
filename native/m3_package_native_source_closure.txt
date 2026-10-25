@@ -38,6 +38,7 @@ src/eshkol_transformer/m3t_transport.c
 include/eshkol_transformer/n3k_primitives_abi.h
 include/eshkol_transformer/n2_primitives_abi.h
 include/eshkol_transformer/a2_attention_abi.h
+native/cpuv1_resource_m3.inc
 native/n2_primitives_provider.c
 native/n3k_primitives_provider.c
 native/a2_attention_provider.c
