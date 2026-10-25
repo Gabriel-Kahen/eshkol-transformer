@@ -2187,6 +2187,14 @@ separate gate. The first one-use attempt is retained as a precompiler
 rootless-mount permission failure, not a runtime result.
 This leaf is not a trainable C4 model or a checkpoint/generation admission.
 
+The next isolated [private C4 residual VJP candidate]
+(g3/G3_R_C4_RESIDUAL_VJP_LEAF.md) covers the accepted four-token
+`g3c4.residual.forward` add with two `f32[1,4,4]` gradients. Its private
+source, central-difference checks against the genuine C4 provider, negative
+ownership/shape controls, and feature-off proof are under focused local
+verification. It is not integrated with trainable M3T, and a pinned compiled
+gate plus independent review remain pending.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
