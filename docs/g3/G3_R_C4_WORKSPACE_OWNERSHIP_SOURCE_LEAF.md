@@ -26,9 +26,7 @@ same live identity with slot 75, so a uniformly finalized eval tree remains
 releasable. Native cleanup checks held parameter/tensor leases before clearing
 its edge and freeing the record; only precomputed Eshkol edge writes follow.
 The released shell is stale and a repeated release rejects `invalid-state`.
-This narrows the source candidate against the accepted contract's idempotent
-dead-shell release requirement; that contract difference must be resolved
-before compiled admission. Live lookup compares `eq?` identities in the
+The ownership contract now specifies this bounded behavior. Live lookup compares `eq?` identities in the
 trusted registry and never invokes a caller-supplied procedure or reveals a
 shared seal. Released rows leave the live registry and are GC-reclaimable;
 the native record is freed on each release. A native nonce distinguishes

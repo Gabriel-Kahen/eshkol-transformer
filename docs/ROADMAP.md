@@ -2295,12 +2295,12 @@ pinned workspace package gate remain pending.
 
 Independent source review found an authority leak in the first workspace
 candidate: its shell validator invoked an arbitrary candidate procedure with
-a shared private seal. A focused successor removes that invocation and accepts
-only `eq?` shell identity in the live workspace registry. Released shells now
-reject as stale with `invalid-state`, preserving bounded retained rows but
-departing from the accepted ownership contract's idempotent release. The
-contract difference and exploit regression require independent review before
-any compiled workspace recipe; the first candidate is nonaccepting.
+a shared private seal. The reviewed successor removes that invocation and
+accepts only `eq?` shell identity in the live workspace registry. The contract
+now specifies typed stale-release rejection, preserving bounded retained rows;
+the first candidate is nonaccepting. The exploit regression is present in the
+source fixture but remains unrun as compiled Eshkol. A pinned package gate and
+its predecessor compiled admissions remain open.
 
 The [private C4 position VJP leaf](g3/G3_R_C4_POSITION_VJP_LEAF.md) supplies
 one fixed `[1,4]` position-ID and `[1,4,4]` upstream to `[4,4]` gradient

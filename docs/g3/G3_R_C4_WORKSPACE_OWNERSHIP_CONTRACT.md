@@ -38,7 +38,7 @@ identities; its workspace record is distinct from a G3 generation context.
 | P1/I2 | slot-74 train topology and fourteen exact retained carriers | no observation commit or replacement binding | original handles unchanged |
 | native C4 owner | sealed, ready, idle, exact scalar association | exclusive active edge to this workspace | active edge empty |
 | generation contexts | no live context bound to this owner, including idle | new context creation rejects | no old cache becomes resumable |
-| workspace | fresh shell and native allocation | idle phase only in this gate | dead tombstone; repeated same-owner release succeeds |
+| workspace | fresh shell and native allocation | idle phase only in this gate | removed from the live registry; repeated release rejects as stale |
 
 ## Transaction and exclusion
 
@@ -60,10 +60,13 @@ edges and clears only workspace-owned scratch, leaving the exclusive edge and
 model bytes intact. No forward frame, graph, gradient or optimizer state is
 created yet, so reset must not pretend to clear those future states. Release
 requires idle state and no genuine held lease; it preflights all fallible
-native cleanup before clearing both edges and tombstoning the workspace.
-Foreign, forged and stale shells reject. A dead same-owner shell releases
-idempotently. No route may clear an unrelated owner's edge to recover from
-an error.
+native cleanup before clearing both edges and removing the workspace from the
+live registry. Foreign, forged and stale shells reject with a typed
+`invalid-state` error, including repeated release of a formerly live shell.
+The live registry compares exact shell identity before reading its row; it
+must never invoke a caller-supplied procedure or reveal a shared seal. Dead
+rows are not retained so repeated create/release has bounded retained bytes.
+No route may clear an unrelated owner's edge to recover from an error.
 
 The current association status requires model entry slot 10 to be empty, so
 it applies to create preflight only. Reset and release need a distinct
@@ -99,7 +102,8 @@ C4 model. It checks exact fourteen same-owner bindings and tied alias; rejects
 seeded/C2/foreign/stale models, swapped or replaced handles, wrong `[2,4]`
 position shape, changed live carrier, eval mode, active construction/call,
 an idle live same-owner generator with retained cache, second workspace,
-held native/P1 leases and each allocation/edge cut. Test eval-mode drift
+held native/P1 leases, forged closure capture, repeated stale release and
+each allocation/edge cut. Test eval-mode drift
 after create: reset rejects while release still clears both exact edges. Test
 independent model coexistence, unchanged parameter and
 gradient bits, and no partial publication. Feature-off symbols remain absent.
