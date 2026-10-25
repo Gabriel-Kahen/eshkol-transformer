@@ -781,6 +781,16 @@ shared header plus I2/K1 fragments, and the three G3G lists also add A2 and
 generation fragments. First-seen package order and sorted TR3 order are
 preserved; targeted package compilation remains pending.
 
+The exact-`842a820e` and exact-`19096272` native-numerics failures share one
+N3K test-roster cause: CPU4 expanded the provider from 31 to 55 operation/shape
+pairs, but negative-atomicity and owned-carrier tests retained `cases==31u`.
+Both now assert 55 and still execute every advertised row. Independent source
+review accepted the two-value correction; direct current-source Clang 21.1.8
+normal and ASan/UBSan binaries on Ubuntu 22.04 pass 15,067 negative and 47,546
+carrier checks with identical output. This focused native link does not replace
+the canonical N3K package gate or exact-head hosted CI, which remain unrun on
+the corrected union.
+
 Active finish milestone: **first complete validated CPU v1**. Current acceptance
 and ownership: [CPU v1 completion index](WAVE3_COMPLETION.md), updated 2026-10-24.
 PR #214 exact-head hosted checks pass. Current-source CPU4 two-update training,

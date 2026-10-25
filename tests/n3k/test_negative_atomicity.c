@@ -88,7 +88,7 @@ static void all_rows(et_kernel_runtime *rt) {
       setup(f,&caps[ci],oi,ri);f->call.input_count=SIZE_MAX;
       unchanged_reject(rt,f,ET_KERNEL_ERROR_INVALID_ARGUMENT,UINT32_MAX);
     }
-  CHECK(cases==31u);
+  CHECK(cases==55u);
   free(f);
 }
 static unsigned short control_word(void) {unsigned short x;__asm__ volatile("fnstcw %0":"=m"(x));return x;}

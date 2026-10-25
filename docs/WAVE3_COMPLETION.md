@@ -73,8 +73,14 @@ independent review/doc work while heavy gates run. Silence is never success.
   numerics at the unchanged N3K `cases==31u` assertion. The two aggregate
   failures are derivative. The E3-D2 pin was subsequently corrected at
   `a608141f`; the resource inventory and 20 exact package closure manifests
-  have independently reviewed source corrections. No corrected-head compiled
-  or hosted acceptance exists yet.
+  have independently reviewed source corrections. No corrected-head canonical
+  package or hosted acceptance exists yet.
+- The N3K assertion failure in that run is a separate stale test-roster count:
+  the provider advertises 55 operation/shape pairs while two downstream tests
+  still expected 31. The independently reviewed two-value correction passes
+  direct current-source Clang 21.1.8 normal and sanitizer N3K binaries (15,067
+  negative and 47,546 carrier checks). Canonical package and hosted gates on
+  the corrected union remain unrun.
 - A distinct fixed-profile fresh-process training-resume result is independently
   accepted on immutable `a2626f12`, tree `fd9ab06b`: separate 250-step producer
   and A125→B250 consumer, complete 25,504-byte A250/B250 checkpoint equality,

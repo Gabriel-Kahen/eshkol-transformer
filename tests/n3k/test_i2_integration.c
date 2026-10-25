@@ -80,7 +80,7 @@ static void carrier_rows(et_kernel_runtime *rt) {
       for(size_t i=0;i<no;++i) destroy(&outputs[i]);
       for(size_t i=0;i<ni;++i) destroy(&inputs[i]);++cases;
     }
-  CHECK(cases==31u);free(f);
+  CHECK(cases==55u);free(f);
 }
 static et_f32_tensor *filled(const uint64_t shape[2],float value) {
   et_f32_tensor *t=NULL;et_f32_tensor_error e;uint32_t bits[1024];
