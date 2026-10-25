@@ -57,13 +57,20 @@ def check():
         [sys.executable, str(ROOT / "scripts/check-e3-p1-contract.py")],
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     text = SOURCE.read_text()
-    # C4 train prepare and topology are append-only to the accepted P1 source.
+    # C4 train prepare and both topology statuses are append-only to the
+    # accepted P1 source. Strip their exact spans for the inherited TR3 pin.
     # Remove their exact spans before checking the inherited TR3 pin.
     inherited = text
     for name in ("construction-prepare-train!",
                  "construction-prepare-train-guarded!",
                  "c4-topology-shape?", "c4-topology-handle-status",
-                 "c4-topology-handles-status", "c4-topology-status"):
+                 "c4-topology-handles-status", "c4-topology-status",
+                 "c4-lifetime-capture-module!",
+                 "c4-lifetime-capture-modules!",
+                 "c4-lifetime-recheck-module",
+                 "c4-lifetime-recheck-modules",
+                 "c4-lifetime-recheck-handles",
+                 "c4-lifetime-topology-status"):
         span = definition(inherited, name) + "\n\n"
         require(inherited.count(span) == 1, f"C4 train span is not unique: {name}")
         inherited = inherited.replace(span, "", 1)
@@ -74,8 +81,14 @@ def check():
         "    (construction-prepare-train-guarded! identity))\n",
         "  ;; Append-only source-private read-only C4 topology status, slot 74.\n"
         "  c4-topology-status\n",
+        "  ;; Append-only source-private C4 lifetime identity, slot 75. This also\n"
+        "  ;; authenticates a uniform eval tree for workspace release.\n"
+        "  c4-lifetime-topology-status\n",
         ";;; C4 read-only topology authority. Slot 74 owns only a closed status; its\n"
         ";;; scratch vectors never escape and no module observation/finalizer runs.\n",
+        ";;; Workspace release must still authenticate the same tree after module-eval!.\n"
+        ";;; Slot 74 remains the train-only compute admission; this status accepts one\n"
+        ";;; uniform train or eval tree and never changes module or handle ownership.\n",
     ):
         require(inherited.count(span) == 1, "C4 train append is not exact")
         inherited = inherited.replace(span, "", 1)

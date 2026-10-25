@@ -2250,7 +2250,9 @@ A [source-only P1 lifetime-topology status candidate](g3/G3_R_C4_P1_LIFETIME_TOP
 appends private trusted slot 75 for a uniform finalized train or eval C4 tree.
 It addresses the exact release-after-eval topology dependency while slot 74
 remains train-only. Focused source checks pass; its compiled fixture and a
-workspace live-edge implementation remain pending.
+workspace live-edge implementation remain pending. The append-only slot 75
+also requires an exact successor to the inherited E3/TR3 P1 structural
+checkers; their accepted slot 0–74 pins remain unchanged.
 
 The [native live-context exclusion leaf](g3/G3_R_C4_NATIVE_CONTEXT_EXCLUSION_LEAF.md)
 adds a source-private read-only status for the first create prerequisite. It
