@@ -2242,6 +2242,15 @@ The sealed independent result review is
 The `(4,256)` numerical check samples 32 distributed `dW` coordinates;
 this leaf is not a trainable C4 model or checkpoint/generation admission.
 
+The next [private C4 LayerNorm VJP leaf]
+(g3/G3_R_C4_LAYERNORM_VJP_LEAF.md) is source-staged for the genuine
+`g3c4.layer-norm.forward` `[1,4,4]` row. It computes staged `dX[1,4,4]`,
+`dGamma[4]`, and `dBeta[4]` from exact borrowed CPU f32 views and positive
+finite epsilon. Local Clang 22 normal/repeat/native ASan+UBSan, all 24
+central differences through the genuine provider, and negative/feature-off
+controls pass; independent source/test review and the pinned compiled gate
+remain **NOT RUN**. This is not trainable C4 admission.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
