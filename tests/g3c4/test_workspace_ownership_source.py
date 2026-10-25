@@ -1,11 +1,22 @@
 """Source boundary for the private C4 workspace candidate."""
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = (ROOT / "native/g3r_c4_workspace_ownership_extension.esk").read_text()
 NATIVE = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
 FIXTURE = (ROOT / "tests/g3c4/workspace_ownership_source_fixture.esk").read_text()
+
+
+def shell_lookup_is_identity_only(source: str) -> bool:
+    body = source.split("(define (g3r-c4-workspace-row workspace operation)", 1)[1]
+    body = body.split("(define (g3r-c4-workspace-live-registry-row?", 1)[0]
+    return (
+        "(eq? (vector-ref (car remaining) 1) workspace)" in body
+        and "(vector-ref g3r-c4-workspace-registry 0)" in body
+        and re.search(r"\(workspace(?:\s|\))", body) is None
+    )
 
 
 class WorkspaceOwnershipSource(unittest.TestCase):
@@ -40,9 +51,21 @@ class WorkspaceOwnershipSource(unittest.TestCase):
             "eval lifetime original-handle rejection",
             "eval lifetime original-carrier rejection",
             "second workspace", "forged closure shell",
-            "dead shell idempotent", "independent model coexistence",
+            "malicious procedure rejected without invocation",
+            "malicious procedure saw no workspace authority",
+            "forged vector with matching tag",
+            "released shell is stale", "independent model coexistence",
         ):
             self.assertIn(phrase, FIXTURE)
+
+    def test_caller_procedure_exploit_cannot_receive_private_authority(self):
+        self.assertTrue(shell_lookup_is_identity_only(SOURCE))
+        mutation = SOURCE.replace(
+            "(eq? (vector-ref (car remaining) 1) workspace)",
+            "(eq? (vector-ref (car remaining) 1) (workspace 'leaked))",
+            1,
+        )
+        self.assertFalse(shell_lookup_is_identity_only(mutation))
 
 
 if __name__ == "__main__":

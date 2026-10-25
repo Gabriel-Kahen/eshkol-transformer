@@ -24,7 +24,6 @@
         :real et_g3c4_private_sealed_owner_parameter_lease_status_v1)
 
 (define g3r-c4-workspace-registry (vector '()))
-(define g3r-c4-workspace-seal (vector 'g3r-c4-workspace-seal))
 ;;; Source-private fixture seam; shipped behavior is inert.
 (define g3r-c4-workspace-fault-hook (lambda (phase) #t))
 
@@ -118,18 +117,19 @@
             (vector-set! carriers index carrier)
             (loop (+ index 1)))))))
 
-;;; The private seal is never returned by this operation. A dead shell owns a
-;;; GC-reclaimable tombstone; the live registry retains only live rows.
+;;; Never invoke a caller-supplied shell. Only eq? membership in the rooted
+;;; live registry authenticates a shell; released shells are stale and reject.
 (define (g3r-c4-workspace-row workspace operation)
-  (let ((row (if (procedure? workspace)
-                 (guard (caught (#t #f))
-                   (workspace g3r-c4-workspace-seal)) #f)))
-    (if (not (and (vector? row) (= (vector-length row) 10)
-                  (eq? (vector-ref row 0) g3r-c4-workspace-seal)
-                  (eq? (vector-ref row 1) workspace)))
-        (g3c4-fail 'invalid-argument operation
-                    "workspace shell is foreign or forged"))
-    row))
+  (let find ((remaining (vector-ref g3r-c4-workspace-registry 0)))
+    (cond
+      ((null? remaining)
+       (g3c4-fail 'invalid-state operation
+                   "workspace shell is foreign, forged or stale"))
+      ((not (and (pair? remaining) (vector? (car remaining))
+                 (= (vector-length (car remaining)) 10)))
+       (g3c4-fail 'invalid-state operation "workspace registry is malformed"))
+      ((eq? (vector-ref (car remaining) 1) workspace) (car remaining))
+      (else (find (cdr remaining))))))
 
 (define (g3r-c4-workspace-live-registry-row? row)
   (let find ((remaining (vector-ref g3r-c4-workspace-registry 0)))
@@ -220,12 +220,10 @@
                 (g3c4-native-fail operation))
             (if (not (g3r-c4-workspace-fault-hook 'after-stage))
                 (g3c4-fail 'internal operation "workspace stage fault"))
-            (let* ((row (vector g3r-c4-workspace-seal #f model entry owner
+            (let* ((shell (vector 'g3r-c4-workspace-v1))
+                   (row (vector 'g3r-c4-workspace-row-v1 shell model entry owner
                                 native nonce handles carriers 'staged))
-                   (shell (lambda (secret)
-                            (if (eq? secret g3r-c4-workspace-seal) row #f)))
                    (next (cons row (vector-ref g3r-c4-workspace-registry 0))))
-              (vector-set! row 1 shell)
               (if (not (g3r-c4-workspace-fault-hook 'after-shell))
                   (g3c4-fail 'internal operation "workspace shell fault"))
               (if (not (g3r-c4-workspace-fault-hook 'before-commit))
@@ -276,24 +274,23 @@
   (let ((operation 'g3r-c4-workspace-release-internal!))
     (m3-call operation
       (let ((row (g3r-c4-workspace-row workspace operation)))
-        (if (eq? (vector-ref row 9) 'dead) #t
-            (let* ((entry (g3r-c4-workspace-auth-live row #f operation))
-                   (next (g3r-c4-workspace-without row)))
-              (if (not (g3r-c4-workspace-live-registry-row? row))
-                  (g3c4-fail 'invalid-state operation
-                              "workspace registry changed"))
-              (g3r-c4-workspace-auth-live row #f operation)
-              ;; Native preflight can fail; after success only edge clears and
-              ;; the already prepared registry-list publication remain.
-              (g3c4-native-check
-                (g3r-c4-workspace-native-release
-                  (vector-ref row 4) (vector-ref row 5) (vector-ref row 6))
-                operation)
-              (vector-set! entry 10 #f)
-              (vector-set! row 9 'dead)
-              (vector-set! row 4 #f)
-              (vector-set! row 5 #f)
-              (vector-set! row 7 #f)
-              (vector-set! row 8 #f)
-              (vector-set! g3r-c4-workspace-registry 0 next)
-              #t))))))
+        (let* ((entry (g3r-c4-workspace-auth-live row #f operation))
+               (next (g3r-c4-workspace-without row)))
+          (if (not (g3r-c4-workspace-live-registry-row? row))
+              (g3c4-fail 'invalid-state operation
+                          "workspace registry changed"))
+          (g3r-c4-workspace-auth-live row #f operation)
+          ;; Native preflight can fail; after success only edge clears and
+          ;; the already prepared registry-list publication remain.
+          (g3c4-native-check
+            (g3r-c4-workspace-native-release
+              (vector-ref row 4) (vector-ref row 5) (vector-ref row 6))
+            operation)
+          (vector-set! entry 10 #f)
+          (vector-set! row 9 'dead)
+          (vector-set! row 4 #f)
+          (vector-set! row 5 #f)
+          (vector-set! row 7 #f)
+          (vector-set! row 8 #f)
+          (vector-set! g3r-c4-workspace-registry 0 next)
+          #t)))))

@@ -45,9 +45,9 @@
 (define before-workspaces (vector-ref g3r-c4-workspace-registry 0))
 (define saved-hook g3r-c4-workspace-fault-hook)
 
-(reject "foreign shell" 'invalid-argument
+(reject "foreign shell" 'invalid-state
         (lambda () (g3r-c4-workspace-reset-internal! (vector 'foreign))))
-(reject "forged closure shell" 'invalid-argument
+(reject "forged closure shell" 'invalid-state
         (lambda ()
           (g3r-c4-workspace-reset-internal!
             (lambda (secret) (vector 'forged secret)))))
@@ -126,6 +126,23 @@
   (and (eq? (vector-ref entry-a 10) workspace-a)
        (= (length (vector-ref g3r-c4-workspace-registry 0)) 1)
        (eq? (vector-ref entry-b 10) #f)))
+(define malicious-called #f)
+(define captured-authority #f)
+(define malicious-shell
+  (lambda (candidate)
+    (set! malicious-called #t)
+    (set! captured-authority candidate)
+    workspace-a))
+(reject "malicious procedure rejected without invocation" 'invalid-state
+        (lambda () (g3r-c4-workspace-release-internal! malicious-shell)))
+(check "malicious procedure saw no workspace authority"
+  (and (not malicious-called) (not captured-authority)
+       (eq? (vector-ref entry-a 10) workspace-a)
+       (eq? (g3r-c4-workspace-reset-internal! workspace-a) workspace-a)))
+(reject "forged vector with matching tag" 'invalid-state
+        (lambda ()
+          (g3r-c4-workspace-release-internal!
+            (vector 'g3r-c4-workspace-v1))))
 (reject "second workspace" 'invalid-state
         (lambda () (g3r-c4-workspace-create-internal model-a)))
 (check "reset retains edge"
@@ -163,7 +180,8 @@
         (lambda () (g3r-c4-workspace-release-internal! workspace-a)))
 (vector-set! carrier-a0 2 original-parameter)
 (check "eval release" (g3r-c4-workspace-release-internal! workspace-a))
-(check "dead shell idempotent" (g3r-c4-workspace-release-internal! workspace-a))
+(reject "released shell is stale" 'invalid-state
+        (lambda () (g3r-c4-workspace-release-internal! workspace-a)))
 (check "released C4 edge" (not (vector-ref entry-a 10)))
 (reject "stale reset" 'invalid-state
         (lambda () (g3r-c4-workspace-reset-internal! workspace-a)))

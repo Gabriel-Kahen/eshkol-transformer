@@ -5,8 +5,8 @@ P1 slot 75. It implements the three private operations in the
 [workspace contract](G3_R_C4_WORKSPACE_OWNERSHIP_CONTRACT.md):
 `g3r-c4-workspace-create-internal(model)`,
 `g3r-c4-workspace-reset-internal!(workspace)` and
-`g3r-c4-workspace-release-internal!(workspace)`. A caller receives a closure
-shell, never the native record, parameter array or carrier. The sole C4 model
+`g3r-c4-workspace-release-internal!(workspace)`. A caller receives a fresh
+vector shell with no native record, parameter array or carrier. The sole C4 model
 registry remains authoritative; a separate list roots only live workspaces.
 
 Create checks the exact trainable entry/metadata, slot 74 association,
@@ -24,9 +24,13 @@ slot 74 train topology, all original handle/carrier identities and native
 per-index bindings. It has no scratch or graph to clear. Release rechecks the
 same live identity with slot 75, so a uniformly finalized eval tree remains
 releasable. Native cleanup checks held parameter/tensor leases before clearing
-its edge and freeing the record; only precomputed Eshkol edge/tombstone writes
-follow. The dead closure shell may be released again. Dead rows leave the
-global live list, so a discarded shell and its tombstone are GC-reclaimable;
+its edge and freeing the record; only precomputed Eshkol edge writes follow.
+The released shell is stale and a repeated release rejects `invalid-state`.
+This narrows the source candidate against the accepted contract's idempotent
+dead-shell release requirement; that contract difference must be resolved
+before compiled admission. Live lookup compares `eq?` identities in the
+trusted registry and never invokes a caller-supplied procedure or reveals a
+shared seal. Released rows leave the live registry and are GC-reclaimable;
 the native record is freed on each release. A native nonce distinguishes
 reused allocation addresses.
 
@@ -38,7 +42,8 @@ rejection, context-entry exclusion, and 32 create/release cycles with measured
 test-only native workspace retained bytes returning to zero each time. The
 private Eshkol fixture contains genuine C4
 constructor, same-owner/foreign/C2, fault, binding-swap, changed-carrier,
-eval-mode and idempotence controls, but it is **UNRUN** as a compiled package.
+eval-mode, forged-shell and stale-release controls, but it is **UNRUN** as a
+compiled package.
 The Python source assertions and balanced-form check are source checks only.
 
 The native fixture uses sealed seeded owners to exercise the native edge; it
