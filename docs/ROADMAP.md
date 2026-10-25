@@ -2257,6 +2257,16 @@ existing second-frame and terminal publication tail. Focused source checks
 pass. Aggregate compilation, issuer integration and fresh-process continuation
 remain **NOT RUN** for this bridge.
 
+The separate private B250 P3 producer source calls the accepted first G2
+frame and T1 decoder on the same registered generator, commits its non-EOS
+prefix, and aborts the pending output in the protected call region. It then
+copies the native idle C4 capture record and fourteen model planes, asks the
+fixed P3 encoder to bind them to the exact B250 C2 SHA/T1 fingerprint, and
+persists the 400-byte wire and 4,768-byte values with exclusive new writes.
+A focused native control tests the first-commit/abort/idle-capture transition;
+source syntax checks pass. The control has not run, and no trained B250 wire,
+compiled producer, FILE pair, or fresh-process continuation is accepted yet.
+
 The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
 adds a source-only native/Eshkol transition from an authentic idle manual P1
 commit to one generated G1. Its host synthetic state witness and causal source
