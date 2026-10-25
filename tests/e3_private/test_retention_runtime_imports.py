@@ -37,7 +37,11 @@ class RetentionRuntimeImportsTests(unittest.TestCase):
 
     def test_both_aot_modes_keep_same_executable_and_case_matrix(self) -> None:
         gate = GATE.read_text()
-        self.assertEqual(gate.count('"${PROJECT_ROOT}/tests/e3_private/retention_runtime.esk"'), 2)
+        self.assertEqual(gate.count('"${PROJECT_ROOT}/tests/e3_private/retention_runtime.esk"'), 1)
+        self.assertEqual(gate.count('"${runtime_source}"'), 2)
+        self.assertIn('runtime_source="${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_runtime.esk"', gate)
+        self.assertLess(gate.index('if [[ "$diagnostic" == 1 ]]; then'),
+                        gate.index('for horizon in 1024 8192; do'))
         self.assertIn("--strict-types --no-stdlib -O 2", gate)
         self.assertIn("for horizon in 1024 8192; do", gate)
         self.assertIn("for gradient in absent present; do", gate)

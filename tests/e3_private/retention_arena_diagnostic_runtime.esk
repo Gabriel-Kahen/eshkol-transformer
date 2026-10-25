@@ -1,0 +1,58 @@
+;;; Test-only localization of the sealed stage-5 read-failure arena delta.
+(extern void e3-retention-test-run ptr ptr ptr :real et_e3_retention_run_v1)
+
+(define (check label condition)
+  (if condition #t
+      (begin (display "E3-RETENTION-DIAGNOSTIC-FAIL: ")
+             (display label) (newline) (exit 1))))
+
+(define (argument-count values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define args (command-line))
+(check 'arguments (= (argument-count args) 3))
+(define path (car (cdr args)))
+(define mode (car (cdr (cdr args))))
+(check 'mode (or (string=? mode "fault") (string=? mode "control")))
+(define fault? (string=? mode "fault"))
+(define input (vector path))
+(define output (vector #f))
+(define prepare (vector (vector 'retention 'prepare 1024 #f)))
+(define diagnose (vector (vector 'retention 'diagnose 1024 #f fault?)))
+(define report (vector (vector 'retention 'report 1024 #f)))
+(define teardown (vector (vector 'retention 'teardown 1024 #f)))
+
+(e3-retention-test-run prepare input output)
+(check 'prepared (eq? (vector-ref output 0) #t))
+(e3-retention-test-run diagnose input output)
+(define samples (vector-ref output 0))
+(check 'samples
+  (and (vector? samples) (= (vector-length samples) 8)
+       (eq? (vector-ref samples 0) 'e3-retention-arena-diagnostic-v1)
+       (eq? (vector-ref samples 1) fault?)
+       (let check-values ((index 2))
+         (if (= index 8) #t
+             (and (>= (vector-ref samples index) 0)
+                  (check-values (+ index 1)))))))
+(e3-retention-test-run report input output)
+(define result (vector-ref output 0))
+(check 'report (and (vector? result) (= (vector-length result) 11)
+                    (eq? (vector-ref result 0) 'e3-retention-result-v1)
+                    (= (vector-ref result 1) 1024)
+                    (eq? (vector-ref result 2) #f)))
+(e3-retention-test-run teardown input output)
+(define released (vector-ref output 0))
+(check 'teardown (and (vector? released) (= (vector-length released) 3)
+                      (eq? (vector-ref released 0) 'e3-retention-teardown-v1)))
+
+(display "E3-RETENTION-ARENA-DIAGNOSTIC mode=")
+(display mode)
+(display " prepared=") (display (vector-ref samples 2))
+(display " before=") (display (vector-ref samples 3))
+(display " after-arm=") (display (vector-ref samples 4))
+(display " after-call=") (display (vector-ref samples 5))
+(display " after-checks=") (display (vector-ref samples 6))
+(display " after-retry=") (display (vector-ref samples 7))
+(newline)

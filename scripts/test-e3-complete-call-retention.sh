@@ -2,9 +2,23 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in ar cmp diff env grep nm python3 realpath strings timeout wc; do require_command "${command}"; done
+for command in ar cmp diff env git grep nm python3 realpath strings timeout wc; do require_command "${command}"; done
 [[ -x /usr/bin/time ]] || die "GNU time is required for E3 retention measurements"
-[[ $# -le 1 ]] || die "usage: $0 [FRESH_OUTPUT_DIRECTORY]"
+[[ $# -le 4 && ( $# -lt 2 || "$2" == diagnostic ) ]] ||
+  die "usage: $0 [FRESH_OUTPUT_DIRECTORY] [diagnostic EXPECTED_HEAD EXPECTED_TREE]"
+diagnostic=0
+if [[ $# -ge 2 ]]; then
+  [[ $# == 4 && "$3" =~ ^[0-9a-f]{40}$ && "$4" =~ ^[0-9a-f]{40}$ ]] ||
+    die "diagnostic mode requires exact HEAD and tree pins"
+  [[ "$(git -C "$PROJECT_ROOT" rev-parse HEAD)" == "$3" &&
+     "$(git -C "$PROJECT_ROOT" rev-parse HEAD^{tree})" == "$4" &&
+     -z "$(git -C "$PROJECT_ROOT" status --porcelain)" ]] ||
+    die "diagnostic guest checkout differs from host-pinned clean HEAD/tree"
+  diagnostic=1
+fi
+runtime_source="${PROJECT_ROOT}/tests/e3_private/retention_runtime.esk"
+[[ "$diagnostic" == 0 ]] || \
+  runtime_source="${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_runtime.esk"
 out="$(realpath -m -- "${1:-$(project_build_dir)/e3-complete-call-retention}")"
 [[ ! -e "${out}" ]] || die "E3 retention output directory must be fresh: ${out}"
 mkdir -p "${out}"
@@ -203,7 +217,7 @@ for cache in a b; do
     timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
     "${runner}" --strict-types --no-stdlib -O 2 \
       -L "${out}/link-${cache}" --lib eshkol_transformer_e3_retention_test \
-      "${PROJECT_ROOT}/tests/e3_private/retention_runtime.esk" \
+      "${runtime_source}" \
       -o "${out}/runtime-${cache}" \
       >"${out}/compile-${cache}.stdout" \
       2>"${out}/compile-${cache}.stderr"
@@ -225,13 +239,42 @@ env -u CPATH -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH -u OBJC_INCLUDE_PATH \
   timeout --foreground --signal=TERM --kill-after=5s "${compiler_timeout}s" \
   "${runner}" --strict-types --no-stdlib -O 2 \
     -L "${out}/link-sanitized" --lib eshkol_transformer_e3_retention_test \
-    "${PROJECT_ROOT}/tests/e3_private/retention_runtime.esk" \
+    "${runtime_source}" \
     -o "${out}/runtime-sanitized" \
     >"${out}/compile-sanitized.stdout" \
     2>"${out}/compile-sanitized.stderr"
 if nm -u "${out}/runtime-sanitized" | \
     grep -E '[[:space:]]U et_e3_retention_region_used_v1(@|$)' >/dev/null; then
   die "sanitized retention observer remained unresolved after final AOT link"
+fi
+
+if [[ "$diagnostic" == 1 ]]; then
+  for profile in normal-a normal-b poisoned-a sanitized; do
+    poison=0
+    [[ "$profile" != poisoned-a && "$profile" != sanitized ]] || poison=1
+    executable="${out}/runtime-a"
+    [[ "$profile" != normal-b ]] || executable="${out}/runtime-b"
+    [[ "$profile" != sanitized ]] || executable="${out}/runtime-sanitized"
+    for mode in fault control; do
+      ESHKOL_ARENA_POISON="$poison" \
+        ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+        UBSAN_OPTIONS=halt_on_error=1 \
+        /usr/bin/time -f 'elapsed_seconds=%e peak_rss_kib=%M' \
+          -o "${out}/diagnostic-${profile}-${mode}.time" \
+        timeout --foreground --signal=TERM --kill-after=5s \
+          "${runtime_timeout}s" "${executable}" "${corpus}" "${mode}" \
+          >"${out}/diagnostic-${profile}-${mode}.stdout" \
+          2>"${out}/diagnostic-${profile}-${mode}.stderr"
+      grep -E "^E3-RETENTION-ARENA-DIAGNOSTIC mode=${mode} prepared=[0-9]+ before=[0-9]+ after-arm=[0-9]+ after-call=[0-9]+ after-checks=[0-9]+ after-retry=[0-9]+$" \
+        "${out}/diagnostic-${profile}-${mode}.stdout" >/dev/null ||
+        die "retention arena diagnostic marker differs: ${profile}/${mode}"
+      [[ "$(wc -l <"${out}/diagnostic-${profile}-${mode}.stdout")" == 1 &&
+         ! -s "${out}/diagnostic-${profile}-${mode}.stderr" ]] ||
+        die "retention arena diagnostic wrote unexpected output: ${profile}/${mode}"
+    done
+  done
+  printf 'E3 retention arena diagnostic recorded: %s\n' "${out}"
+  exit 0
 fi
 
 for horizon in 1024 8192; do

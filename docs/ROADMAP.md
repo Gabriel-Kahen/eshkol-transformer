@@ -902,6 +902,19 @@ role/CE/state/final verification and byte equality for identical packed
 emissions. Its three compiled mutants remain on packed-single. Local parser
 and shell checks do not substitute for independent source/test review or a
 fresh supported compiled gate; this extension has no runtime evidence yet.
+
+On exact `44c0418d` source, the sealed retention attempt2 compiled its
+private and sanitized packages and AOT executables, then the first
+1,024-call absent-gradient process aborted at `failure-arena-bytes` after
+the authentic D2 read fault and same-authority retry. The measured root-arena
+delta was not emitted, so this is a failed resource gate, not a leak
+attribution or an accepted retention result. An isolated diagnostic-only
+successor now retains the same failure checks and adds five root-byte samples
+around the fault, checks and retry, paired with a fresh-process no-fault
+control after the same 512-call prefix. It uses the existing noninstalled
+retention tuple and exact package manifests; no production API changes.
+Focused host source/custody tests pass. Its supported normal, repeat, poison
+and sanitizer measurements and independent result review remain **NOT RUN**.
 An isolated all-correct/all-wrong source candidate adds two fixed raw V256
 six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
 and a separate two-case private numerical runner. The new versioned manifest

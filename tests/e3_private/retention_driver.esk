@@ -132,6 +132,7 @@
 (define (e3-test-retention-fail-retry! model dataset frame destinations
                                        cursor modes model-image rng probes record)
   (e3-test-read-fail-stage 1)
+  (vector-set! (vector-ref record 19) 1 (__arena-used))
   (let ((failure-region-bytes
          (with-region ('e3-retention-failure 262144)
            (let ((region-before (e3-test-region-used)))
@@ -146,6 +147,7 @@
                      #f)))
                (e3-test-retention-check 'injected-read-failure failed?)
                (- (e3-test-region-used) region-before))))))
+    (vector-set! (vector-ref record 19) 2 (__arena-used))
     (e3-test-read-fail-stage 0)
     (e3-test-retention-check 'failure-region-budget
       (and (>= failure-region-bytes 0) (<= failure-region-bytes 262144)))
@@ -171,9 +173,11 @@
                        (e3-test-retention-probe index))))
               (check (+ index 1)))))
       #t)
+    (vector-set! (vector-ref record 19) 3 (__arena-used))
     (vector-set! record 16
       (e3-test-retention-call! model dataset frame destinations cursor modes
                                model-image))
+    (vector-set! (vector-ref record 19) 4 (__arena-used))
     #t))
 
 (define (e3-test-retention-reconcile! before after)
@@ -244,7 +248,7 @@
              (before (e3-test-retention-probes))
              (record (vector model destinations frame dataset cursor modes
                              model-image rng before horizon present? 0 0 #f
-             calibrated-region-bytes 0 0 #f #f)))
+             calibrated-region-bytes 0 0 #f #f (make-vector 5 0))))
         (e3-test-retention-check 'calibrated-region-budget
           (and (>= calibrated-region-bytes 0)
                (<= calibrated-region-bytes 262144)))
@@ -301,6 +305,79 @@
                        (m3t-public-model-initializer model)))))
       (vector-set! record 13 #t)
       #t)))
+
+;;; Diagnostic-only successor: preserve the authentic failure/retry assertions
+;;; while locating root-arena growth before any result is printed. The control
+;;; uses a separate fresh process and the same 512-call successful prefix.
+(define (e3-test-retention-diagnose horizon present? fault?)
+  (let* ((record (vector-ref e3-test-retention-root 0))
+         (model (vector-ref record 0))
+         (destinations (vector-ref record 1))
+         (frame (vector-ref record 2))
+         (dataset (vector-ref record 3))
+         (cursor (vector-ref record 4))
+         (modes (vector-ref record 5))
+         (model-image (vector-ref record 6))
+         (rng (vector-ref record 7))
+         (before (vector-ref record 8))
+         (samples (vector-ref record 19)))
+    (e3-test-retention-check 'prepared-identity
+      (and (= horizon 1024) (eq? present? #f) (not (vector-ref record 13))
+           (boolean? fault?)))
+    (let prefix ((index 0))
+      (if (= index 512) #t
+          (begin
+            (e3-test-retention-check 'success-region-byte-equality
+              (= (e3-test-retention-call! model dataset frame destinations
+                                          cursor modes model-image)
+                 (vector-ref record 14)))
+            (prefix (+ index 1)))))
+    (vector-set! samples 0 (__arena-used))
+    (if fault?
+        (e3-test-retention-fail-retry! model dataset frame destinations
+                                       cursor modes model-image rng before record)
+        (begin
+          (e3-test-read-fail-stage 0)
+          (vector-set! samples 1 (__arena-used))
+          (vector-set! record 15
+            (e3-test-retention-call! model dataset frame destinations
+                                     cursor modes model-image))
+          (vector-set! samples 2 (__arena-used))
+          (with-region ('e3-retention-control-check 262144)
+            (e3-test-retention-check 'failure-cursor
+              (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+            (e3-test-retention-check 'failure-output
+              (e3-test-retention-output=? frame destinations))
+            (e3-test-retention-check 'failure-modes
+              (e3-test-retention-modes=? frame modes))
+            (e3-test-retention-check 'failure-model-image
+              (e3-test-retention-model=? model model-image))
+            (e3-test-retention-check 'failure-rng
+              (equal? rng (m3t-public-initializer-words
+                           (m3t-public-model-initializer model))))
+            (let check ((index 0))
+              (if (= index 29) #t
+                  (begin
+                    (if (or (<= index 6) (and (>= index 17) (<= index 26)))
+                        (e3-test-retention-check 'failure-live
+                          (= (vector-ref before index)
+                             (e3-test-retention-probe index))))
+                    (check (+ index 1))))))
+          (vector-set! samples 3 (__arena-used))
+          (vector-set! record 16
+            (e3-test-retention-call! model dataset frame destinations
+                                     cursor modes model-image))
+          (vector-set! samples 4 (__arena-used))))
+    (e3-test-retention-check 'retry-region-byte-equality
+      (and (= (vector-ref record 16) (vector-ref record 14))
+           (or fault? (= (vector-ref record 15) (vector-ref record 14)))))
+    (vector-set! record 12 (vector-ref samples 4))
+    (vector-set! record 13 #t)
+    (vector 'e3-retention-arena-diagnostic-v1 fault?
+            (vector-ref record 11)
+            (vector-ref samples 0) (vector-ref samples 1)
+            (vector-ref samples 2) (vector-ref samples 3)
+            (vector-ref samples 4))))
 
 (define (e3-test-retention-report horizon present?)
   (let ((record (vector-ref e3-test-retention-root 0)))
@@ -374,8 +451,16 @@
 
 (define (e3-test-retention-dispatch scenario corpus-path)
   (e3-test-retention-check 'scenario
-    (and (vector? scenario) (= (vector-length scenario) 4)
+    (and (vector? scenario)
+         (or (= (vector-length scenario) 4)
+             (and (= (vector-length scenario) 5)
+                  (eq? (vector-ref scenario 1) 'diagnose)
+                  (boolean? (vector-ref scenario 4))))
          (eq? (vector-ref scenario 0) 'retention)))
-  (e3-test-retention-run (vector-ref scenario 1)
-                         (vector-ref scenario 2)
-                         (vector-ref scenario 3) corpus-path))
+  (if (eq? (vector-ref scenario 1) 'diagnose)
+      (e3-test-retention-diagnose (vector-ref scenario 2)
+                                  (vector-ref scenario 3)
+                                  (vector-ref scenario 4))
+      (e3-test-retention-run (vector-ref scenario 1)
+                             (vector-ref scenario 2)
+                             (vector-ref scenario 3) corpus-path)))

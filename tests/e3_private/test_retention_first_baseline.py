@@ -71,11 +71,16 @@ def audit_calls(source: str) -> None:
     require("(e3-test-retention-model=? model model-image)" in call and
             "(with-region ('e3-retention-model-check 262144)" in call,
             "every completed call must compare the same model image")
-    invocations = re.findall(r"\(e3-test-retention-call!", source)
-    require(len(invocations) == 5, "unexpected retention evaluator call topology")
-    for marker in ("(define (e3-test-retention-fail-retry!",
-                   "(define (e3-test-retention-prepare",
-                   "(define (e3-test-retention-execute"):
+    original = ("(define (e3-test-retention-fail-retry!",
+                "(define (e3-test-retention-prepare",
+                "(define (e3-test-retention-execute")
+    invocations = sum(len(re.findall(r"\(e3-test-retention-call!", form(source, marker)))
+                      for marker in original)
+    require(invocations == 4, "unexpected original retention evaluator call topology")
+    diagnostic = form(source, "(define (e3-test-retention-diagnose")
+    require(len(re.findall(r"\(e3-test-retention-call!", diagnostic)) == 3,
+            "unexpected diagnostic evaluator call topology")
+    for marker in original + ("(define (e3-test-retention-diagnose",):
         body = form(source, marker)
         cursor = 0
         while "(e3-test-retention-call!" in body[cursor:]:
