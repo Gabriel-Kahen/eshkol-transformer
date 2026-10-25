@@ -5497,6 +5497,143 @@
                                           supplied modules carriers
                                           provider))))))))))))))))
 
+;;; Workspace release must still authenticate the same tree after module-eval!.
+;;; Slot 74 remains the train-only compute admission; this status accepts one
+;;; uniform train or eval tree and never changes module or handle ownership.
+(define (c4-lifetime-capture-module! root provider modules mode index)
+  (let* ((parent-index (e3-mode-parent index))
+         (parent (if (= index 0) #f
+                     (tr3-fixed-module-raw modules parent-index)))
+         (node (if (= index 0) root
+                   (if parent
+                       (e3-mode-child (vector-ref parent 4)
+                                      (e3-mode-name index)) #f))))
+    (cond
+      ((not (module-value? node)) 4)
+      ((not (eq? (vector-ref node 7) #t)) 2)
+      ((not (eq? (vector-ref node 1) mode)) 2)
+      ((not (and (eq? (vector-ref node 5) parent)
+                 (eq? (vector-ref node 6) provider)
+                 (or (not (= index 0)) (e3-mode-i64=? (vector-ref node 10) 17))
+                 (e3-mode-child-list? (vector-ref node 4)
+                                      (e3-mode-child-count index))
+                 (tr3-fixed-binding-list? (vector-ref node 2)
+                                           (tr3-fixed-parameter-count index))
+                 (null? (vector-ref node 3))
+                 (tr3-fixed-module-distinct? modules node index))) 4)
+      (else
+        (let ((shell (tr3-fixed-existing-shell 'module node)))
+          (if (not shell) 4
+              (begin (vector-set! modules index shell) 0)))))))
+
+(define (c4-lifetime-capture-modules! root provider modules mode)
+  (let loop ((index 0))
+    (if (= index 17) 0
+        (let ((status
+                (c4-lifetime-capture-module!
+                  root provider modules mode index)))
+          (if (= status 0) (loop (+ index 1)) status)))))
+
+(define (c4-lifetime-recheck-module modules provider mode index)
+  (let* ((shell (vector-ref modules index))
+         (node (tr3-fixed-shell-raw shell 'module))
+         (parent-index (e3-mode-parent index))
+         (parent (if (= index 0) #f
+                     (tr3-fixed-module-raw modules parent-index))))
+    (cond
+      ((not (module-value? node)) 4)
+      ((not (eq? (vector-ref node 7) #t)) 2)
+      ((not (eq? (vector-ref node 1) mode)) 2)
+      ((not (and (eq? (vector-ref node 5) parent)
+                 (eq? (vector-ref node 6) provider)
+                 (or (not (= index 0)) (e3-mode-i64=? (vector-ref node 10) 17))
+                 (e3-mode-child-list? (vector-ref node 4)
+                                      (e3-mode-child-count index))
+                 (or (= index 0)
+                     (eq? (e3-mode-child (vector-ref parent 4)
+                                         (e3-mode-name index)) node))
+                 (tr3-fixed-binding-list? (vector-ref node 2)
+                                           (tr3-fixed-parameter-count index))
+                 (null? (vector-ref node 3))
+                 (tr3-fixed-module-distinct? modules node index)
+                 (eq? (tr3-fixed-existing-shell 'module node) shell))) 4)
+      (else 0))))
+
+(define (c4-lifetime-recheck-modules modules provider mode)
+  (let loop ((index 0))
+    (if (= index 17) 0
+        (let ((status
+                (c4-lifetime-recheck-module modules provider mode index)))
+          (if (= status 0) (loop (+ index 1)) status)))))
+
+(define (c4-lifetime-recheck-handles supplied modules carriers provider)
+  (let loop ((index 0))
+    (if (= index 14) 0
+        (let* ((shell (vector-ref supplied index))
+               (entry (shell-entry shell))
+               (raw (if (and entry (eq? (vector-ref entry 1) 'handle))
+                        (vector-ref entry 2) #f))
+               (expected (tr3-fixed-expected-handle modules index)))
+          (if (and raw expected (eq? raw expected)
+                   (handle-value? raw)
+                   (eq? (tr3-fixed-existing-shell 'handle raw) shell)
+                   (eq? (vector-ref raw 1)
+                        (tr3-fixed-module-raw modules
+                          (tr3-fixed-handle-module-index index)))
+                   (tr3-fixed-path? (vector-ref raw 2) index)
+                   (c4-topology-shape? (vector-ref raw 3) index)
+                   (eq? (vector-ref raw 4) 'f32)
+                   (eq? (vector-ref raw 5) 'cpu)
+                   (eq? (vector-ref raw 6) (vector-ref carriers index))
+                   (eq? (vector-ref raw 7) provider)
+                   (tr3-fixed-distinct? supplied shell index)
+                   (tr3-fixed-distinct? carriers (vector-ref raw 6) index))
+              (loop (+ index 1)) 4)))))
+
+(define (c4-lifetime-topology-status model supplied)
+  (cond
+    ((not (tr3-fixed-vector? supplied 14)) 1)
+    (construction-busy? 2)
+    ((protected-storage-comparison-active?) 2)
+    (else
+      (let* ((entry (shell-entry model))
+             (root (if (and entry (eq? (vector-ref entry 1) 'module))
+                       (vector-ref entry 2) #f))
+             (provider (tensor-provider-find e3-mode-provider-name)))
+        (cond
+          ((not (and entry (eq? (vector-ref entry 1) 'module))) 1)
+          ((not (and (module-value? root) provider
+                     (eq? (vector-ref root 5) #f)
+                     (eq? (vector-ref root 6) provider))) 4)
+          (else
+            (let ((mode (vector-ref root 1)))
+              (if (not (e3-mode-symbol? mode)) 2
+                  (let* ((modules (make-vector 17 #f))
+                         (carriers (make-vector 14 #f))
+                         (module-status
+                           (c4-lifetime-capture-modules!
+                             root provider modules mode)))
+                    (if (not (= module-status 0)) module-status
+                        (if (not (eq? model (vector-ref modules 0))) 1
+                            (let ((token-handle
+                                    (tr3-fixed-binding-handle
+                                      (tr3-fixed-module-raw modules 16) "weight"))
+                                  (head-handle
+                                    (tr3-fixed-expected-handle modules 10)))
+                              (if (not (and token-handle head-handle
+                                            (eq? token-handle head-handle))) 4
+                                  (let ((handle-status
+                                          (c4-topology-handles-status
+                                            supplied modules carriers provider)))
+                                    (if (not (= handle-status 0)) handle-status
+                                        (let ((recheck
+                                                (c4-lifetime-recheck-modules
+                                                  modules provider mode)))
+                                          (if (not (= recheck 0)) recheck
+                                              (c4-lifetime-recheck-handles
+                                                supplied modules carriers
+                                                provider))))))))))))))))))
+
 
 (vector
   (lambda (module)
@@ -6005,6 +6142,9 @@
     (construction-prepare-train-guarded! identity))
   ;; Append-only source-private read-only C4 topology status, slot 74.
   c4-topology-status
+  ;; Append-only source-private C4 lifetime identity, slot 75. This also
+  ;; authenticates a uniform eval tree for workspace release.
+  c4-lifetime-topology-status
   )))
 
 (define (module-parameters module)

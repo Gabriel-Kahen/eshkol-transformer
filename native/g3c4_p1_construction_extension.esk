@@ -13,3 +13,8 @@
 ;;; is returned. A separate native owner association gate remains required.
 (define (module-c4-train-topology-status-internal root handles)
   ((vector-ref p1-trusted-surface 74) root handles))
+
+;;; Read-only lifetime identity for an already live C4 workspace. Unlike
+;;; slot 74 this accepts a uniform eval tree, but never admits computation.
+(define (module-c4-lifetime-topology-status-internal root handles)
+  ((vector-ref p1-trusted-surface 75) root handles))

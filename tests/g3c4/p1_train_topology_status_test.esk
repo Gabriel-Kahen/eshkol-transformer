@@ -63,6 +63,8 @@
 (define successor (vector-ref c4-entry 6))
 (status "exact C4 topology" (module-c4-train-topology-status-internal
                                c4-model handles) 0)
+(status "lifetime train topology" (module-c4-lifetime-topology-status-internal
+                                     c4-model handles) 0)
 (status "foreign shell" (module-c4-train-topology-status-internal
                            (vector 'foreign) handles) 1)
 (status "malformed handle vector" (module-c4-train-topology-status-internal
@@ -72,6 +74,8 @@
 (vector-set! swapped 1 (vector-ref handles 0))
 (status "swapped handles" (module-c4-train-topology-status-internal
                             c4-model swapped) 1)
+(status "lifetime swapped handles"
+  (module-c4-lifetime-topology-status-internal c4-model swapped) 1)
 (define forged-head (copy-vector handles))
 (vector-set! forged-head 10 (vector-ref handles 11))
 (status "forged head/tie shell" (module-c4-train-topology-status-internal
@@ -86,12 +90,20 @@
   (vector-ref (m3t-entry c2-model 'model 'c4-p1-topology-fixture #t) 8))
 (status "C2 position shape [2,4]" (module-c4-train-topology-status-internal
                                      c2-model c2-handles) 4)
+(status "lifetime C2 position shape [2,4]"
+  (module-c4-lifetime-topology-status-internal c2-model c2-handles) 4)
 (module-eval! c4-model)
 (status "eval mode" (module-c4-train-topology-status-internal
                        c4-model handles) 2)
+(status "lifetime eval topology"
+  (module-c4-lifetime-topology-status-internal c4-model handles) 0)
+(status "lifetime eval swapped handles"
+  (module-c4-lifetime-topology-status-internal c4-model swapped) 1)
 (module-train! c4-model)
 (status "train mode restored" (module-c4-train-topology-status-internal
                                  c4-model handles) 0)
+(status "lifetime train mode restored"
+  (module-c4-lifetime-topology-status-internal c4-model handles) 0)
 (check "no entry/owner/handle mutation"
   (and (eq? c4-entry (car (vector-ref g3c4-model-registry 0)))
        (eq? owner (vector-ref c4-entry 3))
