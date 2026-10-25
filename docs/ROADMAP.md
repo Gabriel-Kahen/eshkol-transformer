@@ -2348,9 +2348,25 @@ CABI, dispatch and initialization imports. It produced no caller, saved pair,
 runtime result or sanitizer build. A source-staged private test package now
 places the trained-pair entry in one Eshkol private root with the existing
 E1B/CLI3 bridges and one native G3-T owner; its thin caller has no private-root
-load. A link-only package and symbol-closure gate remains required before a
-full normal/repeat/sanitizer successor. It does not restore a replay candidate
-or establish full same-registry continuation.
+load. The one-package link attempt at `493f435a` (outer SHA-256
+`5ba9c9c6dfd5b34d45a44b765d5c6a08f3da15c60af4b2949cc6e4f8b2e05261`)
+linked its private package and caller but failed a recipe assertion demanding
+an executable-mode depfile. Its corrected link-only continuation passed under
+outer SHA-256
+`f780dc5b5303e5b6892366ad24334fd49cd521041e296b7cc121e9dbd12f7166`:
+one package, init and G3-T owner, 16 exports, object-mode caller depfile and
+fresh executable link. The first full runtime attempt sealed FAIL under outer
+SHA-256 `5295528a36365fbfa19233e689fc437d4bd0c084598545358c8df3335369085a`:
+the normal producer raised before any saved C2 or companion. A bounded
+same-package diagnostic sealed under outer SHA-256
+`eda935235149d3aaa075429182c252ea096c01f6973fd4c9133b1d94eefdc12e`:
+its known-error control caught `invalid-argument/checkpoint-save!`, and the
+original positive call caught `invalid-argument/tokenizer-load` with message
+`expected aggregate persistence policy`. The private producer entry had
+bypassed CLI3 dispatch's authenticated C2-to-T2 policy projector setup.
+The focused source repair installs the same projector before its first
+tokenizer load. No repaired compiled runtime, trained pair, reader replay or
+sanitizer result is accepted yet.
 
 A separate fresh-process trained-pair reader is source-staged from the same
 private CLI3 package root. It authenticates the saved C2 SHA against the
