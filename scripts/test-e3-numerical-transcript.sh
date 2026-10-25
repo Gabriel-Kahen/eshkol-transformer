@@ -44,7 +44,7 @@ if grep -F 'E3ROW' \
 fi
 
 prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
-for variant in a b wrong-target mean-of-means second-normalization sanitized; do
+for variant in a b two-term-reversal wrong-target mean-of-means second-normalization sanitized; do
   mode="${variant}"
   case "${variant}" in a|b) mode=normal ;; sanitized) mode=sanitize ;; esac
   "${PROJECT_ROOT}/scripts/build-e3-numerical-test.sh" \
@@ -94,7 +94,7 @@ chmod 0500 "${out}/cxx-sanitized"
 compiler_timeout="${E3_COMPILER_TIMEOUT_SECONDS:-900}"
 [[ "${compiler_timeout}" =~ ^[1-9][0-9]*$ ]] || \
   die "E3 numerical compiler timeout must be positive"
-for variant in a b wrong-target mean-of-means second-normalization sanitized; do
+for variant in a b two-term-reversal wrong-target mean-of-means second-normalization sanitized; do
   cxx_selected="${cxx}"
   if [[ "${variant}" == sanitized ]]; then
     cxx_selected="${out}/cxx-sanitized"
@@ -212,6 +212,12 @@ done
 for variant in wrong-target mean-of-means second-normalization; do
   run_case "${variant}" packed-single 3
 done
+run_case two-term-reversal packed-single 3
+verify_case two-term-reversal packed-single
+cmp "${out}/run-a.stdout" "${out}/run-two-term-reversal.stdout"
+cmp "${out}/observed-a.json" "${out}/observed-two-term-reversal.json"
+cmp "${out}/roles-a.tsv" "${out}/roles-two-term-reversal.tsv"
+cmp "${out}/transcript-a.json" "${out}/transcript-two-term-reversal.json"
 for variant in wrong-target mean-of-means second-normalization; do
   if ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" \
     -B -m tests.e3_native_parity.verify_observation \
@@ -231,4 +237,4 @@ grep -F 'state_f32' "${out}/verify-mean-of-means.stderr" >/dev/null || \
   die "mean-of-means mutant failed outside the accumulator value assertion"
 grep -F 'final.metrics_f32' "${out}/verify-second-normalization.stderr" >/dev/null || \
   die "second-normalization mutant failed outside the final loss value assertion"
-printf 'E3 compiled five-case private numerical transcripts and three mutants passed\n'
+printf 'E3 compiled five-case private numerical transcripts, one private equivalent control and three mutants passed\n'

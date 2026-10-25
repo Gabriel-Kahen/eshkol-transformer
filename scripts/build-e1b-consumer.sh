@@ -1262,7 +1262,7 @@ if [[ -n "${E3_NUMERICAL_MUTANT+x}" ]]; then
     die "E3 numerical mutation is allowed only for the exact test tuple"
 fi
 case "${e3_numerical_mutant}" in
-  normal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sum-order|padded-position) ;;
+  normal|two-term-reversal|wrong-target|mean-of-means|second-normalization|wrong-vocab-axis|sum-order|padded-position) ;;
   *) die "unknown E3 numerical mutation: ${e3_numerical_mutant}" ;;
 esac
 e3_uniform_mutant=${E3_UNIFORM_MUTANT:-normal}
@@ -1897,6 +1897,7 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
         "${e3_tuple_kind}" == numerical ]]; then
     package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
     case "${e3_numerical_mutant}" in
+      two-term-reversal) package_native_cflags+=(-DET_E3_NUMERICAL_REVERSE_CORRECT) ;;
       wrong-target) package_native_cflags+=(-DET_E3_NUMERICAL_WRONG_TARGET) ;;
       mean-of-means) package_native_cflags+=(-DET_E3_NUMERICAL_MEAN_OF_MEANS) ;;
       second-normalization) package_native_cflags+=(-DET_E3_NUMERICAL_SECOND_NORMALIZATION) ;;

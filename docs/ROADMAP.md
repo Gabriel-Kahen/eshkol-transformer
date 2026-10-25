@@ -1083,6 +1083,14 @@ with malformed-close controls. The frozen failed evidence is preserved at
 (`cdb4d3cd...`). Independent source review and a fresh supported compile/runtime
 gate remain required; static parsing does not prove E3 numerical acceptance.
 
+The exact-`44c0418d` private five-case gate was subsequently independently
+accepted (`e3/numerical-a-review/REVIEW.md`, raw seal `f6b04ae1...`), bounded
+to its authentic M3/D2 numerical prerequisite. An isolated test-only successor
+adds a two-term correct-count reversal to the exact numerical tuple and compares
+one packed-single private AOT observation with the unchanged independent oracle
+and normal AOT. Host checks alone do not admit this equivalent control; its
+fresh compiled run, review, other controls and full E3 §9 remain open.
+
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,
 failure and rollback gates. It tracks authentic D2/model reachability separately

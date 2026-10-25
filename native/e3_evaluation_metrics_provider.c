@@ -172,6 +172,9 @@ static int64_t argmax(const float *row) {
 #if defined(ET_E3_NUMERICAL_WRONG_VOCAB_AXIS) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "wrong-vocabulary-axis mutation requires the private numerical test tuple"
 #endif
+#if defined(ET_E3_NUMERICAL_REVERSE_CORRECT) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "reversed-correct equivalence requires the private numerical test tuple"
+#endif
 #ifdef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
 /* Test mutant: reinterpret the same [T=2,V=256] logits as [V=256,T=2]. */
 static int64_t wrong_vocab_axis_argmax(const float *logits, size_t token) {
@@ -217,8 +220,13 @@ static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *resul
   const float p0 = weight0 * hit0;
   const float p1 = weight1 * hit1;
   float correct = 0.0f;
+#ifdef ET_E3_NUMERICAL_REVERSE_CORRECT
+  correct = correct + p1;
+  correct = correct + p0;
+#else
   correct = correct + p0;
   correct = correct + p1;
+#endif
   result->correct.correct = correct;
   result->correct.active = (int64_t)mask[0] + (int64_t)mask[1];
   return 0;

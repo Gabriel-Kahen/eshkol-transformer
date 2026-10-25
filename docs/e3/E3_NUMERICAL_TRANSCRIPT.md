@@ -39,6 +39,18 @@ three batches, 63 role rows and the first two compiled mutants. That run is
 bounded predecessor evidence only. The five-case source and third mutant need
 independent review and a fresh supported gate on the exact tree.
 
+The exact-`44c0418d` five-case private result was later independently accepted
+(`e3/numerical-a-review/REVIEW.md`, raw seal `f6b04ae1...`). This test-only
+successor adds one private equivalent control: reverse the two nonnegative
+binary32 correct-count terms after authentic M3 logits and D2 mask reach the
+unchanged correct provider. The existing packed-single three-batch oracle must
+accept complete 21-role observations and identical stdout, observed record,
+role words and transcript for normal and reversed builds. Host-only source
+checks establish only tuple isolation and the finite term-domain identity;
+the successor's private AOT control is **NOT_RUN** until a fresh supported gate
+and independent result review. Other metrics equivalence controls and full §9
+remain open.
+
 Still open under §9: additional cursor and edge cases, empty and
 singleton outcomes, true tie/uniform/correctness and finite overflow witnesses,
 8,192/8,193 boundaries, the remaining private compiled mutant matrix, native

@@ -248,6 +248,43 @@ printf '%s\\n' "$e3_tuple_kind"
             capture_output=True, text=True, check=False,
         )
         self.assertNotEqual(forbidden.returncode, 0)
+
+    def test_two_term_reversal_is_private_and_uses_real_oracle(self) -> None:
+        source = ROOT / "native/e3_evaluation_metrics_provider.c"
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        package = (ROOT / "scripts/build-e3-numerical-test.sh").read_text()
+        gate = (ROOT / "scripts/test-e3-numerical-transcript.sh").read_text()
+        self.assertIn("two-term-reversal) package_native_cflags+=("
+                      "-DET_E3_NUMERICAL_REVERSE_CORRECT)", builder)
+        self.assertIn("normal|two-term-reversal|wrong-target", package)
+        self.assertIn("run_case two-term-reversal packed-single 3", gate)
+        self.assertIn("verify_case two-term-reversal packed-single", gate)
+        for suffix in ("run", "observed", "roles", "transcript"):
+            self.assertIn(f'${{out}}/{suffix}-two-term-reversal.', gate)
+        self.assertIn("#ifdef ET_E3_NUMERICAL_REVERSE_CORRECT", source.read_text())
+        # The admitted BOOL mask and equality hit produce only positive 0/1
+        # terms. Exhaust that finite domain; other f32 additions are outside
+        # this narrow equivalence claim.
+        for first in (0.0, 1.0):
+            for second in (0.0, 1.0):
+                self.assertEqual((0.0 + first) + second,
+                                 (0.0 + second) + first)
+        if shutil.which("clang") is None:
+            self.skipTest("Clang unavailable for negative macro admission")
+        base = ["clang", "-std=c11", "-fsyntax-only", "-I", str(ROOT / "include"),
+                "-I", str(ROOT / "src")]
+        forbidden = subprocess.run(
+            base + ["-DET_E3_NUMERICAL_REVERSE_CORRECT", str(source)],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(forbidden.returncode, 0)
+        self.assertIn("requires the private numerical test tuple", forbidden.stderr)
+        admitted = subprocess.run(
+            base + ["-DET_E3_NUMERICAL_TESTING",
+                    "-DET_E3_NUMERICAL_REVERSE_CORRECT", str(source)],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(admitted.returncode, 0, admitted.stderr)
         self.assertIn("requires the private numerical test tuple", forbidden.stderr)
         admitted = subprocess.run(
             base + ["-DET_E3_NUMERICAL_TESTING", "-DET_E3_NUMERICAL_WRONG_VOCAB_AXIS",
