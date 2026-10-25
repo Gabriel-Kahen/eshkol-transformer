@@ -10119,6 +10119,13 @@ fail:
 #include "cpu4_c4_capture.inc"
 #endif
 
+#ifdef ET_CPU4_C4_P3_BOXED_BRIDGE_PRIVATE
+#if !defined(ET_CPU4_C4_HISTORY_PRIVATE) || !defined(ET_CPU4_C4_P3_WIRE_PRIVATE)
+#error "C4 P3 boxed producer bridge requires capture and P3 wire"
+#endif
+#include "cpu4_c4_p3_boxed_bridge.inc"
+#endif
+
 #if defined(ET_CPU4_C4_P3_WIRE_PRIVATE) && !defined(ET_CPU4_C4_HISTORY_PRIVATE)
 #error "C4 P3 wire requires the private C4 history and capture source"
 #endif

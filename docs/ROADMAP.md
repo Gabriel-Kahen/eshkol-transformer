@@ -2263,9 +2263,13 @@ prefix, and aborts the pending output in the protected call region. It then
 copies the native idle C4 capture record and fourteen model planes, asks the
 fixed P3 encoder to bind them to the exact B250 C2 SHA/T1 fingerprint, and
 persists the 400-byte wire and 4,768-byte values with exclusive new writes.
-A focused native control tests the first-commit/abort/idle-capture transition;
-source syntax checks pass. The control has not run, and no trained B250 wire,
-compiled producer, FILE pair, or fresh-process continuation is accepted yet.
+A focused native control tests the first-commit/abort/idle-capture transition.
+The producer's private boxed bridge checks all five Eshkol bytevector length
+headers and passes payload pointers to the existing capture and wire APIs;
+malformed headers leave output bytes intact. The focused native control passes
+under ASan and UBSan, and the C4 source inventory tests pass. No trained B250
+wire, compiled Eshkol producer, FILE pair, or fresh-process continuation is
+accepted yet.
 The separate final-B250 FILE factory witness is source-staged. It prints the
 producer's 14 live final-B parameter planes before SAVE and requires a sealed
 raw 4,768-byte witness. A new process will restore the exact B250 C2 through

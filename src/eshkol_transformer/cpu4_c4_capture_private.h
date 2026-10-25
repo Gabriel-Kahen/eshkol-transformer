@@ -51,6 +51,16 @@ int64_t et_cpu4_private_c4_p3_wire_decode_v1(
     uint64_t values_bytes, const uint8_t expected_c2_sha[32],
     const uint8_t expected_t1_fp[96],
     et_cpu4_c4_capture_record_v1 *out_record);
+#ifdef ET_CPU4_C4_P3_BOXED_BRIDGE_PRIVATE
+/* Eshkol bytevector pointers address an i64 length header, then payload. */
+int64_t et_cpu4_private_c4_capture_copy_record_eshkol_v1(
+    const et_cpu4_c4_capture *capture, void *boxed_record);
+int64_t et_cpu4_private_c4_capture_copy_parameters_eshkol_v1(
+    const et_cpu4_c4_capture *capture, void *boxed_values);
+int64_t et_cpu4_private_c4_p3_wire_encode_eshkol_v1(
+    const void *boxed_record, const void *boxed_values,
+    const void *boxed_c2_sha, const void *boxed_t1_fp, void *boxed_wire);
+#endif
 #endif
 
 #endif

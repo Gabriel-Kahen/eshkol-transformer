@@ -5,14 +5,14 @@
 ;;; the separate uninterrupted reference.
 (extern ptr cpu4-c4-p3-capture-create ptr
         :real et_cpu4_private_c4_capture_create_v1)
-(extern i64 cpu4-c4-p3-capture-record ptr ptr i64
-        :real et_cpu4_private_c4_capture_copy_record_v1)
-(extern i64 cpu4-c4-p3-capture-values ptr ptr i64
-        :real et_cpu4_private_c4_capture_copy_parameters_v1)
+(extern i64 cpu4-c4-p3-capture-record ptr ptr
+        :real et_cpu4_private_c4_capture_copy_record_eshkol_v1)
+(extern i64 cpu4-c4-p3-capture-values ptr ptr
+        :real et_cpu4_private_c4_capture_copy_parameters_eshkol_v1)
 (extern i64 cpu4-c4-p3-capture-release ptr
         :real et_cpu4_private_c4_capture_release_v1)
-(extern i64 cpu4-c4-p3-wire-encode ptr ptr i64 ptr ptr ptr i64
-        :real et_cpu4_private_c4_p3_wire_encode_v1)
+(extern i64 cpu4-c4-p3-wire-encode ptr ptr ptr ptr ptr
+        :real et_cpu4_private_c4_p3_wire_encode_eshkol_v1)
 (extern i64 cpu4-c4-p3-write-new ptr ptr i64
         :real et_d1_checked_write_new_v1)
 
@@ -83,9 +83,9 @@
               (values (make-bytevector 4768 0))
               (wire (make-bytevector 400 0)))
           (g3c4-native-check
-            (cpu4-c4-p3-capture-record capture record 224) operation)
+            (cpu4-c4-p3-capture-record capture record) operation)
           (g3c4-native-check
-            (cpu4-c4-p3-capture-values capture values 4768) operation)
+            (cpu4-c4-p3-capture-values capture values) operation)
           (if (not (cpu4-c4-p3-bytes=?
                      before (cpu4-c4-p3-live-file-sha b250-path operation)))
               (cpu4-binding-fail 'invalid-state operation
@@ -94,7 +94,7 @@
           ;; record and hashes the captured 14-plane values into the wire.
           (g3c4-native-check
             (cpu4-c4-p3-wire-encode
-              record values 4768 before fingerprint wire 400) operation)
+              record values before fingerprint wire) operation)
           (g3c4-native-check
             (cpu4-c4-p3-capture-release capture) operation)
           (set! capture #f)
