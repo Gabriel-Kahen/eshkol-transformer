@@ -16,8 +16,8 @@ MANIFEST = "native/e3_d2_source_variant.json"
 SOURCE = "internal/d2/lib/d2_dataset.esk"
 OUTPUT = "source/e3_d2_dataset.esk"
 PROVENANCE = "source/e3_d2_source_provenance.json"
-SOURCE_SHA = "53c5f1eb1c6a306503036251960607d1800a2d944a2322af6b5240fc5b20d5a9"
-RESULT_SHA = "d102ee50a33140271653f732f9dfea7c1c842c5c0922e99b4509ebffdc46ccaa"
+SOURCE_SHA = "6ca386d5e7212e797f0912740c44b14e46400f9e6c05f588a8004693d53fc94c"
+RESULT_SHA = "ae2c4661ac518dab5314dbf0ae7d9326425bd4add190d7f04485bc75fdcfe414"
 REPLACEMENT = (b"(define (d2-tokenizer-identity tokenizer)\n"
                b"  (let ((result (e3-d2-byte-identity tokenizer))) result))\n\n")
 
@@ -108,6 +108,13 @@ class SourceVariantTests(unittest.TestCase):
             with self.subTest(changed_sha=sha(changed)):
                 self.source.write_bytes(changed)
                 self.reject()
+
+    def test_repaired_fault_envelope_is_in_predecessor_pin(self):
+        original = self.source.read_bytes()
+        self.assertIn(b"(vector-set! state 11 #f)", original)
+        self.source.write_bytes(original.replace(b"(vector-set! state 11 #f)",
+                                                 b"(vector-set! state 11 (vector #f))"))
+        self.reject()
 
     def test_missing_duplicate_or_altered_definition(self):
         original = self.source.read_bytes()

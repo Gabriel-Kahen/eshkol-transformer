@@ -11,7 +11,7 @@ import sys
 import uuid
 
 MANIFEST = "native/e3_d2_source_variant.json"
-MANIFEST_SHA256 = "9349a0d6c0f3b108975789f022c9aefc800722dc85d595b8034f5610c71a319d"
+MANIFEST_SHA256 = "f978dd39c00f7d613a637b91ad3e7b203e1290e2475e5762da6382e39d65ec3d"
 SOURCE = "internal/d2/lib/d2_dataset.esk"
 OUTPUT = "source/e3_d2_dataset.esk"
 PROVENANCE = "source/e3_d2_source_provenance.json"

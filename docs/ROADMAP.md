@@ -1235,6 +1235,13 @@ borrows/batches/FDs, and unchanged model-owned counts and full model image.
 Focused source tests reject skip-unbind and skip-one-destination mutations.
 Compiled 1,024/8,192-call resource and sanitizer gates remain pending; this
 test-only source leaf does not establish their runtime outcome.
+The exact 7827 D2 repair changes the predecessor bytes consumed by the
+noninstalled E3 D2 generator. A direct test-only successor repins that
+generator's fixed source, prefix, suffix and output hashes and its embedded
+manifest digest; the repaired production D2 bytes remain unchanged. The
+original 7827 compiled attempt stopped at this guard before AOT or runtime.
+The successor's private package, sanitizer and complete-call retention gates
+remain NOT RUN.
 An isolated noninstalled first-evaluation mutant tuple now derives a private
 driver mechanically from that baseline and replaces only the E3 frame test
 object with a feature-gated, fixed one-shot helper. Source controls cover
