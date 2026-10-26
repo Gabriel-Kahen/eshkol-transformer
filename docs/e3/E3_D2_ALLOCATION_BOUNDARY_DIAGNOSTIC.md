@@ -39,6 +39,20 @@ only `et_e3_retention_boundary_mark_v1` and
 The normal manifest now matches those measured bytes. The subsequent private
 unresolved-authority check admits only these two declared hooks when the
 boundary diagnostic selector is active; selector-off, other tuples and any
-additional private symbol still reject. Sanitized
-noninstrumentation and instrumentation manifests remain unchanged and must be
-measured in a separate fail-closed discovery before any AOT or runtime.
+additional private symbol still reject. Sanitized noninstrumentation and
+instrumentation manifests remained unchanged in that attempt.
+
+The independently reviewed `40550e0` one-use sanitized discovery passed normal
+package policy (181 undefined symbols), then stopped at the expected sanitizer
+noninstrumentation policy rejection. Retained `nm -u` and rejected-stage
+inventories agree at 234 symbols: 175 noninstrumentation and 59 instrumentation.
+Relative to the prior 173/59 sanitized manifests, only the two declared
+boundary hooks were added; no symbol was absent and instrumentation was
+unchanged. This test-only successor pins the measured noninstrumentation bytes.
+The sealed result is
+`retention-boundary-40550e0-sanitized-discovery-attempt3/POSTEXIT-SHA256SUMS` (SHA-256
+`8b5b66b93e2f1b05e30af0463aaf458749165514415c988d976389742eda3b8e`).
+Source/dependency/Q0 pins and owned container custody passed independent review.
+Sanitized package admission on this successor, AOT, fault/control runtime and
+complete-call retention are **NOT RUN**. The next gate is an independently
+reviewed exact-source package and focused boundary fault/control pair.

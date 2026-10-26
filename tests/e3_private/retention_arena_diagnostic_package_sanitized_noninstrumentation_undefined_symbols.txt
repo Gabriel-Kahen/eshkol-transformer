@@ -120,6 +120,8 @@ eshkol_type_error_with_operand
 eshkol_utf8_ref
 eshkol_utf8_strlen
 eshkol_utf8_substring
+et_e3_retention_boundary_mark_v1
+et_e3_retention_boundary_read_v1
 et_e3_retention_region_used_v1
 exit
 expf

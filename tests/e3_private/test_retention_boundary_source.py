@@ -23,7 +23,7 @@ class BoundarySourceTest(unittest.TestCase):
         self.assertEqual(hashlib.sha256(normal.read_bytes()).hexdigest(),
                          "fddea863533a943fbcb356bcfab8d095158c82ee48ece1e88199690755e6e2a6")
         self.assertEqual(hashlib.sha256(non.read_bytes()).hexdigest(),
-                         "eeed6ee49b420c709bffbbd0f90262455bef8f13f979ae2ba30016e15f3b1293")
+                         "80f41e9a3eb8333fdc1a1eb321cdf2975e85d177a6ceb31f8ce96692a8fa8e5a")
         self.assertEqual(hashlib.sha256(instrumentation.read_bytes()).hexdigest(),
                          "40e37a1554ecf2df0f5b39923ca936babbb345fd9958eab2eaf86fb4cbc98271")
         words = normal.read_text().splitlines()

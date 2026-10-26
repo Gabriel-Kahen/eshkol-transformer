@@ -17,11 +17,16 @@ SPEC.loader.exec_module(LAUNCHER)
 CID = 'a' * 64
 
 
-def exact_diagnostic_fflush_delta(canonical: str, diagnostic: str) -> bool:
+BOUNDARY_IMPORTS = ('et_e3_retention_boundary_mark_v1\n',
+                    'et_e3_retention_boundary_read_v1\n')
+
+
+def exact_diagnostic_import_delta(canonical: str, diagnostic: str) -> bool:
     symbols = canonical.splitlines(keepends=True)
-    return ('fflush\n' not in symbols
+    added = ('fflush\n', *BOUNDARY_IMPORTS)
+    return (not set(added).intersection(symbols)
             and symbols == sorted(set(symbols))
-            and diagnostic == ''.join(sorted((*symbols, 'fflush\n'))))
+            and diagnostic == ''.join(sorted((*symbols, *added))))
 
 
 def container(running=False, label='owned', exit_code=0):
@@ -51,7 +56,7 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
                          'fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9')
         self.assertNotEqual(source_head, head(fe9, env))
         poisoned = dict(env, GIT_DIR=subprocess.check_output(
-            ['git', '-C', str(source), 'rev-parse', '--git-dir'],
+            ['git', '-C', str(source), 'rev-parse', '--absolute-git-dir'],
             env=env, text=True).strip(), GIT_WORK_TREE=str(source))
         self.assertEqual(head(fe9, poisoned), source_head)
 
@@ -79,10 +84,10 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
                 expected = expected.replace('retention_bridge.c',
                                             'retention_arena_diagnostic_bridge.c')
             if original.name == 'retention_package_undefined_symbols.txt':
-                self.assertTrue(exact_diagnostic_fflush_delta(expected, candidate.read_text()),
+                self.assertTrue(exact_diagnostic_import_delta(expected, candidate.read_text()),
                                 candidate.name)
             elif original.name == 'retention_package_sanitized_noninstrumentation_undefined_symbols.txt':
-                self.assertTrue(exact_diagnostic_fflush_delta(expected, candidate.read_text()),
+                self.assertTrue(exact_diagnostic_import_delta(expected, candidate.read_text()),
                                 candidate.name)
             else:
                 self.assertEqual(candidate.read_text(), expected, candidate.name)
@@ -93,21 +98,22 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
         private = SCRIPT.parents[1] / 'tests/e3_private'
         canonical = (private / 'retention_package_undefined_symbols.txt').read_text()
         diagnostic = (private / 'retention_arena_diagnostic_package_undefined_symbols.txt').read_text()
-        self.assertTrue(exact_diagnostic_fflush_delta(canonical, diagnostic))
+        self.assertTrue(exact_diagnostic_import_delta(canonical, diagnostic))
         for name, changed in (
             ('missing measured import', diagnostic.replace('fflush\n', '')),
+            ('missing boundary hook', diagnostic.replace(BOUNDARY_IMPORTS[0], '')),
             ('extra import', diagnostic + 'unmeasured_symbol\n'),
             ('same-count substitution', diagnostic.replace('fflush\n', 'unmeasured_symbol\n')),
         ):
             with self.subTest(name=name):
-                self.assertFalse(exact_diagnostic_fflush_delta(canonical, changed))
+                self.assertFalse(exact_diagnostic_import_delta(canonical, changed))
 
     def test_diagnostic_sanitized_import_policy_rejects_drift(self):
         root = SCRIPT.parents[1]
         private = root / 'tests/e3_private'
         canonical = (private / 'retention_package_sanitized_noninstrumentation_undefined_symbols.txt').read_text()
         diagnostic = (private / 'retention_arena_diagnostic_package_sanitized_noninstrumentation_undefined_symbols.txt').read_text()
-        self.assertTrue(exact_diagnostic_fflush_delta(canonical, diagnostic))
+        self.assertTrue(exact_diagnostic_import_delta(canonical, diagnostic))
         normal = private / 'retention_arena_diagnostic_package_undefined_symbols.txt'
         instrumentation = private / 'retention_arena_diagnostic_package_sanitized_instrumentation_undefined_symbols.txt'
         policy = root / 'scripts/e3-retention-sanitizer-import-policy.sh'
@@ -116,6 +122,7 @@ class RetentionArenaDiagnosticTest(unittest.TestCase):
             for name, content in (
                 ('measured', diagnostic),
                 ('missing', diagnostic.replace('fflush\n', '')),
+                ('missing hook', diagnostic.replace(BOUNDARY_IMPORTS[0], '')),
                 ('extra', diagnostic + 'unmeasured_symbol\n'),
                 ('same-count', diagnostic.replace('fflush\n', 'unmeasured_symbol\n')),
             ):

@@ -9,7 +9,7 @@ e3_retention_verify_sanitizer_imports() {
       expected_non_count=172 expected_instrumentation_count=59 expected_absent_count=8
       if [[ "${e3_retention_arena_diagnostic_tuple:-0}" == 1 ]]; then
         prefix="${PROJECT_ROOT}/tests/e3_private/retention_arena_diagnostic_package_sanitized"
-        expected_non_count=173
+        expected_non_count=175
       fi
       ;;
     fault)

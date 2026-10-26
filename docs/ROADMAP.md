@@ -926,8 +926,14 @@ production D2 or E1. The sealed `b465081` import-discovery attempt measured
 exactly two new normal undefined symbols, the private mark/read hooks, and
 stopped before sanitizer/AOT/runtime. This test-only successor pins that
 measured normal policy and permits its two hooks only in the boundary
-diagnostic's unresolved-authority check; sanitized import discovery and independent review are
-**NOT RUN**. No retention or E3 §9 admission follows.
+diagnostic's unresolved-authority check. The independently reviewed `40550e0`
+one-use sanitizer discovery measured 175 noninstrumentation and 59
+instrumentation imports in retained rejected-stage objects, adding only the
+two declared boundary hooks to the prior noninstrumentation policy; it did not
+run AOT or runtime. This test-only manifest successor pins those measured
+bytes. Its sanitized package rerun, focused boundary fault/control AOT and
+runtime, complete-call retention and E3 §9 admission remain **NOT RUN**. The
+sealed discovery is recorded in the [allocation-boundary diagnostic](e3/E3_D2_ALLOCATION_BOUNDARY_DIAGNOSTIC.md).
 An isolated all-correct/all-wrong source candidate adds two fixed raw V256
 six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
 and a separate two-case private numerical runner. The new versioned manifest
