@@ -1138,6 +1138,17 @@ and sanitizer; the compiled wrong-target mutant failed first at CE with no
 report. This admits that bounded leaf; uniform/tie and the full N3/§9 union
 remain open.
 
+The `3aade9b1`/tree `dfb8fb3d` uniform/tie attempt 6 is independently
+NONACCEPTING (`n3-uniform-3aade9b-v5-attempt6-independent-review-20261025/REVIEW.md`,
+236-file raw seal `22de375d...`). Q0 references, the canonical package and
+four private packages built, with normal A/B object and archive equality.
+The first AOT compile failed at `uniform_runtime.esk:44` because the local
+`e3-uniform-set-files!` function was not callable from the runtime source.
+No private runtime, sanitizer or tie mutant executed. Separately, the host
+common Git config changed during the run, so source custody also failed.
+The source and packet need a reviewed test-only interface repair and fresh
+host pins before one new gate; this attempt cannot admit uniform/tie.
+
 The noninstalled `dc565e1` mode/graph successor has since passed independent
 compiled result review: absent-gradient and seeded-present-gradient runtime stdout matched
 across normal A/B, poison, and ASan/UBSan runs; in-call mode and graph mutants
