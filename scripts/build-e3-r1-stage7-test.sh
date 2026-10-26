@@ -15,7 +15,7 @@ prefix="${PROJECT_ROOT}/tests/e3_private/fault_package"
 sanitize=0
 [[ "$mode" != sanitize ]] || sanitize=1
 E1B_COMPILER_TIMEOUT_SECONDS="${E3_COMPILER_TIMEOUT_SECONDS:-900}" \
-  E3_RETENTION_SANITIZE="$sanitize" \
+  E3_FAULT_SANITIZE="$sanitize" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
   "${PROJECT_ROOT}/tests/e3_private/fault_driver_root.esk" \
   "${PROJECT_ROOT}/tests/e3_private/fault_bridge.c" \

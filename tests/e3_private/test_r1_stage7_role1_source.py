@@ -8,6 +8,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Stage7Role1SourceTest(unittest.TestCase):
+    def test_sanitized_fault_package_uses_fault_selector(self):
+        wrapper = (ROOT / 'scripts/build-e3-r1-stage7-test.sh').read_text()
+        policy = (ROOT / 'scripts/build-e1b-consumer.sh').read_text()
+        self.assertIn('E3_FAULT_SANITIZE="$sanitize"', wrapper)
+        self.assertNotIn('E3_RETENTION_SANITIZE=', wrapper)
+        self.assertIn('"${e3_tuple_kind}" == fault', policy)
+        self.assertIn('"${E3_FAULT_SANITIZE}" == 1', policy)
+
     def test_native_cut_follows_completed_role_zero(self):
         frame = (ROOT / 'src/eshkol_transformer/e3_frame.c').read_text()
         native = (ROOT / 'tests/e3_native/test_frame.c').read_text()

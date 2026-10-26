@@ -1345,6 +1345,13 @@ adds no production hook or public ABI. It is source-only pending independent
 source/test review and a new supported compiled normal/repeat/poison/sanitizer
 gate. It does not establish D2 retention, other R1 cuts, or E3 §9 admission.
 
+The stage-7 one-shot source successor also routes its sanitized noninstalled
+fault package through the existing `E3_FAULT_SANITIZE` selector. The former
+wrapper used the retention-only selector, which the package builder rejects
+for the fault tuple before AOT. This correction changes no native cut,
+failure/retry assertion or production API. Supported compiled execution and
+independent result review remain **NOT RUN**.
+
 A bounded noninstalled stage-12 successor extends the existing
 `ET_E3_FAULT_TESTING` frame selector with site 2, ordinal 0, occurrence 1.
 It fires after all four destination and four result view checks, count
