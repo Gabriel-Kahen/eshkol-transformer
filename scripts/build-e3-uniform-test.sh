@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|last-tie|sanitize]"
+[[ $# -le 2 ]] || die "usage: $0 [ARTIFACT_DIR] [normal|last-tie|sanitize|two-term-reversal|bool-fma|weight-from-tokens|f64-add-cast]"
 verify_toolchain
 for command in ar cmp; do require_command "${command}"; done
 artifact="${1:-$(project_build_dir)/e3-uniform-test}"
 mode="${2:-normal}"
-case "${mode}" in normal|last-tie|sanitize) ;; *) die "unknown E3 uniform mode: ${mode}" ;; esac
+case "${mode}" in normal|last-tie|sanitize|two-term-reversal|bool-fma|weight-from-tokens|f64-add-cast) ;; *) die "unknown E3 uniform mode: ${mode}" ;; esac
 mkdir -p "$(dirname -- "${artifact}")"
 staging="$(mktemp -d "$(dirname -- "${artifact}")/.e3-uniform.XXXXXX")"
 uniform_stage_cleanup() {

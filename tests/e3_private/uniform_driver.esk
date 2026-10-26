@@ -243,16 +243,17 @@
          e3-test-fixture-root))))
 
 (define (e3-test-scenario scenario)
-  (if (not (and (vector? scenario) (= (vector-length scenario) 2)
+  (if (not (and (vector? scenario) (= (vector-length scenario) 3)
                 (boolean? (vector-ref scenario 0))
                 (integer? (vector-ref scenario 1))
                 (exact? (vector-ref scenario 1))
                 (>= (vector-ref scenario 1) 0)
-                (<= (vector-ref scenario 1) 8192)))
+                (<= (vector-ref scenario 1) 8192)
+                (vector? (vector-ref scenario 2))))
       (let ((unreachable
              (et-e1b-private-raise
               'invalid-argument 'e3-test-run
-              "expected #(packing? skipped-batches)" '() #f)))
+              "expected #(packing? skipped-batches files)" '() #f)))
         unreachable))
   scenario)
 
@@ -303,6 +304,7 @@
 
 (define (e3-test-run scenario corpus-path)
   (let* ((checked (e3-test-scenario scenario))
+         (files-ready (e3-uniform-set-files! (vector-ref checked 2)))
          (fixture (e3-test-fixture))
          (model (vector-ref fixture 0))
          (tokenizer (vector-ref fixture 1))

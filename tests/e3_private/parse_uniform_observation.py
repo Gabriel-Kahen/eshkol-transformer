@@ -33,7 +33,9 @@ def parse_uniform(raw: bytes, batch_count: int, expected_cursor: str):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stdout", required=True, type=Path)
-    parser.add_argument("--batch-count", required=True, type=int, choices=(3,))
+    parser.add_argument("--batch-count", required=True, type=int, choices=(2, 3))
+    parser.add_argument("--case", default="uniform-zero",
+                        choices=("uniform-zero", "nonzero-equivalence"))
     parser.add_argument("--reference", required=True, type=Path)
     parser.add_argument("--observed", required=True, type=Path)
     parser.add_argument("--roles", required=True, type=Path)
@@ -41,7 +43,8 @@ def main() -> None:
     reference = decode(args.reference.read_bytes())
     cases = reference.get("cases") if isinstance(reference, dict) else None
     if not isinstance(cases, list) or len(cases) != 1 or \
-            cases[0].get("name") != "uniform-zero":
+            cases[0].get("name") != args.case or \
+            len(cases[0]["corpus"].get("batches", [])) != args.batch_count:
         raise ValueError("uniform reference case differs")
     expected_cursor = cases[0]["corpus"]["start_cursor"]
     payload, roles = parse_uniform(args.stdout.read_bytes(), args.batch_count,

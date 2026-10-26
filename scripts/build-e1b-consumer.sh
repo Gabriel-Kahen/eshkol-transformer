@@ -1272,9 +1272,14 @@ if [[ -n "${E3_UNIFORM_MUTANT+x}" ]]; then
     die "E3 uniform mutation is allowed only for the exact test tuple"
 fi
 case "${e3_uniform_mutant}" in
-  normal|last-tie) ;;
+  normal|last-tie|two-term-reversal|bool-fma|weight-from-tokens|f64-add-cast) ;;
   *) die "unknown E3 uniform mutation: ${e3_uniform_mutant}" ;;
 esac
+if [[ "${package_policy}" == e3-private-aggregate &&
+      "${e3_tuple_kind}" == uniform &&
+      "${e3_uniform_mutant}" == bool-fma ]]; then
+  undefined_symbols="${PROJECT_ROOT}/tests/e3_private/uniform_bool_fma_undefined_symbols.txt"
+fi
 require_command awk
 source "${PROJECT_ROOT}/scripts/e3-overflow-clamp-policy.sh"
 require_command cmp
@@ -1909,9 +1914,13 @@ if [[ "${#package_native_sources[@]}" -gt 0 ]]; then
   if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == uniform ]]; then
     package_native_cflags+=(-DET_E3_NUMERICAL_TESTING -fno-builtin-printf)
-    if [[ "${e3_uniform_mutant}" == last-tie ]]; then
-      package_native_cflags+=(-DET_E3_UNIFORM_LAST_TIE_TEST)
-    fi
+    case "${e3_uniform_mutant}" in
+      last-tie) package_native_cflags+=(-DET_E3_UNIFORM_LAST_TIE_TEST) ;;
+      two-term-reversal) package_native_cflags+=(-DET_E3_NUMERICAL_REVERSE_CORRECT) ;;
+      bool-fma) package_native_cflags+=(-DET_E3_EQUIV_BOOL_FMA) ;;
+      weight-from-tokens) package_native_cflags+=(-DET_E3_EQUIV_W_FROM_TOKENS) ;;
+      f64-add-cast) package_native_cflags+=(-DET_E3_EQUIV_F64_ADD_CAST) ;;
+    esac
   fi
   if [[ "${package_policy}" == e3-private-aggregate &&
         "${e3_tuple_kind}" == zero ]]; then

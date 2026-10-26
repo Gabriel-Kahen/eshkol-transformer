@@ -1090,6 +1090,16 @@ adds a two-term correct-count reversal to the exact numerical tuple and compares
 one packed-single private AOT observation with the unchanged independent oracle
 and normal AOT. Host checks alone do not admit this equivalent control; its
 fresh compiled run, review, other controls and full E3 §9 remain open.
+The separate test-only nonzero M3 equivalent-controls candidate keeps the
+accepted C1 zero-state admission seam and adds raw D1 bytes `00 00 01 01 00`:
+D2 emits two full rows with one correct token apiece. Four individually built
+private provider overlays cover two-term reversal, canonical Boolean `fmaf`,
+W from the exact token counter, and local binary64 add then binary32 cast.
+The new strict gate requires the independent Q0 M3/D2 oracle, complete 21-role
+observations, identical stdout, observed records, roles and transcripts for
+each overlay against two reproducible normal builds. This is a source
+candidate only; its Docker/AOT gate and result review are **NOT_RUN**. The
+identical-error retry remains separate, and no E3 §9 equivalence row is closed.
 
 The [E3 §9 compiled acceptance matrix contract](e3/E3_SECTION9_COMPILED_ACCEPTANCE_MATRIX.md)
 is a docs-only candidate for the remaining private numerical, compiled-mutant,

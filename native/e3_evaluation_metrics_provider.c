@@ -175,6 +175,10 @@ static int64_t argmax(const float *row) {
 #if defined(ET_E3_NUMERICAL_REVERSE_CORRECT) && !defined(ET_E3_NUMERICAL_TESTING)
 #error "reversed-correct equivalence requires the private numerical test tuple"
 #endif
+#if (defined(ET_E3_EQUIV_BOOL_FMA) || defined(ET_E3_EQUIV_W_FROM_TOKENS) || \
+     defined(ET_E3_EQUIV_F64_ADD_CAST)) && !defined(ET_E3_NUMERICAL_TESTING)
+#error "equivalent provider controls require the private numerical test tuple"
+#endif
 #ifdef ET_E3_NUMERICAL_WRONG_VOCAB_AXIS
 /* Test mutant: reinterpret the same [T=2,V=256] logits as [V=256,T=2]. */
 static int64_t wrong_vocab_axis_argmax(const float *logits, size_t token) {
@@ -217,8 +221,13 @@ static int32_t evaluate_correct(const et_kernel_call_v1 *c, union results *resul
   const float weight1 = mask[1] == 0u ? 0.0f : 1.0f;
   const float hit0 = winner0 == targets[0] ? 1.0f : 0.0f;
   const float hit1 = winner1 == targets[1] ? 1.0f : 0.0f;
+#ifdef ET_E3_EQUIV_BOOL_FMA
+  const float p0 = fmaf(weight0, hit0, 0.0f);
+  const float p1 = fmaf(weight1, hit1, 0.0f);
+#else
   const float p0 = weight0 * hit0;
   const float p1 = weight1 * hit1;
+#endif
   float correct = 0.0f;
 #ifdef ET_E3_NUMERICAL_REVERSE_CORRECT
   correct = correct + p1;
@@ -268,7 +277,11 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
 #ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
   const float next_n = n + nb / wb;
 #else
+#ifdef ET_E3_EQUIV_F64_ADD_CAST
+  const float next_n = (float)((double)n + (double)nb);
+#else
   const float next_n = n + nb;
+#endif
 #endif
   if (!isfinite(next_n)) return domain(e,op);
 #ifdef ET_E3_NUMERICAL_MEAN_OF_MEANS
@@ -280,7 +293,11 @@ static int32_t evaluate_accumulate(const et_kernel_call_v1 *c, union results *re
   const float next_c = correct + cb;
   if (!isfinite(next_c)) return domain(e,op);
   result->accumulate.n = positive_zero(next_n);
+#ifdef ET_E3_EQUIV_W_FROM_TOKENS
+  result->accumulate.w = (float)next_tokens;
+#else
   result->accumulate.w = positive_zero(next_w);
+#endif
   result->accumulate.correct = positive_zero(next_c);
   result->accumulate.tokens = next_tokens;
   result->accumulate.batches = next_batches;
