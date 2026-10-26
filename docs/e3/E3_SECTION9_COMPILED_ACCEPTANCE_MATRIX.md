@@ -304,9 +304,15 @@ The trained-G2 sanitizer attempt at `55a56f2f` is separately authenticated as
 NONACCEPTING in `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/team/integration-review-trained-g2-san-55a56f2f-failure/REVIEW.md`:
 the first two-token run reports an ASan one-byte read seven bytes before a
 48-byte terminal-ID clone allocation. Its partial SAVE/E3 prefix does not admit
-the full trained path. A bounded authentic clone/original-native reproducer
-with a same-object managed/typed-carrier control, independent repair review,
-and a fresh frozen full-path successor remain separate gates.
+the full trained path. The managed-cell focused successor at `266f2a5` is also
+NONACCEPTING (`cpu4-trained-g2-san-managed-266f2a5-focused-v3-attempt1-independent-review-20261026/REVIEW.md`;
+392-file raw seal `a2686963...`): all 37 native sanitizer units compiled,
+but Clang hit the explicit 2,400-second bound while compiling the 1.73-GB
+generated ASan IR. No sanitized evaluator object, linked runtime, two-token
+case, or first-EOS case ran; source and container custody passed. The original
+clone trace therefore remains unresolved for the trained path. A changed-bound
+focused successor, independent result review, and then a fresh frozen full-path
+gate remain separate prerequisites.
 
 Completion requires independent source-and-test review, frozen oracle and
 mutation inventory, every row's supported compiled proof or explicit accepted

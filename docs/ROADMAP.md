@@ -1310,6 +1310,13 @@ The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:
 `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/team/integration-review-trained-g2-san-55a56f2f-failure/REVIEW.md`).
+The focused managed-cell successor at `266f2a5` is independently
+NONACCEPTING (`cpu4-trained-g2-san-managed-266f2a5-focused-v3-attempt1-independent-review-20261026/REVIEW.md`,
+392-file raw seal `a2686963...`): 37 native sanitizer units built, but Clang
+timed out after 2,400 seconds compiling 1.73-GB generated ASan IR. No
+sanitized object, linked runtime or focused two-token/first-EOS case ran.
+Source and container custody passed. A fresh changed-bound compiler gate
+and independent runtime review are required before a full-path successor.
 The full trained path, candidate-ON CPU4 and E3 §9 remain unadmitted.
 
 The first [mathematical three-batch M2 sum-order witness](../tests/e3_reference/sum_order_witness_v1.json)
