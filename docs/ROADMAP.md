@@ -1021,6 +1021,16 @@ This is source/oracle evidence only. The zero-control tuple still needs exact
 compiled inventories, independent review, and normal/poison/sanitizer AOT
 runtime evidence before any N3 tie/uniform claim.
 
+The noninstalled uniform/tie `3aade9b` attempt6 built all four packages but
+stopped at its first AOT: `uniform_runtime.esk` called
+`e3-uniform-set-files!`, a package-local Eshkol function outside the runtime
+compiler's source scope. Its host common-Git config also changed during the
+run, so the sealed attempt is nonaccepting. A focused test-only successor
+carries the five paths through the existing private `e3-test-run` scenario and
+sets them inside the package before fixture creation. It changes no production
+E3 source or exported ABI. Host scope negatives pass; fresh package/AOT,
+normal/poison/sanitizer and last-tie compiled gates remain **NOT_RUN**.
+
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
 the same `[3,197]` inputs and `11` mask and differs only in the second target.

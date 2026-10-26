@@ -20,6 +20,35 @@ def lines(prefix: Path, suffix: str) -> list[str]:
 
 
 class UniformTupleTest(unittest.TestCase):
+    def test_uniform_file_paths_enter_through_existing_private_run(self) -> None:
+        runtime = (ROOT / "tests/e3_private/uniform_runtime.esk").read_text()
+        driver = (ROOT / "tests/e3_private/uniform_driver.esk").read_text()
+
+        def valid(runtime_source: str, driver_source: str) -> bool:
+            entry = driver_source.split("(define (e3-test-run scenario corpus-path)", 1)[-1]
+            setter = "(files-ready (e3-uniform-set-files! (vector-ref checked 2)))"
+            return (
+                "(e3-uniform-set-files!" not in runtime_source
+                and "(vector (vector #t 0" in runtime_source
+                and all(f"(uniform-argument arguments {index})" in runtime_source
+                        for index in range(3, 8))
+                and "(= (vector-length scenario) 3)" in driver_source
+                and setter in entry
+                and entry.index(setter) < entry.index("(fixture (e3-test-fixture))")
+            )
+
+        self.assertTrue(valid(runtime, driver))
+        self.assertFalse(valid(runtime + "\n(e3-uniform-set-files! #f)\n", driver))
+        self.assertFalse(valid(runtime, driver.replace(
+            "(files-ready (e3-uniform-set-files! (vector-ref checked 2)))\n"
+            "         (fixture (e3-test-fixture))",
+            "(fixture (e3-test-fixture))\n"
+            "         (files-ready (e3-uniform-set-files! (vector-ref checked 2)))")))
+        self.assertFalse(valid(runtime, driver.replace(
+            "(= (vector-length scenario) 3)",
+            "(= (vector-length scenario) 2)")))
+        self.assertNotIn("e3-uniform-set-files!", lines(UNIFORM, "public_exports"))
+
     def test_zero_state_load_uses_first_model_initializer_successor(self) -> None:
         from tests.m3 import reference as m3
 

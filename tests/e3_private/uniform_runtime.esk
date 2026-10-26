@@ -41,14 +41,14 @@
 (define expected-accuracy
   (if (string=? (uniform-argument arguments 1) "uniform-zero-last-tie")
       0 1065353216))
-(e3-uniform-set-files!
-  (vector (uniform-argument arguments 3)
-          (uniform-argument arguments 4)
-          (uniform-argument arguments 5)
-          (uniform-argument arguments 6)
-          (uniform-argument arguments 7)))
 (define output (vector #f))
-(e3-private-test-run (vector (vector #t 0))
+(e3-private-test-run
+ (vector (vector #t 0
+                 (vector (uniform-argument arguments 3)
+                         (uniform-argument arguments 4)
+                         (uniform-argument arguments 5)
+                         (uniform-argument arguments 6)
+                         (uniform-argument arguments 7))))
                      (vector (uniform-argument arguments 2)) output)
 (define result (vector-ref output 0))
 (uniform-check 'result
