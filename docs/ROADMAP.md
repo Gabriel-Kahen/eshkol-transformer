@@ -1285,6 +1285,16 @@ all four mutant runs first diverged at the third-batch numerator and rejected
 without publishing a transcript. The other M2 numerical mutants and the full
 E3 §9 acceptance matrix remain open; this result does not establish installed
 or public E3 behavior or GPU execution.
+The fresh exact-`44c0418d` sum-order successor then passed its independently
+reviewed noninstalled compiled-private gate
+(`m2-sum-order-44c0418-attempt4-independent-review-20261025/REVIEW.md`,
+435-file raw seal `afcfeec5...`). Normal A/B, poison and sanitizer results
+matched byte-for-byte; four regrouping mutants first changed the genuine
+third-row state numerator `41de3b31` to `41de3b30` and emitted no mutant
+transcript. The launcher, container, inner gate and custody checks exited zero.
+The wrapper accepted only the exact retained 291-byte Q0 NumPy warning; the
+prior attempt 3 remains host NONACCEPTING. This closes that bounded
+exact-source sum-order leaf, not the remaining M2 mutants or full §9.
 The separate noninstalled M2 padded-position source candidate reuses the same
 authentic three-row packed D1/D2 witness. Its test-only frame variant supplies a
 local `11` mask to both final-row L3S reduce and E3 correct while retaining the
