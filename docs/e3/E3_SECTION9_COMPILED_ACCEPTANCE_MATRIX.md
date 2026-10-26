@@ -260,6 +260,15 @@ samples showed zero **net active-region** used-byte change; they do not
 attribute allocations or explain the separately measured full-E3 2,360-byte
 fault growth. R1/R2 retention and full sanitizer remain open.
 
+The source-reviewed `7827b8d` D2 fault-envelope repair has no compiled
+retention result. Its first attempt is independently NONACCEPTING
+(`retention-d2-escape-7827-attempt1-independent-review-20261025/REVIEW.md`;
+19-file raw POSTEXIT seal `091f263c...`). The first private package stopped
+before AOT on a stale test-generator D2 predecessor hash/size: repaired
+`d2_dataset.esk` is 45,388 bytes versus the manifest's 45,336. A missing
+guest Git alternates mount also warned. No paired runtime or canonical
+complete-call arena assertion ran; repair effect remains unmeasured.
+
 The accepted T2 numerical F evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/numerical-a-review/REVIEW.md`:
 supported f31/fe9 exit 0 after 3,750.864 seconds; 510-file raw seal

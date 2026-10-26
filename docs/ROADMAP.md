@@ -1257,6 +1257,16 @@ control cases all exited zero. Direct and mapped D2 faults each retained
 before and after `e3-note-caught-error!` showed zero net used-byte change in
 the active region. That does not establish zero allocation or explain the
 separately observed 2,360-byte full-E3 fault growth. Retention remains open.
+The first compiled attempt for the source-reviewed D2 fault-envelope repair at
+`7827b8d` is independently classified NONACCEPTING
+(`retention-d2-escape-7827-attempt1-independent-review-20261025/REVIEW.md`,
+19-file raw POSTEXIT seal `091f263c...`). The first private package rejected
+the unchanged test generator's predecessor D2 hash/size: repaired production
+`d2_dataset.esk` is 45,388 bytes, whereas its variant manifest still required
+45,336. Guest Git also warned that a linked alternates object directory was
+not mounted. No AOT, paired fault/control runtime or complete-call retention
+assertion ran. Repin the derived test-source manifest in a reviewed successor
+and make the alternates target available before a fresh compiled gate.
 The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:
