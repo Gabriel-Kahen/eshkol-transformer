@@ -917,6 +917,13 @@ driver/root/bridge and exact package manifests isolate these samples. There
 are no production API changes. Focused host source/custody tests pass. Its
 supported normal, repeat, poison
 and sanitizer measurements and independent result review remain **NOT RUN**.
+The later sealed `2b77481` repair attempt retained +2,288 bytes in direct and
+mapped D2 faults with flat controls, while the canonical 1,024-call path still
+failed `failure-arena-bytes`. A new [test-only allocation-boundary
+diagnostic](e3/E3_D2_ALLOCATION_BOUNDARY_DIAGNOSTIC.md) instruments generated
+private D2/E1 sources and a fixed native root observer without changing
+production D2 or E1. Its first compiled import-discovery gate is **NOT RUN**;
+source and packet review precede any AOT or retention claim.
 An isolated all-correct/all-wrong source candidate adds two fixed raw V256
 six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
 and a separate two-case private numerical runner. The new versioned manifest

@@ -12,6 +12,7 @@
 (extern void e3-test-read-fail-stage i64
         :real et_d2_exact_read_test_fail_stage_v1)
 (extern i64 e3-test-region-used :real et_e3_retention_region_used_v1)
+(extern i64 e3-test-boundary-mark i64 :real et_e3_retention_boundary_v1)
 
 (define e3-test-retention-root (vector #f))
 
@@ -582,6 +583,79 @@
             (vector-ref samples 4) (vector-ref samples 5)
             (vector-ref samples 6) (vector-ref samples 7))))
 
+;;; Test-only root snapshots. The fixed native hook records without allocating;
+;;; no display or vector construction occurs between arm and the final sample.
+(define (e3-test-retention-diagnose-boundary horizon present? fault?)
+  (let* ((record (vector-ref e3-test-retention-root 0))
+         (model (vector-ref record 0))
+         (destinations (vector-ref record 1))
+         (frame (vector-ref record 2))
+         (dataset (vector-ref record 3))
+         (cursor (vector-ref record 4))
+         (modes (vector-ref record 5))
+         (model-image (vector-ref record 6)))
+    (e3-test-retention-check 'boundary-identity
+      (and (= horizon 1024) (eq? present? #f) (boolean? fault?)
+           (not (vector-ref record 13))))
+    (let prefix ((index 0))
+      (if (= index 512) #t
+          (begin
+            (e3-test-retention-check 'boundary-prefix-region-byte-equality
+              (= (e3-test-retention-call! model dataset frame destinations
+                                          cursor modes model-image)
+                 (vector-ref record 14)))
+            (prefix (+ index 1)))))
+    (e3-test-read-fail-stage (if fault? 1 0))
+    (e3-test-boundary-mark 0)
+    (with-region ('e3-retention-boundary 262144)
+      (let ((caught?
+             (guard
+              (caught
+               (#t
+                (e3-test-boundary-mark 7)
+                (and (transformer-error? caught)
+                     (eq? (transformer-error-category caught) 'io)
+                     (eq? (transformer-error-operation caught)
+                          'token-dataset-next-batch))))
+              (let ((batch (d2-token-dataset-next-batch dataset)))
+                (e3-test-retention-check 'boundary-not-eos
+                  (not (d2-token-dataset-end? batch)))
+                (d2-token-batch-release! batch)
+                (d2-token-dataset-seek! dataset cursor)
+                #f))))
+        (e3-test-retention-check 'boundary-outcome (eq? caught? fault?))))
+    (e3-test-boundary-mark 8)
+    (e3-test-read-fail-stage 0)
+    (with-region ('e3-retention-boundary-check 262144)
+      (e3-test-retention-check 'boundary-cursor
+        (d2-core-bytes=? cursor (d2-token-dataset-cursor dataset)))
+      (e3-test-retention-check 'boundary-no-live-batch-or-borrow
+        (and (= (e3-test-retention-probe 23) 0)
+             (= (e3-test-retention-probe 24) 0)))
+      (e3-test-retention-check 'boundary-no-dataset-escape
+        (eq? (vector-ref (d2-dataset-state dataset 'token-dataset-next-batch)
+                         11) #f)))
+    (e3-test-retention-check 'boundary-retry-region-byte-equality
+      (= (e3-test-retention-call! model dataset frame destinations cursor modes
+                                  model-image) (vector-ref record 14)))
+    (e3-test-boundary-mark 9)
+    (e3-test-boundary-mark 99)
+    (let ((bytes (make-vector 10 0)) (counts (make-vector 10 0)))
+      (let collect ((index 0))
+        (if (= index 10) #t
+            (begin
+              (vector-set! bytes index (e3-test-boundary-mark (+ 100 index)))
+              (vector-set! counts index (e3-test-boundary-mark (+ 200 index)))
+              (collect (+ index 1)))))
+      (let verify ((index 0))
+        (if (= index 10) #t
+            (begin
+              (e3-test-retention-check 'boundary-marker-count
+                (= (vector-ref counts index)
+                   (if (or (= index 0) (= index 8) (= index 9) fault?) 1 0)))
+              (verify (+ index 1)))))
+      (vector 'e3-retention-boundary-v1 fault? bytes counts))))
+
 (define (e3-test-retention-run phase horizon present? corpus-path)
   (cond ((eq? phase 'prepare)
          (e3-test-retention-prepare horizon present? corpus-path))
@@ -599,9 +673,14 @@
          (or (= (vector-length scenario) 4)
              (and (= (vector-length scenario) 5)
                   (or (eq? (vector-ref scenario 1) 'diagnose)
-                      (eq? (vector-ref scenario 1) 'diagnose-d2))
+                      (eq? (vector-ref scenario 1) 'diagnose-d2)
+                      (eq? (vector-ref scenario 1) 'diagnose-boundary))
                   (boolean? (vector-ref scenario 4))))
          (eq? (vector-ref scenario 0) 'retention)))
+  (if (eq? (vector-ref scenario 1) 'diagnose-boundary)
+      (e3-test-retention-diagnose-boundary (vector-ref scenario 2)
+                                           (vector-ref scenario 3)
+                                           (vector-ref scenario 4))
   (if (eq? (vector-ref scenario 1) 'diagnose-d2-map)
       (e3-test-retention-diagnose-d2-map (vector-ref scenario 2)
                                          (vector-ref scenario 3))
@@ -615,4 +694,4 @@
                                   (vector-ref scenario 4))
       (e3-test-retention-run (vector-ref scenario 1)
                              (vector-ref scenario 2)
-                             (vector-ref scenario 3) corpus-path)))))
+                             (vector-ref scenario 3) corpus-path))))))

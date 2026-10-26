@@ -82,6 +82,12 @@ for g3g_raw_input in "${raw_private_root}" "${raw_package_bridge}" \
   esac
 done
 source "${PROJECT_ROOT}/scripts/e3-private-package-policy.sh"
+e3_retention_boundary_diagnostic=${E3_RETENTION_BOUNDARY_DIAGNOSTIC:-0}
+case "${e3_retention_boundary_diagnostic}" in 0|1) ;; *) die "invalid E3 boundary diagnostic selector" ;; esac
+if [[ "${e3_retention_boundary_diagnostic}" == 1 &&
+      "${e3_retention_arena_diagnostic_tuple}" != 1 ]]; then
+  die "E3 boundary diagnostic requires the exact noninstalled retention diagnostic tuple"
+fi
 if [[ "${e3_tuple_requested}" == 1 ]]; then
   m3_tuple_requested=0
   m3t_tuple_requested=0
@@ -455,6 +461,9 @@ e3_undefined_symbols="$(realpath -- "${e3_prefix}_undefined_symbols.txt")"
 e3_public_strings="$(realpath -- "${e3_prefix}_public_strings.txt")"
 e3_source_closure="$(realpath -- "${e3_prefix}_source_closure.txt")"
 e3_native_source_closure="$(realpath -- "${e3_prefix}_native_source_closure.txt")"
+if [[ "${e3_retention_boundary_diagnostic}" == 1 ]]; then
+  e3_source_closure="$(realpath -- "${PROJECT_ROOT}/tests/e3_private/retention_boundary_package_source_closure.txt")"
+fi
 
 [[ -z "${E1B_PACKAGE_POLICY+x}" ]] || \
   die "E1B_PACKAGE_POLICY overrides are forbidden; package policy is derived from exact repository inputs"
@@ -1443,6 +1452,11 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
   python3 "${PROJECT_ROOT}/scripts/generate-e3-d2-source.py" \
     --output-dir "${e3_generated_dir}" >"${e1b_tmp}/d2-generation.json"
   e3_generated_source_root="${e3_generated_dir}/source"
+  if [[ "${e3_retention_boundary_diagnostic}" == 1 ]]; then
+    python3 -B "${PROJECT_ROOT}/scripts/generate-e3-retention-boundary-source.py" \
+      --output-dir "${e3_generated_dir}" \
+      >"${e1b_tmp}/boundary-source-generation.json"
+  fi
     if [[ "${e3_tuple_kind}" == fault ||
         "${e3_tuple_kind}" == retention ||
         "${e3_tuple_kind}" == retention-first-eval-mutant ||
@@ -1610,6 +1624,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
   else
     include_args+=(-I "${e3_generated_source_root}")
+  fi
+  if [[ "${e3_retention_boundary_diagnostic}" == 1 ]]; then
+    include_args=(-I "${e3_generated_source_root}" "${include_args[@]}")
   fi
   if [[ "${e3_tuple_kind}" == mode-graph ||
         "${e3_tuple_kind}" == fault ||
@@ -2639,6 +2656,12 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     "${evidence_dir}.tmp.$$/e3_d2_dataset.esk"
   cp "${e3_generated_source_root}/e3_d2_source_provenance.json" \
     "${evidence_dir}.tmp.$$/e3_d2_source_provenance.json"
+  if [[ "${e3_retention_boundary_diagnostic}" == 1 ]]; then
+    cp "${e3_generated_dir}/boundary-source-receipt.json" \
+      "${evidence_dir}.tmp.$$/boundary-source-receipt.json"
+    cp "${e3_generated_source_root}/transformer/error_core.esk" \
+      "${evidence_dir}.tmp.$$/boundary-error-core.esk"
+  fi
   if [[ "${e3_tuple_kind}" == zero ]]; then
     cp "${e3_generated_source_root}/transformer/module.esk" \
       "${evidence_dir}.tmp.$$/e3_zero_p1_topology_module.esk"

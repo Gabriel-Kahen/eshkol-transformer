@@ -12,6 +12,35 @@ extern "C" int64_t et_e3_retention_arena_used_v1() {
   return static_cast<int64_t>(arena_get_used_memory(get_global_arena_shared()));
 }
 
+// Test-only, allocation-free snapshots of the true shared root arena. The
+// compiler package records fault boundaries; the diagnostic driver reads them
+// only after the D2 call has returned to its outer region.
+static int64_t boundary_bytes[10] = {};
+static int64_t boundary_counts[10] = {};
+static bool boundary_armed = false;
+
+extern "C" int64_t et_e3_retention_boundary_v1(int64_t stage) {
+  if (stage == 0) {
+    for (int i = 0; i < 10; ++i) {
+      boundary_bytes[i] = 0;
+      boundary_counts[i] = 0;
+    }
+    boundary_armed = true;
+  } else if (stage == 99) {
+    boundary_armed = false;
+    return 0;
+  } else if (stage >= 100 && stage < 110) {
+    return boundary_bytes[stage - 100];
+  } else if (stage >= 200 && stage < 210) {
+    return boundary_counts[stage - 200];
+  }
+  if (stage < 0 || stage >= 10 || !boundary_armed) return -1;
+  const int64_t used = static_cast<int64_t>(arena_get_used_memory(get_global_arena_shared()));
+  boundary_bytes[stage] = used;
+  ++boundary_counts[stage];
+  return used;
+}
+
 extern "C" int64_t et_e3_retention_arena_total_v1() {
   return static_cast<int64_t>(arena_get_total_memory(get_global_arena_shared()));
 }

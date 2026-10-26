@@ -17,11 +17,16 @@
 (define mode (car (cdr (cdr args))))
 (check 'mode (or (string=? mode "fault") (string=? mode "control")
                  (string=? mode "d2-fault") (string=? mode "d2-control")
-                 (string=? mode "d2-map-fault")))
+                 (string=? mode "d2-map-fault")
+                 (string=? mode "boundary-fault")
+                 (string=? mode "boundary-control")))
+(define boundary? (or (string=? mode "boundary-fault")
+                      (string=? mode "boundary-control")))
 (define d2-only? (or (string=? mode "d2-fault")
                      (string=? mode "d2-control")))
 (define fault? (or (string=? mode "fault")
-                   (string=? mode "d2-fault")))
+                   (string=? mode "d2-fault")
+                   (string=? mode "boundary-fault")))
 (define input (vector path))
 (define output (vector #f))
 (define prepare (vector (vector 'retention 'prepare 1024 #f)))
@@ -31,6 +36,29 @@
 
 (e3-retention-test-run prepare input output)
 (check 'prepared (eq? (vector-ref output 0) #t))
+(if boundary?
+    (begin
+      (e3-retention-test-run
+        (vector (vector 'retention 'diagnose-boundary 1024 #f fault?))
+        input output)
+      (let ((result (vector-ref output 0)))
+        (check 'boundary-result
+          (and (vector? result) (= (vector-length result) 4)
+               (eq? (vector-ref result 0) 'e3-retention-boundary-v1)
+               (eq? (vector-ref result 1) fault?)
+               (= (vector-length (vector-ref result 2)) 10)
+               (= (vector-length (vector-ref result 3)) 10)))
+        (display "E3-RETENTION-BOUNDARY mode=") (display mode)
+        (let emit ((index 0))
+          (if (= index 10) #t
+              (begin
+                (display " stage") (display index) (display "=")
+                (display (vector-ref (vector-ref result 2) index))
+                (display "/")
+                (display (vector-ref (vector-ref result 3) index))
+                (emit (+ index 1)))))
+        (newline) (flush-output-port (current-output-port)))
+      (exit 0)))
 (if (string=? mode "d2-map-fault")
     (begin
       (e3-retention-test-run
