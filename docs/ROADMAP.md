@@ -1316,6 +1316,15 @@ canonical 1,024-call absent-gradient runtime aborted at
 A focused compiled phase probe around D2 promotion, envelope and re-raise,
 with a nearest control, is the next causal gate; the full-E3 observer and
 canonical arena equality need fresh proof after that.
+The `b465081` phase-probe attempt 1 passed independently reviewed
+normal-package import discovery only
+(`retention-boundary-b465081-import-discovery-attempt1-independent-review-20261026/REVIEW.md`,
+88-file raw postexit seal `217f775f...`). Its deliberately rejected object
+measured 181 imports, the prior 179 plus only the boundary `mark` and `read`
+symbols; none were absent. Source and container custody passed. Sanitized
+package inventory, AOT and fault/control runtime were not run. Repin normal
+imports, independently discover sanitized imports, then run a fresh paired
+phase probe before any allocation attribution or retention claim.
 The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:

@@ -294,6 +294,16 @@ Retain R1/R2 as open. A fresh phase probe must distinguish D2 promotion,
 exception construction, envelope and re-raise before another repair claim;
 the full-E3 scoped observer and canonical equality need separate proof.
 
+The `b465081` allocation-boundary attempt 1 passed only normal-package
+import discovery (`retention-boundary-b465081-import-discovery-attempt1-independent-review-20261026/REVIEW.md`;
+88-file raw postexit seal `217f775f...`). The deliberately rejected object
+had 181 undefined imports: the prior 179 plus exactly the new boundary
+`mark` and `read` symbols, with none absent. Source, dependency and container
+custody passed. Sanitized package imports, AOT and runtime were not attempted;
+there is no allocation attribution or retention admission. Repin the measured
+normal policy, discover the sanitized inventory independently, then review a
+fresh paired fault/control runtime gate.
+
 The `761cb395` one-shot R1 stage-3 attempt 1 is independently HOLD/nonadmitting
 (`r1-stage3-oneshot-761cb395-attempt1-independent-review-20261026/REVIEW.md`;
 85-file raw postexit seal `33d2b782...`). Corpus generation, normal fault
