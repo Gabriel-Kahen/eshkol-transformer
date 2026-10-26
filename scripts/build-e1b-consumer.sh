@@ -1456,6 +1456,12 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
     python3 -B "${PROJECT_ROOT}/scripts/generate-e3-retention-boundary-source.py" \
       --output-dir "${e3_generated_dir}" \
       >"${e1b_tmp}/boundary-source-generation.json"
+    cp "${e3_generated_dir}/boundary-source-receipt.json" \
+      "${e1b_tmp}/boundary-source-receipt.json"
+    cp "${e3_generated_source_root}/e3_d2_dataset.esk" \
+      "${e1b_tmp}/boundary-d2.esk"
+    cp "${e3_generated_source_root}/transformer/error_core.esk" \
+      "${e1b_tmp}/boundary-e1.esk"
   fi
     if [[ "${e3_tuple_kind}" == fault ||
         "${e3_tuple_kind}" == retention ||
