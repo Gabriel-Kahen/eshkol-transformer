@@ -924,8 +924,9 @@ diagnostic](e3/E3_D2_ALLOCATION_BOUNDARY_DIAGNOSTIC.md) instruments generated
 private D2/E1 sources and a fixed native root observer without changing
 production D2 or E1. The sealed `b465081` import-discovery attempt measured
 exactly two new normal undefined symbols, the private mark/read hooks, and
-stopped before sanitizer/AOT/runtime. This test-only successor pins only that
-measured normal policy; sanitized import discovery and independent review are
+stopped before sanitizer/AOT/runtime. This test-only successor pins that
+measured normal policy and permits its two hooks only in the boundary
+diagnostic's unresolved-authority check; sanitized import discovery and independent review are
 **NOT RUN**. No retention or E3 §9 admission follows.
 An isolated all-correct/all-wrong source candidate adds two fixed raw V256
 six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,

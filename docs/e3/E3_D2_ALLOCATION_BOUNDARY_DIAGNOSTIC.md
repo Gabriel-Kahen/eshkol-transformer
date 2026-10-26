@@ -36,6 +36,9 @@ The sealed `b465081` attempt1 authenticated the normal rejected-stage IR and
 181-symbol `nm -u` inventory. Relative to the tracked 179-symbol policy,
 only `et_e3_retention_boundary_mark_v1` and
 `et_e3_retention_boundary_read_v1` were added; no expected symbol was absent.
-The normal manifest now matches those measured bytes. Sanitized
+The normal manifest now matches those measured bytes. The subsequent private
+unresolved-authority check admits only these two declared hooks when the
+boundary diagnostic selector is active; selector-off, other tuples and any
+additional private symbol still reject. Sanitized
 noninstrumentation and instrumentation manifests remain unchanged and must be
 measured in a separate fail-closed discovery before any AOT or runtime.

@@ -15,6 +15,13 @@ e3_reject_unresolved_private() {
        grep -Fxq -- "${symbol}" "${expected}"; then
       continue
     fi
+    if [[ "${tuple_kind}" == retention &&
+          "${e3_retention_boundary_diagnostic:-0}" == 1 &&
+          ( "${symbol}" == et_e3_retention_boundary_mark_v1 ||
+            "${symbol}" == et_e3_retention_boundary_read_v1 ) ]] &&
+       grep -Fxq -- "${symbol}" "${expected}"; then
+      continue
+    fi
     die "E3 aggregate retains unresolved private native authority: ${symbol}"
   done <"${actual}"
 }

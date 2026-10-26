@@ -25,7 +25,8 @@ class RetentionUnresolvedPolicyTest(unittest.TestCase):
                         builder.index('e3_reject_unresolved_private'))
 
     def check_policy(self, kind: str, actual: list[str],
-                     expected: list[str], accepted: bool) -> None:
+                     expected: list[str], accepted: bool,
+                     *, boundary: bool = False) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             actual_path = directory / "actual.txt"
@@ -36,11 +37,12 @@ class RetentionUnresolvedPolicyTest(unittest.TestCase):
 set -euo pipefail
 die() { printf '%s\\n' "$*" >&2; exit 77; }
 source "$1"
+e3_retention_boundary_diagnostic="$5"
 e3_reject_unresolved_private "$2" "$3" "$4"
 '''
             result = subprocess.run(
                 ["bash", "-c", command, "bash", str(POLICY), kind,
-                 str(actual_path), str(expected_path)],
+                 str(actual_path), str(expected_path), "1" if boundary else "0"],
                 capture_output=True, text=True, check=False,
             )
             self.assertEqual(result.returncode, 0 if accepted else 77,
@@ -67,6 +69,16 @@ e3_reject_unresolved_private "$2" "$3" "$4"
             for kind in ("retention", "retention-overflow"):
                 self.check_policy(kind, [OBSERVER, forbidden],
                                   [OBSERVER, forbidden], False)
+
+    def test_boundary_hooks_require_exact_diagnostic_authority(self) -> None:
+        hooks = ["et_e3_retention_boundary_mark_v1",
+                 "et_e3_retention_boundary_read_v1"]
+        self.check_policy("retention", hooks, hooks, True, boundary=True)
+        self.check_policy("retention", hooks, hooks, False)
+        self.check_policy("fault", hooks, hooks, False, boundary=True)
+        self.check_policy("retention", hooks, hooks[:1], False, boundary=True)
+        self.check_policy("retention", hooks + ["et_e3_private_acquire_v1"],
+                          hooks + ["et_e3_private_acquire_v1"], False, boundary=True)
 
     def test_overflow_declares_and_links_the_same_observer(self) -> None:
         manifest = (ROOT / "tests/e3_private/overflow_package_undefined_symbols.txt")
