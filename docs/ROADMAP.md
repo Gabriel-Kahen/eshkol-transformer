@@ -1208,6 +1208,18 @@ peak RSS are failed-process measurements. The sealed trace does not identify
 the exact failed check. Inspect retained IR/object, add a flushed per-check
 diagnostic, and repeat the reviewed full N5/resource gate after repair.
 
+The test-only counter-order successor `bd2af693`/tree `b6ce66b2` corrected
+the private N5 assertion's reversed native publication selectors: selector 0
+reports tokens and selector 1 reports batches. Its independently reviewed
+full attempt 2 passed the six authentic empty, singleton, entry-EOS,
+one-token, 8,192 and 8,193 cases in normal A/B, poison and sanitizer
+(`n5-counter-order-bd2af693-full-attempt2-independent-review-20261025/REVIEW.md`,
+259-file raw seal `3a29276d...`). The cap cases published 8,192 batches with
+16,384 tokens and 8,193 batches with 16,386 tokens; the sanitized cap peak
+RSS was 446,308 KiB, below the 524,288 KiB limit. All 15 stage markers and
+the owned-container exit/absence checks passed. This accepts the bounded
+private N5 cap, edge and resource leaf. It does not admit full E3 section 9.
+
 The exact `44c0418d` complete-call retention attempt 2 is sealed and
 independently classified NONACCEPTING. Its normal and sanitized packages and
 AOT binaries built, but the first 1,024-call absent-gradient runtime aborted
