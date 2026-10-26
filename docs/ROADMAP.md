@@ -1214,9 +1214,11 @@ reports tokens and selector 1 reports batches. Its independently reviewed
 full attempt 2 passed the six authentic empty, singleton, entry-EOS,
 one-token, 8,192 and 8,193 cases in normal A/B, poison and sanitizer
 (`n5-counter-order-bd2af693-full-attempt2-independent-review-20261025/REVIEW.md`,
-259-file raw seal `3a29276d...`). The cap cases published 8,192 batches with
-16,384 tokens and 8,193 batches with 16,386 tokens; the sanitized cap peak
-RSS was 446,308 KiB, below the 524,288 KiB limit. All 15 stage markers and
+259-file raw seal `3a29276d...`). The authentic corpora recorded 8,192
+remaining rows with 16,384 active tokens and 8,193 rows with 16,386 tokens.
+The 8,192 case succeeded; E3 rejected 8,193 at stage 2 with six outputs and
+the cursor unchanged. Sanitized cap peak RSS was 446,308 KiB, below the
+524,288 KiB limit. All 15 stage markers and
 the owned-container exit/absence checks passed. This accepts the bounded
 private N5 cap, edge and resource leaf. It does not admit full E3 section 9.
 
