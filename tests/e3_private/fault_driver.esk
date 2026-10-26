@@ -255,6 +255,30 @@
     (vector-set! record 13 #t)
     #t))
 
+;;; The role-1 cut has already proved failure, rollback and retry. Close its
+;;; fixture without entering the separate complete-call retention reconciliation.
+(define (e3-test-fault-stage7-report present?)
+  (let ((record (vector-ref e3-test-retention-root 0)))
+    (e3-test-fault-check 'stage7-report-identity
+      (and (vector? record) (= (vector-ref record 9) 1024)
+           (eq? (vector-ref record 10) present?)
+           (vector-ref record 13) (not (vector-ref record 18))))
+    (let ((before (vector-ref record 8))
+          (after (e3-test-retention-probes)))
+      (e3-test-fault-check 'stage7-report-idle
+        (and (= (vector-ref after 20) 0)
+             (= (vector-ref after 21) 0)
+             (= (vector-ref after 3) 0)
+             (= (vector-ref after 23) 0)
+             (= (vector-ref after 24) 0)
+             (= (vector-ref after 26) 0)))
+      (d2-token-dataset-close! (vector-ref record 3))
+      (e3-test-fault-check 'stage7-report-dataset-close
+        (= (e3-test-retention-probe 22) 0))
+      (vector-set! record 17 (e3-test-retention-probes))
+      (vector-set! record 18 #t)
+      (vector 'e3-r1-stage7-one-shot-v1 1 1 present? before after))))
+
 (define (e3-test-fault-dispatch scenario corpus-path)
   (e3-test-fault-check 'scenario
     (and (vector? scenario) (= (vector-length scenario) 6)
@@ -334,6 +358,11 @@
           (else
            (e3-test-fault-check 'bound-report
              (e3-test-fault-bound? scenario corpus-path 2))
-           (let ((result (e3-test-retention-report 1024 present?)))
+           (let ((result
+                  (if (and (= (vector-ref scenario 3) 1)
+                           (= (vector-ref scenario 4) 1)
+                           (= (vector-ref scenario 5) 1))
+                      (e3-test-fault-stage7-report present?)
+                      (e3-test-retention-report 1024 present?))))
              (vector-set! e3-test-fault-root 0 #f)
              result)))))

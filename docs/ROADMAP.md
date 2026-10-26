@@ -1336,6 +1336,15 @@ for absent/present gradients, normal/repeat, poison and sanitizer. Focused
 host source tests pass; that recipe, its emitted manifests and runtime remain
 **NOT RUN** pending independent review and a shared-lock custody launcher.
 
+The stage-7 role-1 one-shot report successor preserves that existing guarded
+selector and all first-error, state rollback, retry and twin assertions. Its
+exact site-1/role-1/occurrence-1 report closes the private fixture and reuses
+the existing teardown without the separate 1,024-call retention
+reconciliation; other selectors retain the ordinary retention report. This
+adds no production hook or public ABI. It is source-only pending independent
+source/test review and a new supported compiled normal/repeat/poison/sanitizer
+gate. It does not establish D2 retention, other R1 cuts, or E3 §9 admission.
+
 A bounded noninstalled stage-12 successor extends the existing
 `ET_E3_FAULT_TESTING` frame selector with site 2, ordinal 0, occurrence 1.
 It fires after all four destination and four result view checks, count
