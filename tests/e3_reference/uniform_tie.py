@@ -22,7 +22,8 @@ RAW = bytes(6)
 NAME = "uniform-zero"
 PROVIDER = b"i2-dense-cpu-f32-v1"
 KIND = "e3-uniform-tie-corpus-v1"
-CONFIG = ReferenceConfig(1, 2, None, 1, True)
+# Match the private driver's e3-test-dataset-config; this limit is saved in D2 cursors.
+CONFIG = ReferenceConfig(1, 2, None, 1, True, maximum_batch_bytes=34)
 # The M3 parameter contract is deliberately repeated here so a future change
 # to the mathematical reference cannot silently change the C1 fixture.
 SHAPES = (

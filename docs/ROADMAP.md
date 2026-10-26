@@ -1031,6 +1031,14 @@ sets them inside the package before fixture creation. It changes no production
 E3 source or exported ABI. Host scope negatives pass; fresh package/AOT,
 normal/poison/sanitizer and last-tie compiled gates remain **NOT_RUN**.
 
+The sealed `1d916ffd` uniform/tie attempt1 reached the first normal runtime,
+then stopped at the parser's exact saved-cursor check. The private driver sets
+`:maximum-batch-bytes 34`, while the Q0 fixture had used the D2 reference
+default of 1048576; that limit is encoded in the cursor. This test-only Q0
+successor pins 34 and rejects both old-default start and end cursors. Focused
+host tests pass; a fresh reviewed compiled gate and independent result review
+remain **NOT_RUN**. Attempt1 is nonaccepting.
+
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
 the same `[3,197]` inputs and `11` mask and differs only in the second target.

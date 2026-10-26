@@ -8,10 +8,13 @@ import tempfile
 import unittest
 
 from tests.e3_reference.uniform_tie import (
-    ALIAS, BAD_SHAPES, NAME, RAW, SHAPES, build_reference, checkpoints,
+    ALIAS, BAD_SHAPES, CONFIG, FINGERPRINT, NAME, RAW, SHAPES, VOCAB_SIZE,
+    build_reference, checkpoints,
     materialize, validate_materialized, zero_checkpoint,
 )
 from tests.c1.test_checkpoint_format import parse_golden
+from tests.d2.reference import ReferenceConfig, ReferenceDataset, decode_reference_cursor
+from tests.d2.test_resources import load_d1_resource
 
 
 class UniformTieTest(unittest.TestCase):
@@ -28,6 +31,11 @@ class UniformTieTest(unittest.TestCase):
             validate_materialized(left, first)
             case = build_reference(first)["cases"][0]
             self.assertEqual(case["name"], NAME)
+            self.assertEqual(CONFIG.maximum_batch_bytes, 34)
+            self.assertEqual(decode_reference_cursor(bytes.fromhex(
+                first["cases"][0]["start_cursor"])).config, CONFIG)
+            self.assertEqual(decode_reference_cursor(bytes.fromhex(
+                first["cases"][0]["end_cursor"])).config, CONFIG)
             self.assertEqual([batch["mask"] for batch in first["cases"][0]["batches"]],
                              [[True, True], [True, True], [True, False]])
             self.assertEqual(case["synthetic"]["final"], {
@@ -76,6 +84,34 @@ class UniformTieTest(unittest.TestCase):
                 validate_materialized(root, manifest)
             (root / "zero-state.etcp").write_bytes(original)
             validate_materialized(root, manifest)
+
+    def test_default_batch_byte_cursor_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "fixture"
+            manifest = materialize(root)
+            loaded, digest = load_d1_resource(
+                root / NAME, expected_fingerprint=FINGERPRINT,
+                expected_vocab=VOCAB_SIZE, maximum_total_tokens=6,
+            )
+            old_config = ReferenceConfig(1, 2, None, 1, True)
+            self.assertEqual(old_config.maximum_batch_bytes, 1_048_576)
+            dataset = ReferenceDataset(
+                loaded, old_config, manifest_digest=digest,
+                tokenizer_fingerprint=FINGERPRINT, vocab_size=VOCAB_SIZE,
+            )
+            old_start = dataset.snapshot().hex()
+            while dataset.next_batch() is not None:
+                pass
+            old_end = dataset.snapshot().hex()
+            for field, old_cursor in (("start_cursor", old_start),
+                                      ("end_cursor", old_end)):
+                changed = copy.deepcopy(manifest)
+                changed["cases"][0][field] = old_cursor
+                self.assertNotEqual(old_cursor, manifest["cases"][0][field])
+                self.assertEqual(decode_reference_cursor(bytes.fromhex(
+                    old_cursor)).config, old_config)
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    validate_materialized(root, changed, check_manifest=False)
 
 
 if __name__ == "__main__":
