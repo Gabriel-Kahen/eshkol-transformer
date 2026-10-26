@@ -1148,6 +1148,16 @@ No private runtime, sanitizer or tie mutant executed. Separately, the host
 common Git config changed during the run, so source custody also failed.
 The source and packet need a reviewed test-only interface repair and fresh
 host pins before one new gate; this attempt cannot admit uniform/tie.
+The repaired `1d916ffd` attempt 1 is also independently NONACCEPTING
+(`n3-uniform-1d916ff-attempt1-independent-review-20261026/REVIEW.md`,
+248-file raw postexit seal `80ce2b64...`). All four private packages and AOTs
+built; only normal A runtime exited zero with zero-state and numerical markers.
+The strict host parser then rejected its saved cursor before B, poison,
+sanitizer or tie-mutant execution. Compiled D2 used
+`maximum-batch-bytes=34`, while Q0 retained its 1,048,576 default; the
+bound is encoded in cursor identity. Source and container custody passed.
+Align the test-only reference bound, review a fresh packet and rerun; N3
+uniform/tie and full §9 remain open.
 
 The noninstalled `dc565e1` mode/graph successor has since passed independent
 compiled result review: absent-gradient and seeded-present-gradient runtime stdout matched
