@@ -1292,6 +1292,20 @@ the unchanged test generator's predecessor D2 hash/size: repaired production
 not mounted. No AOT, paired fault/control runtime or complete-call retention
 assertion ran. Repin the derived test-source manifest in a reviewed successor
 and make the alternates target available before a fresh compiled gate.
+The manifest-repinned standalone successor `2b77481d`/tree `8c43cc62`
+then completed four packages and four AOTs but failed its independently
+reviewed full attempt 2 (`retention-d2-escape-2b77481-attempt2-independent-review-20261025/REVIEW.md`,
+330-file raw seal `daefe43e...`). All twelve direct/mapped D2 fault and
+nearest-control runtimes exited zero in normal A/B, poison and sanitizer;
+faults still retained 2,288 root-arena bytes through retry and controls
+stayed flat. All eight full-E3 fault/control runtimes aborted first at the
+invalid `balanced-i2-views-pins` public-counter assertion; fault arms
+retained 2,360 bytes, without attributing the 72-byte difference. The
+canonical 1,024-call absent-gradient runtime aborted at
+`failure-arena-bytes` after 512 calls. The repair did not close retention.
+A focused compiled phase probe around D2 promotion, envelope and re-raise,
+with a nearest control, is the next causal gate; the full-E3 observer and
+canonical arena equality need fresh proof after that.
 The separate trained-G2 sanitizer attempt at `55a56f2f` is also NONACCEPTING:
 the first two-token run hit an ASan one-byte read seven bytes before a live
 48-byte terminal-ID clone allocation in the release path (review:

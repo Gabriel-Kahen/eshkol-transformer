@@ -269,6 +269,20 @@ before AOT on a stale test-generator D2 predecessor hash/size: repaired
 guest Git alternates mount also warned. No paired runtime or canonical
 complete-call arena assertion ran; repair effect remains unmeasured.
 
+The manifest-repinned standalone successor `2b77481d`/tree `8c43cc62`
+completed four private packages and AOTs, but its independently reviewed
+full attempt 2 is NONACCEPTING (`retention-d2-escape-2b77481-attempt2-independent-review-20261025/REVIEW.md`,
+330-file raw seal `daefe43e...`). Twelve direct/mapped D2 fault and control
+runtimes exited zero across normal A/B, poison and sanitizer; fault arms
+still retained 2,288 root-arena bytes through genuine retry while controls
+were flat. Eight full-E3 fault/control runtimes aborted first at the invalid
+public `balanced-i2-views-pins` assertion; fault arms retained 2,360 bytes,
+without attribution of the 72-byte difference. The canonical 1,024-call
+absent-gradient runtime aborted at `failure-arena-bytes` after 512 calls.
+Retain R1/R2 as open. A fresh phase probe must distinguish D2 promotion,
+exception construction, envelope and re-raise before another repair claim;
+the full-E3 scoped observer and canonical equality need separate proof.
+
 The accepted T2 numerical F evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/numerical-a-review/REVIEW.md`:
 supported f31/fe9 exit 0 after 3,750.864 seconds; 510-file raw seal
