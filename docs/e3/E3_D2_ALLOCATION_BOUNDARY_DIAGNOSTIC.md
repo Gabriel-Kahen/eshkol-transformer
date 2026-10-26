@@ -31,3 +31,11 @@ import discovery and retained rejected-stage IR/objects. Only after measured
 imports and independent review should a new committed manifest successor
 admit a focused AOT fault/control run. No full retention acceptance follows
 from this diagnostic.
+
+The sealed `b465081` attempt1 authenticated the normal rejected-stage IR and
+181-symbol `nm -u` inventory. Relative to the tracked 179-symbol policy,
+only `et_e3_retention_boundary_mark_v1` and
+`et_e3_retention_boundary_read_v1` were added; no expected symbol was absent.
+The normal manifest now matches those measured bytes. Sanitized
+noninstrumentation and instrumentation manifests remain unchanged and must be
+measured in a separate fail-closed discovery before any AOT or runtime.

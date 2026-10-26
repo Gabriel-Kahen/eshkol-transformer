@@ -1,5 +1,6 @@
 """Fixed-source, noninstalled root-allocation boundary contract."""
 import importlib.util
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
@@ -14,6 +15,34 @@ SPEC.loader.exec_module(GEN)
 
 
 class BoundarySourceTest(unittest.TestCase):
+    def test_measured_normal_imports_only_and_closed_sanitizer_policy(self):
+        prefix = ROOT / "tests/e3_private/retention_arena_diagnostic_package"
+        normal = Path(str(prefix) + "_undefined_symbols.txt")
+        non = Path(str(prefix) + "_sanitized_noninstrumentation_undefined_symbols.txt")
+        instrumentation = Path(str(prefix) + "_sanitized_instrumentation_undefined_symbols.txt")
+        self.assertEqual(hashlib.sha256(normal.read_bytes()).hexdigest(),
+                         "fddea863533a943fbcb356bcfab8d095158c82ee48ece1e88199690755e6e2a6")
+        self.assertEqual(hashlib.sha256(non.read_bytes()).hexdigest(),
+                         "eeed6ee49b420c709bffbbd0f90262455bef8f13f979ae2ba30016e15f3b1293")
+        self.assertEqual(hashlib.sha256(instrumentation.read_bytes()).hexdigest(),
+                         "40e37a1554ecf2df0f5b39923ca936babbb345fd9958eab2eaf86fb4cbc98271")
+        words = normal.read_text().splitlines()
+        measured = ["et_e3_retention_boundary_mark_v1",
+                    "et_e3_retention_boundary_read_v1"]
+        self.assertEqual(len(words), 181)
+        self.assertEqual(words, sorted(set(words)))
+        self.assertEqual([word for word in words if "retention_boundary_" in word], measured)
+        with tempfile.TemporaryDirectory() as temporary:
+            actual = Path(temporary) / "actual.txt"
+            for variant in (words, words[:-1], sorted(words + ["unauthorized_import"])):
+                actual.write_text("\n".join(variant) + "\n")
+                result = subprocess.run(
+                    ["bash", "-c", 'source "$1"; e1b_compare_exact_undefined_allowlist "$2" "$3"',
+                     "bash", str(ROOT / "scripts/common.sh"), str(normal), str(actual)],
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0 if variant is words else 1)
+
     def test_fixed_generation_and_order(self):
         with tempfile.TemporaryDirectory() as temporary:
             subprocess.run(["python3", "-B", str(ROOT / "scripts/generate-e3-d2-source.py"),
