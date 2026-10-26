@@ -22,6 +22,15 @@ def container(running=False, label='owned', exit_code=0):
 
 
 class Stage3LauncherCustodyTest(unittest.TestCase):
+    def test_sanitized_fault_package_uses_fault_selector(self):
+        root = SCRIPT.parents[1]
+        wrapper = (root / 'scripts/build-e3-r1-stage3-test.sh').read_text()
+        policy = (root / 'scripts/build-e1b-consumer.sh').read_text()
+        self.assertIn('E3_FAULT_SANITIZE="$sanitize"', wrapper)
+        self.assertNotIn('E3_RETENTION_SANITIZE=', wrapper)
+        self.assertIn('"${e3_tuple_kind}" == fault', policy)
+        self.assertIn('"${E3_FAULT_SANITIZE}" == 1', policy)
+
     def test_runtime_routes_stage3_partial_pin_denial(self):
         runtime = (SCRIPT.parents[1] / 'tests/e3_private/r1_stage3_runtime.esk').read_text()
         self.assertIn("(define scenario (vector 'fault 'prepare present? 4 7 1))", runtime)

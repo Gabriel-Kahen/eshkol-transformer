@@ -1393,6 +1393,14 @@ retains labeled container custody through removal. Focused host source and
 custody tests pass; supported compiled execution and independent result
 review remain **NOT RUN**. No other stage-3 cut or E3 §9 R1/R2 row is admitted.
 
+The first one-shot compiled attempt at `761cb395` is **NONACCEPTING**: normal
+package construction passed, but sanitized package construction stopped at
+the existing retention-only selector guard before any AOT or stage-3 runtime.
+The exact test wrapper now routes its fault tuple through the existing
+`E3_FAULT_SANITIZE` guard. This source correction preserves the stage-3 cut,
+rollback/retry assertions and production evaluator; a fresh one-use compiled
+gate and independent result review remain **NOT RUN**.
+
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
 consumes the one-shot selector before L2 CE dispatch and returns the existing
