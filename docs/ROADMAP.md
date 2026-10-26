@@ -1370,6 +1370,15 @@ union at `9aed9c65`/tree `55377da7`. This remains a source candidate;
 supported optimized Eshkol AOT normal, poison and sanitizer gates are the next
 admission gate.
 
+The stage-3 site-4/ordinal-7 one-shot successor keeps the existing selector,
+first-error and same-authority rollback/retry checks, but closes its private
+fixture through a stage-3-only report instead of the separate 1,024-call
+retention reconciliation. The ordinary retention report remains selected for
+other sites. It reuses the existing private bridge and teardown, adds no public
+ABI or provider hook, and remains source-only pending independent review and
+supported compiled normal/repeat/poison/sanitizer proof. Its single ordinal
+does not exhaust the other 13 prefix-pin cuts or complete R1/R2.
+
 An isolated exact-`44c0418d` stage-3 compiled-gate recipe now fixes the
 existing guarded selector to site 4, ordinal 7, occurrence 1. This denies the
 eighth pin after a real seven-pin prefix and exercises M3's ordinary prefix
