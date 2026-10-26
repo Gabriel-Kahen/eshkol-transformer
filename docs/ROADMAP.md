@@ -1149,6 +1149,18 @@ common Git config changed during the run, so source custody also failed.
 The source and packet need a reviewed test-only interface repair and fresh
 host pins before one new gate; this attempt cannot admit uniform/tie.
 
+A separate test-only N3 mixed-correctness source candidate fixes raw D1 byte
+streams `030e1f` and `030e00` into one genuine packed D2 row each. The
+seed-1729 Q0 source oracle fixes common input `[3,14]`, winners `[14,31]`,
+second CE `40aeb52c` versus `40b0b72f`, and correct count `2` versus `1`.
+The accepted exact-44c compiled all-correct control emits `40aeb52d` for
+its second CE, one ULP above Q0; the compiled comparator therefore uses
+the established CE tolerance and exact arithmetic on observed CE words.
+`scripts/test-e3-mixed-correctness.sh` specifies a fresh noninstalled
+normal A/B, poison and sanitizer gate with strict raw-frame, role, metric,
+six-output and cursor comparison. Source tests pass; the compiled gate and
+independent result review are **NOT_RUN**, so this candidate does not admit N3.
+
 The noninstalled `dc565e1` mode/graph successor has since passed independent
 compiled result review: absent-gradient and seeded-present-gradient runtime stdout matched
 across normal A/B, poison, and ASan/UBSan runs; in-call mode and graph mutants

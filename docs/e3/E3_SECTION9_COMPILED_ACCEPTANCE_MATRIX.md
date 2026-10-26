@@ -230,6 +230,14 @@ implementation.
 
 The named next gates keep each still-open obligation visible:
 
+N3 mixed-correctness has a separate source-only candidate: one genuine D2 row
+from each raw stream `030e1f` and `030e00`, with a pinned seed-1729 Q0
+second-CE and correct-count witness. An accepted exact-44c control differs
+from Q0 at second CE by one ULP; compiled CE uses established tolerance,
+while observed reduction/state arithmetic is checked exactly. Its noninstalled normal A/B, poison and
+sanitizer gate is **NOT_RUN**. This candidate has no compiled admission and
+does not alter the uniform/tie branch or the accepted correctness parser.
+
 | Row | Current status | Next proving gate |
 |---|---|---|
 | N1 three-batch exact roles/CE/states/outputs | Compiled-private T2 predecessor accepted at `44c0418d`/tree `70706c0a`: exact roles, CE, serial state, six outputs and cursor in normal A/B, poison and sanitizer. The earlier failed F attempt remains nonaccepting. Independent consumed-source closure review carries this accepted bounded result from `44c0418d` to docs-only `b4b82d2b` without a new compile (`t2-f-carry-44c0418-to-b4b82d2-independent-review-20261025/REVIEW.md`). | CPU4/current integration needs its own affected gate; no full §9 claim follows from source carry. |
