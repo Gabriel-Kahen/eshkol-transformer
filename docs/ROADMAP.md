@@ -1626,6 +1626,14 @@ symbol/feature-off checks pass. Independent source/test review accepted the E3
 union at `9aed9c65`/tree `55377da7`. This remains a source candidate;
 supported optimized Eshkol AOT normal, poison and sanitizer gates are the next
 admission gate.
+The independently reviewed one-shot `761cb395` attempt 1 is HOLD before AOT
+(`r1-stage3-oneshot-761cb395-attempt1-independent-review-20261026/REVIEW.md`,
+85-file raw postexit seal `33d2b782...`). Corpus generation, normal fault
+package/object/archive and arena-object build passed; sanitized package
+construction first failed when the wrapper selected retention-only sanitizer
+mode for the fault tuple. No stage-3 runtime, rollback or retry proof ran.
+Container custody passed. Correct the wrapper and review a fresh one-use
+compiled gate; R1/R2 and §9 remain open.
 
 The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
 site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it

@@ -283,6 +283,16 @@ Retain R1/R2 as open. A fresh phase probe must distinguish D2 promotion,
 exception construction, envelope and re-raise before another repair claim;
 the full-E3 scoped observer and canonical equality need separate proof.
 
+The `761cb395` one-shot R1 stage-3 attempt 1 is independently HOLD/nonadmitting
+(`r1-stage3-oneshot-761cb395-attempt1-independent-review-20261026/REVIEW.md`;
+85-file raw postexit seal `33d2b782...`). Corpus generation, normal fault
+package/object/archive and normal arena-object build passed. Sanitized package
+construction then failed because the wrapper set the retention-only sanitizer
+selector for a fault tuple. No AOT or stage-3 normal, poison or sanitizer
+runtime ran; no rollback, twin retry or pin-cut result is admitted. The owned
+container was removed, with three absence checks. Repair the test wrapper and
+freeze a new packet before a fresh compiled gate.
+
 The accepted T2 numerical F evidence is
 `/home/gabe/.codex/evidence/eshkol-transformer/finish-20261022/e3/numerical-a-review/REVIEW.md`:
 supported f31/fe9 exit 0 after 3,750.864 seconds; 510-file raw seal
