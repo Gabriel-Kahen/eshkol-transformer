@@ -9,8 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BASE_D2 = "ae2c4661ac518dab5314dbf0ae7d9326425bd4add190d7f04485bc75fdcfe414"
 BASE_E1 = "9b545f57e131dcdfaa121f318caa78a80db7e831bb91eab836182e2331fdc259"
-D2_DECL = "(extern i64 d2-boundary-mark i64 :real et_e3_retention_boundary_v1)\n"
-E1_DECL = "(extern i64 e1-boundary-mark i64 :real et_e3_retention_boundary_v1)\n"
+D2_DECL = "(extern void d2-boundary-mark i64 :real et_e3_retention_boundary_mark_v1)\n"
+E1_DECL = "(extern void e1-boundary-mark i64 :real et_e3_retention_boundary_mark_v1)\n"
 D2_CLOSE = """                  (let ((promoted (region-close region caught)))
                     (vector d2-region-exception-marker promoted)))))"""
 D2_CLOSE_PROBE = """                  (begin

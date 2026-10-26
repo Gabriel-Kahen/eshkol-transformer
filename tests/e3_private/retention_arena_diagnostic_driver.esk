@@ -12,7 +12,8 @@
 (extern void e3-test-read-fail-stage i64
         :real et_d2_exact_read_test_fail_stage_v1)
 (extern i64 e3-test-region-used :real et_e3_retention_region_used_v1)
-(extern i64 e3-test-boundary-mark i64 :real et_e3_retention_boundary_v1)
+(extern void e3-test-boundary-mark i64 :real et_e3_retention_boundary_mark_v1)
+(extern i64 e3-test-boundary-read i64 :real et_e3_retention_boundary_read_v1)
 
 (define e3-test-retention-root (vector #f))
 
@@ -644,8 +645,8 @@
       (let collect ((index 0))
         (if (= index 10) #t
             (begin
-              (vector-set! bytes index (e3-test-boundary-mark (+ 100 index)))
-              (vector-set! counts index (e3-test-boundary-mark (+ 200 index)))
+              (vector-set! bytes index (e3-test-boundary-read index))
+              (vector-set! counts index (e3-test-boundary-read (+ 10 index)))
               (collect (+ index 1)))))
       (let verify ((index 0))
         (if (= index 10) #t

@@ -19,7 +19,7 @@ static int64_t boundary_bytes[10] = {};
 static int64_t boundary_counts[10] = {};
 static bool boundary_armed = false;
 
-extern "C" int64_t et_e3_retention_boundary_v1(int64_t stage) {
+extern "C" void et_e3_retention_boundary_mark_v1(int64_t stage) {
   if (stage == 0) {
     for (int i = 0; i < 10; ++i) {
       boundary_bytes[i] = 0;
@@ -28,17 +28,18 @@ extern "C" int64_t et_e3_retention_boundary_v1(int64_t stage) {
     boundary_armed = true;
   } else if (stage == 99) {
     boundary_armed = false;
-    return 0;
-  } else if (stage >= 100 && stage < 110) {
-    return boundary_bytes[stage - 100];
-  } else if (stage >= 200 && stage < 210) {
-    return boundary_counts[stage - 200];
+    return;
   }
-  if (stage < 0 || stage >= 10 || !boundary_armed) return -1;
+  if (stage < 0 || stage >= 10 || !boundary_armed) return;
   const int64_t used = static_cast<int64_t>(arena_get_used_memory(get_global_arena_shared()));
   boundary_bytes[stage] = used;
   ++boundary_counts[stage];
-  return used;
+}
+
+extern "C" int64_t et_e3_retention_boundary_read_v1(int64_t index) {
+  if (index >= 0 && index < 10) return boundary_bytes[index];
+  if (index >= 10 && index < 20) return boundary_counts[index - 10];
+  return -1;
 }
 
 extern "C" int64_t et_e3_retention_arena_total_v1() {
