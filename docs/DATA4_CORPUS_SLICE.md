@@ -68,18 +68,20 @@ unchanged. D1's trusted directory, checked-write, no-fsync, and summary-lifetime
 limits apply unchanged.
 
 The pinned local source gate passed 28 Eshkol checks, using genuine T2 BPE
-encoding and a D1 writer stub. A strict same-aggregate source compile passed.
-The O0 executable compiled in 1:13.80 with peak 3,461,472 KiB RSS, but its
-first link omitted P1's trusted native identity source. An object-only relink
-using that source and the pinned runtime link flags succeeded. The resulting
-binary produced byte-identical reports, manifests, and shards on two fresh
-runs, read back the six expected T2 IDs through D1, rejected a preexisting
-target without emitting a report, and classified a flipped shard byte as D1
-`corrupt-data`. The revised one-command native script includes P1, but has not
-been rerun from a clean build. The separate strict source compile took 4:39.18
-and peaked at 3,313,628 KiB RSS; retained evidence occupied 753 MiB at that
-checkpoint. These are local measurements, not release acceptance.
+encoding and a D1 writer stub. From clean commit `6b885150`, the corrected
+one-command same-aggregate native gate passed in the pinned offline Ubuntu
+22.04/LLVM 21.1.8 image: compiler 1:12.86, whole gate 1:13.97, peak compiler
+and gate RSS 3,460,012 KiB. It produced byte-identical reports, manifests,
+and shards on two fresh runs, read back the six expected T2 IDs through D1,
+rejected a preexisting target without emitting a report, and classified a
+flipped shard byte as D1 `corrupt-data`. Sixteen five-second samples observed
+at most 140,393,345 bytes of gate output files; this is a sampled high-water
+value, not an exact disk peak. Local logs and hashes are retained at
+`/tmp/et-data4-clean-6b885150-20261114/`. The preceding manual object-only
+P1 link repair and strict source compile remain historical evidence, not the
+basis for this clean-gate result. These are local measurements, not release
+acceptance.
 
 Public CLI wiring, installed boundary manifests, report persistence/validation,
-a clean one-command native gate, hosted CI, and full DATA4 admission remain
+dedicated DATA4 gate registration, hosted CI, and full DATA4 admission remain
 pending.
