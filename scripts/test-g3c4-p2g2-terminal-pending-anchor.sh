@@ -11,9 +11,15 @@ resolve_provenance_compilers cc cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 eshkol_runner="$(eshkol_build_dir)/eshkol-run"
 evidence="${1:-$(project_build_dir)/g3c4-p2g2-terminal-pending-anchor-test}"
+extent_witness="${G3C4_TERMINAL_EXTENT_WITNESS:-0}"
+[[ "$extent_witness" == 0 || "$extent_witness" == 1 ]] || exit 2
 mkdir -p "$evidence"
 python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-pending-anchor.py" \
   >"$evidence/static.stdout"
+if [[ "$extent_witness" == 1 ]]; then
+  python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-carriers.py" \
+    >>"$evidence/static.stdout"
+fi
 
 tmp="$(mktemp -d "$evidence/build.XXXXXX")"
 trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
@@ -21,7 +27,12 @@ trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
 
 compile_mode() {
   local mode=$1 directory="$tmp/$1" source
-  local -a optimization=(-O2) runtime=(env)
+  local -a optimization=(-O2) runtime=(env) extent_defines=()
+  local extent_link=
+  if [[ "$extent_witness" == 1 ]]; then
+    extent_defines=(-DET_G3C4_TERMINAL_EXTENT_TESTING)
+    extent_link=-Wl,--wrap=arena_allocate_aligned
+  fi
   if [[ "$mode" == sanitize ]]; then
     optimization=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
     runtime=(env ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
@@ -48,7 +59,7 @@ compile_mode() {
     -o "$directory/objects/i2_native_helpers.o"
   "$cxx" -std=c++17 -Wall -Wextra -Werror -Wpedantic -fPIC \
     -fvisibility=hidden -fno-common -fstack-protector-all \
-    "${optimization[@]}" -I "$(eshkol_source_dir)/inc" \
+    "${optimization[@]}" "${extent_defines[@]}" -I "$(eshkol_source_dir)/inc" \
     -I "$(eshkol_source_dir)/lib/core" \
     -c "$PROJECT_ROOT/tests/g3c4/call_entry_allocation_shim.cpp" \
     -o "$directory/objects/call_entry_allocation_shim.o"
@@ -84,12 +95,15 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=arena_allocate_vector_with_header \\
   -Wl,--wrap=arena_allocate_with_header \\
   -Wl,--wrap=arena_allocate_cons_with_header \\
+  $extent_link \\
   -Wl,--wrap=malloc -Wl,--wrap=eshkol_push_exception_handler \\
   -Wl,--wrap=et_kernel_runtime_dispatch
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   local fixture prefix source expected log
-  for fixture in feature-off protected; do
+  local -a fixtures=(feature-off protected)
+  [[ "$extent_witness" == 1 ]] && fixtures=(extent)
+  for fixture in "${fixtures[@]}"; do
     prefix=
     source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_pending_anchor_test.esk"
     expected='^G3-C4 P2/G2 terminal anchor PASS: checks=[1-9][0-9]* pending-only=1$'
@@ -97,6 +111,9 @@ WRAPPER
       prefix=feature-off-
       source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_pending_anchor_feature_off_test.esk"
       expected='^G3-C4 P2/G2 terminal anchor off PASS: checks=[1-9][0-9]*$'
+    elif [[ "$fixture" == extent ]]; then
+      source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_carriers_test.esk"
+      expected='^G3-C4 P2/G2 terminal carriers PASS: checks=[1-9][0-9]*$'
     fi
     mkdir -p "$directory/cache/$fixture"
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -116,32 +133,51 @@ WRAPPER
       timeout --foreground --signal=TERM --kill-after=5s 120s \
       "$directory/p2g2-$fixture" >"$directory/${prefix}run.stdout" \
       2>"$directory/${prefix}run.stderr"
+    test ! -s "$directory/${prefix}compile.stderr"
     test ! -s "$directory/${prefix}run.stderr"
     grep -E "$expected" "$directory/${prefix}run.stdout" >/dev/null
     for log in compile.stdout compile.stderr run.stdout run.stderr; do
       cp "$directory/${prefix}$log" "$evidence/$mode-${prefix}$log"
     done
   done
+  if [[ "$extent_witness" == 1 ]]; then
+    python3 "$PROJECT_ROOT/scripts/check-g3c4-terminal-carrier-failures.py" \
+      "$directory/p2g2-extent" "$mode" "$evidence" \
+      >"$evidence/$mode-allocation-classification.stdout"
+  fi
 }
 
 compile_mode normal
-ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-feature-off" \
-  >"$evidence/repeat-feature-off-run.stdout" \
-  2>"$evidence/repeat-feature-off-run.stderr"
-ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-protected" \
+if [[ "$extent_witness" == 0 ]]; then
+  ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-feature-off" \
+    >"$evidence/repeat-feature-off-run.stdout" \
+    2>"$evidence/repeat-feature-off-run.stderr"
+  test ! -s "$evidence/repeat-feature-off-run.stderr"
+fi
+repeat_fixture=protected
+[[ "$extent_witness" == 1 ]] && repeat_fixture=extent
+ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-$repeat_fixture" \
   >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
-test ! -s "$evidence/repeat-feature-off-run.stderr"
 test ! -s "$evidence/repeat-run.stderr"
 compile_mode sanitize
-cmp "$evidence/normal-feature-off-run.stdout" \
-    "$evidence/repeat-feature-off-run.stdout"
-cmp "$evidence/normal-feature-off-run.stdout" \
-    "$evidence/sanitize-feature-off-run.stdout"
+if [[ "$extent_witness" == 0 ]]; then
+  cmp "$evidence/normal-feature-off-run.stdout" \
+      "$evidence/repeat-feature-off-run.stdout"
+  cmp "$evidence/normal-feature-off-run.stdout" \
+      "$evidence/sanitize-feature-off-run.stdout"
+fi
 cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
 git -C "$PROJECT_ROOT" diff --check
-sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_terminal_pending_anchor_source_closure.txt" \
+closure="$PROJECT_ROOT/native/g3c4_p2g2_terminal_pending_anchor_source_closure.txt"
+[[ "$extent_witness" == 1 ]] && \
+  closure="$PROJECT_ROOT/native/g3c4_p2g2_terminal_carriers_source_closure.txt"
+sha256sum "$closure" \
   >"$evidence/closure.sha256"
-cat "$evidence/static.stdout" "$evidence/normal-feature-off-run.stdout" \
-    "$evidence/normal-run.stdout"
+if [[ "$extent_witness" == 0 ]]; then
+  cat "$evidence/static.stdout" "$evidence/normal-feature-off-run.stdout" \
+      "$evidence/normal-run.stdout"
+else
+  cat "$evidence/static.stdout" "$evidence/normal-run.stdout"
+fi
 printf 'G3-C4 P2/G2 protected evidence: %s\n' "$evidence"
