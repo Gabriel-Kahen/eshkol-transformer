@@ -37,6 +37,36 @@ class Stage3LauncherCustodyTest(unittest.TestCase):
             self.assertEqual(report['guest_tmpdir'], '/out/tmp')
             self.assertGreater(report['scratch_free_bytes'], 0)
 
+    def test_dependencies_keep_their_own_git_identity(self):
+        source = SCRIPT.read_text()
+        self.assertNotIn('GIT_DIR=', source)
+        self.assertNotIn('GIT_WORK_TREE=', source)
+        self.assertIn("(SOURCE / '.deps').mkdir(exist_ok=True)", source)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project, deps = root / 'project', root / 'deps'
+            for repo in (project, deps):
+                subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+                subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Test',
+                                '-c', 'user.email=test@example.invalid', 'commit',
+                                '-q', '--allow-empty', '-m', repo.name], check=True)
+            expected = subprocess.check_output(
+                ['git', '-C', str(deps), 'rev-parse', 'HEAD'], text=True).strip()
+            project_head = subprocess.check_output(
+                ['git', '-C', str(project), 'rev-parse', 'HEAD'], text=True).strip()
+            contaminated = {**LAUNCHER.os.environ, 'GIT_DIR': str(project / '.git'),
+                            'GIT_WORK_TREE': str(project)}
+            wrong = subprocess.check_output(
+                ['git', '-C', str(deps), 'rev-parse', 'HEAD'], text=True,
+                env=contaminated).strip()
+            self.assertEqual(wrong, project_head)
+            self.assertNotEqual(wrong, expected)
+            actual = subprocess.check_output(
+                ['git', '-C', str(deps), 'rev-parse', 'HEAD'], text=True,
+                env={key: value for key, value in contaminated.items()
+                     if key not in ('GIT_DIR', 'GIT_WORK_TREE')}).strip()
+            self.assertEqual(actual, expected)
+
     def test_sanitized_fault_package_uses_fault_selector(self):
         root = SCRIPT.parents[1]
         wrapper = (root / 'scripts/build-e3-r1-stage3-test.sh').read_text()

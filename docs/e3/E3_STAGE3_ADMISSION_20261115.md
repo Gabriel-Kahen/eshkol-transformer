@@ -64,3 +64,36 @@ The existing compiler timeout remains 900 seconds per package compiler call,
 5,400-second package/AOT command bounds, and 14,400-second global bound.
 Failure output is retained. A successful guest marker still requires host
 custody eligibility and independent result review before admission.
+
+## Preserved launch failures
+
+The first `b4adb72e` attempt failed OCI setup before a guest process started:
+the fresh worktree lacked the ignored `.deps` nested mountpoint. Attempt 2
+reached and verified the guest 6 GiB memory/1 GiB swap cgroup, then stopped
+before compilation: the historical launcher's global project `GIT_DIR` made
+the dependency `git -C` query resolve the project revision instead of fe9.
+Both attempts removed their owned containers and preserved unchanged tracked
+source/digests. Their `SHA256SUMS-POSTEXIT` evidence is under
+`/home/gabe/.cache/et-e3-admission-20261115-evidence/stage3{,-attempt2}`.
+The focused successor creates the empty ignored mountpoint under the lock and
+lets each repository's own `.git` resolve through read-only mounted metadata.
+No numerical, import, failure or resource assertion is relaxed by either fix.
+
+At the final local checkpoint under the orchestrator hold (2026-11-15),
+MemAvailable was 10,201,616,384 bytes and SwapFree 836,075,520 bytes; `/home`
+had 99,443,806,208 free bytes and `/tmp` 1,955,311,616 free bytes. The explicit
+orchestrator instruction is to start no further memory-heavy phase until
+headroom recovers.
+Attempt 3 therefore remains **NOT RUN / HOLD**, with an exact byte-valued
+checkpoint in `et-e3-admission-20261115-evidence/headroom-hold.json`.
+This is an execution hold under the orchestrator's instruction, not a newly
+invented RAM/swap admission minimum or a compiler/numerical verdict. No
+package, AOT, rollback runtime, poison runtime or sanitizer runtime has run
+in these two attempts. After headroom recovery, freeze the reviewed launcher
+fix and run a fresh evidence directory; retain independent result review.
+
+A separate read-only authentication probe on the corrected mount/environment
+recipe passed `verify_toolchain` and printed distinct project `b4adb72e` and
+dependency `fe9dfd5` identities. Its actual guest cap was 512 MiB/no swap;
+no compiler ran. The `fixed-launcher-auth` logs are prerequisite verification
+only and do not change the full-gate HOLD.
