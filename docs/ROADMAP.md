@@ -2370,6 +2370,15 @@ RAM 15,462,760 KiB and free swap 3,145,724 KiB are below the unchanged
 pass at 92,600,385,536 bytes. The sealed probe ran no toolchain build or
 generated Eshkol program and does not admit G3/C2 or E3 runtime behavior.
 
+The follow-up [one-use G3-R/C2 controller](G3R_ONE_USE_LAUNCHER.md) adds exact
+input/seal checks, locked resource rechecks, exclusive claims, owned-container
+custody and complete output/artifact validation. Thirty focused control/oracle
+and Q0 tests pass, including a measured Docker missing-container response
+regression. Fresh replay/SAVE package and toolchain preflight evidence is
+separate from all preserved earlier bundles. Heavy launch remains blocked
+below the unchanged resource floors; no generated runtime or E3 admission
+follows from controller tests or the hosted resource measurement.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
