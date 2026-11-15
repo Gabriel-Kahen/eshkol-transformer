@@ -2363,10 +2363,12 @@ unreleased pending one-use/seal/custody review and locked resource checks.
 Scratch is under `/home`; the original stacks and failed evidence are preserved.
 Generated runtime, E3 §9 and full Wave 3 admission remain **HOLD**.
 
-A branch-scoped Ubuntu 22.04 hosted resource probe measures the unchanged
-16 GiB available-RAM, 8 GiB free-swap and 32 GiB disk floors without installing
-dependencies or launching a build. Capacity is not inferred from the runner
-label; the completed JSON measurement is required before a hosted verdict.
+The [hosted resource qualification](G3R_HOSTED_RESOURCE_QUALIFICATION_20261115.md)
+has a measured **NO** for standard Ubuntu 22.04 run `43744457531`: available
+RAM 15,462,760 KiB and free swap 3,145,724 KiB are below the unchanged
+16,777,216/8,388,608 KiB floors. Workspace and Docker-root free space each
+pass at 92,600,385,536 bytes. The sealed probe ran no toolchain build or
+generated Eshkol program and does not admit G3/C2 or E3 runtime behavior.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
