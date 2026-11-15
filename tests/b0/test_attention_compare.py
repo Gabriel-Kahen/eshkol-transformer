@@ -10,7 +10,10 @@ import tempfile
 import unittest
 from unittest import mock
 
-from . import attention_compare as compare
+if __package__:
+    from . import attention_compare as compare
+else:
+    import attention_compare as compare
 
 
 class ComparisonFormatTests(unittest.TestCase):
