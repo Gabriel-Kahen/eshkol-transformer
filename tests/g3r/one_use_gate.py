@@ -266,7 +266,7 @@ class Inputs:
         policy = c["evidence"]
         steps = policy["steps"]
         require(isinstance(steps, list) and steps and len(set(steps)) == len(steps)
-                and all(re.fullmatch(r"[a-z0-9][a-z0-9-]*", n) for n in steps), "step inventory")
+                and all(re.fullmatch(r"[a-z0-9][a-z0-9_-]*", n) for n in steps), "step inventory")
         needed = {"pins-before", "pins-after", "toolchain"}
         if c["gate"] == "replay":
             needed |= {"normal-run", "repeat-run", "sanitize-run", "normal-oracle", "repeat-oracle", "sanitize-oracle"}

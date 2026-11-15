@@ -82,7 +82,7 @@ class Fixture:
             'docker': {'client': str(self.client), 'client_sha256': gate.sha(self.client),
                        'socket': str(self.sockpath), 'root': str(self.docker_root),
                        'image': 'sha256:' + '3' * 64},
-            'evidence': {'steps': steps, 'empty_stderr': steps, 'artifact_pins': {}}}
+            'evidence': {'steps': steps, 'empty_stderr': list(steps), 'artifact_pins': {}}}
         write(self.prep / 'inside.sh', b'#!/bin/bash\n# sealed, never executed in tests\n')
         self.seal()
         self.locks = tuple(root / name for name in ('heavy.lock', 'docker.lock'))
@@ -263,6 +263,13 @@ class OneUseGateTests(unittest.TestCase):
             self.assertNotIn('kill', args)
             self.assertNotIn('stop', args)
         self.assertIn('--sig-proxy=false', f.inputs().command())
+
+    def test_accepted_replay_native_step_names_keep_underscores(self):
+        f = self.fixture
+        f.config['evidence']['steps'].append('normal-data_io')
+        f.config['evidence']['empty_stderr'].append('normal-data_io')
+        f.seal()
+        self.assertEqual(f.runner().run()['status'], 'PASS')
 
     def test_reused_attempt_does_not_invoke_docker(self):
         f = self.fixture
