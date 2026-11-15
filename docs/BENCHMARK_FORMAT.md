@@ -196,3 +196,13 @@ not verify or establish the project's supported Eshkol toolchain lane. Supported
 CI/admission, independent integration review and PA4 candidate parity remain
 separate gates. No speedup, reduced memory, large-context scalability, training
 throughput, or admission of PA4 draft #215 follows from these measurements.
+
+## A2 / PA4 comparison extension v1
+
+The separate [comparison contract](ATTENTION_COMPARISON.md) defines explicit
+frozen A2 versus PA4 paired measurement over these exact ten shapes and inputs.
+It records whole K1 dispatch and separately prevalidated invocation, balanced
+AB/BA timing pairs, exact bit witnesses and separate selected-provider process
+RSS. It leaves the smoke and A2-only formats above unchanged. The comparison
+format provides raw evidence and descriptive ranges; performance admission is
+separate.
