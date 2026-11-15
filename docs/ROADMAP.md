@@ -3249,7 +3249,7 @@ publication, public G2 and continuation remain pending.
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| IO5 | Safe import/export for safetensors and GGUF | C1, M3 | Cross-format round trips and malformed-file tests | planned |
+| IO5 | [Safe import/export for safetensors and GGUF](IO5_SAFETENSORS.md) | C1, M3 | First bounded data-only C1 1.0 CPU-f32 ↔ safetensors tool: versioned metadata preserves paths/kinds/aliases and checksums, explicit plain import, checked limits and corruption negatives; independent source/test review approved; local 11-test gate including independent safetensors 0.6.2 and five Python isolation tests pass. Integration, supported CI, live model/state ingress and GGUF remain pending | active |
 | MOD5 | RMSNorm/SwiGLU/GQA/MQA/ALiBi/sliding-window model variants | M3 | Per-variant parity and training smoke tests | planned |
 | DIST5 | Data-parallel training and collective abstraction | TR3, K1 | Multi-process deterministic smoke and failure handling | planned |
 | EVAL5 | External evaluation adapters and contamination checks | E3, T2 | Reproducible benchmark manifests | planned |
