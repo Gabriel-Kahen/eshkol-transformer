@@ -3242,7 +3242,7 @@ publication, public G2 and continuation remain pending.
 | MP4 | True f32 plus f16/bf16 policy, master weights and loss scaling | TR3, K1 | Numerical and storage-size evidence; overflow recovery tests | planned |
 | AC4 | Activation checkpointing and memory-bounded training | TR3 | Same update within tolerance and measured memory reduction | planned |
 | AMD4 | AMD HIP/rocBLAS backend and device observability | K1, TR3, B0 | Direct device execution, parity and benchmark evidence | planned |
-| PA4 | Optimized/fused attention path | A2, B0 | Parity plus measured speed/memory improvement | planned |
+| PA4 | Optimized/fused attention path | A2, B0 | Parity plus measured speed/memory improvement | active: independently reviewed bounded CPU-f32 candidate; ten-shape bitwise parity, numerical gradients and native sanitizers pass; tensor benchmark extension, measurement and full admission gates pending ([contract](PA4_ATTENTION.md)) |
 | DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | Deterministic reports and contamination/provenance metadata | planned |
 
 ## Wave 5 — ecosystem expansion
