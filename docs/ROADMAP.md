@@ -1425,6 +1425,16 @@ free swap; `/home` about 93 GiB free).
 Earlier accepted numerical F/mode leaves and failed complete-call retention
 remain separate evidence. E3 §9 stays **HOLD**.
 
+The [2026-11-15 hosted qualification audit](e3/E3_HOSTED_QUALIFICATION_20261115.md)
+binds exact PR #223 `03a31501`/tree `de658fb9` to the existing resource-only
+run `43744457531`. The configured Ubuntu 22.04 runner measured 15,462,760 KiB
+available RAM and 3,145,724 KiB free swap, below the preserved historical
+16 GiB/8 GiB qualification floor; workspace/Docker free space passed 32 GiB
+and `/tmp` was unmeasured. Those host floors remain distinct from PR #223's
+6/7 GiB experimental container caps and actual-scratch check. No configured
+host qualified, no compiled workflow was added or launched, and the local
+heavy-build hold remains in force. Stage-3 compiled and E3 §9 remain **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
