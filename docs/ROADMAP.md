@@ -2363,6 +2363,11 @@ unreleased pending one-use/seal/custody review and locked resource checks.
 Scratch is under `/home`; the original stacks and failed evidence are preserved.
 Generated runtime, E3 §9 and full Wave 3 admission remain **HOLD**.
 
+A branch-scoped Ubuntu 22.04 hosted resource probe measures the unchanged
+16 GiB available-RAM, 8 GiB free-swap and 32 GiB disk floors without installing
+dependencies or launching a build. Capacity is not inferred from the runner
+label; the completed JSON measurement is required before a hosted verdict.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
