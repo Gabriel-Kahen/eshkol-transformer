@@ -118,6 +118,7 @@ A supported native container invocation supplies
 `BENCHMARK_CONTAINER_IMAGE=sha256:68e2e292a255c9b42206e2298d12770aea7594ff9b82219460cb27ee28dbdc99`
 after the orchestrator verifies its actual container image. Optional CPU pinning
 must be applied before invoking the wrapper and remains visible in report
-`cpu_affinity`. Generated reports/binaries stay outside Git. Performance results
-and final admission are pending measurement. Independent source/test review approved
-the bounded harness; the focused nine-test native/schema suite passes.
+`cpu_affinity`. Generated reports/binaries stay outside Git. The [supported native results](ATTENTION_COMPARISON_RESULTS.md) record exact
+measurement identity, raw-report checksum, forward gains, control regressions and
+uncertainty. Independent source/test review approved the bounded harness; the
+full B0 discovery gate passes 59 tests. Full PA4 admission remains separate.
