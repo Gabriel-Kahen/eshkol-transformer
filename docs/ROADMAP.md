@@ -3502,6 +3502,24 @@ publication, public G2 and continuation remain pending.
   extent, allocation failure cuts, same-call EOS/second-token publication,
   detached clones, public G2 and save/reload remain open.
 
+- **Standalone P2/G2 constructor-owned carrier prerequisite:** The
+  [private carrier bundle candidate](g3/G3_C4_P2_G2_TERMINAL_CARRIERS_LEAF.md)
+  captures all eight literal constructor returns in an inaccessible lexical
+  root, authenticates original bundle/carrier identities and fixed extents,
+  and provides authenticated scrub/unlink retirement. Pinned normal, repeat
+  and sanitizer runs pass 530 identical checks each, including eight guarded
+  allocation cuts with earlier-bundle preservation and retry; sixteen
+  unguarded cuts match the exact pinned emergency exit 1 diagnostic.
+  Unchanged pending/feature-off predecessors pass 23/4 per mode; 22+7 static
+  mutations and Q0's four tests pass. Evidence is under
+  `build/g3c4-p2g2-terminal-carriers-20261115-attempt3/`; integration remains
+  pending. Its development allocator
+  witness is evidence only; the production helper never converts carriers
+  to native pointers. Existing protected/prefix wrappers and native ABI
+  remain unchanged. Composition into the sole native pending output and
+  actual terminal close, public G2, trained-G2 sanitizer acceptance and
+  save/reload remain open.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
