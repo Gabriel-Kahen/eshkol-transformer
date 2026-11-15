@@ -3243,7 +3243,7 @@ publication, public G2 and continuation remain pending.
 | AC4 | Activation checkpointing and memory-bounded training | TR3 | Same update within tolerance and measured memory reduction | planned |
 | AMD4 | AMD HIP/rocBLAS backend and device observability | K1, TR3, B0 | Direct device execution, parity and benchmark evidence | planned |
 | PA4 | Optimized/fused attention path | A2, B0 | Parity plus measured speed/memory improvement | planned |
-| DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | Deterministic reports and contamination/provenance metadata | planned |
+| DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | [DATA4-A bounded corpus selection](DATA4_CORPUS_SLICE.md) is a build-only candidate: raw length filtering, first-occurrence exact deduplication, per-document provenance/SHA-256, and a deterministic checksummed in-memory report composed with T2 staging and D1 publication. Local focused source and same-aggregate native round-trip/corruption evidence passes after an object-only P1 link repair; clean one-command gate, installed wiring, durable report handling, hosted CI, and full DATA4 acceptance remain pending. | active |
 
 ## Wave 5 — ecosystem expansion
 
