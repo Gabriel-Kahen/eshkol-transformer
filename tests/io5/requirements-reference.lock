@@ -1,0 +1,2 @@
+# Development interoperability reference only; never a training dependency.
+safetensors==0.6.2

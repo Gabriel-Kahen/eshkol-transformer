@@ -105,11 +105,13 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3r-record-codec.py",
     ROOT / "scripts" / "check-g3r-p1-roster.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
+INTEROPERABILITY_TOOLS = frozenset({ROOT / "tools" / "io5" / "safetensors_interop.py"})
 
 
 def development_python(path: Path) -> bool:
     # Exact development-only build/check helpers, never training dependencies.
-    return path.is_relative_to(ROOT / "tests") or path in DEVELOPMENT_SCRIPTS
+    return (path.is_relative_to(ROOT / "tests") or path in DEVELOPMENT_SCRIPTS
+            or path in INTEROPERABILITY_TOOLS)
 
 
 class PythonIsolationTests(unittest.TestCase):
@@ -173,6 +175,15 @@ class PythonIsolationTests(unittest.TestCase):
             ):
                 with self.subTest(path=path.relative_to(ROOT)):
                     self.assertFalse(development_python(path))
+
+    def test_only_exact_interoperability_tools_are_admitted(self) -> None:
+        for path in INTEROPERABILITY_TOOLS:
+            self.assertTrue(development_python(path))
+        for relative in ("tools/io5/runtime.py", "tools/io5/safetensors_interop.py.extra.py",
+                         "tools/io5/nested/safetensors_interop.py", "tools/safetensors_interop.py",
+                         "lib/safetensors_interop.py", "native/safetensors_interop.py"):
+            with self.subTest(path=relative):
+                self.assertFalse(development_python(ROOT / relative))
 
     def test_fixture_reader_has_no_executable_deserialization(self) -> None:
         source = (Q0 / "oracle_format.py").read_text(encoding="utf-8").lower()
