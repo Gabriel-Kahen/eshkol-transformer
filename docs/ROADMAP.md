@@ -2350,6 +2350,19 @@ open. Retained one-use leaf preparations are not runtime evidence; the
 32 GiB disk floor also prevents a new heavy attempt on this host at review
 time. G3, C2/SAVE, E3 §9, TR3, full CLI3 and Wave 3 acceptance remain **HOLD**.
 
+The [2026-11-15 integration follow-up](WAVE3_INTEGRATION_20261115.md), draft
+PR #221, composes PR #216 `70220bbe` with reviewed PR #218 `23c544b6` in a
+distinct worktree and branch. All seven non-roadmap leaf files are retained
+exactly. The combined source check exposed and repaired the pending-anchor
+checker's missing exact Q0 development allowlist entry; 70 focused tests,
+seven checker mutations, replay host/source, shell and topology checks pass.
+Supported lightweight toolchain/source preflight passes, but no generated
+Eshkol replay or authentic C2 SAVE/reader compile ran: RAM/swap are below the
+retained 16 GiB/8 GiB floors despite adequate disk. Fresh recipes remain
+unreleased pending one-use/seal/custody review and locked resource checks.
+Scratch is under `/home`; the original stacks and failed evidence are preserved.
+Generated runtime, E3 §9 and full Wave 3 admission remain **HOLD**.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
