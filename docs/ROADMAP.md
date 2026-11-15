@@ -3561,6 +3561,21 @@ publication, public G2 and continuation remain pending.
   are prerequisites; Eshkol implementation and compiled same-call proof remain
   pending. No public G2 or continuation acceptance is claimed.
 
+- **Private P2/G2 terminal pending-allocation precursor:** The
+  [abort-only anchor candidate](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
+  reserves the original output and second/text carriers before sampling. An
+  independent lexical root detects paired carrier replacement and changed
+  list nodes/successors before abort. On the `c71d39a984` worktree candidate,
+  the pinned `fe9dfd5` Ubuntu 22.04/Clang 21 normal, repeat and sanitizer
+  fixtures pass 23 private and four feature-off checks with identical stdout
+  and empty stderr; seven static mutations pass. The runner's final Git check
+  failed because the container lacked the external worktree Git directory;
+  host postflight passed. Evidence is sealed under
+  `build/g3c4-p2g2-terminal-pending-anchor-20261114/SHA256SUMS` pending
+  independent result review and integration. Actual bytevector backing
+  extent, allocation failure cuts, same-call EOS/second-token publication,
+  detached clones, public G2 and save/reload remain open.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
