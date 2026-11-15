@@ -1410,6 +1410,16 @@ host. Independent source/test review accepted this E3 union at `9aed9c65`;
 supported compiled Eshkol normal, poison, and sanitizer evidence remains
 required; E3 §9 admission remains **HOLD**.
 
+The [2026-11-15 bounded stage-3 successor](e3/E3_STAGE3_ADMISSION_20261115.md)
+selects only `188169be`/`761cb395`/`48bc75a6` over reviewed PR216 `70220bbe`.
+Its noninstalled fault tuple isolates site 4, ordinal 7, occurrence 1 (after
+seven pins are acquired) for absent/present gradient images; external-borrow,
+other prefixes and the complete R1/R2 matrix remain open. Source/custody tests
+pass; the fresh supported normal/repeat/poison/leak-enabled sanitizer gate is
+pending with explicit 6 GiB memory/7 GiB memory-plus-swap experimental caps and
+scratch under `/home`. Earlier accepted numerical F/mode leaves and failed
+complete-call retention remain separate evidence. E3 §9 stays **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
