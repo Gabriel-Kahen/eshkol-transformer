@@ -334,6 +334,10 @@ test-c1: build
 test-io5:
 	/usr/bin/bash scripts/test-io5.sh
 
+.PHONY: test-io5-gguf
+test-io5-gguf:
+	/usr/bin/bash scripts/test-io5-gguf.sh
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 
