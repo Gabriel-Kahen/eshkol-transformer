@@ -330,6 +330,10 @@ test-tr3-c-o2-restore:
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh
 
+.PHONY: test-io5
+test-io5:
+	/usr/bin/bash scripts/test-io5.sh
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 
