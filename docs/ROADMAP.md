@@ -2350,6 +2350,35 @@ open. Retained one-use leaf preparations are not runtime evidence; the
 32 GiB disk floor also prevents a new heavy attempt on this host at review
 time. G3, C2/SAVE, E3 §9, TR3, full CLI3 and Wave 3 acceptance remain **HOLD**.
 
+The [2026-11-15 integration follow-up](WAVE3_INTEGRATION_20261115.md), draft
+PR #221, composes PR #216 `70220bbe` with reviewed PR #218 `23c544b6` in a
+distinct worktree and branch. All seven non-roadmap leaf files are retained
+exactly. The combined source check exposed and repaired the pending-anchor
+checker's missing exact Q0 development allowlist entry; 70 focused tests,
+seven checker mutations, replay host/source, shell and topology checks pass.
+Supported lightweight toolchain/source preflight passes, but no generated
+Eshkol replay or authentic C2 SAVE/reader compile ran: RAM/swap are below the
+retained 16 GiB/8 GiB floors despite adequate disk. Fresh recipes remain
+unreleased pending one-use/seal/custody review and locked resource checks.
+Scratch is under `/home`; the original stacks and failed evidence are preserved.
+Generated runtime, E3 §9 and full Wave 3 admission remain **HOLD**.
+
+The [hosted resource qualification](G3R_HOSTED_RESOURCE_QUALIFICATION_20261115.md)
+has a measured **NO** for standard Ubuntu 22.04 run `43744457531`: available
+RAM 15,462,760 KiB and free swap 3,145,724 KiB are below the unchanged
+16,777,216/8,388,608 KiB floors. Workspace and Docker-root free space each
+pass at 92,600,385,536 bytes. The sealed probe ran no toolchain build or
+generated Eshkol program and does not admit G3/C2 or E3 runtime behavior.
+
+The follow-up [one-use G3-R/C2 controller](G3R_ONE_USE_LAUNCHER.md) adds exact
+input/seal checks, locked resource rechecks, exclusive claims, owned-container
+custody and complete output/artifact validation. Thirty-two focused control/oracle
+and Q0 tests pass, including a measured Docker missing-container response
+regression. Fresh replay/SAVE package and toolchain preflight evidence is
+separate from all preserved earlier bundles. Heavy launch remains blocked
+below the unchanged resource floors; no generated runtime or E3 admission
+follows from controller tests or the hosted resource measurement.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
@@ -3454,6 +3483,21 @@ publication, public G2 and continuation remain pending.
   after native commit. Native terminal integration and logical I1 clone code
   are prerequisites; Eshkol implementation and compiled same-call proof remain
   pending. No public G2 or continuation acceptance is claimed.
+
+- **Private P2/G2 terminal pending-allocation precursor:** The
+  [abort-only anchor candidate](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
+  reserves the original output and second/text carriers before sampling. An
+  independent lexical root detects paired carrier replacement and changed
+  list nodes/successors before abort. On the `c71d39a984` worktree candidate,
+  the pinned `fe9dfd5` Ubuntu 22.04/Clang 21 normal, repeat and sanitizer
+  fixtures pass 23 private and four feature-off checks with identical stdout
+  and empty stderr; seven static mutations pass. The runner's final Git check
+  failed because the container lacked the external worktree Git directory;
+  host postflight passed. Evidence is sealed under
+  `build/g3c4-p2g2-terminal-pending-anchor-20261114/SHA256SUMS` pending
+  independent result review and integration. Actual bytevector backing
+  extent, allocation failure cuts, same-call EOS/second-token publication,
+  detached clones, public G2 and save/reload remain open.
 
 ## Wave 4 — practical pretraining and performance
 

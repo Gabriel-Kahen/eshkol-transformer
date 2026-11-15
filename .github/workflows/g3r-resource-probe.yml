@@ -1,0 +1,27 @@
+name: G3-R hosted resource measurement (non-admission)
+on:
+  push:
+    branches: [codex/et-wave3-integration-20261115]
+    paths:
+      - .github/workflows/g3r-resource-probe.yml
+      - tests/g3r/hosted_resource_probe.py
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Measure unchanged resource floors without a build
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          python3 -B tests/g3r/hosted_resource_probe.py "$RUNNER_TEMP/g3r-resource-probe"
+      - name: Retain measured result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: g3r-resource-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/g3r-resource-probe/
+          if-no-files-found: error
+          retention-days: 30
