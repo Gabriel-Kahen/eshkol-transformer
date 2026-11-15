@@ -41,6 +41,7 @@ SUITES = (
     "bpe-tokenizer",
     "bpe-boundary",
     "shard-loader",
+    "data4-corpus",
     "c2-format",
     "c2-state",
     "c2-save",

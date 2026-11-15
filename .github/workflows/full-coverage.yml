@@ -57,6 +57,9 @@ jobs:
           - suite: shard-loader
             test_target: test-ci-dataset-after-build
             timeout: 75
+          - suite: data4-corpus
+            test_target: test-ci-data4-after-build
+            timeout: 75
           - suite: c2-format
             test_target: test-ci-c2-format-after-build
             timeout: 240

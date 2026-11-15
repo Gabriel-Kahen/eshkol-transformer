@@ -13,7 +13,54 @@ ENGINE = ".github/workflows/full-coverage.yml"
 
 class TopologyTests(unittest.TestCase):
     def test_current_complete_graph(self):
-        self.assertEqual(check(ROOT), 21)
+        self.assertEqual(check(ROOT), 22)
+
+    def test_data4_inventory_and_failure_propagation(self):
+        engine = (ROOT / ENGINE).read_text()
+        make = (ROOT / "Makefile").read_text()
+        entry = ("          - suite: data4-corpus\n"
+                 "            test_target: test-ci-data4-after-build\n"
+                 "            timeout: 75\n")
+        source = "/usr/bin/bash scripts/test-data4-source.sh"
+        command = "/usr/bin/bash scripts/test-data4-native.sh"
+        mutations = [
+            (ENGINE, engine, entry, ""),
+            (ENGINE, engine, entry, entry + entry),
+            (ENGINE, engine, entry, entry.replace("timeout: 75", "timeout: 3")),
+            (ENGINE, engine, entry, entry + "            if: false\n"),
+            ("Makefile", make, source, ":"),
+            ("Makefile", make, source, source + " || true"),
+            ("Makefile", make, source + "\n\t" + command,
+             command + "\n\t" + source),
+            ("Makefile", make, command, ":"),
+            ("Makefile", make, command, command + " || true"),
+            ("tests/ci/evidence.py", (ROOT / "tests/ci/evidence.py").read_text(),
+             '    "data4-corpus",\n', ""),
+        ]
+        for path, text, before, after in mutations:
+            with self.subTest(path=path, mutation=after):
+                self.assertIn(before, text)
+                with self.assertRaises((AssertionError, KeyError)):
+                    check(ROOT, {path: text.replace(before, after)})
+
+        for failed in ("test-data4-source.sh", "test-data4-native.sh"):
+            for target in ("test-after-build", "test-acceptance-predecessors-after-build",
+                           "test-ci-data4-after-build"):
+                with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    (root / "Makefile").write_text(make)
+                    (root / "scripts").mkdir()
+                    for name in set(re.findall(r"scripts/([a-zA-Z0-9_.-]+\.sh)", make)):
+                        (root / "scripts" / name).write_text(
+                            "#!/usr/bin/bash\necho " + name + " >> called\n" +
+                            ("exit 73\n" if name == failed else "exit 0\n"))
+                    result = subprocess.run(["make", target], cwd=root, capture_output=True,
+                                            text=True, check=False)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Error 73", result.stderr)
+                    calls = (root / "called").read_text().splitlines()
+                    self.assertEqual(calls.count(failed), 1)
+                    self.assertEqual(calls[-1], failed)
 
     def test_workflow_mutations_rejected(self):
         mutations = [

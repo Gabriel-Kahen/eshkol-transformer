@@ -82,6 +82,17 @@ P1 link repair and strict source compile remain historical evidence, not the
 basis for this clean-gate result. These are local measurements, not release
 acceptance.
 
+The required shared CI engine now registers the dedicated `data4-corpus` suite
+with `make test-ci-data4-after-build`. It runs the unchanged source gate first
+(including malformed shape, limit, cycle, and token-overflow negatives), then
+the unchanged same-aggregate native gate. Its prerequisite plan is clean and
+configuration only: both gates build their own inputs and consume no canonical
+package artifacts. Both commands also remain mandatory in the full test and
+acceptance-predecessor entry points. The engine and exact-evidence inventories
+now require 22 suites and 38 commands; prior evidence without DATA4 is rejected.
+DATA4 code, gate, and oracle changes retain fail-closed full-suite selection,
+while allowlisted prose-only changes retain the existing selection rules.
+
 Public CLI wiring, installed boundary manifests, report persistence/validation,
-dedicated DATA4 gate registration, hosted CI, and full DATA4 admission remain
-pending.
+exact-successor hosted CI, and full DATA4 admission remain pending. Gate
+registration alone does not establish those acceptance results.
