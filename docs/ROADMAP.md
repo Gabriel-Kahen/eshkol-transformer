@@ -912,6 +912,14 @@ role/CE/state/final verification and byte equality for identical packed
 emissions. Its three compiled mutants remain on packed-single. Local parser
 and shell checks do not substitute for independent source/test review or a
 fresh supported compiled gate; this extension has no runtime evidence yet.
+The existing second-normalization mutant's numerical gate now has a bounded
+causal verifier after the strict final-metric rejection. It requires unchanged
+three-batch rows and all 63 role records, recomputes the binary32 accumulator
+from independently admitted D2 rows and validated CE words, then requires the
+second exact division's loss and a two-ULP perplexity bound with unchanged
+weight, accuracy and counters. Focused synthetic negative controls pass; this
+source change has no fresh compiled result. Supported exact-source AOT,
+poison/sanitizer execution and independent review remain the M2 proving gate.
 An isolated all-correct/all-wrong source candidate adds two fixed raw V256
 six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
 and a separate two-case private numerical runner. The new versioned manifest
