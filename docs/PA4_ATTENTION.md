@@ -66,6 +66,14 @@ tracked predecessor inventories pass `sha256sum -c` locally. The frozen PA4
 baseline above remains pinned to its historical source. This inventory repair
 does not add performance or full integration evidence.
 
+The O2 create-hook package test now pins the exact 14-header tree after the
+intentional `include/eshkol_transformer/pa4_attention_candidate.h` addition:
+`34cb46384f9e9dc44573a7e8b527b312fe4f39c66cf659e65e4ce035fe6dae46`.
+That is the only header change since its preceding 13-header pin; O2 source,
+facade, and package manifests are unchanged, and the strict hash assertion is
+preserved. The four focused O2 package tests and CI topology checks pass locally.
+Fresh exact-head hosted CI remains pending; this repair adds no PA4 admission.
+
 ## Measurement gate
 
 PA4 acceptance requires parity **and measured speed or memory improvement** on
