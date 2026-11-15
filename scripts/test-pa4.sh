@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${root}"
+python3 -m unittest -v tests.ci.test_attention_predecessor_pins
 cc="${CC:-clang}"
 out="${PA4_BUILD_DIR:-${root}/build/pa4}"
 mkdir -p "${out}"

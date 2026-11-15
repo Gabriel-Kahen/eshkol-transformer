@@ -55,6 +55,17 @@ These are native component results. No canonical Eshkol AOT, full repository,
 hosted CI, training, performance, or memory-reduction result is established.
 No attention benchmark was run: the B0 tensor contract below remains a dependency.
 
+## Current-source predecessor inventory follow-up
+
+The four live N3K, G3N, G3S, and G3-C4 predecessor inventories now pin the
+current A2 source, and G3N pins the resulting N3K inventory digest. The CI
+topology test `tests/ci/test_attention_predecessor_pins.py` checks exact tracked
+inventory membership and rejects stale, missing, extra, or duplicate direct and
+nested pins. All
+tracked predecessor inventories pass `sha256sum -c` locally. The frozen PA4
+baseline above remains pinned to its historical source. This inventory repair
+does not add performance or full integration evidence.
+
 ## Measurement gate
 
 PA4 acceptance requires parity **and measured speed or memory improvement** on
