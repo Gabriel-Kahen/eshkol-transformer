@@ -26,6 +26,7 @@ REPORT = 'eshkol-attention-comparison-report'
 PROVIDERS = ['a2.cpu-f32.serial', 'pa4.cpu-f32.row-scratch.candidate']
 BASELINE_COMMIT = 'ee24ef461ef7e313c36c6c6f97ba4f3d8155bac7'
 BASELINE_SHA256 = 'fdb4ca172ca7aa282e787ff42b2998592c8b77a30f67d35680f7e38b2f550b02'
+BASELINE_SOURCE = ROOT/'tests/b0/frozen/a2_attention_provider_ee24ef46.c'
 IMAGE = 'sha256:68e2e292a255c9b42206e2298d12770aea7594ff9b82219460cb27ee28dbdc99'
 SOURCES = sorted(set(base.SOURCES + ['benchmarks/attention_compare_v1.c',
     'tests/b0/attention_compare.py', 'include/eshkol_transformer/pa4_attention_candidate.h']))
@@ -229,14 +230,19 @@ def load_report(path):
     return codec._load(path,REPORT,validate_report)
 
 
+def frozen_baseline_source():
+    frozen = BASELINE_SOURCE.read_bytes()
+    require(hashlib.sha256(frozen).hexdigest() == BASELINE_SHA256,'frozen baseline source mismatch')
+    return frozen
+
+
 def build(compiler, directory):
     path = shutil.which(compiler)
     require(path is not None,'compiler unavailable')
     path = Path(path).resolve()
     identity = {'path':str(path),'sha256':common.sha256_file(path),'version':subprocess.check_output([str(path),'--version'],text=True).strip(),'flags':FLAGS}
     directory.mkdir(parents=True,exist_ok=True)
-    frozen = subprocess.check_output(['git','show',BASELINE_COMMIT+':native/a2_attention_provider.c'],cwd=ROOT)
-    require(hashlib.sha256(frozen).hexdigest() == BASELINE_SHA256,'frozen baseline source mismatch')
+    frozen = frozen_baseline_source()
     baseline = directory/'baseline'
     baseline.mkdir(exist_ok=True)
     source = baseline/'a2_attention_provider.c'

@@ -13,8 +13,11 @@ the PA4 admission rule.
 forward and backward operations, and the exact dyadic/positions/selective-mask
 recipe in [BENCHMARK_FORMAT.md](BENCHMARK_FORMAT.md). Both providers receive the
 same input and output tensor views, buffers, counts, masks and positions. The
-baseline source is extracted from the historical commit and checked against the
-SHA-256 frozen in [PA4_ATTENTION.md](PA4_ATTENTION.md). The candidate is built from
+baseline source is carried in
+`tests/b0/frozen/a2_attention_provider_ee24ef46.c`, extracted from historical
+commit `ee24ef461ef7e313c36c6c6f97ba4f3d8155bac7` and checked against the
+SHA-256 frozen in [PA4_ATTENTION.md](PA4_ATTENTION.md). This makes the build
+independent of checkout history depth. The candidate is built from
 the composed current source with `ET_PA4_ATTENTION_CANDIDATE`; default-provider
 source is not rewritten. Both objects link into the same executable, with
 `-O2 -ffp-contract=off`, strict warnings and no LTO. Preparation/build is excluded.

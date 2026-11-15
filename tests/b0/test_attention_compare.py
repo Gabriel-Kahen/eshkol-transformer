@@ -17,6 +17,16 @@ else:
 
 
 class ComparisonFormatTests(unittest.TestCase):
+    def test_frozen_baseline_is_checked_without_git_history(self):
+        frozen = compare.frozen_baseline_source()
+        self.assertEqual(compare.hashlib.sha256(frozen).hexdigest(),compare.BASELINE_SHA256)
+        with tempfile.TemporaryDirectory() as temporary:
+            altered = Path(temporary)/'baseline.c'
+            altered.write_bytes(frozen+b'\n')
+            with mock.patch.object(compare,'BASELINE_SOURCE',altered):
+                with self.assertRaisesRegex(compare.codec.BenchmarkFormatError,'frozen baseline source mismatch'):
+                    compare.frozen_baseline_source()
+
     def test_definition_isolated_and_balanced(self):
         path = compare.ROOT/'benchmarks/attention_compare_v1.json'
         self.assertEqual(compare.load_definition(path),compare.CONTRACT)
