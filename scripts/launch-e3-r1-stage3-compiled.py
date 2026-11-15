@@ -201,6 +201,7 @@ def main():
                                 '--is-ancestor', BASE, args.expected_head],
                                check=False).returncode != 0):
             raise SystemExit('locked source differs from reviewed gate HEAD/tree or PR216 base')
+        (SOURCE / '.deps').mkdir(exist_ok=True)
         if inspect_container(name) is not None:
             raise SystemExit('generated container name is occupied')
         git_dir = Path(git('rev-parse', '--git-dir'))
@@ -225,7 +226,6 @@ def main():
             '-e', 'GIT_CONFIG_VALUE_0=/workspace',
             '-e', 'GIT_CONFIG_KEY_1=safe.directory',
             '-e', 'GIT_CONFIG_VALUE_1=/workspace/.deps/eshkol-src',
-            '-e', f'GIT_DIR={git_dir}', '-e', 'GIT_WORK_TREE=/workspace',
             '-e', 'GIT_OPTIONAL_LOCKS=0', '-e', 'TMPDIR=/out/tmp',
             '-e', 'CC=clang-21', '-e', 'CXX=clang++-21',
             '-e', 'CMAKE_BUILD_PARALLEL_LEVEL=3', '-e', 'MAKEFLAGS=-j3',

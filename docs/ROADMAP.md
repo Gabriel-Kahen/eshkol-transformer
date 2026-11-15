@@ -1417,8 +1417,13 @@ seven pins are acquired) for absent/present gradient images; external-borrow,
 other prefixes and the complete R1/R2 matrix remain open. Source/custody tests
 pass; the fresh supported normal/repeat/poison/leak-enabled sanitizer gate is
 pending with explicit 6 GiB memory/7 GiB memory-plus-swap experimental caps and
-scratch under `/home`. Earlier accepted numerical F/mode leaves and failed
-complete-call retention remain separate evidence. E3 §9 stays **HOLD**.
+scratch under `/home`. Two launch attempts stopped before compilation on
+nested-mountpoint and global Git-environment defects; the focused launcher
+fix is source-tested. Attempt 3 is **NOT RUN** under the orchestrator
+headroom hold (final local checkpoint: about 9.5 GiB available RAM, 797 MiB
+free swap; `/home` about 93 GiB free).
+Earlier accepted numerical F/mode leaves and failed complete-call retention
+remain separate evidence. E3 §9 stays **HOLD**.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
