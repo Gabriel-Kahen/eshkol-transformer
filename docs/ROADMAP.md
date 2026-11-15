@@ -2448,6 +2448,13 @@ open. Retained one-use leaf preparations are not runtime evidence; the
 32 GiB disk floor also prevents a new heavy attempt on this host at review
 time. G3, C2/SAVE, E3 §9, TR3, full CLI3 and Wave 3 acceptance remain **HOLD**.
 
+The [G3-R/C2 one-use controller](G3R_ONE_USE_LAUNCHER.md) supplies exact
+input/seal checks, locked resource rechecks, exclusive claims, owned-container
+custody and complete output/artifact validation. Its focused controls are
+source-level evidence only; a fresh preparation repinned to the composed tree,
+independent recipe/seal review, and resource-qualified generated replay/SAVE
+runs remain required. G3/C2 generated runtime and E3 §9 admission remain **HOLD**.
+
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
 checks the authentic idle generator's four RNG words without allocation,
