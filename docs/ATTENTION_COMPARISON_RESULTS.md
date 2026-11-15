@@ -1,11 +1,12 @@
 # A2 / PA4 supported native comparison, 2026-11-15
 
-PA4 meets the **bounded forward speed criterion** for this fixed workload: exact
+PA4 demonstrates **bounded forward speed improvement** for this fixed workload: exact
 output parity is preserved, total forward K1 dispatch time is 9.675% lower and
 prevalidated invocation time is 50.004% lower. This does not establish a uniform
 win for every shape or PA4 integration admission. Four forward dispatch pair
 ranges cross parity; backward invocation is 3.179% slower in aggregate. There is
-no demonstrated process-memory reduction.
+no demonstrated process-memory reduction. Joint forward-plus-backward execution
+was not measured; the derived sum below is not a training-speed result.
 
 ## Exact inputs and evidence
 
@@ -41,6 +42,30 @@ only this shape/input mix. Positive change means more time.
 | forward | invoke | 353236292 | 176604301 | 0.499961 | -50.004% |
 | backward | dispatch | 4757671953 | 4765299587 | 1.001603 | +0.160% |
 | backward | invoke | 619951362 | 639657933 | 1.031787 | +3.179% |
+
+### Forward-plus-backward derived sum
+
+**A joint forward→backward execution was not measured.** The following adds raw
+forward and backward times from separate cases, with identical call counts and
+input recipe. It is an additional derived summary requested after measurement,
+not a new timed region or a training benchmark. It excludes joint ordering/cache
+interactions and cannot measure joint-execution latency.
+
+| Scope | A2 forward + backward ns | PA4 forward + backward ns | PA4 / A2 | Derived time change | Index-aligned ratio min / lower median / max |
+|---|---:|---:|---:|---:|---:|
+| Dispatch | 6515679301 | 6353220566 | 0.975066 | -2.493% | 0.960566 / 0.973298 / 0.984621 |
+| Invoke | 973187654 | 816262234 | 0.838751 | -16.125% | 0.814838 / 0.839558 / 0.862864 |
+
+For the descriptive ranges, pair index `i` is aligned across the independently
+measured forward/backward shape cases, arm times are summed, and PA4/A2 is
+recomputed for each of the 12 indices. These are synthetic index-aligned sums,
+not coherent jointly timed trials or confidence intervals. Their AB/BA lower
+median ratios are 0.975895 / 0.972235 for dispatch and 0.828510 / 0.841130 for
+invoke. They retain observed variation but do not quantify unmeasured joint
+execution or future-run uncertainty. In particular, the 9.675% forward-dispatch
+reduction becomes only a 2.493% reduction in this derived forward/backward sum;
+backward is the dominant measured cost. No PA4 admission or training-speed
+conclusion is drawn from that sum.
 
 The following ranges are observed pair ratios, not confidence intervals.
 Ratios below one mean less candidate time. Lower medians and AB/BA order
@@ -108,8 +133,9 @@ incremental attention working set. These samples support no memory-win claim.
 - Independent source/test review approved, including the discovered-test import
   repair. The initial supported attempt failed test discovery before the
   performance run; its exit-1 log and non-OOM container inspection are retained.
-- The bounded speed prerequisite is evidenced for forward attention on this
-  exact recipe. Full PA4 admission still requires exact-head repository/AOT/hosted
+- Bounded forward improvement is evidenced for attention on this
+  exact recipe, without establishing joint forward/backward or training speed.
+  Full PA4 admission still requires exact-head repository/AOT/hosted
   gates and integration review; this comparison does not provide those gates.
 - Shapes remain tiny (`Tk <= 3`), masks include fully masked rows, the fixed
   mix is not representative training, CPU 2 was pinned but not reserved, and
