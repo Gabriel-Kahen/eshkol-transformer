@@ -19,7 +19,9 @@ profile, its guest recipe and exact required evidence inventory.
   file inventory, dependency inventories, recipe files, Docker client, socket
   endpoint and image identity. Changed or extra preparation/dependency files fail.
 - Reject traversal and symlink components with no-follow filesystem operations;
-  the fixed Docker vector mounts inputs read-only and writes only gate output.
+  the fixed Docker vector mounts inputs read-only. Only `out/guest` is mounted
+  writable at `/out`; host CID, inspection logs, Docker config and result records
+  remain outside that writable subtree.
 - Hold `/tmp/eshkol-transformer-heavy-build.lock` and
   `/home/gabe/.codex/eshkol-heavy-docker.lock`; recheck inputs and the unchanged
   16 GiB available-RAM, 8 GiB free-swap and 32 GiB disk floors under the locks.
@@ -47,7 +49,7 @@ Passing output inventories allow only the accepted `link.g3r -> valid.g3r`
 and `fifo.g3r` negative fixtures. Failure seals retain unexpected links or
 special nodes as metadata without dereferencing them; those nodes cannot pass.
 
-Thirty focused tests (26 control/oracle and four Q0) exercise these controls
+Thirty-two focused tests (28 control/oracle and four Q0) exercise these controls
 with fake Docker, resources and clocks, including dirty/stale/reused inputs,
 path escapes, missing logs, artifact substitutions, interrupted clients,
 inspection uncertainty and logging failures. A real read-only Docker absence
