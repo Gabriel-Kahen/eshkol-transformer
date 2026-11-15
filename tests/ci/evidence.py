@@ -47,6 +47,7 @@ SUITES = (
     "c2-load",
     "c2-public",
     "c2-operational",
+    "io5-gguf",
 )
 HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")

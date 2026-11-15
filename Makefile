@@ -338,6 +338,11 @@ test-io5:
 test-io5-gguf:
 	/usr/bin/bash scripts/test-io5-gguf.sh
 
+.PHONY: test-io5-gguf-native
+test-io5-gguf-native:
+	test -n "$${IO5_GGUF_NATIVE_PREFIX:-}"
+	python3 -m unittest -v tests.io5.test_gguf_native
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 

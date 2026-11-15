@@ -10,8 +10,9 @@ installed facades, and production dependency manifests are unchanged.
 IO5 remains **active**. This safetensors slice has independent source/test approval
 and is merged through PR #217 as `6668e52b`, preserving the exact `13c623c3` tree
 that passed all 24 hosted checks. A separate [bounded GGUF candidate](IO5_GGUF.md)
-has focused local evidence and independent source/test approval, with integration
-and supported CI pending. Live state/model ingress is unimplemented. The M3 fixture uses
+has focused local evidence, independent source/test approval and a dedicated
+required CI lane; its integration and hosted evidence are tracked in PR #222.
+Live state/model ingress is unimplemented. The M3 fixture uses
 the accepted 15 logical paths, 14 unique parameter tensors and tied head/embedding from its
 development manifest, with deterministic generated f32 bytes. This is format
 compatibility evidence, not a real M3 snapshot, model load or forward-pass test.

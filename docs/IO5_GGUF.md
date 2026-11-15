@@ -8,7 +8,8 @@ model construction, live-state ingress or training. The delivered training path
 remains Eshkol-native. GGUF metadata cannot select executable behavior.
 
 The safetensors predecessor is merged through PR #217. This GGUF slice has
-independent source/test approval; integration and supported CI remain pending.
+independent source/test approval and a required supported CI lane; integration
+and exact hosted evidence are tracked in [PR #222](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/222).
 IO5 remains active; model-name mapping and live model/state integration are later
 gates. Neither format slice establishes full trainer-state or resume equivalence.
 
@@ -148,12 +149,56 @@ the C1 fixtures. Actual `gguf` reader checks every exported shape and exact payl
 actual writer repacks IO5 metadata/tensors for exact C1 restoration and independently
 generates plain rank 1–4 fixtures. NumPy is confined to this development reference.
 The entire eleven-group safetensors regression suite and five Q0 Python isolation
-groups also run, keeping the existing tool source unchanged.
+groups also run, keeping the existing tool source unchanged. A further native
+witness is explicitly skipped unless its existing-library prefix is configured.
 
-Local configured reference validation passed **21 IO5 + 5 isolation groups**.
+### Required hosted coverage
+
+The shared full-coverage engine adds `Supported suite / io5-gguf` on Ubuntu 22.04
+with pinned Python 3.14.6. It installs the combined reference lock and requires
+`IO5_GGUF_REFERENCE_PYTHON` when running `make test-io5-gguf`, so missing references
+cannot yield a successful skipped compatibility gate. All 21 compiled matrix
+suites and their prerequisites remain unchanged. Suite evidence requires both
+the compiled matrix and IO5 job to succeed; the 22-suite inventory rejects old
+evidence or successful job lists missing GGUF, including exact-tree and docs-base
+reuse. The existing fail-closed change selector remains unchanged, with explicit
+tests that IO5 tool, test, lock and script changes require full coverage.
+
+### Existing native reader/writer witness
+
+An already installed GGML runtime supplies the local native witness; no native
+dependency is downloaded or built. Configure its prefix explicitly:
+
+```sh
+IO5_GGUF_NATIVE_PREFIX=/absolute/path/to/existing/runtime make test-io5-gguf-native
+```
+
+The target fails when the prefix is absent or unusable. The development Python
+test compiles only a small C caller against that prefix's headers and library,
+records their SHA-256 identities and the compiler version, and checks runtime
+library resolution. The native reader observes each generated tensor's dimensions
+and exact bytes; a fresh native writer copies metadata and adds the live allocated
+tensors, then produces a GGUF file that restores the identical original C1 bytes.
+The fixture covers ranks 1–4, non-square shapes, special f32 bits, buffer/parameter
+kinds and a logical alias. Its dimensions are non-unit: native writers may
+canonicalize unit-dimension ranks, so this witness does not establish arbitrary
+shape-preserving native reserialization. Dropping such rank information causes
+the IO5 checksum to reject rather than silently returning a different state.
+
+Local validation used the existing `t3-local-models/runtime` GGML 0.27.0 library
+whose installed headers match upstream llama.cpp commit
+[`1d88cb05f1a257f90741538ca3aca6c1b015c6d3`](https://github.com/ggml-org/llama.cpp/tree/1d88cb05f1a257f90741538ca3aca6c1b015c6d3/ggml).
+The library SHA-256 is
+`371a0a0a3de3d2250d032fc37484c87ddf86174732b3e7613bbf718f110a65e7`;
+the small caller used host GCC 16.2.1. This is bounded local cross-reader/writer
+evidence, not supported native CI or formal source/binary correspondence. Hosted
+CI does not install this native dependency and reports the witness as skipped.
+
+Local configured reference validation with the native prefix passed **22 IO5 +
+5 isolation groups**; 112 CI unit/mutation tests and the topology check also pass.
 Independent source/test review approved this GGUF slice after the descriptor-order
-acceptance fix and its regression. Integration and supported CI remain pending;
-the compiled native reader has not been executed against these fixtures.
+acceptance fix and its regression. The CI/native follow-up is independently approved;
+the exact hosted result is recorded in PR #222, rather than inferred from local tests.
 This evidence establishes no live M3 snapshot/load, forward output, provider
 ownership, optimizer/RNG/tokenizer state, resume equivalence, GPU execution,
 mixed precision or performance.

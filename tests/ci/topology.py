@@ -88,7 +88,7 @@ def check(root, overrides=None):
     cj, aj, ej = jobs(ci), jobs(acceptance), jobs(engine)
     assert set(cj) == {"topology", "blocking", "f0-linux"}
     assert set(aj) == {"select", "full", "accepted"}
-    assert set(ej) == {"suites", "evidence"}
+    assert set(ej) == {"suites", "io5-gguf", "evidence"}
     for workflow in (ci, acceptance, engine):
         assert "continue-on-error" not in workflow
         assert "pull_request_target" not in workflow
@@ -212,11 +212,39 @@ def check(root, overrides=None):
     for variable, value in (("M3", "n2_oracle_python"), ("N2", "n2_oracle_python"), ("O2", "oracle_python"), ("A2", "oracle_python")):
         assert f'echo "{variable}_ORACLE_PYTHON=${value}"' in ss["Install pinned development oracle"]
     assert 'echo "Q0_PYTHON=$oracle_python"' in ss["Install pinned development oracle"]
-    assert field(ej["evidence"], 4, "needs") == "suites"
+    reference = ej["io5-gguf"]
+    assert field(reference, 4, "name") == "Supported suite / io5-gguf"
+    assert field(reference, 4, "runs-on") == "ubuntu-22.04"
+    assert field(reference, 4, "timeout-minutes") == "10"
+    assert "if:" not in reference
+    assert reference.count("      - ") == 4  # Checkout plus exactly three named steps.
+    rs = steps(reference)
+    assert set(rs) == {"Select pinned IO5 Python", "Install pinned IO5 reference",
+                       "Run mandatory IO5 reference gate"}
+    assert field(rs["Select pinned IO5 Python"], 8, "uses") == "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+    assert field(rs["Select pinned IO5 Python"], 10, "python-version") == "'3.14.6'"
+    assert run(rs["Install pinned IO5 reference"]) == [
+        'python3 -m venv "$RUNNER_TEMP/io5-reference"',
+        '"$RUNNER_TEMP/io5-reference/bin/python" -m pip install \\',
+        '  --disable-pip-version-check \\',
+        '  -r tests/io5/requirements-gguf-reference.lock']
+    assert run(rs["Run mandatory IO5 reference gate"]) == [
+        'IO5_GGUF_REFERENCE_PYTHON="$RUNNER_TEMP/io5-reference/bin/python" make test-io5-gguf']
+    for path, expected in {
+        "tests/io5/requirements-gguf-reference.lock": ["-r requirements-reference.lock", "gguf==0.19.0", "numpy==2.5.4"],
+        "tests/io5/requirements-reference.lock": ["safetensors==0.6.2"],
+    }.items():
+        assert [line for line in read(path).splitlines() if line and not line.startswith("#")] == expected
+    for step in (rs["Install pinned IO5 reference"], rs["Run mandatory IO5 reference gate"]):
+        assert field(step, 8, "shell") == "/usr/bin/bash -euo pipefail {0}"
+    assert field(ej["evidence"], 4, "needs") == "[suites, io5-gguf]"
     assert field(ej["evidence"], 4, "if") == "${{ always() }}"
+    assert field(steps(ej["evidence"])["Require complete coverage and record tested tree"], 10, "SUITES_RESULT") == "${{ needs.suites.result }}"
+    assert field(steps(ej["evidence"])["Require complete coverage and record tested tree"], 10, "IO5_RESULT") == "${{ needs.io5-gguf.result }}"
     assert run(steps(ej["evidence"])["Require complete coverage and record tested tree"]) == [
-        'test "$SUITES_RESULT" = success', "python3 tests/ci/evidence.py emit"]
-    for body in (suite, ej["evidence"], cj["topology"], aj["select"]):
+        'test "$SUITES_RESULT" = success', 'test "$IO5_RESULT" = success',
+        "python3 tests/ci/evidence.py emit"]
+    for body in (suite, reference, ej["evidence"], cj["topology"], aj["select"]):
         assert f"      - uses: {CHECKOUT}" in body
     for body in (cj["f0-linux"], aj["accepted"], ej["evidence"]):
         assert field(body, 4, "timeout-minutes") == "2"
@@ -260,6 +288,15 @@ def check(root, overrides=None):
     assert '"${PROJECT_ROOT}/tests/e3_native_parity/test_frame_parity.c"' in e3_parity
     assert "e3_frame.c" not in read("scripts/build.sh")
     targets = recipes(make)
+    assert re.search(r"^test-io5-gguf:\s*$", make, re.M)
+    assert targets["test-io5-gguf"] == ["/usr/bin/bash scripts/test-io5-gguf.sh"]
+    # Evidence inventory includes the independent reference job as well as every
+    # unchanged compiled matrix suite. Old 21-suite evidence cannot satisfy it.
+    evidence_assignments = [node for node in ast.parse(read("tests/ci/evidence.py")).body
+                            if isinstance(node, ast.Assign) and any(
+                                isinstance(t, ast.Name) and t.id == "SUITES" for t in node.targets)]
+    assert len(evidence_assignments) == 1
+    assert ast.literal_eval(evidence_assignments[0].value) == tuple(s for s, _, _ in SUITES) + ("io5-gguf",)
     assert targets["test-ci-m3-after-build"] == [
         "/usr/bin/bash scripts/test-m3.sh", "/usr/bin/bash scripts/test-e3-native-frame.sh",
         "/usr/bin/bash scripts/test-e3-native-parity.sh",
@@ -315,7 +352,7 @@ def check(root, overrides=None):
         "build-k1.sh", "build-l2.sh", "build-i1.sh", "build-i2.sh", "build-l3s.sh",
         "build-e3-metrics.sh", "test-e3-metrics.sh")]
     assert read("scripts/build.sh").count('/usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-metrics.sh"') == 1
-    return len(SUITES)
+    return len(SUITES) + 1
 
 
 if __name__ == "__main__":

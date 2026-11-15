@@ -13,7 +13,7 @@ ENGINE = ".github/workflows/full-coverage.yml"
 
 class TopologyTests(unittest.TestCase):
     def test_current_complete_graph(self):
-        self.assertEqual(check(ROOT), 21)
+        self.assertEqual(check(ROOT), 22)
 
     def test_workflow_mutations_rejected(self):
         mutations = [
@@ -58,6 +58,34 @@ class TopologyTests(unittest.TestCase):
             (ACCEPTANCE, "evidence.py select", "evidence.py select || true"),
             (ACCEPTANCE, "  actions: read\n", ""),
             (ACCEPTANCE, "uses: ./.github/workflows/full-coverage.yml", "uses: ./.github/workflows/other.yml"),
+        ]
+        for path, before, after in mutations:
+            with self.subTest(path=path, mutation=before):
+                text = (ROOT / path).read_text()
+                self.assertIn(before, text)
+                with self.assertRaises((AssertionError, KeyError)):
+                    check(ROOT, {path: text.replace(before, after, 1)})
+
+    def test_io5_reference_and_aggregation_cannot_be_skipped_or_weakened(self):
+        mutations = [
+            (ENGINE, "  io5-gguf:\n", "  ignored-io5:\n"),
+            (ENGINE, "name: Supported suite / io5-gguf", "name: Optional IO5"),
+            (ENGINE, "    timeout-minutes: 10\n", "    timeout-minutes: 10\n    if: false\n"),
+            (ENGINE, "name: Select pinned IO5 Python", "name: Select pinned IO5 Python\n        if: false"),
+            (ENGINE, "name: Select pinned IO5 Python", "run: make build\n      - name: Select pinned IO5 Python"),
+            (ENGINE, '-r tests/io5/requirements-gguf-reference.lock', '-r tests/io5/requirements-reference.lock'),
+            (ENGINE, 'IO5_GGUF_REFERENCE_PYTHON="$RUNNER_TEMP/io5-reference/bin/python" make test-io5-gguf',
+             'make test-io5-gguf'),
+            (ENGINE, 'make test-io5-gguf', 'make test-io5-gguf || true'),
+            (ENGINE, "needs: [suites, io5-gguf]", "needs: suites"),
+            (ENGINE, '${{ needs.io5-gguf.result }}', '${{ needs.suites.result }}'),
+            (ENGINE, 'test "$IO5_RESULT" = success', ': "$IO5_RESULT"'),
+            ("Makefile", "test-io5-gguf:\n", "test-io5-gguf: build\n"),
+            ("Makefile", "/usr/bin/bash scripts/test-io5-gguf.sh", ":"),
+            ("tests/io5/requirements-gguf-reference.lock", "gguf==0.19.0", "gguf>=0.19.0"),
+            ("tests/io5/requirements-gguf-reference.lock", "numpy==2.5.4", "numpy"),
+            ("tests/io5/requirements-reference.lock", "safetensors==0.6.2", "safetensors"),
+            ("tests/ci/evidence.py", '    "io5-gguf",\n', ""),
         ]
         for path, before, after in mutations:
             with self.subTest(path=path, mutation=before):

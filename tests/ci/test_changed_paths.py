@@ -76,6 +76,20 @@ class ChangedPathSelectorTests(unittest.TestCase):
         head = self._commit("code")
         self.assertTrue(self._requires_full_suite(head))
 
+    def test_io5_tools_tests_locks_and_gate_require_full_coverage(self) -> None:
+        for relative in ("tools/io5/gguf_interop.py", "tools/io5/safetensors_interop.py",
+                         "tests/io5/test_gguf_interop.py", "tests/io5/requirements-gguf-reference.lock",
+                         "tests/io5/requirements-reference.lock", "scripts/test-io5-gguf.sh",
+                         ".github/workflows/full-coverage.yml"):
+            with self.subTest(path=relative):
+                base = self._git("rev-parse", "HEAD")
+                self._write(relative, "changed\n")
+                head = self._commit("IO5 executable change")
+                self.assertTrue(ci_changed_paths.requires_full_suite(base, head, self.repository))
+                env = dict(CI_REF="refs/heads/main", CI_PUSH_FORCED="false",
+                           CI_PUSH_CREATED="false", CI_PUSH_DELETED="false")
+                self.assertTrue(ci_changed_paths.push_requires_full_suite(base, head, env, self.repository))
+
     def test_mixed_prose_and_code_requires_full_suite(self) -> None:
         self._write("docs/guide.md", "updated\n")
         self._write("src/program.esk", "updated\n")

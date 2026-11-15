@@ -178,9 +178,30 @@ jobs:
           make "${{ matrix.test_target }}"
           echo "suite_seconds=$((SECONDS - started))" >> "$GITHUB_STEP_SUMMARY"
 
+  io5-gguf:
+    name: Supported suite / io5-gguf
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Select pinned IO5 Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.14.6'
+      - name: Install pinned IO5 reference
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/io5-reference"
+          "$RUNNER_TEMP/io5-reference/bin/python" -m pip install \
+            --disable-pip-version-check \
+            -r tests/io5/requirements-gguf-reference.lock
+      - name: Run mandatory IO5 reference gate
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: IO5_GGUF_REFERENCE_PYTHON="$RUNNER_TEMP/io5-reference/bin/python" make test-io5-gguf
+
   evidence:
     name: Suite evidence
-    needs: suites
+    needs: [suites, io5-gguf]
     if: ${{ always() }}
     runs-on: ubuntu-22.04
     timeout-minutes: 2
@@ -189,7 +210,9 @@ jobs:
       - name: Require complete coverage and record tested tree
         env:
           SUITES_RESULT: ${{ needs.suites.result }}
+          IO5_RESULT: ${{ needs.io5-gguf.result }}
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           test "$SUITES_RESULT" = success
+          test "$IO5_RESULT" = success
           python3 tests/ci/evidence.py emit
