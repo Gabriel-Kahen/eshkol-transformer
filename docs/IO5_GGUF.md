@@ -149,22 +149,24 @@ the C1 fixtures. Actual `gguf` reader checks every exported shape and exact payl
 actual writer repacks IO5 metadata/tensors for exact C1 restoration and independently
 generates plain rank 1–4 fixtures. NumPy is confined to this development reference.
 The entire eleven-group safetensors regression suite and five Q0 Python isolation
-groups also run, keeping the existing tool source unchanged. A further native
-witness is explicitly skipped unless its existing-library prefix is configured.
+groups also run, keeping the existing tool source unchanged. The native witness
+is optional locally and mandatory in the supported IO5 CI job.
 
 ### Required hosted coverage
 
 The shared full-coverage engine adds `Supported suite / io5-gguf` on Ubuntu 22.04
-with pinned Python 3.14.6. It installs the combined reference lock and requires
-`IO5_GGUF_REFERENCE_PYTHON` when running `make test-io5-gguf`, so missing references
-cannot yield a successful skipped compatibility gate. All 21 compiled matrix
-suites and their prerequisites remain unchanged. Suite evidence requires both
+with pinned Python 3.14.6 and Clang 21.1.8. It installs the combined reference lock,
+builds only `ggml-base` from the GGML commit and SHA-256 checked source archive
+below, and requires both the Python references and the native reader/writer witness.
+Missing references, native prefix, wrong compiler, source checksum, or native test
+failure fails the job. All 21 compiled matrix suites and their prerequisites remain
+unchanged. Suite evidence requires both
 the compiled matrix and IO5 job to succeed; the 22-suite inventory rejects old
 evidence or successful job lists missing GGUF, including exact-tree and docs-base
 reuse. The existing fail-closed change selector remains unchanged, with explicit
 tests that IO5 tool, test, lock and script changes require full coverage.
 
-### Existing native reader/writer witness
+### Native reader/writer witness
 
 An already installed GGML runtime supplies the local native witness; no native
 dependency is downloaded or built. Configure its prefix explicitly:
@@ -185,14 +187,22 @@ canonicalize unit-dimension ranks, so this witness does not establish arbitrary
 shape-preserving native reserialization. Dropping such rank information causes
 the IO5 checksum to reject rather than silently returning a different state.
 
-Local validation used the existing `t3-local-models/runtime` GGML 0.27.0 library
+The prior local validation used the existing `t3-local-models/runtime` GGML 0.27.0 library
 whose installed headers match upstream llama.cpp commit
 [`1d88cb05f1a257f90741538ca3aca6c1b015c6d3`](https://github.com/ggml-org/llama.cpp/tree/1d88cb05f1a257f90741538ca3aca6c1b015c6d3/ggml).
-The library SHA-256 is
+That library SHA-256 is
 `371a0a0a3de3d2250d032fc37484c87ddf86174732b3e7613bbf718f110a65e7`;
 the small caller used host GCC 16.2.1. This is bounded local cross-reader/writer
 evidence, not supported native CI or formal source/binary correspondence. Hosted
-CI does not install this native dependency and reports the witness as skipped.
+run 43745109450 passed the 22-suite aggregation but skipped the native test because
+`IO5_GGUF_NATIVE_PREFIX` was unset. The CI follow-up pins upstream GGML commit
+`417a024b4fb6bc3116d41af7c067166a039bdf12` and source archive SHA-256
+`eb2fb2d60331e78de996f4fd3f9cee955cfcab2546b7ad64100444730f39ede7`.
+It disables the CPU backend, examples and upstream tests, then builds just the
+11-action `ggml-base` target with at most two jobs. The supported Clang 21.1.8
+hosted run remains the next evidence gate; local Clang 22.1.8 validation of this
+build path cannot substitute for it. The follow-up passes 22 IO5 tests with no
+skips, five isolation tests, 113 CI unit/mutation tests, and topology locally.
 
 Local configured reference validation with the native prefix passed **22 IO5 +
 5 isolation groups**; 112 CI unit/mutation tests and the topology check also pass.

@@ -1,4 +1,4 @@
-"""Optional local witness; never downloads or builds the native GGML dependency."""
+"""Native GGML witness; optional locally and mandatory in the supported IO5 job."""
 from __future__ import annotations
 
 import hashlib
@@ -17,10 +17,12 @@ import gguf_interop as gg
 import safetensors_interop as c1
 
 
-@unittest.skipUnless(os.environ.get("IO5_GGUF_NATIVE_PREFIX"),
-                     "local native GGML prefix not configured; native execution unproved here")
 class NativeGGUFTests(unittest.TestCase):
     def test_existing_native_reader_and_writer(self):
+        if not os.environ.get("IO5_GGUF_NATIVE_PREFIX"):
+            if os.environ.get("IO5_GGUF_NATIVE_REQUIRED") == "1":
+                self.fail("required native GGML prefix not configured")
+            self.skipTest("local native GGML prefix not configured; native execution unproved here")
         prefix = Path(os.environ["IO5_GGUF_NATIVE_PREFIX"]).resolve(strict=True)
         headers = [prefix / "include" / name for name in ("gguf.h", "ggml.h")]
         library = (prefix / "lib/libggml-base.so").resolve(strict=True)

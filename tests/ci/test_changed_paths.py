@@ -80,6 +80,7 @@ class ChangedPathSelectorTests(unittest.TestCase):
         for relative in ("tools/io5/gguf_interop.py", "tools/io5/safetensors_interop.py",
                          "tests/io5/test_gguf_interop.py", "tests/io5/requirements-gguf-reference.lock",
                          "tests/io5/requirements-reference.lock", "scripts/test-io5-gguf.sh",
+                         "scripts/prepare-io5-ggml-native.sh", "tests/io5/test_gguf_native.py",
                          ".github/workflows/full-coverage.yml"):
             with self.subTest(path=relative):
                 base = self._git("rev-parse", "HEAD")

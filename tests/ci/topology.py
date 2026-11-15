@@ -217,10 +217,16 @@ def check(root, overrides=None):
     assert field(reference, 4, "runs-on") == "ubuntu-22.04"
     assert field(reference, 4, "timeout-minutes") == "10"
     assert "if:" not in reference
-    assert reference.count("      - ") == 4  # Checkout plus exactly three named steps.
+    assert reference.count("      - ") == 6  # Checkout plus five named steps.
     rs = steps(reference)
-    assert set(rs) == {"Select pinned IO5 Python", "Install pinned IO5 reference",
+    assert set(rs) == {"Install pinned native compiler", "Build pinned native GGUF witness library",
+                       "Select pinned IO5 Python", "Install pinned IO5 reference",
                        "Run mandatory IO5 reference gate"}
+    assert '6084F3CF814B57C1CF12EFD515CF4D18AF4F7421' in rs["Install pinned native compiler"]
+    assert 'llvm-toolchain-jammy-21 main' in rs["Install pinned native compiler"]
+    assert 'sudo apt-get install -y clang-21 cmake curl ninja-build' in rs["Install pinned native compiler"]
+    assert run(rs["Build pinned native GGUF witness library"]) == [
+        '/usr/bin/bash scripts/prepare-io5-ggml-native.sh "$RUNNER_TEMP/io5-ggml" clang-21 clang++-21 21.1.8']
     assert field(rs["Select pinned IO5 Python"], 8, "uses") == "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
     assert field(rs["Select pinned IO5 Python"], 10, "python-version") == "'3.14.6'"
     assert run(rs["Install pinned IO5 reference"]) == [
@@ -229,13 +235,27 @@ def check(root, overrides=None):
         '  --disable-pip-version-check \\',
         '  -r tests/io5/requirements-gguf-reference.lock']
     assert run(rs["Run mandatory IO5 reference gate"]) == [
-        'IO5_GGUF_REFERENCE_PYTHON="$RUNNER_TEMP/io5-reference/bin/python" make test-io5-gguf']
+        'IO5_GGUF_REFERENCE_PYTHON="$RUNNER_TEMP/io5-reference/bin/python" \\',
+        'IO5_GGUF_NATIVE_REQUIRED=1 \\',
+        'IO5_GGUF_NATIVE_PREFIX="$RUNNER_TEMP/io5-ggml/prefix" \\',
+        'IO5_GGUF_NATIVE_CC=clang-21 make test-io5-gguf']
+    native_prepare = read("scripts/prepare-io5-ggml-native.sh")
+    for required in ("417a024b4fb6bc3116d41af7c067166a039bdf12",
+                     "eb2fb2d60331e78de996f4fd3f9cee955cfcab2546b7ad64100444730f39ede7",
+                     'sha256sum -c -',
+                     'cmake --build "$work_dir/build" --target ggml-base --parallel 2',
+                     '-DGGML_CPU=OFF', '-DGGML_BUILD_TESTS=OFF'):
+        assert required in native_prepare
+    native_test = read("tests/io5/test_gguf_native.py")
+    assert 'os.environ.get("IO5_GGUF_NATIVE_REQUIRED") == "1"' in native_test
+    assert 'self.fail("required native GGML prefix not configured")' in native_test
     for path, expected in {
         "tests/io5/requirements-gguf-reference.lock": ["-r requirements-reference.lock", "gguf==0.19.0", "numpy==2.5.4"],
         "tests/io5/requirements-reference.lock": ["safetensors==0.6.2"],
     }.items():
         assert [line for line in read(path).splitlines() if line and not line.startswith("#")] == expected
-    for step in (rs["Install pinned IO5 reference"], rs["Run mandatory IO5 reference gate"]):
+    for step in (rs["Install pinned native compiler"], rs["Build pinned native GGUF witness library"],
+                 rs["Install pinned IO5 reference"], rs["Run mandatory IO5 reference gate"]):
         assert field(step, 8, "shell") == "/usr/bin/bash -euo pipefail {0}"
     assert field(ej["evidence"], 4, "needs") == "[suites, io5-gguf]"
     assert field(ej["evidence"], 4, "if") == "${{ always() }}"

@@ -45,6 +45,16 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("No module named 'gguf'", result.stderr)
 
+    def test_io5_native_required_mode_fails_instead_of_skipping(self):
+        environment = {**os.environ, "IO5_GGUF_NATIVE_REQUIRED": "1"}
+        environment.pop("IO5_GGUF_NATIVE_PREFIX", None)
+        result = subprocess.run(
+            [sys.executable, "-m", "unittest", "-v", "tests.io5.test_gguf_native"],
+            cwd=WORKFLOW.parents[2], env=environment, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("required native GGML prefix not configured", result.stderr)
+        self.assertNotIn("skipped", result.stderr)
+
     def assert_n2_reference_environment_is_pinned(self, workflow):
         install = workflow.split(
             "      - name: Install pinned development oracle\n", 1
