@@ -235,6 +235,7 @@ def seal_preparation(package: Path) -> str:
 class Inputs:
     def __init__(self, package: Path, expected: str):
         self.package, self.prep, self.out = absolute(package), package / "preparation", package / "out"
+        self.guest = self.out / "guest"
         require(HEX.fullmatch(expected), "independent preparation digest required")
         self.expected = expected
         seal_data = read_file(self.prep / "seal.json")
@@ -315,7 +316,7 @@ class Inputs:
         mounts += [(Path(dep["root"]), dep["guest"]) for dep in self.deps]
         for src, dst in mounts:
             args += ["--mount", f"type=bind,src={src},dst={dst},readonly"]
-        args += ["--mount", f"type=bind,src={self.out},dst=/out", "--workdir", str(self.source_root),
+        args += ["--mount", f"type=bind,src={self.guest},dst=/out", "--workdir", str(self.source_root),
                  "--env", "TMPDIR=/out/tmp", "--env", "XDG_CACHE_HOME=/out/cache",
                  "--env", "PYTHONDONTWRITEBYTECODE=1", "--env", "OMP_NUM_THREADS=1",
                  d["image"], "/usr/bin/bash", "/package/inside.sh"]
@@ -522,8 +523,10 @@ class Runner:
                 "source_head": self.i.source["head"], "source_tree": self.i.source["tree"],
                 "preparation_sha256": self.i.expected, "time": self.clock()}))
             mkdir_new(self.i.out)
-            for name in ("host", "docker-config", "tmp", "cache"):
+            for name in ("host", "docker-config", "guest"):
                 mkdir_new(self.i.out / name)
+            for name in ("tmp", "cache"):
+                mkdir_new(self.i.guest / name)
             write_new(self.i.out / "resources.json", json_bytes(sample))
             write_new(self.i.out / "run.argv.json", json_bytes(self.i.command()))
             attempted, row, failure, status = False, None, None, "FAIL"
@@ -587,7 +590,7 @@ def elf(path: Path) -> None:
 
 
 def validate_evidence(inputs: Inputs) -> dict[str, str]:
-    out, policy = inputs.out, inputs.config["evidence"]
+    out, policy = inputs.guest, inputs.config["evidence"]
     files = manifest(out, special=True)  # Inspect fixture nodes; never dereference.
     allowed_special = ({"authentic-save/companions/link.g3r": "symlink:valid.g3r",
                         "authentic-save/companions/fifo.g3r": "mode:" + str(stat.S_IFIFO)}
