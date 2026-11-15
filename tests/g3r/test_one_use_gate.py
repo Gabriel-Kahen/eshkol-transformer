@@ -126,7 +126,7 @@ class Fixture:
                            clock=lambda: 1729.0, **kwargs)
 
     def outputs(self):
-        out = self.package / 'out'
+        out = self.package / 'out/guest'
         write(out / 'inside.exit', b'0\n')
         for name in self.config['evidence']['steps']:
             write(out / f'steps/{name}.argv', b'exact fixture argv\n')
@@ -270,6 +270,20 @@ class OneUseGateTests(unittest.TestCase):
         f.config['evidence']['empty_stderr'].append('normal-data_io')
         f.seal()
         self.assertEqual(f.runner().run()['status'], 'PASS')
+
+    def test_only_guest_subtree_is_writable_and_cannot_reach_host_custody(self):
+        f = self.fixture
+        inputs = f.inputs()
+        argv = inputs.command()
+        mounts = [argv[n + 1] for n, value in enumerate(argv) if value == '--mount']
+        writable = [entry for entry in mounts if not entry.endswith(',readonly')]
+        self.assertEqual(writable, [f'type=bind,src={inputs.guest},dst=/out'])
+        for protected in (inputs.out / 'host/run.stdout', inputs.out / 'container.cid',
+                          inputs.out / 'docker-config/config.json', inputs.out / 'result.json'):
+            self.assertFalse(protected.is_relative_to(inputs.guest))
+            self.assertFalse(inputs.guest.is_relative_to(protected))
+        source_mount = f'type=bind,src={f.source},dst={f.source},readonly'
+        self.assertIn(source_mount, mounts)
 
     def test_reused_attempt_does_not_invoke_docker(self):
         f = self.fixture
@@ -416,7 +430,7 @@ class OneUseGateTests(unittest.TestCase):
             with self.subTest(index=index):
                 f = Fixture(self.root / ('case' + str(index)))
                 self.addCleanup(f.close)
-                f.process.mutate = lambda f=f, m=mutation: m(f.package / 'out')
+                f.process.mutate = lambda f=f, m=mutation: m(f.package / 'out/guest')
                 with self.assertRaises(gate.Hold):
                     f.runner().run()
                 self.assertEqual(json.loads((f.package / 'out/result.json').read_text())['status'], 'FAIL')
@@ -425,14 +439,14 @@ class OneUseGateTests(unittest.TestCase):
     def test_output_symlink_escape_is_sealed_as_failure_without_reading_target(self):
         f = self.fixture
         def mutate():
-            p = f.package / 'out/build/normal/caller'
+            p = f.package / 'out/guest/build/normal/caller'
             p.unlink()
             p.symlink_to('/etc/passwd')
         f.process.mutate = mutate
         with self.assertRaisesRegex(gate.Hold, 'output link'):
             f.runner().run()
         seal = json.loads((f.package / 'out/seal.json').read_text())
-        self.assertEqual(seal['files']['build/normal/caller'], 'symlink:/etc/passwd')
+        self.assertEqual(seal['files']['guest/build/normal/caller'], 'symlink:/etc/passwd')
 
     def test_artifact_pin_and_host_launch_argv_cannot_drift(self):
         for index, mutate_argv in enumerate((False, True)):
@@ -466,8 +480,8 @@ class OneUseGateTests(unittest.TestCase):
         self.addCleanup(f.close)
         f.runner().run()
         seal = json.loads((f.package / 'out/seal.json').read_text())
-        self.assertEqual(seal['files']['authentic-save/companions/link.g3r'], 'symlink:valid.g3r')
-        self.assertEqual(seal['files']['authentic-save/companions/fifo.g3r'], 'mode:' + str(__import__('stat').S_IFIFO))
+        self.assertEqual(seal['files']['guest/authentic-save/companions/link.g3r'], 'symlink:valid.g3r')
+        self.assertEqual(seal['files']['guest/authentic-save/companions/fifo.g3r'], 'mode:' + str(__import__('stat').S_IFIFO))
 
     def test_save_pair_and_producer_identity_mutations_fail(self):
         mutations = [
@@ -483,7 +497,7 @@ class OneUseGateTests(unittest.TestCase):
             with self.subTest(index=index):
                 f = Fixture(self.root / ('save-negative' + str(index)), 'save')
                 self.addCleanup(f.close)
-                f.process.mutate = lambda f=f, m=mutation: m(f.package / 'out/authentic-save')
+                f.process.mutate = lambda f=f, m=mutation: m(f.package / 'out/guest/authentic-save')
                 with self.assertRaises(gate.Hold):
                     f.runner().run()
 
@@ -496,7 +510,7 @@ class OneUseGateTests(unittest.TestCase):
         for index, mutation in enumerate((wrong_name, wrong_type)):
             f = Fixture(self.root / ('special' + str(index)), 'save')
             self.addCleanup(f.close)
-            f.process.mutate = lambda f=f, m=mutation: m(f.package / 'out/authentic-save')
+            f.process.mutate = lambda f=f, m=mutation: m(f.package / 'out/guest/authentic-save')
             with self.subTest(index=index), self.assertRaisesRegex(gate.Hold, 'output link'):
                 f.runner().run()
 
