@@ -11,6 +11,7 @@ PREFIX = NATIVE / 'cli3_generate'
 INCLUDES = [ROOT / path for path in (
     'internal/p1/lib', 'internal/c1/lib', 'internal/t2/lib',
     'internal/t1/lib', 'internal/d2/lib', 'internal/e3/lib', 'src')]
+PRODUCTION_INCLUDES = [*INCLUDES[:3], ROOT / 'internal/data4/lib', *INCLUDES[3:]]
 
 
 def policy(inputs, includes=INCLUDES):
@@ -39,19 +40,21 @@ class ProductionGenerateContract(unittest.TestCase):
             'public_exports.txt')]
 
     def test_exact_production_tuple_and_near_matches(self):
-        accepted = policy(self.inputs)
+        accepted = policy(self.inputs, PRODUCTION_INCLUDES)
         self.assertEqual((accepted.returncode, accepted.stdout.strip()),
                          (0, '1 0 0 0 1'), accepted.stderr)
         with tempfile.TemporaryDirectory() as directory:
             copied = Path(directory) / 'public_exports.txt'
             copied.write_bytes(self.inputs[3].read_bytes())
             cases = [
-                ([*self.inputs[:3], copied], INCLUDES),
-                ([self.inputs[0], copied, *self.inputs[2:]], INCLUDES),
-                (self.inputs, [*INCLUDES[:2], INCLUDES[3], INCLUDES[2],
-                               *INCLUDES[4:]]),
+                ([*self.inputs[:3], copied], PRODUCTION_INCLUDES),
+                ([self.inputs[0], copied, *self.inputs[2:]], PRODUCTION_INCLUDES),
+                (self.inputs, INCLUDES),
+                (self.inputs, [*PRODUCTION_INCLUDES[:3],
+                               PRODUCTION_INCLUDES[4], PRODUCTION_INCLUDES[3],
+                               *PRODUCTION_INCLUDES[5:]]),
                 ([self.inputs[0].parent / '..' / 'native' /
-                  self.inputs[0].name, *self.inputs[1:]], INCLUDES),
+                  self.inputs[0].name, *self.inputs[1:]], PRODUCTION_INCLUDES),
             ]
             for inputs, includes in cases:
                 with self.subTest(inputs=inputs):
