@@ -32,6 +32,8 @@ SOURCES = ["benchmarks/attention_v1.c", "benchmarks/measure_linux.c",
            "include/eshkol_transformer/a2_attention_abi.h",
            "include/eshkol_transformer/kernel_abi.h", "tests/b0/attention_benchmark.py",
            "tests/b0/benchmark_format.py", "tests/b0/run_benchmark.py"]
+SUPPORT_SOURCES = ["scripts/verify-attention-supported.sh", "scripts/common.sh",
+                   "toolchain/eshkol.lock"]
 FLAGS = ["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-Wpedantic", "-ffp-contract=off"]
 CONTRACT = {
     "id": "a2-attention-v1", "backend": "a2.cpu-f32.serial", "device": "cpu", "dtype": "f32",
@@ -81,10 +83,69 @@ def summary(samples: list[dict], iterations: int) -> dict:
             "dispatches_per_second": codec.decimal_rate(iterations*len(samples), sum(elapsed))}
 
 
-def validate_report(value: object) -> dict:
+def parse_support_tsv(raw: str, name: str) -> dict[str, str]:
+    require(len(raw.encode("utf-8")) <= 65536, f"{name} is too large")
+    result: dict[str, str] = {}
+    for line in raw.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        require(len(fields) == 2 and all(fields) and fields[0] not in result,
+                f"invalid {name} TSV")
+        result[fields[0]] = fields[1]
+    return result
+
+
+def validate_support_evidence(stable: dict, volatile: dict) -> None:
+    evidence = stable["support_evidence"]
+    keys(evidence, {"lock_tsv", "provenance_tsv", "provenance_sha256"},
+         "support evidence")
+    lock_raw = codec._string(evidence["lock_tsv"], "lock TSV", nonempty=True)
+    provenance_raw = codec._string(evidence["provenance_tsv"], "provenance TSV", nonempty=True)
+    require(hashlib.sha256(lock_raw.encode()).hexdigest() ==
+            stable["sources"]["toolchain/eshkol.lock"], "lock source hash mismatch")
+    for path in SOURCES + SUPPORT_SOURCES:
+        require(common.sha256_file(ROOT/path) == stable["sources"][path],
+                f"benchmark source changed: {path}")
+    require(hashlib.sha256(provenance_raw.encode()).hexdigest() ==
+            codec._sha256(evidence["provenance_sha256"], "provenance digest"),
+            "provenance hash mismatch")
+    lock = parse_support_tsv(lock_raw, "lock")
+    provenance = parse_support_tsv(provenance_raw, "provenance")
+    for name, expected in {"supported_os": "ubuntu-22.04", "supported_arch": "x86_64",
+                           "llvm_version": "21.1.8", "clang_version": "21.1.8",
+                           "supported_cc": "clang-21"}.items():
+        require(lock.get(name) == expected, f"unsupported lock {name}")
+    for name in ("eshkol_repository", "eshkol_commit", "eshkol_version"):
+        require(provenance.get(name) == lock.get(name) and bool(lock.get(name)),
+                f"toolchain {name} mismatch")
+    for name, lock_name in (("llvm_version", "llvm_version"),
+                            ("cc_version", "clang_version"),
+                            ("cxx_version", "clang_version")):
+        require(provenance.get(name) == lock[lock_name], f"toolchain {name} mismatch")
+    require(provenance.get("cc_path") == stable["compiler"]["path"],
+            "compiler path/provenance mismatch")
+    require(Path(provenance["cc_path"]).is_absolute(), "compiler path is not absolute")
+    require(re.search(r"\bversion 21\.1\.8\b", stable["compiler"]["version"].splitlines()[0]) is not None,
+            "compiler version/provenance mismatch")
+    codec._sha256(provenance.get("eshkol_binary_sha256"), "Eshkol binary digest")
+    host = volatile["support_evidence"]
+    keys(host, {"os_id", "os_version_id", "architecture"}, "support host")
+    require(host["os_id"] == "ubuntu" and host["os_version_id"] == "22.04",
+            "unsupported report host")
+    require(host["architecture"] == "x86_64" and
+            host["architecture"] == volatile["environment"]["architecture"],
+            "unsupported report architecture")
+
+
+def validate_report(value: object, *, version: int = 1) -> dict:
+    require(version in (1, 2), "unsupported attention report version")
     keys(value, {"stable", "volatile"}, "report")
     stable, volatile = value["stable"], value["volatile"]
-    keys(stable, {"definition", "definition_sha256", "project", "sources", "compiler", "binaries"}, "stable")
+    stable_keys = {"definition", "definition_sha256", "project", "sources", "compiler", "binaries"}
+    if version == 2:
+        stable_keys.add("support_evidence")
+    keys(stable, stable_keys, "stable")
     definition = validate_definition(stable["definition"])
     expected_digest = hashlib.sha256(encode_definition(definition)).hexdigest()
     require(stable["definition_sha256"] == expected_digest, "definition digest mismatch")
@@ -92,7 +153,7 @@ def validate_report(value: object) -> dict:
     require(re.fullmatch(r"[0-9a-f]{40}", codec._string(stable["project"]["commit"], "commit")) is not None,
             "invalid project commit")
     require(type(stable["project"]["dirty"]) is bool, "invalid dirty flag")
-    keys(stable["sources"], set(SOURCES), "sources")
+    keys(stable["sources"], set(SOURCES + (SUPPORT_SOURCES if version == 2 else [])), "sources")
     keys(stable["binaries"], {"target", "helper"}, "binaries")
     for digest in [*stable["sources"].values(), *stable["binaries"].values()]:
         codec._sha256(digest, "source/binary digest")
@@ -102,8 +163,12 @@ def validate_report(value: object) -> dict:
         codec._string(compiler[name], f"compiler {name}", nonempty=True)
     codec._sha256(compiler["sha256"], "compiler digest")
     require(compiler["flags"] == FLAGS, "unsupported compiler flags")
-    keys(volatile, {"observed_at_utc", "support_status", "environment", "cases"}, "volatile")
-    require(volatile["support_status"] == "compatibility-only", "unsupported admission claim")
+    volatile_keys = {"observed_at_utc", "support_status", "environment", "cases"}
+    if version == 2:
+        volatile_keys.add("support_evidence")
+    keys(volatile, volatile_keys, "volatile")
+    require(volatile["support_status"] == ("supported" if version == 2 else "compatibility-only"),
+            "unsupported admission claim")
     timestamp = codec._string(volatile["observed_at_utc"], "observation time")
     require(codec._UTC_TIMESTAMP.fullmatch(timestamp) is not None, "invalid UTC timestamp")
     try:
@@ -134,15 +199,25 @@ def validate_report(value: object) -> dict:
             require(sample["process_elapsed_ns"] >= sample["dispatch_elapsed_ns"], "dispatch exceeds process time")
         expected_summary = summary(samples, definition["iterations"])
         require(codec.canonical_json(case["summary"]) == codec.canonical_json(expected_summary), "summary mismatch")
+    if version == 2:
+        require(stable["project"]["dirty"] is False, "supported project tree is dirty")
+        validate_support_evidence(stable, volatile)
     return value
 
 
-def encode_report(value: dict) -> bytes:
-    return codec._encode(REPORT, value, validate_report)
+def encode_report(value: dict, *, version: int = 1) -> bytes:
+    return codec._encode(REPORT, value, lambda payload: validate_report(payload, version=version),
+                         version=version)
 
 
 def load_report(path: Path | bytes) -> dict:
-    return codec._load(path, REPORT, validate_report)
+    raw = path.read_bytes() if isinstance(path, Path) else path
+    try:
+        return codec._load(raw, REPORT, validate_report)
+    except codec.BenchmarkFormatError as error:
+        if str(error) != "unsupported benchmark version 2":
+            raise
+    return codec._load(raw, REPORT, lambda payload: validate_report(payload, version=2), version=2)
 
 
 def native_output(raw: bytes, shape: list[int], operation: str) -> tuple[int, str]:
@@ -200,10 +275,57 @@ def build(compiler: str, directory: Path) -> tuple[Path, Path, dict]:
                             "version": version, "flags": FLAGS}
 
 
-def run(definition_path: Path, report_path: Path, compiler: str, directory: Path) -> None:
+def supported_probe(compiler: str) -> dict[str, str]:
+    require("ESHKOL_ALLOW_UNSUPPORTED_HOST" not in os.environ,
+            "supported attention measurement forbids host override")
+    result = subprocess.run(["/usr/bin/bash", str(ROOT/"scripts/verify-attention-supported.sh"), compiler],
+                            cwd=ROOT, capture_output=True, text=True, check=False)
+    require(result.returncode == 0 and not result.stderr,
+            "supported toolchain gate failed: " + result.stderr.strip())
+    probe = parse_support_tsv(result.stdout, "support probe")
+    keys(probe, {"os_id", "os_version_id", "architecture", "cc_path", "cc_version",
+                 "llvm_version", "eshkol_repository", "eshkol_commit", "eshkol_version",
+                 "eshkol_binary_sha256", "lock_sha256", "provenance_sha256"}, "support probe")
+    return probe
+
+
+def supported_snapshot(probe: dict[str, str]) -> dict[str, str]:
+    lock_raw = (ROOT/"toolchain/eshkol.lock").read_bytes()
+    provenance_path = Path(os.environ.get("ESHKOL_BUILD_DIR", ROOT/".deps/eshkol-build"))
+    provenance_raw = (provenance_path/"eshkol-transformer-provenance.tsv").read_bytes()
+    require(hashlib.sha256(lock_raw).hexdigest() == probe["lock_sha256"],
+            "supported lock changed after gate")
+    require(hashlib.sha256(provenance_raw).hexdigest() == probe["provenance_sha256"],
+            "supported provenance changed after gate")
+    try:
+        lock_text, provenance_text = lock_raw.decode("utf-8"), provenance_raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise codec.BenchmarkFormatError("supported toolchain TSV is not UTF-8") from error
+    lock = parse_support_tsv(lock_text, "lock")
+    provenance = parse_support_tsv(provenance_text, "provenance")
+    for name in ("eshkol_repository", "eshkol_commit", "eshkol_version", "llvm_version"):
+        require(probe[name] == lock.get(name), f"support probe {name} mismatch")
+    for name in ("cc_path", "cc_version", "eshkol_binary_sha256"):
+        require(probe[name] == provenance.get(name), f"support probe {name} mismatch")
+    require(probe["os_id"] == "ubuntu" and probe["os_version_id"] == "22.04" and
+            probe["architecture"] == "x86_64", "unsupported probe host")
+    return {"lock_tsv": lock_text, "provenance_tsv": provenance_text,
+            "provenance_sha256": probe["provenance_sha256"]}
+
+
+def run(definition_path: Path, report_path: Path, compiler: str, directory: Path,
+        *, supported: bool = False) -> None:
     require(platform.system() == "Linux", "Linux pidfd/wait4 benchmark required")
     definition = load_definition(definition_path)
-    source_identity = {p: common.sha256_file(ROOT/p) for p in SOURCES}
+    probe = supported_probe(compiler) if supported else None
+    support_identity = supported_snapshot(probe) if probe else None
+    revision = common.git_output("rev-parse", "HEAD")
+    if supported:
+        require(not common.git_output("status", "--porcelain", "--untracked-files=all"),
+                "supported project tree is dirty")
+        compiler = probe["cc_path"]
+    source_paths = SOURCES + (SUPPORT_SOURCES if supported else [])
+    source_identity = {p: common.sha256_file(ROOT/p) for p in source_paths}
     target, helper, compiler_identity = build(compiler, directory)
     cases = []
     with tempfile.TemporaryDirectory(prefix="attention-v1.", dir=directory) as temporary:
@@ -218,20 +340,32 @@ def run(definition_path: Path, report_path: Path, compiler: str, directory: Path
                 require(len(set(digests)) == 1, "nondeterministic output across measured repetitions")
                 cases.append({"shape": shape, "operation": operation, "output_sha256": digests[0],
                               "samples": samples, "summary": summary(samples, definition["iterations"])})
-    require(source_identity == {p: common.sha256_file(ROOT/p) for p in SOURCES}, "sources changed during benchmark")
+    require(source_identity == {p: common.sha256_file(ROOT/p) for p in source_paths}, "sources changed during benchmark")
+    if supported:
+        require(supported_probe(compiler) == probe, "supported toolchain changed during benchmark")
+        require(supported_snapshot(probe) == support_identity, "supported provenance changed during benchmark")
+        require(common.sha256_file(Path(compiler)) == compiler_identity["sha256"],
+                "supported compiler changed during benchmark")
+        require(common.git_output("rev-parse", "HEAD") == revision and
+                not common.git_output("status", "--porcelain", "--untracked-files=all"),
+                "supported project tree changed during benchmark")
     report = {"stable": {"definition": definition, "definition_sha256": hashlib.sha256(encode_definition(definition)).hexdigest(),
-                          "project": {"commit": common.git_output("rev-parse", "HEAD"),
+                          "project": {"commit": revision,
                                       "dirty": bool(common.git_output("status", "--porcelain", "--untracked-files=all"))},
                           "sources": source_identity,
                           "compiler": compiler_identity,
                           "binaries": {"target": common.sha256_file(target), "helper": common.sha256_file(helper)}},
               "volatile": {"observed_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z"),
-                            "support_status": "compatibility-only",
+                            "support_status": "supported" if supported else "compatibility-only",
                             "environment": {"architecture": platform.machine(), "kernel": platform.release(),
                                             "cpu_model": common.cpu_model(), "logical_cpus": os.cpu_count(),
                                             "os_release": common.os_release()}, "cases": cases}}
-    common.write_atomic(report_path, encode_report(report))
-    print(f"attention benchmark: PASS ({len(cases)} cases; compatibility-only); report: {report_path}")
+    if supported:
+        report["stable"]["support_evidence"] = support_identity
+        report["volatile"]["support_evidence"] = {
+            name: probe[name] for name in ("os_id", "os_version_id", "architecture")}
+    common.write_atomic(report_path, encode_report(report, version=2 if supported else 1))
+    print(f"attention benchmark: PASS ({len(cases)} cases; {report['volatile']['support_status']}); report: {report_path}")
 
 
 def main() -> int:
@@ -241,6 +375,7 @@ def main() -> int:
     running.add_argument("definition", type=Path)
     running.add_argument("report", type=Path)
     running.add_argument("--cc", default="clang")
+    running.add_argument("--supported", action="store_true")
     running.add_argument("--build-dir", type=Path, default=ROOT/"build/benchmarks/attention-v1")
     verifying = commands.add_parser("verify")
     verifying.add_argument("definition", type=Path)
@@ -248,7 +383,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "run":
-            run(args.definition.resolve(), args.report.resolve(), args.cc, args.build_dir.resolve())
+            run(args.definition.resolve(), args.report.resolve(), args.cc, args.build_dir.resolve(),
+                supported=args.supported)
         else:
             definition, report = load_definition(args.definition), load_report(args.report)
             require(report["stable"]["definition"] == definition, "report does not match requested definition")

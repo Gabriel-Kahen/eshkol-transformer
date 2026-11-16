@@ -1,6 +1,7 @@
 # B0 benchmark format and measurement contract
 
-Status: **B0 implementation complete; independent integration review pending**.
+Status: **B0 foundation complete; attention report v2 independently reviewed,
+hosted measurement pending**.
 
 ## Scope
 
@@ -193,6 +194,39 @@ warnings; source/compiler/binary identities remain explicit. The wrapper checks
 available disk space with `df` and holds the shared heavy-build lock. Every report
 is conservatively labeled `compatibility-only`; this standalone benchmark does
 not verify or establish the project's supported Eshkol toolchain lane. Supported
-CI/admission, independent integration review and PA4 candidate parity remain
+CI/admission and PA4 candidate parity remain
 separate gates. No speedup, reduced memory, large-context scalability, training
 throughput, or admission of PA4 draft #215 follows from these measurements.
+
+### Reviewed supported-lane attention report v2 extension
+
+`make benchmark-attention-supported` requests report format version `2`, while
+reusing the exact version-1 attention definition, native workload, and measurement
+semantics above. Version-1 reports remain compatibility-only; their validator
+continues to reject a `supported` label. Version 2 requires `supported` and adds
+the exact toolchain lock and build-provenance TSV bytes, their SHA-256 identities,
+and explicit host ID/version/architecture evidence. Its validator requires the
+Ubuntu 22.04 x86-64, Clang/LLVM 21.1.8 lock, checks the embedded provenance
+against that lock and the recorded compiler, and rejects a dirty project tree.
+Neither format permits another device, shape, provider, or numerical workload.
+
+Before compilation and again after the final sample, the v2 runner calls the
+project's F0 `verify_toolchain` gate and binds the benchmark compiler to the
+verified provenance C compiler. It rejects any
+`ESHKOL_ALLOW_UNSUPPORTED_HOST` setting, checks the project tree and source
+hashes, and publishes only after all checks pass. A failed check leaves an older
+report untouched. The checksum and embedded evidence make the report auditable;
+they are not a cryptographic attestation that the host executed it. Supported
+admission still requires an exact-head supported-lane run. Independent source and
+test review accepted this contract.
+No supported attention result or PA4 speed/memory claim has been established by
+this reviewed contract.
+
+An explicit `workflow_dispatch` mode in `.github/workflows/ci.yml` selects only
+the supported attention benchmark. It requires the exact
+`codex/b0-attention-supported-v2-20261116` ref and a matching full
+`expected_attention_head` SHA. The Ubuntu 22.04 job installs pinned LLVM,
+verifies the locked toolchain, runs `make benchmark-attention-supported`, and
+uploads the version-2 report plus checksummed setup and benchmark logs. Its
+default-false selector leaves ordinary CI and ordinary manual dispatch on the
+full-coverage path. This diagnostic job is explicitly non-admission.

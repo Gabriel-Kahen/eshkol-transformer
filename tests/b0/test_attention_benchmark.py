@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import os
 import platform
 import shutil
 import struct
@@ -82,6 +83,33 @@ class NativeAttentionTests(unittest.TestCase):
     def invoke(self, *args):
         return subprocess.run([str(self.target),*args],capture_output=True,check=False)
 
+    def synthetic_v2_report(self):
+        """A format fixture, not evidence of a supported measurement."""
+        report = copy.deepcopy(self.report)
+        lock_raw = (attention.ROOT/"toolchain/eshkol.lock").read_text()
+        lock = attention.parse_support_tsv(lock_raw, "fixture lock")
+        report["stable"]["project"]["dirty"] = False
+        report["stable"]["compiler"]["path"] = "/usr/bin/clang-21"
+        report["stable"]["compiler"]["version"] = "clang version 21.1.8"
+        provenance_raw = (f"eshkol_repository\t{lock['eshkol_repository']}\n"
+                          f"eshkol_commit\t{lock['eshkol_commit']}\n"
+                          f"eshkol_version\t{lock['eshkol_version']}\n"
+                          f"llvm_version\t{lock['llvm_version']}\n"
+                          f"cc_path\t/usr/bin/clang-21\n"
+                          f"cc_version\t{lock['clang_version']}\n"
+                          f"cxx_version\t{lock['clang_version']}\n"
+                          f"eshkol_binary_sha256\t{'0'*64}\n")
+        report["stable"]["sources"].update({
+            p: attention.common.sha256_file(attention.ROOT/p) for p in attention.SUPPORT_SOURCES})
+        report["stable"]["support_evidence"] = {
+            "lock_tsv": lock_raw, "provenance_tsv": provenance_raw,
+            "provenance_sha256": hashlib.sha256(provenance_raw.encode()).hexdigest()}
+        report["volatile"]["support_status"] = "supported"
+        report["volatile"]["environment"]["architecture"] = "x86_64"
+        report["volatile"]["support_evidence"] = {
+            "os_id": "ubuntu", "os_version_id": "22.04", "architecture": "x86_64"}
+        return report
+
     def test_real_dispatch_all_rows_and_repeated_outputs(self):
         cases = self.report["volatile"]["cases"]
         self.assertEqual(len(cases),20)
@@ -138,6 +166,53 @@ class NativeAttentionTests(unittest.TestCase):
         encoded = attention.encode_report(self.report)
         with self.assertRaisesRegex(attention.codec.BenchmarkFormatError,"checksum mismatch"):
             attention.load_report(encoded.replace(b'"compatibility-only"',b'"supported"'))
+
+    def test_v2_schema_and_wrong_or_forged_evidence(self):
+        report = self.synthetic_v2_report()
+        encoded = attention.encode_report(report, version=2)
+        self.assertEqual(attention.load_report(encoded), report)
+        with self.assertRaises(attention.codec.BenchmarkFormatError):
+            attention.encode_report(report)
+        mutations = [
+            lambda r: r["stable"]["project"].update(dirty=True),
+            lambda r: r["volatile"]["support_evidence"].update(os_id="cachyos"),
+            lambda r: r["volatile"]["support_evidence"].update(architecture="aarch64"),
+            lambda r: r["stable"]["sources"].update({"toolchain/eshkol.lock": "0"*64}),
+            lambda r: r["stable"]["support_evidence"].update(provenance_sha256="0"*64),
+            lambda r: r["stable"]["compiler"].update(path="/usr/bin/gcc"),
+            lambda r: r["stable"]["compiler"].update(version="clang version 20.0.0"),
+            lambda r: r["volatile"].update(support_status="compatibility-only"),
+        ]
+        for mutate in mutations:
+            changed = copy.deepcopy(report)
+            mutate(changed)
+            with self.subTest(mutate=mutate):
+                with self.assertRaises(attention.codec.BenchmarkFormatError):
+                    attention.encode_report(changed, version=2)
+        changed = copy.deepcopy(report)
+        evidence = changed["stable"]["support_evidence"]
+        evidence["provenance_tsv"] = evidence["provenance_tsv"].replace(
+            "cc_version\t21.1.8", "cc_version\t20.0.0")
+        evidence["provenance_sha256"] = hashlib.sha256(
+            evidence["provenance_tsv"].encode()).hexdigest()
+        with self.assertRaisesRegex(attention.codec.BenchmarkFormatError, "toolchain cc_version mismatch"):
+            attention.encode_report(changed, version=2)
+
+    def test_supported_gate_failure_preserves_previous_report(self):
+        path = self.directory/"supported-preserved.json"
+        path.write_bytes(b"previous")
+        with mock.patch.dict(os.environ, {"ESHKOL_ALLOW_UNSUPPORTED_HOST": "1"}):
+            with mock.patch.object(attention.subprocess, "run") as process:
+                with self.assertRaisesRegex(attention.codec.BenchmarkFormatError, "host override"):
+                    attention.run(self.definition_path, path, "clang-21", self.directory,
+                                  supported=True)
+                process.assert_not_called()
+        self.assertEqual(path.read_bytes(), b"previous")
+        with mock.patch.object(attention, "supported_probe", side_effect=attention.codec.BenchmarkFormatError("wrong toolchain")):
+            with self.assertRaisesRegex(attention.codec.BenchmarkFormatError, "wrong toolchain"):
+                attention.run(self.definition_path, path, "clang-21", self.directory,
+                              supported=True)
+        self.assertEqual(path.read_bytes(), b"previous")
 
     def test_measurement_failure_and_nondeterminism_preserve_report(self):
         path = self.directory/"preserved.json"

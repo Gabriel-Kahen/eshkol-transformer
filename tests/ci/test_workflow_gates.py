@@ -6,7 +6,6 @@ import json
 import subprocess
 import sys
 import tempfile
-import textwrap
 import unittest
 from itertools import product
 
@@ -35,8 +34,8 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertEqual(workflow.count("MKL_CBWR"), 2)
 
     def test_final_status_accepts_only_completed_required_scope(self):
-        gate = WORKFLOW.read_text().split("  f0-linux:\n", 1)[1]
-        command = textwrap.dedent(gate.split("        run: |\n", 1)[1])
+        gate = jobs(WORKFLOW.read_text())["f0-linux"]
+        command = "\n".join(run(steps(gate)["Require successful checks for the selected scope"]))
         for topology in ("success", "failure", "cancelled", "skipped", ""):
             for scope in ("full", "docs", "reused", "true", ""):
                 for blocking in ("success", "failure", "cancelled", "skipped", ""):
@@ -54,8 +53,8 @@ class WorkflowGateTests(unittest.TestCase):
 
     def test_workflow_wires_selection_to_matrix_and_final_gate(self):
         workflow = WORKFLOW.read_text()
-        topology, rest = workflow.split("  blocking:\n", 1)
-        blocking, gate = rest.split("  f0-linux:\n", 1)
+        cj = jobs(workflow)
+        topology, blocking, gate = cj["topology"], cj["blocking"], cj["f0-linux"]
         self.assertIn("fetch-depth: 0", topology)
         self.assertIn("run_full: ${{ steps.scope.outputs.run_full }}", topology)
         self.assertIn("CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}", topology)
@@ -63,7 +62,7 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertIn("run_full=true", topology)
         self.assertIn('if [[ "$CI_EVENT" == pull_request ]]; then', topology)
         self.assertIn("if: needs.topology.outputs.run_full == 'true'", blocking)
-        self.assertIn("if: ${{ always() }}", gate)
+        self.assertIn("if: ${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.attention_supported_diagnostic) }}", gate)
         self.assertIn("needs: [topology, blocking]", gate)
         self.assertIn("SCOPE: ${{ needs.topology.outputs.scope }}", gate)
 

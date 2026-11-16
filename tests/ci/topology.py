@@ -86,14 +86,16 @@ def check(root, overrides=None):
     engine = read(".github/workflows/full-coverage.yml")
     make = read("Makefile")
     cj, aj, ej = jobs(ci), jobs(acceptance), jobs(engine)
-    assert set(cj) == {"topology", "blocking", "f0-linux"}
+    assert set(cj) == {"topology", "blocking", "f0-linux", "attention-supported-diagnostic"}
     assert set(aj) == {"select", "full", "accepted"}
     assert set(ej) == {"suites", "evidence"}
     for workflow in (ci, acceptance, engine):
         assert "continue-on-error" not in workflow
         assert "pull_request_target" not in workflow
     assert "  workflow_call:" in engine
-    assert "  workflow_dispatch:" in ci
+    assert "  workflow_dispatch:\n    inputs:\n" in ci
+    assert re.search(r"^      attention_supported_diagnostic:\n        description: 'Run only supported A2 attention benchmark \(non-admission\)'\n        type: boolean\n        required: false\n        default: false$", ci, re.M)
+    assert re.search(r"^      expected_attention_head:\n        description: 'Exact 40-character commit SHA required for attention mode'\n        type: string\n        required: false$", ci, re.M)
     assert "  actions: read\n" in acceptance.split("\njobs:\n", 1)[0]
     assert "  actions: read\n" in ci.split("\njobs:\n", 1)[0]
     assert "  pull-requests: read\n" in ci.split("\njobs:\n", 1)[0]
@@ -101,11 +103,12 @@ def check(root, overrides=None):
         assert field(body, 4, "uses") == "./.github/workflows/full-coverage.yml"
     assert field(cj["blocking"], 4, "needs") == "topology"
     assert field(cj["blocking"], 4, "if") == "needs.topology.outputs.run_full == 'true'"
+    assert field(cj["topology"], 4, "if") == "${{ github.event_name != 'workflow_dispatch' || !inputs.attention_supported_diagnostic }}"
     assert field(aj["full"], 4, "needs") == "select"
     assert field(aj["full"], 4, "if") == "needs.select.outputs.reused == 'false'"
     assert field(cj["f0-linux"], 4, "needs") == "[topology, blocking]"
     assert field(aj["accepted"], 4, "needs") == "[select, full]"
-    assert field(cj["f0-linux"], 4, "if") == "${{ always() }}"
+    assert field(cj["f0-linux"], 4, "if") == "${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.attention_supported_diagnostic) }}"
     assert field(aj["accepted"], 4, "if") == "${{ always() }}"
     assert run(steps(cj["f0-linux"])["Require successful checks for the selected scope"]) == [
         'test "$TOPOLOGY_RESULT" = success', 'case "$SCOPE:$BLOCKING_RESULT" in',
@@ -315,6 +318,43 @@ def check(root, overrides=None):
         "build-k1.sh", "build-l2.sh", "build-i1.sh", "build-i2.sh", "build-l3s.sh",
         "build-e3-metrics.sh", "test-e3-metrics.sh")]
     assert read("scripts/build.sh").count('/usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-metrics.sh"') == 1
+    diagnostic = cj["attention-supported-diagnostic"]
+    assert field(diagnostic, 4, "name") == "A2 attention benchmark only (non-admission)"
+    assert field(diagnostic, 4, "if") == "${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic }}"
+    assert field(diagnostic, 4, "runs-on") == "ubuntu-22.04"
+    assert field(diagnostic, 4, "timeout-minutes") == "75"
+    assert diagnostic.count(CHECKOUT) == 1
+    assert "uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830" in diagnostic
+    assert "uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in diagnostic
+    assert "full-coverage.yml" not in diagnostic
+    assert "make benchmark-after-build" not in diagnostic
+    diagnostic_steps = steps(diagnostic)
+    assert run(diagnostic_steps["Install pinned host dependencies"]) == run(
+        steps(ej["suites"])["Install host dependencies"])
+    assert run(diagnostic_steps["Verify pinned Eshkol toolchain"]) == [
+        'make toolchain 2>&1 | tee "$RUNNER_TEMP/attention-supported-diagnostic/toolchain.log"']
+    assert run(diagnostic_steps["Measure supported A2 attention"]) == [
+        'make benchmark-attention-supported 2>&1 | tee "$RUNNER_TEMP/attention-supported-diagnostic/benchmark.log"']
+    assert field(diagnostic_steps["Measure supported A2 attention"], 10, "BENCHMARK_REPORT") == (
+        "${{ runner.temp }}/attention-supported-diagnostic/attention-v2-supported-report.json")
+    identity = run(diagnostic_steps["Verify exact attention diagnostic ref"])
+    for guard in (
+        'test "$GITHUB_REF" = refs/heads/codex/b0-attention-supported-v2-20261116',
+        '[[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]',
+        'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"',
+        'test "$GITHUB_SHA" = "$EXPECTED_HEAD"',
+        'test -z "$(git status --porcelain --untracked-files=all)"',
+    ):
+        assert guard in identity
+    assert field(diagnostic_steps["Verify exact attention diagnostic ref"], 10, "EXPECTED_HEAD") == "${{ inputs.expected_attention_head }}"
+    assert field(diagnostic_steps["Seal attention diagnostic evidence"], 8, "if") == "always()"
+    assert 'sha256sum) > "$root/SHA256SUMS"' in run(
+        diagnostic_steps["Seal attention diagnostic evidence"])[-1]
+    assert field(diagnostic_steps["Upload attention diagnostic evidence"], 8, "if") == "always()"
+    assert field(diagnostic_steps["Upload attention diagnostic evidence"], 10,
+                 "if-no-files-found") == "error"
+    assert targets["benchmark-attention-supported"] == [
+        "/usr/bin/bash scripts/benchmark-attention.sh --supported"]
     return len(SUITES)
 
 
