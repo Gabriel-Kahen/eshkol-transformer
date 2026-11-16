@@ -778,22 +778,23 @@
               (cli3-usage "corpus prepare is missing a required option"))
           (if (> minimum maximum)
               (cli3-usage "--minimum-bytes exceeds --maximum-bytes"))
-          (let* ((policy (c2-persistence-policy-internal
+          (let* ((checked-directory (cli3-path directory 'corpus-prepare))
+                 (policy (c2-persistence-policy-internal
                           cli3-tokenizer-limit cli3-tokenizer-limit
                           cli3-tokenizer-limit 64 'cpu))
                  (tokenizer (t2-wave2-tokenizer-load tokenizer-path policy))
                  (documents (cli3-data4-read-sources
                              (cli3-reverse sources)))
                  (prepared (data4-corpus-prepare documents minimum maximum))
-                 (report-path (cli3-data4-report-path directory)))
+                 (report-path (cli3-data4-report-path checked-directory)))
             (if (file-exists? report-path)
                 (cli3-fail 'io 'corpus-prepare
                            "report sidecar already exists" '()))
             (let ((published (data4-corpus-write!
-                              tokenizer (cli3-path directory 'corpus-prepare)
+                              tokenizer checked-directory
                               shard-limit prepared)))
               (set! cli3-command-published? #t)
-              (cli3-data4-publish-report directory (vector-ref published 1))
+              (cli3-data4-publish-report checked-directory (vector-ref published 1))
               (cli3-summary-json (vector-ref published 0)))))
         (let ((option (car remaining)))
           (cond
