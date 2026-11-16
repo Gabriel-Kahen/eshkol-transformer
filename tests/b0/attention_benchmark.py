@@ -116,7 +116,8 @@ def validate_support_evidence(stable: dict, volatile: dict) -> None:
                            "llvm_version": "21.1.8", "clang_version": "21.1.8",
                            "supported_cc": "clang-21"}.items():
         require(lock.get(name) == expected, f"unsupported lock {name}")
-    for name in ("eshkol_repository", "eshkol_commit", "eshkol_version"):
+    require(bool(lock.get("eshkol_version")), "missing Eshkol version pin")
+    for name in ("eshkol_repository", "eshkol_commit"):
         require(provenance.get(name) == lock.get(name) and bool(lock.get(name)),
                 f"toolchain {name} mismatch")
     for name, lock_name in (("llvm_version", "llvm_version"),

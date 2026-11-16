@@ -93,7 +93,6 @@ class NativeAttentionTests(unittest.TestCase):
         report["stable"]["compiler"]["version"] = "clang version 21.1.8"
         provenance_raw = (f"eshkol_repository\t{lock['eshkol_repository']}\n"
                           f"eshkol_commit\t{lock['eshkol_commit']}\n"
-                          f"eshkol_version\t{lock['eshkol_version']}\n"
                           f"llvm_version\t{lock['llvm_version']}\n"
                           f"cc_path\t/usr/bin/clang-21\n"
                           f"cc_version\t{lock['clang_version']}\n"
@@ -169,6 +168,7 @@ class NativeAttentionTests(unittest.TestCase):
 
     def test_v2_schema_and_wrong_or_forged_evidence(self):
         report = self.synthetic_v2_report()
+        self.assertNotIn("eshkol_version\t", report["stable"]["support_evidence"]["provenance_tsv"])
         encoded = attention.encode_report(report, version=2)
         self.assertEqual(attention.load_report(encoded), report)
         with self.assertRaises(attention.codec.BenchmarkFormatError):
