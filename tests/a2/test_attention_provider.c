@@ -1,4 +1,10 @@
 #include "eshkol_transformer/a2_attention_abi.h"
+#ifdef ET_PA4_TEST
+#include "eshkol_transformer/pa4_attention_candidate.h"
+#define TEST_PROVIDER et_pa4_kernel_provider_v1
+#else
+#define TEST_PROVIDER et_a2_kernel_provider_v1
+#endif
 #include "reference_vectors.h"
 
 #include <math.h>
@@ -112,7 +118,7 @@ static const et_kernel_provider_v1 *resolve_a2(void *context,
                                                const char *symbol) {
   (void)context;
   CHECK(strcmp(symbol, ET_KERNEL_PROVIDER_SYMBOL_V1) == 0);
-  return et_a2_kernel_provider_v1();
+  return TEST_PROVIDER();
 }
 
 static et_kernel_runtime *make_runtime(void) {
@@ -141,7 +147,7 @@ static void expect_capability_request(et_kernel_runtime *runtime,
 }
 
 static void test_metadata(et_kernel_runtime *runtime) {
-  const et_kernel_provider_v1 *provider = et_a2_kernel_provider_v1();
+  const et_kernel_provider_v1 *provider = TEST_PROVIDER();
   const et_kernel_capability_v1 *attention;
   const et_kernel_capability_v1 *rope;
   CHECK(ET_A2_ATTENTION_ABI_MAJOR == 1u);
@@ -150,7 +156,11 @@ static void test_metadata(et_kernel_runtime *runtime) {
   CHECK(provider != NULL);
   CHECK(provider->abi_major == ET_KERNEL_ABI_MAJOR);
   CHECK(provider->abi_minor == ET_KERNEL_ABI_MINOR);
+#ifdef ET_PA4_TEST
+  CHECK(strcmp(provider->name, "pa4.cpu-f32.row-scratch.candidate") == 0);
+#else
   CHECK(strcmp(provider->name, "a2.cpu-f32.serial") == 0);
+#endif
   CHECK(provider->capability_count == 2u);
   CHECK(provider->validate_call != NULL);
   CHECK(provider->invoke_call != NULL);
@@ -158,6 +168,12 @@ static void test_metadata(et_kernel_runtime *runtime) {
                                                 "kernel.causal-attention");
   rope = et_kernel_runtime_capability_find(runtime, "kernel.rope");
   CHECK(attention != NULL && rope != NULL);
+#ifdef ET_PA4_TEST
+  CHECK(strcmp(attention->implementation, "pa4.cpu-f32.row-scratch") == 0);
+  CHECK(strcmp(attention->evidence, "PA4:candidate-not-admitted") == 0);
+  CHECK(strcmp(rope->implementation, "a2.cpu-f32.serial") == 0);
+  CHECK(strcmp(rope->evidence, "A2:cpu-f32-attention-rope-v1") == 0);
+#endif
   CHECK(attention->status == ET_KERNEL_CAPABILITY_VERIFIED);
   CHECK(rope->status == ET_KERNEL_CAPABILITY_VERIFIED);
   CHECK(attention->deterministic == 1u && rope->deterministic == 1u);
