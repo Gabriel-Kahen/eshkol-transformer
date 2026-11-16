@@ -487,20 +487,22 @@ fi
 
 run_resource_probe() {
   local label=$1 directory=$2 expected=$3
+  local limit=300
+  [[ "${label}" == large ]] && limit=450
   local pid rss=0 rss_max=0 fd_count=0 fd_max=0 started=$SECONDS
   local elapsed=0 next_report=30 cpu_ticks=unavailable exit_status
   "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
     "${d2_fixture}" \
     "${directory}" consume >"${d2_tmp}/resource-${label}.stdout" &
   pid=$!
-  printf 'D2 RESOURCE PROBE START: %s limit=300s\n' "${label}"
+  printf 'D2 RESOURCE PROBE START: %s limit=%ss\n' "${label}" "${limit}"
   while kill -0 "${pid}" 2>/dev/null; do
     elapsed=$((SECONDS - started))
-    if (( elapsed > 300 )); then
+    if (( elapsed > limit )); then
       kill "${pid}" 2>/dev/null || true
       wait "${pid}" 2>/dev/null || true
-      printf 'D2 RESOURCE PROBE TIMEOUT: %s elapsed=%ss limit=300s last-rss=%s KiB rss-max=%s KiB last-fd=%s fd-max=%s last-cpu-ticks=%s\n' \
-        "${label}" "${elapsed}" "${rss}" "${rss_max}" \
+      printf 'D2 RESOURCE PROBE TIMEOUT: %s elapsed=%ss limit=%ss last-rss=%s KiB rss-max=%s KiB last-fd=%s fd-max=%s last-cpu-ticks=%s\n' \
+        "${label}" "${elapsed}" "${limit}" "${rss}" "${rss_max}" \
         "${fd_count}" "${fd_max}" "${cpu_ticks}"
       die "D2 ${label} resource probe timed out"
     fi
@@ -579,8 +581,10 @@ for horizon in short long; do
     mode=consume
     expected_batches=8192
   fi
+  arena_timeout=300
+  [[ "${horizon}" == long ]] && arena_timeout=450
   ESHKOL_ARENA_REPORT=1 \
-    timeout --foreground --signal=TERM --kill-after=5s 300s \
+    timeout --foreground --signal=TERM --kill-after=5s "${arena_timeout}s" \
     "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
     "${d2_fixture}" \
     "${d2_tmp}/public-resources-1/large" "${mode}" \

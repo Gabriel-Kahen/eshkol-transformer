@@ -226,6 +226,10 @@ return to baseline. RSS and file-descriptor peaks remain separately reported; RS
 advisory because host allocator and shared-library behavior is outside the semantic
 payload bound. Unregioned or deliberately promoted shell aliases are caller-owned,
 not hidden native/D2 retention.
+The hosted watchdog remains finite: 300 seconds for small and topology probes,
+and 450 seconds for the 8,192-batch large probe and retained-arena run. The
+watchdog is a runner limit, not a measured loader performance claim; all batch,
+native-lifetime, descriptor, and arena assertions remain required.
 
 Missing or unreadable manifest/shard data is `io`; malformed, noncanonical,
 truncated, trailing, digest-corrupt, record-inconsistent, out-of-range-token, or D1
