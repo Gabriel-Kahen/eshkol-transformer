@@ -779,6 +779,13 @@ independently reviewed. This supports only the fixed CPU f32, one-byte
 diagnostic profile; hosted exact-head CI and merge remain pending, as do
 EOS, multi-token generation, GPU, and general profiles.
 
+A [sealed fixed-profile CLI3 binary artifact candidate](CLI3_FIXED_BINARY_ARTIFACT.md)
+now packages the exact executable already exercised by the production command
+gate, records its source/toolchain/package identity, and performs a fresh-location
+version/tokenizer smoke before supported CI upload. Focused source/CI tests pass
+locally; exact-head hosted artifact intake remains pending. This supplies no trained SAN, EOS,
+continuation, or CPU-v1 admission.
+
 The Wave 3 production CLI3 `generate` candidate moves the reviewed fixed
 CPU-f32 P1/G1 command into an exact installed CLI3 successor tuple. It retains
 the executable's dispatch/fallback ABI (two exports, eight globals), uses the
