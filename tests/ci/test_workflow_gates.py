@@ -19,6 +19,42 @@ FULL_COVERAGE = WORKFLOW.with_name("full-coverage.yml")
 
 
 class WorkflowGateTests(unittest.TestCase):
+    def test_evidence_requires_both_compiled_and_io5_success(self):
+        evidence = jobs(FULL_COVERAGE.read_text())["evidence"]
+        commands = run(steps(evidence)["Require complete coverage and record tested tree"])
+        self.assertEqual(commands[-1], "python3 tests/ci/evidence.py emit")
+        command = "\n".join(commands[:-1] + ["echo emitted"])
+        for suites, io5 in product(("success", "failure", "cancelled", "skipped", ""), repeat=2):
+            with self.subTest(suites=suites, io5=io5):
+                result = subprocess.run(["bash", "-euo", "pipefail", "-c", command],
+                                        env={**os.environ, "SUITES_RESULT": suites, "IO5_RESULT": io5},
+                                        capture_output=True, text=True)
+                success = suites == io5 == "success"
+                self.assertEqual(result.returncode == 0, success)
+                self.assertEqual(result.stdout, "emitted\n" if success else "")
+
+    def test_io5_supported_command_fails_without_reference_packages(self):
+        reference = jobs(FULL_COVERAGE.read_text())["io5-gguf"]
+        command = run(steps(reference)["Run mandatory IO5 reference gate"])
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(Path(directory) / "io5-reference")],
+                           check=True, capture_output=True)
+            result = subprocess.run(["bash", "-euo", "pipefail", "-c", "\n".join(command)],
+                                    cwd=WORKFLOW.parents[2], env={**os.environ, "RUNNER_TEMP": directory},
+                                    capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("No module named 'gguf'", result.stderr)
+
+    def test_io5_native_required_mode_fails_instead_of_skipping(self):
+        environment = {**os.environ, "IO5_GGUF_NATIVE_REQUIRED": "1"}
+        environment.pop("IO5_GGUF_NATIVE_PREFIX", None)
+        result = subprocess.run(
+            [sys.executable, "-m", "unittest", "-v", "tests.io5.test_gguf_native"],
+            cwd=WORKFLOW.parents[2], env=environment, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("required native GGML prefix not configured", result.stderr)
+        self.assertNotIn("skipped", result.stderr)
+
     def assert_n2_reference_environment_is_pinned(self, workflow):
         install = workflow.split(
             "      - name: Install pinned development oracle\n", 1
