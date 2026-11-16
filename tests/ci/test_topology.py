@@ -113,6 +113,28 @@ class TopologyTests(unittest.TestCase):
                 with self.assertRaises((AssertionError, KeyError)):
                     check(ROOT, {path: text.replace(before, after, 1)})
 
+    def test_manual_attention_mode_cannot_bypass_full_ci_or_weaken_evidence(self):
+        mutations = (
+            ("        default: false\n", "        default: true\n"),
+            ("    if: ${{ github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic }}\n", ""),
+            ("    if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) }}\n", "    if: ${{ always() }}\n"),
+            ("    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic }}\n", "    if: ${{ always() }}\n"),
+            ("refs/heads/codex/b0-attention-supported-v2-20261116", "refs/heads/main"),
+            ('test "$GITHUB_SHA" = "$EXPECTED_HEAD"', ":"),
+            ("make benchmark-attention-supported 2>&1", "make benchmark-attention 2>&1"),
+            ("make toolchain 2>&1", "make configure 2>&1"),
+            ("test \"$(llvm-config-21 --version)\" = '21.1.8'", ":"),
+            ("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02", "actions/upload-artifact@main"),
+            ('LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$root/SHA256SUMS"', ":"),
+            ("BENCHMARK_REPORT: ${{ runner.temp }}/attention-supported-diagnostic/attention-v2-supported-report.json", "BENCHMARK_REPORT: /tmp/report.json"),
+        )
+        ci = (ROOT / CI).read_text()
+        for before, after in mutations:
+            with self.subTest(before=before):
+                self.assertIn(before, ci)
+                with self.assertRaises((AssertionError, KeyError)):
+                    check(ROOT, {CI: ci.replace(before, after, 1)})
+
     def test_shared_call_subgate_cannot_be_removed_or_weakened(self):
         mutations = [
             ("scripts/test-m3.sh", '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-m3cg.sh"', ""),

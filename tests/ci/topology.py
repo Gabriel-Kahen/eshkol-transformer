@@ -87,14 +87,16 @@ def check(root, overrides=None):
     engine = read(".github/workflows/full-coverage.yml")
     make = read("Makefile")
     cj, aj, ej = jobs(ci), jobs(acceptance), jobs(engine)
-    assert set(cj) == {"topology", "blocking", "f0-linux"}
+    assert set(cj) == {"topology", "blocking", "f0-linux", "attention-supported-diagnostic", "data4-diagnostic"}
     assert set(aj) == {"select", "full", "accepted"}
     assert set(ej) == {"suites", "evidence"}
     for workflow in (ci, acceptance, engine):
         assert "continue-on-error" not in workflow
         assert "pull_request_target" not in workflow
     assert "  workflow_call:" in engine
-    assert "  workflow_dispatch:" in ci
+    assert "  workflow_dispatch:\n    inputs:\n" in ci
+    assert re.search(r"^      attention_supported_diagnostic:\n        description: 'Run only supported A2 attention benchmark \(non-admission\)'\n        type: boolean\n        required: false\n        default: false$", ci, re.M)
+    assert re.search(r"^      expected_attention_head:\n        description: 'Exact 40-character commit SHA required for attention mode'\n        type: string\n        required: false$", ci, re.M)
     assert "  actions: read\n" in acceptance.split("\njobs:\n", 1)[0]
     assert "  actions: read\n" in ci.split("\njobs:\n", 1)[0]
     assert "  pull-requests: read\n" in ci.split("\njobs:\n", 1)[0]
@@ -102,16 +104,28 @@ def check(root, overrides=None):
         assert field(body, 4, "uses") == "./.github/workflows/full-coverage.yml"
     assert field(cj["blocking"], 4, "needs") == "topology"
     assert field(cj["blocking"], 4, "if") == "needs.topology.outputs.run_full == 'true'"
+    assert field(cj["topology"], 4, "if") == "${{ github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic }}"
     assert field(aj["full"], 4, "needs") == "select"
     assert field(aj["full"], 4, "if") == "needs.select.outputs.reused == 'false'"
     assert field(cj["f0-linux"], 4, "needs") == "[topology, blocking]"
     assert field(aj["accepted"], 4, "needs") == "[select, full]"
-    assert field(cj["f0-linux"], 4, "if") == "${{ always() }}"
+    assert field(cj["data4-diagnostic"], 4, "if") == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic && !inputs.attention_supported_diagnostic }}")
+    assert field(cj["data4-diagnostic"], 4, "uses") == (
+        "./.github/workflows/data4-installed-diagnostic.yml")
+    assert field(cj["f0-linux"], 4, "if") == (
+        "${{ always() && (github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) }}")
     assert field(aj["accepted"], 4, "if") == "${{ always() }}"
     assert run(steps(cj["f0-linux"])["Require successful checks for the selected scope"]) == [
         'test "$TOPOLOGY_RESULT" = success', 'case "$SCOPE:$BLOCKING_RESULT" in',
         "  full:success|docs:skipped|reused:skipped) ;;", "  *) exit 1 ;;", "esac"]
     cs = steps(cj["topology"])
+    assert run(cs["Reject simultaneous diagnostics"]) == [
+        'test "$ATTENTION_DIAGNOSTIC:$DATA4_DIAGNOSTIC" != true:true']
+    assert field(cs["Reject simultaneous diagnostics"], 10, "ATTENTION_DIAGNOSTIC") == (
+        "${{ inputs.attention_supported_diagnostic }}")
+    assert field(cs["Reject simultaneous diagnostics"], 10, "DATA4_DIAGNOSTIC") == (
+        "${{ inputs.data4_installed_diagnostic }}")
     assert field(cj["topology"], 6, "run_full") == "${{ steps.scope.outputs.run_full }}"
     assert field(cj["topology"], 6, "scope") == "${{ steps.scope.outputs.scope }}"
     assert field(cs["Find merged PR full-coverage evidence"], 8, "if") == "github.event_name == 'push'"
@@ -184,8 +198,9 @@ def check(root, overrides=None):
     ss = steps(suite)
     assert set(ss) == {"Install host dependencies", "Restore pinned Eshkol toolchain",
         "Select pinned oracle Python", "Install pinned development oracle",
-        "Verify pinned Eshkol toolchain", "Build suite prerequisites", "Run full suite"}
-    assert suite.count("if:") == 2
+        "Verify pinned Eshkol toolchain", "Build suite prerequisites", "Run full suite",
+        "Upload tested CLI3 binary"}
+    assert suite.count("if:") == 3
     for name in ("Select pinned oracle Python", "Install pinned development oracle"):
         assert field(ss[name], 8, "if") == "matrix.suite == 'native-numerics' || matrix.suite == 'native-optimizer' || matrix.suite == 'model-composition'"
     assert run(ss["Build suite prerequisites"]) == [
@@ -196,6 +211,17 @@ def check(root, overrides=None):
     assert run(ss["Run full suite"]) == [
         "started=$SECONDS", 'make "${{ matrix.test_target }}"',
         'echo "suite_seconds=$((SECONDS - started))" >> "$GITHUB_STEP_SUMMARY"']
+    assert field(ss["Run full suite"], 10, "CLI3_BINARY_ARTIFACT_ROOT") == (
+        "${{ runner.temp }}/cli3-binary-artifact")
+    upload = ss["Upload tested CLI3 binary"]
+    assert field(upload, 8, "if") == "${{ success() && matrix.suite == 'cli3-commands' }}"
+    assert field(upload, 8, "uses") == (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02")
+    assert field(upload, 10, "name") == (
+        "cli3-fixed-binary-${{ github.run_id }}-${{ github.run_attempt }}")
+    assert field(upload, 10, "path") == "${{ runner.temp }}/cli3-binary-artifact.tar*"
+    assert field(upload, 10, "if-no-files-found") == "error"
+    assert field(upload, 10, "retention-days") == "30"
     for name in ("Install host dependencies", "Install pinned development oracle",
                  "Verify pinned Eshkol toolchain", "Build suite prerequisites", "Run full suite"):
         assert field(ss[name], 8, "shell") == "/usr/bin/bash -euo pipefail {0}"
@@ -288,16 +314,26 @@ def check(root, overrides=None):
     assert "set -euo pipefail" in cli3_ci
     assert "|| true" not in cli3_ci
     assert 'mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/eshkol-cli3-ci.XXXXXX"' in cli3_ci
-    cli3_tail = [line.strip().rstrip("\\").strip() for line in cli3_ci.splitlines()[-4:]]
+    cli3_tail = [line.strip().rstrip("\\").strip() for line in
+                 cli3_ci.split("printf 'CLI3 CI evidence: %s\\n' \"${evidence}\"\n", 1)[1].splitlines()]
     assert cli3_tail == [
         '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-production-generate.sh"',
         '"${evidence}/production-generate"',
         '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-cross-command-chain.sh"',
         '"${evidence}/cross-command-chain"',
+        'if [[ -n "${CLI3_BINARY_ARTIFACT_ROOT:-}" ]]; then',
+        '/usr/bin/bash "${PROJECT_ROOT}/scripts/package-cli3-binary.sh"',
+        '"${evidence}/production-generate" "${CLI3_BINARY_ARTIFACT_ROOT}"',
+        'fi',
     ]
     production = read("scripts/test-cli3-production-generate.sh")
     assert "tests.cli3.test_installed_corpus_validate" in production
     assert "CLI3_INSTALLED_BINARY=\"${scratch}/eshkol-transformer\"" in production
+    assert 'sha256sum "${scratch}/eshkol-transformer" >"${evidence}/binary-before.sha256"' in production
+    assert 'phase_begin tested-binary-unchanged\nsha256sum -c "${evidence}/binary-before.sha256" >/dev/null' in production
+    assert "printf 'CLI3-PRODUCTION-GENERATE-PASS\\n' >\"${evidence}/gate.pass\"" in production
+    cross_command = read("scripts/test-cli3-cross-command-chain.sh")
+    assert "printf 'CLI3-CROSS-COMMAND-CHAIN-PASS\\n' >\"${evidence}/gate.pass\"" in cross_command
     assert targets["test-after-build"] == FULL
     assert targets["test-ci-clean-build-after-build"] == ["$(MAKE) smoke-after-build benchmark-after-build"]
     assert targets["test-acceptance-predecessors-after-build"] == [c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh"]
@@ -324,6 +360,43 @@ def check(root, overrides=None):
         "build-k1.sh", "build-l2.sh", "build-i1.sh", "build-i2.sh", "build-l3s.sh",
         "build-e3-metrics.sh", "test-e3-metrics.sh")]
     assert read("scripts/build.sh").count('/usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-metrics.sh"') == 1
+    diagnostic = cj["attention-supported-diagnostic"]
+    assert field(diagnostic, 4, "name") == "A2 attention benchmark only (non-admission)"
+    assert field(diagnostic, 4, "if") == "${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic }}"
+    assert field(diagnostic, 4, "runs-on") == "ubuntu-22.04"
+    assert field(diagnostic, 4, "timeout-minutes") == "75"
+    assert diagnostic.count(CHECKOUT) == 1
+    assert "uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830" in diagnostic
+    assert "uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in diagnostic
+    assert "full-coverage.yml" not in diagnostic
+    assert "make benchmark-after-build" not in diagnostic
+    diagnostic_steps = steps(diagnostic)
+    assert run(diagnostic_steps["Install pinned host dependencies"]) == run(
+        steps(ej["suites"])["Install host dependencies"])
+    assert run(diagnostic_steps["Verify pinned Eshkol toolchain"]) == [
+        'make toolchain 2>&1 | tee "$RUNNER_TEMP/attention-supported-diagnostic/toolchain.log"']
+    assert run(diagnostic_steps["Measure supported A2 attention"]) == [
+        'make benchmark-attention-supported 2>&1 | tee "$RUNNER_TEMP/attention-supported-diagnostic/benchmark.log"']
+    assert field(diagnostic_steps["Measure supported A2 attention"], 10, "BENCHMARK_REPORT") == (
+        "${{ runner.temp }}/attention-supported-diagnostic/attention-v2-supported-report.json")
+    identity = run(diagnostic_steps["Verify exact attention diagnostic ref"])
+    for guard in (
+        'test "$GITHUB_REF" = refs/heads/codex/b0-attention-supported-v2-20261116',
+        '[[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]',
+        'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"',
+        'test "$GITHUB_SHA" = "$EXPECTED_HEAD"',
+        'test -z "$(git status --porcelain --untracked-files=all)"',
+    ):
+        assert guard in identity
+    assert field(diagnostic_steps["Verify exact attention diagnostic ref"], 10, "EXPECTED_HEAD") == "${{ inputs.expected_attention_head }}"
+    assert field(diagnostic_steps["Seal attention diagnostic evidence"], 8, "if") == "always()"
+    assert 'sha256sum) > "$root/SHA256SUMS"' in run(
+        diagnostic_steps["Seal attention diagnostic evidence"])[-1]
+    assert field(diagnostic_steps["Upload attention diagnostic evidence"], 8, "if") == "always()"
+    assert field(diagnostic_steps["Upload attention diagnostic evidence"], 10,
+                 "if-no-files-found") == "error"
+    assert targets["benchmark-attention-supported"] == [
+        "/usr/bin/bash scripts/benchmark-attention.sh --supported"]
     return len(SUITES)
 
 

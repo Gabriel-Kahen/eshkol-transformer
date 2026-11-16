@@ -175,11 +175,22 @@ jobs:
           echo "prerequisite_seconds=$((SECONDS - started))" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run full suite
+        env:
+          CLI3_BINARY_ARTIFACT_ROOT: ${{ runner.temp }}/cli3-binary-artifact
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           started=$SECONDS
           make "${{ matrix.test_target }}"
           echo "suite_seconds=$((SECONDS - started))" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload tested CLI3 binary
+        if: ${{ success() && matrix.suite == 'cli3-commands' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cli3-fixed-binary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cli3-binary-artifact.tar*
+          if-no-files-found: error
+          retention-days: 30
 
   evidence:
     name: Suite evidence

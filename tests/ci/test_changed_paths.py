@@ -79,11 +79,14 @@ class ChangedPathSelectorTests(unittest.TestCase):
     def test_data4_code_gates_and_oracles_require_full_suite(self) -> None:
         paths = (
             "internal/data4/lib/data4_corpus.esk",
+            "internal/data4/lib/data4_report_reader.esk",
             "scripts/test-data4-source.sh",
             "scripts/test-data4-native.sh",
             "tests/data4/data4_runtime.esk",
             "tests/data4/data4_same_aggregate_runtime.esk",
             "tests/data4/check_native_report.py",
+            "tests/cli3/test_installed_data4.py",
+            "scripts/test-cli3-production-generate.sh",
         )
         base = self.base
         for path in paths:

@@ -11,10 +11,13 @@ PREFIX = NATIVE / 'cli3_generate'
 INCLUDES = [ROOT / path for path in (
     'internal/p1/lib', 'internal/c1/lib', 'internal/t2/lib',
     'internal/t1/lib', 'internal/d2/lib', 'internal/e3/lib', 'src')]
+PRODUCTION_INCLUDES = [*INCLUDES[:3], ROOT / 'internal/data4/lib', *INCLUDES[3:]]
 
 
-def policy(inputs, includes=INCLUDES):
-    source = (ROOT / 'scripts/build-e1b-consumer.sh').read_text()
+def policy(inputs, includes=INCLUDES, *, successor=False):
+    builder = ('build-e1b-consumer-cli3-data4.sh' if successor
+               else 'build-e1b-consumer.sh')
+    source = (ROOT / 'scripts' / builder).read_text()
     prelude = source.split('require_command realpath\n', 1)[1].split(
         'private_root="$(realpath -- "$1")"', 1)[0]
     script = (
@@ -39,23 +42,25 @@ class ProductionGenerateContract(unittest.TestCase):
             'public_exports.txt')]
 
     def test_exact_production_tuple_and_near_matches(self):
-        accepted = policy(self.inputs)
+        accepted = policy(self.inputs, PRODUCTION_INCLUDES, successor=True)
         self.assertEqual((accepted.returncode, accepted.stdout.strip()),
                          (0, '1 0 0 0 1'), accepted.stderr)
         with tempfile.TemporaryDirectory() as directory:
             copied = Path(directory) / 'public_exports.txt'
             copied.write_bytes(self.inputs[3].read_bytes())
             cases = [
-                ([*self.inputs[:3], copied], INCLUDES),
-                ([self.inputs[0], copied, *self.inputs[2:]], INCLUDES),
-                (self.inputs, [*INCLUDES[:2], INCLUDES[3], INCLUDES[2],
-                               *INCLUDES[4:]]),
+                ([*self.inputs[:3], copied], PRODUCTION_INCLUDES),
+                ([self.inputs[0], copied, *self.inputs[2:]], PRODUCTION_INCLUDES),
+                (self.inputs, INCLUDES),
+                (self.inputs, [*PRODUCTION_INCLUDES[:3],
+                               PRODUCTION_INCLUDES[4], PRODUCTION_INCLUDES[3],
+                               *PRODUCTION_INCLUDES[5:]]),
                 ([self.inputs[0].parent / '..' / 'native' /
-                  self.inputs[0].name, *self.inputs[1:]], INCLUDES),
+                  self.inputs[0].name, *self.inputs[1:]], PRODUCTION_INCLUDES),
             ]
             for inputs, includes in cases:
                 with self.subTest(inputs=inputs):
-                    rejected = policy(inputs, includes)
+                    rejected = policy(inputs, includes, successor=True)
                     self.assertNotEqual(rejected.returncode, 0)
                     self.assertIn('policy requires', rejected.stderr)
 
@@ -83,6 +88,18 @@ class ProductionGenerateContract(unittest.TestCase):
         fixture = (ROOT / 'tests/cli3/formatter_private_root.esk').read_text()
         self.assertIn('(load "formatter_private.esk")', fixture)
 
+    def test_data4_commands_are_successor_only(self):
+        predecessor = (NATIVE / 'cli3_extension.esk').read_text()
+        root = (NATIVE / 'cli3_generate_root.esk').read_text()
+        successor = (NATIVE / 'cli3_data4_extension.esk').read_text()
+        generate = (NATIVE / 'cli3_generate_extension.esk').read_text()
+        self.assertNotIn('(define (cli3-corpus-prepare', predecessor)
+        self.assertNotIn('(define (cli3-corpus-report-validate', predecessor)
+        self.assertIn('(load "cli3_data4_extension.esk")', root)
+        self.assertIn('(define (cli3-corpus-prepare', successor)
+        self.assertIn('(define (cli3-corpus-report-validate', successor)
+        self.assertIn('(cli3-data4-private-dispatch arguments)', generate)
+
     def test_readonly_d1_exports_and_reviewed_closures(self):
         exports = (NATIVE / 'cli3_generate_public_exports.txt').read_text().splitlines()
         base = (NATIVE / 'cli3_public_exports.txt').read_text().splitlines()
@@ -109,6 +126,12 @@ class ProductionGenerateContract(unittest.TestCase):
             ('tests/cli3_generate/generate_extension.esk',
              'native/cli3_generate_extension.esk')):
             source = source.replace(old, new)
+        anchor = 'native/cli3_b_extension.esk\n'
+        self.assertEqual(source.count(anchor), 1)
+        source = source.replace(anchor, anchor +
+            'internal/data4/lib/data4_corpus.esk\n'
+            'internal/data4/lib/data4_report_reader.esk\n'
+            'native/cli3_data4_extension.esk\n')
         self.assertEqual((NATIVE / 'cli3_generate_source_closure.txt').read_text(),
                          source)
         native = (FIXTURE / 'aggregate_native_source_closure.txt').read_text()
@@ -127,6 +150,8 @@ class ProductionGenerateContract(unittest.TestCase):
         self.assertIn('native/cli3_generate_root.esk',
                       (ROOT / 'scripts/build-cli3.sh').read_text())
         build = (ROOT / 'scripts/build-cli3.sh').read_text()
+        self.assertIn('scripts/build-e1b-consumer-cli3-data4.sh', build)
+        self.assertNotIn('scripts/build-e1b-consumer.sh', build)
         self.assertIn('tests/cli3/stage-cli3-d1-readonly.py', build)
         self.assertNotIn('scripts/stage-cli3-d1-readonly.py', build)
         self.assertIn('ESHKOL_LIB_DIR="${public_dir}"', build)
@@ -142,7 +167,10 @@ class ProductionGenerateContract(unittest.TestCase):
     def test_command_retains_reviewed_ownership_order(self):
         production = (NATIVE / 'cli3_generate_extension.esk').read_text()
         reviewed = (FIXTURE / 'generate_extension.esk').read_text()
-        self.assertEqual(production.split('\n', 2)[2], reviewed.split('\n', 3)[3])
+        self.assertEqual(
+            production.replace('(cli3-data4-private-dispatch arguments)',
+                               '(cli3-private-dispatch arguments)').split('\n', 2)[2],
+            reviewed.split('\n', 3)[3])
         sequence = ('(cli3-b-restore! trainer checkpoint)',
                     '(trainer-release! trainer)', '(set! trainer #f)',
                     '(module-eval! model)', '(g3g-public-generator-create')

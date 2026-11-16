@@ -553,6 +553,13 @@ metrics implementation.
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
 | B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed smoke and accepted-A2 CPU-f32 attention benchmark contracts](BENCHMARK_FORMAT.md). The attention foundation covers all ten admitted shapes in forward and backward, with separate dispatch timing and fresh-process RSS; independent source review and [PR #219](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/219) integration are complete. [Hosted PR CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43743833642) passed 24/24 checks on the exact merge tree; [merged-main CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43922467842) succeeded by exact-tree reuse, with the full suites skipped. Focused merged-main `make test-b0` passed 50/50 tests, including 20 real attention cases. Full-count latency/RSS measurements remain CachyOS compatibility-only; they establish no supported-lane performance, PA4 speedup, memory improvement, or admission of draft #215 | complete (smoke and A2 benchmark foundation) |
 
+The B0 supported attention report-v2 extension and explicit manual CI mode passed
+independent source/test/report review. Exact-head supported diagnostic run
+`43930911395` passed 60 forward/backward measurements across ten shapes, and
+ordinary full CI run `43930811027` passed all required checks at `9af5513d`.
+The measured result is bounded to that supported candidate; PA4 speed/memory
+improvement and full CPU-v1 admission remain open.
+
 The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
 is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
 exit and JIT startup timeouts under the 2 GiB probe cap to OpenBLAS worker
@@ -771,6 +778,13 @@ evidence seal is
 independently reviewed. This supports only the fixed CPU f32, one-byte
 diagnostic profile; hosted exact-head CI and merge remain pending, as do
 EOS, multi-token generation, GPU, and general profiles.
+
+A [sealed fixed-profile CLI3 binary artifact candidate](CLI3_FIXED_BINARY_ARTIFACT.md)
+now packages the exact executable already exercised by the production command
+gate, records its source/toolchain/package identity, and performs a fresh-location
+version/tokenizer smoke before supported CI upload. Focused source/CI tests pass
+locally; exact-head hosted artifact intake remains pending. This supplies no trained SAN, EOS,
+continuation, or CPU-v1 admission.
 
 The Wave 3 production CLI3 `generate` candidate moves the reviewed fixed
 CPU-f32 P1/G1 command into an exact installed CLI3 successor tuple. It retains
@@ -3243,7 +3257,7 @@ publication, public G2 and continuation remain pending.
 | AC4 | Activation checkpointing and memory-bounded training | TR3 | Same update within tolerance and measured memory reduction | planned |
 | AMD4 | AMD HIP/rocBLAS backend and device observability | K1, TR3, B0 | Direct device execution, parity and benchmark evidence | planned |
 | PA4 | Optimized/fused attention path | A2, B0 | Parity plus measured speed/memory improvement | planned |
-| DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | [DATA4-A bounded corpus selection](DATA4_CORPUS_SLICE.md) is a build-only candidate: raw length filtering, first-occurrence exact deduplication, per-document provenance/SHA-256, and a deterministic checksummed in-memory report composed with T2 staging and D1 publication. The clean one-command native gate passed from `6b885150` with two-run artifact parity, T2/D1 readback, preexisting-target rejection, and D1 corruption detection. The dedicated required `data4-corpus` CI suite now runs the unchanged source gate before the native gate; topology, full/acceptance inventories, and exact-evidence requirements include both commands. Installed wiring, durable report handling, exact-successor hosted CI, and full DATA4 acceptance remain pending. | active |
+| DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | [DATA4-A bounded corpus selection](DATA4_CORPUS_SLICE.md) is a build-only candidate: raw length filtering, first-occurrence exact deduplication, per-document provenance/SHA-256, and a deterministic checksummed in-memory report composed with T2 staging and D1 publication. The clean one-command native gate passed from `6b885150` with two-run artifact parity, T2/D1 readback, preexisting-target rejection, and D1 corruption detection. The dedicated required `data4-corpus` CI suite now runs the unchanged source gate before the native gate; topology, full/acceptance inventories, and exact-evidence requirements include both commands. Exact PR #220 head `562cb353` passed hosted full run `43743963935` including `data4-corpus`. A separate [DATA4-B installed report candidate](DATA4_INSTALLED_REPORT.md) stages opt-in `corpus prepare`/`report-validate` commands, C1 no-replace sidecar publication and aggregate-only report validation; independent source/workflow review accepted; exact `2e656717` supported diagnostic run `43935284566` passed 32 source checks, the CLI3 package/manifest gate and 9/9 installed commands, with both evidence seals verified. The transient binary was hashed but not uploaded. Ordinary full CI run `43941165585` failed M3's unchanged predecessor-builder source pin after the installed CLI3 command suite passed; a successor-only builder split is source-staged for exact-head retest. Integration and full DATA4 acceptance remain pending. | active |
 
 ## Wave 5 — ecosystem expansion
 
