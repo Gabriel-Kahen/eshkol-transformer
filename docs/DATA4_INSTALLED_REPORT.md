@@ -62,6 +62,10 @@ successor-only DATA4 command extension. The predecessor CLI3 source and formatte
 fixture retain their original command surface;
 public exports, defined/undefined-symbol lists, native source closure, and
 public-symbol string inventory remain unchanged pending compiled confirmation.
+The DATA4 successor uses a separate builder so the accepted M3 predecessor
+builder retains its exact pinned bytes. Full run `43941165585` reached the
+M3 source-pin check and rejected the prior shared-builder edit; the separated
+builder repair requires a new exact-head hosted gate.
 An opt-in `ci.yml` manual mode calls branch-local
 `data4-installed-diagnostic.yml` as a non-admission route requiring exact
 branch/head/tree inputs. Ordinary PR, push and manual full-suite selection

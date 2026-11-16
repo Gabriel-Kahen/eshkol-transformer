@@ -14,8 +14,10 @@ INCLUDES = [ROOT / path for path in (
 PRODUCTION_INCLUDES = [*INCLUDES[:3], ROOT / 'internal/data4/lib', *INCLUDES[3:]]
 
 
-def policy(inputs, includes=INCLUDES):
-    source = (ROOT / 'scripts/build-e1b-consumer.sh').read_text()
+def policy(inputs, includes=INCLUDES, *, successor=False):
+    builder = ('build-e1b-consumer-cli3-data4.sh' if successor
+               else 'build-e1b-consumer.sh')
+    source = (ROOT / 'scripts' / builder).read_text()
     prelude = source.split('require_command realpath\n', 1)[1].split(
         'private_root="$(realpath -- "$1")"', 1)[0]
     script = (
@@ -40,7 +42,7 @@ class ProductionGenerateContract(unittest.TestCase):
             'public_exports.txt')]
 
     def test_exact_production_tuple_and_near_matches(self):
-        accepted = policy(self.inputs, PRODUCTION_INCLUDES)
+        accepted = policy(self.inputs, PRODUCTION_INCLUDES, successor=True)
         self.assertEqual((accepted.returncode, accepted.stdout.strip()),
                          (0, '1 0 0 0 1'), accepted.stderr)
         with tempfile.TemporaryDirectory() as directory:
@@ -58,7 +60,7 @@ class ProductionGenerateContract(unittest.TestCase):
             ]
             for inputs, includes in cases:
                 with self.subTest(inputs=inputs):
-                    rejected = policy(inputs, includes)
+                    rejected = policy(inputs, includes, successor=True)
                     self.assertNotEqual(rejected.returncode, 0)
                     self.assertIn('policy requires', rejected.stderr)
 
@@ -148,6 +150,8 @@ class ProductionGenerateContract(unittest.TestCase):
         self.assertIn('native/cli3_generate_root.esk',
                       (ROOT / 'scripts/build-cli3.sh').read_text())
         build = (ROOT / 'scripts/build-cli3.sh').read_text()
+        self.assertIn('scripts/build-e1b-consumer-cli3-data4.sh', build)
+        self.assertNotIn('scripts/build-e1b-consumer.sh', build)
         self.assertIn('tests/cli3/stage-cli3-d1-readonly.py', build)
         self.assertNotIn('scripts/stage-cli3-d1-readonly.py', build)
         self.assertIn('ESHKOL_LIB_DIR="${public_dir}"', build)
