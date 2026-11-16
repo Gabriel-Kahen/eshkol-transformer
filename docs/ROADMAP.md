@@ -551,7 +551,7 @@ metrics implementation.
 | A0 | Public API, shapes, dtype/device, error and ownership contracts | — | Reviewed specification and compile-only API fixtures | complete |
 | R0 | Audit Eshkol tensor/autodiff/runtime capabilities | — | Executable capability probe and gap report with no inferred support | complete |
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
-| B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed definition, report schema, and smoke benchmark](BENCHMARK_FORMAT.md) | complete |
+| B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed definition, report schema, and smoke benchmark](BENCHMARK_FORMAT.md); real A2 CPU-f32 attention extension implements versioned definitions/reports, separate dispatch timing and fresh-process RSS over all ten admitted rows, with focused local compatibility-only evidence. Independent source review approved; focused B0 tests pass 50/50 and all 20 attention cases pass locally as compatibility-only. This provides a foundation for PA4, without accepting draft #215 or claiming speedup; supported-lane validation and integration admission remain separate gates | complete (smoke); attention source-reviewed, compatibility-tested |
 
 The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
 is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
