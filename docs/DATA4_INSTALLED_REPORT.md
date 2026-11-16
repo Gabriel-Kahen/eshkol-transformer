@@ -1,8 +1,12 @@
 # DATA4-B installed report candidate
 
 Status: command, reader, and focused diagnostic source/tests independently
-reviewed. Supported compiled package and command gates, and exact-head ordinary
-CI remain pending. This does not admit DATA4 as a complete workstream.
+reviewed. [Supported installed diagnostic 43935284566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43935284566)
+passed at `2e656717`/tree `c99df006`: 32 DATA4 source checks, the exact CLI3
+package/manifest gate, and all 9 installed command tests. The downloaded outer
+and inner SHA256SUMS verify. The temporary binary was hashed on the runner but
+not uploaded as a deliverable. Ordinary full CI, integration, and complete
+DATA4 admission remain pending.
 
 ## Commands
 
