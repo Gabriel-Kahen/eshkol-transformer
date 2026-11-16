@@ -56,6 +56,16 @@ class InstalledData4Tests(unittest.TestCase):
         return self.command("corpus", "report-validate", "--input-directory",
                             str(directory or self.output), status=status)
 
+    def test_installed_help_routes(self) -> None:
+        group = self.command("corpus", "--help")
+        self.assertIn("prepare  Filter and deduplicate", group.stdout)
+        self.assertIn("report-validate  Validate a DATA4 report", group.stdout)
+        self.assertEqual(group.stderr, "")
+        for command in ("prepare", "report-validate"):
+            help_result = self.command("corpus", command, "--help")
+            self.assertIn(f"eshkol-transformer corpus {command}", help_result.stdout)
+            self.assertEqual(help_result.stderr, "")
+
     def test_prepared_report_and_d1_summary(self) -> None:
         built = self.prepare()
         summary = json.loads(built.stdout)

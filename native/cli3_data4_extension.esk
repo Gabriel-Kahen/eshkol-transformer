@@ -1,0 +1,181 @@
+;;; DATA4 installed commands for the production CLI3 successor only.
+
+(define cli3-data4-corpus-help
+  "Usage: eshkol-transformer corpus COMMAND [OPTIONS]\n\nCommands:\n  build    Encode documents into a D1 token corpus\n  inspect  Validate and inspect a D1 token corpus\n  prepare  Filter and deduplicate bounded documents with a report\n  report-validate  Validate a DATA4 report and D1 aggregate summary\n")
+(define cli3-corpus-prepare-help
+  "Usage: eshkol-transformer corpus prepare --tokenizer PATH --source SOURCE_ID=PATH [--source SOURCE_ID=PATH]... --minimum-bytes N --maximum-bytes N --output-directory DIRECTORY --shard-token-limit N\n")
+(define cli3-corpus-report-validate-help
+  "Usage: eshkol-transformer corpus report-validate --input-directory DIRECTORY\n")
+
+(define (cli3-data4-source-spec text)
+  (let loop ((index 0))
+    (if (= index (string-length text))
+        (cli3-usage "--source requires SOURCE_ID=PATH")
+        (if (char=? (string-ref text index) #\=)
+            (let ((id (substring text 0 index))
+                  (path (substring text (+ index 1) (string-length text))))
+              (if (not (data4-source-id? id))
+                  (cli3-usage "--source has an invalid source ID"))
+              (list id (cli3-path path 'corpus-prepare)))
+            (loop (+ index 1))))))
+
+(define (cli3-data4-read-sources specs)
+  (let ((count (cli3-list-length-bounded specs 129)))
+    (if (or (not count) (= count 0) (> count 128))
+        (cli3-usage "--source must occur between 1 and 128 times"))
+    (let loop ((rest specs) (total 0) (out '()))
+      (if (null? rest) (cli3-reverse out)
+          (let* ((spec (car rest))
+                 (bytes (cli3-read-file (car (cdr spec))
+                                       (- 65536 total) 'corpus-prepare)))
+            (loop (cdr rest) (+ total (bytevector-length bytes))
+                  (cons (list (car spec) bytes) out)))))))
+
+(define (cli3-data4-report-path directory)
+  (cli3-path (string-append directory "/data4-report.tsv")
+             'data4-report))
+
+(define (cli3-data4-translate thunk)
+  (guard (caught
+          ((t1-core-error? caught)
+           (cli3-fail (t1-core-error-category caught)
+                      (t1-core-error-operation caught)
+                      (t1-core-error-message caught) '()))
+          (else (raise caught)))
+    (thunk)))
+
+(define (cli3-data4-publish-report directory bytes)
+  (let* ((status (t1-native-atomic-write
+                  (cli3-data4-report-path directory) bytes
+                  (bytevector-length bytes) 0))
+         (visible? (not (= (bitwise-and status 16777216) 0))))
+    (if (not (= status 0))
+        (cli3-fail
+         'io 'corpus-prepare
+         (if visible?
+             "corpus published; report visible with uncertain durability"
+             "corpus published; report not published by this invocation")
+         (list (list 'corpus-published? #t)
+               (list 'report-published? visible?)
+               (list 'report-durability
+                     (if visible? 'unknown 'not-published))
+               (list 'native-stage (modulo (quotient status 65536) 256))
+               (list 'native-errno (modulo status 65536)))))
+    #t))
+
+(define (cli3-corpus-prepare options)
+  (let loop ((remaining options) (tokenizer-path #f) (sources '())
+             (minimum #f) (maximum #f) (directory #f) (shard-limit #f))
+    (if (null? remaining)
+        (begin
+          (if (or (not tokenizer-path) (null? sources)
+                  (not minimum) (not maximum) (not directory)
+                  (not shard-limit))
+              (cli3-usage "corpus prepare is missing a required option"))
+          (if (> minimum maximum)
+              (cli3-usage "--minimum-bytes exceeds --maximum-bytes"))
+          (let* ((checked-directory (cli3-path directory 'corpus-prepare))
+                 (policy (c2-persistence-policy-internal
+                          cli3-tokenizer-limit cli3-tokenizer-limit
+                          cli3-tokenizer-limit 64 'cpu))
+                 (tokenizer (t2-wave2-tokenizer-load tokenizer-path policy))
+                 (documents (cli3-data4-read-sources
+                             (cli3-reverse sources)))
+                 (prepared (data4-corpus-prepare documents minimum maximum))
+                 (report-path (cli3-data4-report-path checked-directory)))
+            (if (file-exists? report-path)
+                (cli3-fail 'io 'corpus-prepare
+                           "report sidecar already exists" '()))
+            (let ((published (data4-corpus-write!
+                              tokenizer checked-directory
+                              shard-limit prepared)))
+              (set! cli3-command-published? #t)
+              (cli3-data4-publish-report checked-directory (vector-ref published 1))
+              (cli3-summary-json (vector-ref published 0)))))
+        (let ((option (car remaining)))
+          (cond
+            ((string=? option "--tokenizer")
+             (if tokenizer-path (cli3-usage "duplicate --tokenizer"))
+             (let ((value (cli3-next-value remaining option)))
+               (loop (cddr remaining) value sources minimum maximum
+                     directory shard-limit)))
+            ((string=? option "--source")
+             (let ((value (cli3-next-value remaining option)))
+               (loop (cddr remaining) tokenizer-path
+                     (cons (cli3-data4-source-spec value) sources)
+                     minimum maximum directory shard-limit)))
+            ((string=? option "--minimum-bytes")
+             (if minimum (cli3-usage "duplicate --minimum-bytes"))
+             (let ((value (cli3-next-value remaining option)))
+               (loop (cddr remaining) tokenizer-path sources
+                     (cli3-parse-i64 value option 65536) maximum directory
+                     shard-limit)))
+            ((string=? option "--maximum-bytes")
+             (if maximum (cli3-usage "duplicate --maximum-bytes"))
+             (let ((value (cli3-next-value remaining option)))
+               (loop (cddr remaining) tokenizer-path sources minimum
+                     (cli3-parse-i64 value option 65536) directory
+                     shard-limit)))
+            ((string=? option "--output-directory")
+             (if directory (cli3-usage "duplicate --output-directory"))
+             (let ((value (cli3-next-value remaining option)))
+               (loop (cddr remaining) tokenizer-path sources minimum maximum
+                     value shard-limit)))
+            ((string=? option "--shard-token-limit")
+             (if shard-limit (cli3-usage "duplicate --shard-token-limit"))
+             (let* ((text (cli3-next-value remaining option))
+                    (value (cli3-parse-i64 text option 65536)))
+               (if (= value 0)
+                   (cli3-usage "--shard-token-limit must be positive"))
+               (loop (cddr remaining) tokenizer-path sources minimum maximum
+                     directory value)))
+            (else (cli3-usage (string-append "unknown option " option))))))))
+
+(define (cli3-corpus-report-validate options)
+  (if (or (not (pair? options))
+          (not (string=? (car options) "--input-directory"))
+          (not (pair? (cdr options)))
+          (not (null? (cddr options))))
+      (cli3-usage "corpus report-validate requires --input-directory DIRECTORY"))
+  (let* ((directory (cli3-path (car (cdr options)) 'data4-report-validate))
+         (summary (et-d1-private-token-corpus-validate
+                   directory 1048576 1048576 65536))
+         (report (cli3-read-file (cli3-data4-report-path directory)
+                                 data4-report-maximum-bytes
+                                 'data4-report-validate)))
+    (data4-report-validate report summary)
+    (cli3-summary-json summary)))
+
+(define (cli3-data4-command? arguments)
+  (and (pair? arguments) (pair? (cdr arguments))
+       (string=? (car arguments) "corpus")
+       (or (string=? (car (cdr arguments)) "prepare")
+           (string=? (car (cdr arguments)) "report-validate"))))
+
+(define (cli3-data4-private-dispatch arguments)
+  (if (or (equal? arguments '("corpus" "--help"))
+          (cli3-data4-command? arguments))
+      (begin
+        (cli3-native-fallback-status-set 70)
+        (set! cli3-command-published? #f)
+        (vector-set! t2-wave2-policy-projector 0 c2-policy-t2-entry-internal)
+        (guard (raised (#t (cli3-format-raised raised)))
+          (let ((output
+                 (cond
+                   ((equal? arguments '("corpus" "--help"))
+                    cli3-data4-corpus-help)
+                   ((equal? arguments '("corpus" "prepare" "--help"))
+                    cli3-corpus-prepare-help)
+                   ((equal? arguments '("corpus" "report-validate" "--help"))
+                    cli3-corpus-report-validate-help)
+                   ((string=? (car (cdr arguments)) "prepare")
+                    (cli3-data4-translate
+                     (lambda () (cli3-corpus-prepare (cddr arguments)))))
+                   (else
+                    (cli3-data4-translate
+                     (lambda () (cli3-corpus-report-validate
+                                 (cddr arguments))))))))
+            (cli3-write-output output)
+            (cli3-native-fallback-status-set 70)
+            (cli3-result 0 "" ""))))
+      (cli3-private-dispatch arguments)))

@@ -198,13 +198,39 @@ class SingleRegistryContract(unittest.TestCase):
                          'tests/cli3_generate/generate_extension.esk')
         entry = (FIXTURE / 'cli.esk').read_text()
         original = (ROOT / 'src/eshkol_transformer/cli.esk').read_text()
-        self.assertEqual(
-            entry.replace('Test-installed CLI3/G3-G successor entry; the package owns dispatch.',
-                          'Thin Eshkol-native executable entry. The CLI3 aggregate owns all dispatch.')
-                 .replace('cli3-generate-dispatch', 'cli3-dispatch')
-                 .replace('et_e1b_public_cli3_generate_dispatch_v1',
-                          'et_e1b_public_cli3_dispatch_v1'),
-            original)
+        predecessor = (entry.replace(
+            'Test-installed CLI3/G3-G successor entry; the package owns dispatch.',
+            'Thin Eshkol-native executable entry. The CLI3 aggregate owns all dispatch.')
+            .replace('cli3-generate-dispatch', 'cli3-dispatch')
+            .replace('et_e1b_public_cli3_generate_dispatch_v1',
+                     'et_e1b_public_cli3_dispatch_v1'))
+        imports = (';;; The app imports only a checked read-only projection of the public D1 facade.\n'
+                   '(require transformer.data)\n'
+                   '(require transformer.cli3_corpus_validate)\n\n')
+        self.assertEqual(predecessor.count('(extern void cli3-dispatch'), 1)
+        predecessor = predecessor.replace('(extern void cli3-dispatch',
+                                          imports + '(extern void cli3-dispatch', 1)
+
+        prefix, guard = predecessor.split('(guard\n', 1)
+        self.assertTrue(guard.endswith('\n'))
+        self.assertEqual(guard.count('(vector (cdr (command-line)))'), 1)
+        guard = '(guard\n' + guard.replace('(vector (cdr (command-line)))',
+                                           '(vector arguments)', 1)
+        validate_route = (
+            '(let ((arguments (cdr (command-line))))\n'
+            '  (if (and (pair? arguments)\n'
+            '           (string=? (car arguments) "corpus")\n'
+            '           (pair? (cdr arguments))\n'
+            '           (string=? (car (cdr arguments)) "validate"))\n'
+            '      (begin\n'
+            '        (cli3-corpus-validate-command arguments)\n'
+            '        (exit 0))\n')
+        expected = (prefix + validate_route
+                    + '\n'.join('      ' + line for line in guard.splitlines())
+                    + '))\n')
+        self.assertEqual(original, expected)
+        self.assertLess(original.index('(cli3-corpus-validate-command arguments)'),
+                        original.index('(cli3-dispatch (vector arguments) output)'))
 
 
 if __name__ == '__main__':

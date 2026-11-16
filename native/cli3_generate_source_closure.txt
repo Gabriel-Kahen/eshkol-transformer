@@ -70,6 +70,7 @@ native/cli3_extension.esk
 native/cli3_b_extension.esk
 internal/data4/lib/data4_corpus.esk
 internal/data4/lib/data4_report_reader.esk
+native/cli3_data4_extension.esk
 native/cli3_generate_t2_bridge.esk
 native/g3t_model_admission_extension.esk
 native/g3t_generator_constructor_extension.esk

@@ -86,6 +86,18 @@ class ProductionGenerateContract(unittest.TestCase):
         fixture = (ROOT / 'tests/cli3/formatter_private_root.esk').read_text()
         self.assertIn('(load "formatter_private.esk")', fixture)
 
+    def test_data4_commands_are_successor_only(self):
+        predecessor = (NATIVE / 'cli3_extension.esk').read_text()
+        root = (NATIVE / 'cli3_generate_root.esk').read_text()
+        successor = (NATIVE / 'cli3_data4_extension.esk').read_text()
+        generate = (NATIVE / 'cli3_generate_extension.esk').read_text()
+        self.assertNotIn('(define (cli3-corpus-prepare', predecessor)
+        self.assertNotIn('(define (cli3-corpus-report-validate', predecessor)
+        self.assertIn('(load "cli3_data4_extension.esk")', root)
+        self.assertIn('(define (cli3-corpus-prepare', successor)
+        self.assertIn('(define (cli3-corpus-report-validate', successor)
+        self.assertIn('(cli3-data4-private-dispatch arguments)', generate)
+
     def test_readonly_d1_exports_and_reviewed_closures(self):
         exports = (NATIVE / 'cli3_generate_public_exports.txt').read_text().splitlines()
         base = (NATIVE / 'cli3_public_exports.txt').read_text().splitlines()
@@ -116,7 +128,8 @@ class ProductionGenerateContract(unittest.TestCase):
         self.assertEqual(source.count(anchor), 1)
         source = source.replace(anchor, anchor +
             'internal/data4/lib/data4_corpus.esk\n'
-            'internal/data4/lib/data4_report_reader.esk\n')
+            'internal/data4/lib/data4_report_reader.esk\n'
+            'native/cli3_data4_extension.esk\n')
         self.assertEqual((NATIVE / 'cli3_generate_source_closure.txt').read_text(),
                          source)
         native = (FIXTURE / 'aggregate_native_source_closure.txt').read_text()
@@ -150,7 +163,10 @@ class ProductionGenerateContract(unittest.TestCase):
     def test_command_retains_reviewed_ownership_order(self):
         production = (NATIVE / 'cli3_generate_extension.esk').read_text()
         reviewed = (FIXTURE / 'generate_extension.esk').read_text()
-        self.assertEqual(production.split('\n', 2)[2], reviewed.split('\n', 3)[3])
+        self.assertEqual(
+            production.replace('(cli3-data4-private-dispatch arguments)',
+                               '(cli3-private-dispatch arguments)').split('\n', 2)[2],
+            reviewed.split('\n', 3)[3])
         sequence = ('(cli3-b-restore! trainer checkpoint)',
                     '(trainer-release! trainer)', '(set! trainer #f)',
                     '(module-eval! model)', '(g3g-public-generator-create')
