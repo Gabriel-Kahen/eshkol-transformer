@@ -13,6 +13,9 @@ evidence="$(realpath -e -- "$1")"
 artifact="$(realpath -m -- "$2")"
 archive="${artifact}.tar"
 project="$(realpath -e -- "${PROJECT_ROOT}")"
+[[ "${evidence}" == */production-generate ]] || \
+  die "CLI3 artifact requires the production-generate evidence child"
+cross="${evidence%/production-generate}/cross-command-chain"
 [[ ! -e "${archive}" && ! -L "${archive}" &&
    ! -e "${archive}.sha256" && ! -L "${archive}.sha256" ]] || \
   die "CLI3 artifact archive path already exists"
@@ -41,6 +44,13 @@ mapfile -t receipt <"${evidence}/binary-before.sha256"
 [[ "${#receipt[@]}" == 1 && "${receipt[0]}" == "$(sha256sum "${binary}")" ]] || \
   die "CLI3 tested executable differs from its pre-test receipt"
 sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
+[[ -f "${evidence}/gate.pass" && ! -L "${evidence}/gate.pass" &&
+   -f "${cross}/gate.pass" && ! -L "${cross}/gate.pass" ]] || \
+  die "CLI3 production and cross-command gate receipts are unavailable"
+cmp -s "${evidence}/gate.pass" <(printf 'CLI3-PRODUCTION-GENERATE-PASS\n') || \
+  die "CLI3 production gate receipt is invalid"
+cmp -s "${cross}/gate.pass" <(printf 'CLI3-CROSS-COMMAND-CHAIN-PASS\n') || \
+  die "CLI3 cross-command gate receipt is invalid"
 
 verify_toolchain
 [[ -z "$(git -C "${PROJECT_ROOT}" status --porcelain --untracked-files=all)" ]] || \
@@ -60,6 +70,17 @@ mkdir -m 0700 -- "${artifact}/metadata" "${artifact}/smoke"
 install -m 0755 -- "${binary}" "${artifact}/eshkol-transformer"
 cmp "${binary}" "${artifact}/eshkol-transformer"
 sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
+printf '%s  eshkol-transformer\n' "${receipt[0]:0:64}" \
+  >"${artifact}/metadata/tested-binary.sha256"
+(cd "${artifact}" && sha256sum -c metadata/tested-binary.sha256 >/dev/null)
+install -m 0644 -- "${evidence}/gate.pass" \
+  "${artifact}/metadata/production-generate.pass"
+install -m 0644 -- "${cross}/gate.pass" \
+  "${artifact}/metadata/cross-command-chain.pass"
+for name in pretrain greedy-first categorical-first; do
+  install -m 0644 -- "${evidence}/${name}.json" \
+    "${artifact}/metadata/${name}.json"
+done
 install -m 0644 -- "${LOCK_FILE}" "${artifact}/metadata/eshkol.lock"
 install -m 0644 -- "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" \
   "${artifact}/metadata/toolchain-provenance.tsv"

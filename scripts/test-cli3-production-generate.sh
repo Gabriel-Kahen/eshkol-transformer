@@ -180,4 +180,5 @@ CLI3_GENERATE_EXPECTED=1 TMPDIR="${evidence}" \
   2>"${evidence}/six-command-suite.stderr"
 phase_begin tested-binary-unchanged
 sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
+printf 'CLI3-PRODUCTION-GENERATE-PASS\n' >"${evidence}/gate.pass"
 printf 'CLI3-PRODUCTION-GENERATE-PASS\n'

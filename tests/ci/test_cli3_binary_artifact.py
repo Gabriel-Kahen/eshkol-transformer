@@ -12,13 +12,14 @@ PACKAGE = ROOT / "scripts/package-cli3-binary.sh"
 
 
 class CLI3BinaryArtifactTests(unittest.TestCase):
-    def run_rejected(self, *args: Path) -> None:
+    def run_rejected(self, *args: Path) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
             ["/usr/bin/bash", str(PACKAGE), *(str(arg) for arg in args)],
             capture_output=True, text=True, timeout=10,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse("CLI3-BINARY-ARTIFACT-PASS" in result.stdout)
+        return result
 
     def test_rejects_missing_or_relative_paths(self) -> None:
         self.run_rejected()
@@ -30,7 +31,7 @@ class CLI3BinaryArtifactTests(unittest.TestCase):
     def test_rejects_preexisting_or_symlinked_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            evidence = root / "evidence"
+            evidence = root / "production-generate"
             evidence.mkdir()
             artifact = root / "artifact"
             artifact.mkdir()
@@ -51,7 +52,7 @@ class CLI3BinaryArtifactTests(unittest.TestCase):
     def test_rejects_escaped_or_symlinked_scratch(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            evidence = root / "evidence"
+            evidence = root / "production-generate"
             evidence.mkdir()
             artifact = root / "artifact"
             outside = root / "outside"
@@ -63,14 +64,23 @@ class CLI3BinaryArtifactTests(unittest.TestCase):
             self.run_rejected(evidence, artifact)
             self.assertFalse(artifact.exists())
 
-    def test_rejects_evidence_inside_checkout(self) -> None:
+    def test_rejects_artifact_inside_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            self.run_rejected(ROOT / "tests/ci", Path(temporary) / "artifact")
+            evidence = Path(temporary) / "production-generate"
+            evidence.mkdir()
+            self.run_rejected(evidence, ROOT / "tests/ci/new-artifact")
+
+    def test_rejects_nonproduction_evidence_child(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = Path(temporary) / "evidence"
+            evidence.mkdir()
+            result = self.run_rejected(evidence, Path(temporary) / "artifact")
+            self.assertIn("production-generate evidence child", result.stderr)
 
     def test_rejects_tampered_or_redirected_pretest_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            evidence = root / "evidence"
+            evidence = root / "production-generate"
             scratch = evidence / ".build.fake"
             scratch.mkdir(parents=True)
             binary = scratch / "eshkol-transformer"
@@ -82,12 +92,14 @@ class CLI3BinaryArtifactTests(unittest.TestCase):
             (evidence / "scratch-path.txt").write_text(str(scratch) + "\n")
             receipt = evidence / "binary-before.sha256"
             receipt.write_text("0" * 64 + "  " + str(binary) + "\n")
-            self.run_rejected(evidence, root / "artifact")
+            result = self.run_rejected(evidence, root / "artifact")
+            self.assertIn("differs from its pre-test receipt", result.stderr)
             other = root / "other"
             other.write_bytes(binary.read_bytes())
             receipt.write_text(hashlib.sha256(other.read_bytes()).hexdigest()
                                + "  " + str(other) + "\n")
-            self.run_rejected(evidence, root / "artifact")
+            result = self.run_rejected(evidence, root / "artifact")
+            self.assertIn("differs from its pre-test receipt", result.stderr)
             self.assertFalse((root / "artifact").exists())
 
 

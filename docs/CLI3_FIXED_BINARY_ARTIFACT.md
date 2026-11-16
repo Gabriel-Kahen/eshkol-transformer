@@ -14,9 +14,12 @@ directory outside the checkout. Packaging does not compile another executable.
 The production gate hashes its executable before the first command test and
 checks that receipt again after its last test. The packager rechecks the exact
 path and digest before copying and compares the installed copy byte for byte.
-It also requires the supported F0 toolchain, clean exact source tree,
-unchanged package manifests, a real executable under the recorded production
-scratch path, and an unused output path. It records the source commit/tree,
+The artifact carries a path-neutral `metadata/tested-binary.sha256` receipt
+for that pre-test digest, both completed gate PASS receipts, and the production
+pretrain and generation JSON outputs. It also requires the supported F0
+toolchain, clean exact source tree, unchanged package manifests, a real
+executable under the recorded production scratch path, and an unused output
+path. It records the source commit/tree,
 toolchain lock and build provenance, five package manifests, ELF header/dynamic
 section and resolved shared libraries. In the new location it starts the copied
 binary in fresh processes, checks exact `--version` output, creates a byte
@@ -29,10 +32,13 @@ succeed; upload failure fails the required suite.
 
 On a downloaded artifact, run `sha256sum -c cli3-binary-artifact.tar.sha256`,
 extract the tarball, then run `sha256sum -c SHA256SUMS` from the extracted
-`cli3-binary-artifact` directory. Check
-`metadata/identity.tsv`, `metadata/elf.txt`, and
-`metadata/dependencies.txt` against the exact supported run. The binary depends
-on the recorded Ubuntu 22.04 x86-64 shared-library environment; the artifact
+`cli3-binary-artifact` directory. Run
+`sha256sum -c metadata/tested-binary.sha256` there and inspect the two gate
+receipts and production outputs. The hosted CI run log remains the authoritative
+source for full gate execution. Compare `metadata/identity.tsv`,
+`metadata/elf.txt`, and `metadata/dependencies.txt` with the exact supported
+run. The binary depends on the recorded Ubuntu 22.04 x86-64 shared-library
+environment; the artifact
 does not bundle those libraries or claim portability to another host.
 
 This is a fixed CPU-f32, context-two, byte-tokenizer, one-byte diagnostic
