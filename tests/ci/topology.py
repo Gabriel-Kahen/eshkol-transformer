@@ -21,6 +21,7 @@ SUITES = [
     ("bpe-tokenizer", "test-ci-tokenizer-bpe-after-build", 75),
     ("bpe-boundary", "test-ci-tokenizer-bpe-boundary-after-build", 75),
     ("shard-loader", "test-ci-dataset-after-build", 75),
+    ("data4-corpus", "test-ci-data4-after-build", 75),
 ] + [(f"c2-{g}", f"test-ci-c2-{g}-after-build", 240) for g in GROUPS]
 FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test.sh", "check_a0_api_contract.sh", "test-k1.sh", "test-a2.sh",
@@ -29,7 +30,7 @@ FULL = ["/usr/bin/bash scripts/" + name for name in (
     "test-k2.sh", "test-n2.sh", "test-n3k.sh", "test-g3s.sh", "test-o2.sh", "test-tr3-o.sh",
     "test-x1.sh",
     "test-p1.sh", "test-d1.sh", "test-d2.sh", "test-e3-d2.sh", "test-c1.sh", "test-c2.sh",
-    "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-tr3b.sh", "test-g3n.sh", "test-g3c4.sh", "test-cli3-ci.sh",
+    "test-t1.sh", "test-t2.sh --runtime-only", "test-t2-boundary.sh", "test-q0.sh", "test-m3t.sh", "test-m3.sh", "test-tr3b.sh", "test-g3n.sh", "test-g3c4.sh", "test-cli3-ci.sh", "test-data4-source.sh", "test-data4-native.sh",
 )]
 CHECKOUT = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
 
@@ -184,7 +185,7 @@ def check(root, overrides=None):
     assert set(ss) == {"Install host dependencies", "Restore pinned Eshkol toolchain",
         "Select pinned oracle Python", "Install pinned development oracle",
         "Verify pinned Eshkol toolchain", "Build suite prerequisites", "Run full suite"}
-    assert suite.count("        if:") == 2
+    assert suite.count("if:") == 2
     for name in ("Select pinned oracle Python", "Install pinned development oracle"):
         assert field(ss[name], 8, "if") == "matrix.suite == 'native-numerics' || matrix.suite == 'native-optimizer' || matrix.suite == 'model-composition'"
     assert run(ss["Build suite prerequisites"]) == [
@@ -275,6 +276,14 @@ def check(root, overrides=None):
         "/usr/bin/bash scripts/test-g3s.sh"]
     assert targets["test-ci-cli3-after-build"] == [
         "/usr/bin/bash scripts/test-cli3-ci.sh"]
+    assert targets["test-ci-data4-after-build"] == [
+        "/usr/bin/bash scripts/test-data4-source.sh",
+        "/usr/bin/bash scripts/test-data4-native.sh"]
+    evidence_tree = ast.parse(read("tests/ci/evidence.py"))
+    evidence_suites = [node for node in evidence_tree.body if isinstance(node, ast.Assign)
+                      and any(isinstance(t, ast.Name) and t.id == "SUITES" for t in node.targets)]
+    assert len(evidence_suites) == 1
+    assert ast.literal_eval(evidence_suites[0].value) == tuple(s for s, _, _ in SUITES)
     cli3_ci = read("scripts/test-cli3-ci.sh")
     assert "set -euo pipefail" in cli3_ci
     assert "|| true" not in cli3_ci

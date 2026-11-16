@@ -76,6 +76,32 @@ class ChangedPathSelectorTests(unittest.TestCase):
         head = self._commit("code")
         self.assertTrue(self._requires_full_suite(head))
 
+    def test_data4_code_gates_and_oracles_require_full_suite(self) -> None:
+        paths = (
+            "internal/data4/lib/data4_corpus.esk",
+            "scripts/test-data4-source.sh",
+            "scripts/test-data4-native.sh",
+            "tests/data4/data4_runtime.esk",
+            "tests/data4/data4_same_aggregate_runtime.esk",
+            "tests/data4/check_native_report.py",
+        )
+        base = self.base
+        for path in paths:
+            with self.subTest(path=path):
+                self._write(path, "changed\n")
+                head = self._commit(path)
+                self.assertTrue(ci_changed_paths.requires_full_suite(
+                    base, head, repository=self.repository))
+                base = head
+        self._write("docs/DATA4_CORPUS_SLICE.md", "report update\n")
+        docs = self._commit("DATA4 prose")
+        self.assertFalse(ci_changed_paths.requires_full_suite(
+            base, docs, repository=self.repository))
+        self._write("tests/data4/check_native_report.py", "oracle update\n")
+        mixed = self._commit("DATA4 mixed prose and oracle")
+        self.assertTrue(ci_changed_paths.requires_full_suite(
+            base, mixed, repository=self.repository))
+
     def test_mixed_prose_and_code_requires_full_suite(self) -> None:
         self._write("docs/guide.md", "updated\n")
         self._write("src/program.esk", "updated\n")

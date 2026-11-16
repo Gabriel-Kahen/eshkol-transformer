@@ -1,0 +1,65 @@
+;;; Development-only genuine T2/D1 composition root. Never install.
+(load "t2_wave2_root.esk")
+(load "data4_corpus.esk")
+
+(define (data4-test-fail message)
+  (display "FAIL DATA4 ") (display message) (newline) (exit 1))
+
+(define (data4-test-staging=? staging ids)
+  (and (= (bytevector-length staging)
+          (* (data4-bounded-length ids 65537) 8))
+       (let loop ((rest ids) (offset 0))
+         (if (null? rest) #t
+             (and (= (t1-core-read-u64-le staging offset) (car rest))
+                  (loop (cdr rest) (+ offset 8)))))))
+
+(define (data4-test-write directory)
+  (let* ((tokenizer
+          (t2-private-register-core
+           (t2-bpe-train-core '() 0 1 'raw
+                              (list (list "bos" 'omit))
+                              (list "bos") '())))
+         (prepared
+          (data4-corpus-prepare
+           (list (list "a" (bytevector 65 66))
+                 (list "duplicate" (bytevector 65 66))
+                 (list "b" (bytevector 67 68))) 2 2))
+         (published (data4-corpus-write! tokenizer directory 3 prepared))
+         (summary (et-d1-private-token-corpus-validate
+                   directory 1048576 1048576 65536))
+         (staging (t2-token-corpus-read-i64-le tokenizer directory
+                                               1048576 1048576 65536)))
+    (if (or (not (= (et-d1-private-token-corpus-summary-total-tokens
+                     summary) 6))
+            (not (= (et-d1-private-token-corpus-summary-shard-count
+                     summary) 2))
+            (not (string=?
+                  (et-d1-private-token-corpus-summary-tokenizer-fingerprint
+                   summary)
+                  (t2-private-tokenizer-fingerprint tokenizer)))
+            (not (data4-test-staging=? staging '(256 65 66 256 67 68))))
+        (data4-test-fail "round trip"))
+    (display (utf8->string (vector-ref published 1)))))
+
+(define (data4-test-corrupt directory)
+  (guard
+   (caught
+    ((and (transformer-error? caught)
+          (eq? (transformer-error-category caught) 'corrupt-data)
+          (eq? (transformer-error-operation caught)
+               'token-corpus-validate))
+     (display "D1 corrupt-data confirmed") (newline))
+    (else (data4-test-fail "wrong corruption category")))
+   (et-d1-private-token-corpus-validate directory 1048576 1048576 65536)
+   (data4-test-fail "corrupt shard was accepted")))
+
+(define data4-test-arguments (cdr (command-line)))
+(if (or (not (pair? data4-test-arguments))
+        (not (pair? (cdr data4-test-arguments)))
+        (not (null? (cdr (cdr data4-test-arguments)))))
+    (data4-test-fail "expected MODE DIRECTORY"))
+(let ((mode (car data4-test-arguments))
+      (directory (car (cdr data4-test-arguments))))
+  (cond ((string=? mode "write") (data4-test-write directory))
+        ((string=? mode "validate-corrupt") (data4-test-corrupt directory))
+        (else (data4-test-fail "unknown mode"))))

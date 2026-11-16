@@ -218,6 +218,21 @@ def successful_docs_push_responses() -> dict[str, object]:
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_pre_data4_suite_jobs_and_reports_cannot_be_reused(self) -> None:
+        for missing in ("jobs", "report"):
+            with self.subTest(missing=missing):
+                responses = successful_responses()
+                if missing == "jobs":
+                    old_jobs = [job for job in jobs() if not str(job["name"]).endswith(
+                        "Supported suite / data4-corpus")]
+                    responses[jobs_path()] = {"total_count": len(old_jobs), "jobs": old_jobs}
+                else:
+                    old_suites = [suite for suite in evidence.SUITES if suite != "data4-corpus"]
+                    responses[logs_path()] = report_log(report(suites=old_suites))
+                result = evidence.select_reuse(
+                    "workflow_dispatch", REPOSITORY, COMMIT, TREE, FakeApi(responses))
+                self.assertFalse(result.reused)
+
     def tearDown(self) -> None:
         evidence._gh_allows_escape_sequences.cache_clear()
 
@@ -275,9 +290,11 @@ class EvidenceTests(unittest.TestCase):
         )
 
     def test_suite_inventory_includes_optimizer_after_native_numerics(self) -> None:
-        self.assertEqual(len(evidence.SUITES), 21)
+        self.assertEqual(len(evidence.SUITES), 22)
         index = evidence.SUITES.index("native-numerics")
         self.assertEqual(evidence.SUITES[index + 1], "native-optimizer")
+        index = evidence.SUITES.index("shard-loader")
+        self.assertEqual(evidence.SUITES[index + 1], "data4-corpus")
 
     def test_push_reuses_exact_pr_run_and_actual_tested_tree(self) -> None:
         api = FakeApi(successful_push_responses())
