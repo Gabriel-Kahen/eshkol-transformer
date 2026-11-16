@@ -276,6 +276,13 @@ def build(compiler: str, directory: Path) -> tuple[Path, Path, dict]:
                             "version": version, "flags": FLAGS}
 
 
+def bind_supported_compiler(identity: dict, verified_path: str) -> dict:
+    require(Path(verified_path).is_absolute() and
+            Path(verified_path).resolve() == Path(identity["path"]),
+            "supported compiler path changed during build")
+    return {**identity, "path": verified_path}
+
+
 def supported_probe(compiler: str) -> dict[str, str]:
     require("ESHKOL_ALLOW_UNSUPPORTED_HOST" not in os.environ,
             "supported attention measurement forbids host override")
@@ -328,6 +335,8 @@ def run(definition_path: Path, report_path: Path, compiler: str, directory: Path
     source_paths = SOURCES + (SUPPORT_SOURCES if supported else [])
     source_identity = {p: common.sha256_file(ROOT/p) for p in source_paths}
     target, helper, compiler_identity = build(compiler, directory)
+    if supported:
+        compiler_identity = bind_supported_compiler(compiler_identity, probe["cc_path"])
     cases = []
     with tempfile.TemporaryDirectory(prefix="attention-v1.", dir=directory) as temporary:
         for row, shape in enumerate(SHAPES):

@@ -198,6 +198,18 @@ class NativeAttentionTests(unittest.TestCase):
         with self.assertRaisesRegex(attention.codec.BenchmarkFormatError, "toolchain cc_version mismatch"):
             attention.encode_report(changed, version=2)
 
+    def test_supported_compiler_binds_verified_alias(self):
+        alias = self.directory/"clang-alias"
+        alias.symlink_to(self.compiler["path"])
+        bound = attention.bind_supported_compiler(self.compiler, str(alias))
+        self.assertEqual(bound["path"], str(alias))
+        self.assertEqual(bound["sha256"], self.compiler["sha256"])
+        self.assertEqual(self.compiler["path"], str(alias.resolve()))
+        with self.assertRaisesRegex(attention.codec.BenchmarkFormatError, "path changed"):
+            attention.bind_supported_compiler(self.compiler, str(self.target))
+        with self.assertRaisesRegex(attention.codec.BenchmarkFormatError, "path changed"):
+            attention.bind_supported_compiler(self.compiler, "clang")
+
     def test_supported_gate_failure_preserves_previous_report(self):
         path = self.directory/"supported-preserved.json"
         path.write_bytes(b"previous")
