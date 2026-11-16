@@ -20,52 +20,32 @@ cli3_generate_exact_tuple=0
 cli3_generate_prefix="${PROJECT_ROOT}/tests/cli3_generate/aggregate"
 cli3_production_exact_tuple=0
 cli3_production_prefix="${PROJECT_ROOT}/native/cli3_generate"
-cli3_expected_roots=(
-  "${PROJECT_ROOT}/internal/p1/lib"
-  "${PROJECT_ROOT}/internal/c1/lib"
-  "${PROJECT_ROOT}/internal/t2/lib"
-  "${PROJECT_ROOT}/internal/t1/lib"
-  "${PROJECT_ROOT}/internal/d2/lib"
-  "${PROJECT_ROOT}/internal/e3/lib"
-  "${PROJECT_ROOT}/src"
-)
-if [[ "${raw_private_root}" == "${cli3_production_prefix}_root.esk" ]]; then
-  cli3_expected_roots=(
-    "${PROJECT_ROOT}/internal/p1/lib"
-    "${PROJECT_ROOT}/internal/c1/lib"
-    "${PROJECT_ROOT}/internal/t2/lib"
-    "${PROJECT_ROOT}/internal/data4/lib"
-    "${PROJECT_ROOT}/internal/t1/lib"
-    "${PROJECT_ROOT}/internal/d2/lib"
-    "${PROJECT_ROOT}/internal/e3/lib"
-    "${PROJECT_ROOT}/src"
-  )
-fi
-cli3_exact_roots() {
-  local spelling=$1 index expected
-  shift
-  [[ "$#" == "${#cli3_expected_roots[@]}" ]] || return 1
-  for ((index=0; index<${#cli3_expected_roots[@]}; index++)); do
-    expected=${cli3_expected_roots[index]}
-    if [[ "${spelling}" == canonical ]]; then
-      expected="$(realpath -- "${expected}")" || return 1
-    fi
-    [[ "${1}" == "${expected}" ]] || return 1
-    shift
-  done
-}
 if [[ "${raw_private_root}" == "${cli3_generate_prefix}_root.esk" && \
       "${raw_package_bridge}" == "${cli3_generate_prefix}_bridge.c" && \
       "${raw_package_renames}" == "${cli3_generate_prefix}_private_renames.txt" && \
-      "${raw_public_exports}" == "${cli3_generate_prefix}_public_exports.txt" ]] && \
-      cli3_exact_roots lexical "${raw_include_dirs[@]}"; then
+      "${raw_public_exports}" == "${cli3_generate_prefix}_public_exports.txt" && \
+      "${#raw_include_dirs[@]}" == 7 && \
+      "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+      "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+      "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
+      "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+      "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
+      "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" && \
+      "${raw_include_dirs[6]}" == "${PROJECT_ROOT}/src" ]]; then
   cli3_generate_exact_tuple=1
 fi
 if [[ "${raw_private_root}" == "${cli3_production_prefix}_root.esk" && \
       "${raw_package_bridge}" == "${cli3_production_prefix}_package_bridge.c" && \
       "${raw_package_renames}" == "${cli3_production_prefix}_private_renames.txt" && \
-      "${raw_public_exports}" == "${cli3_production_prefix}_public_exports.txt" ]] && \
-      cli3_exact_roots lexical "${raw_include_dirs[@]}"; then
+      "${raw_public_exports}" == "${cli3_production_prefix}_public_exports.txt" && \
+      "${#raw_include_dirs[@]}" == 7 && \
+      "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+      "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+      "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
+      "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+      "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
+      "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" && \
+      "${raw_include_dirs[6]}" == "${PROJECT_ROOT}/src" ]]; then
   cli3_production_exact_tuple=1
 fi
 g3g_tuple_requested=0
@@ -327,7 +307,14 @@ if [[ "${cli3_tuple_requested}" == 1 ]]; then
      "${raw_package_renames}" == "${cli3_requested_lexical_renames}" && \
      "${raw_public_exports}" == "${cli3_requested_lexical_exports}" ]] || \
     die "CLI3 aggregate policy requires exact lexical repository inputs"
-  cli3_exact_roots lexical "${raw_include_dirs[@]}" || \
+  [[ "${#raw_include_dirs[@]}" == 7 && \
+     "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+     "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+     "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
+     "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+     "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
+     "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" && \
+     "${raw_include_dirs[6]}" == "${PROJECT_ROOT}/src" ]] || \
     die "CLI3 aggregate policy requires exact lexical ordered trusted roots"
   for cli3_closure_manifest in \
       "${cli3_requested_lexical_source_closure}" \
@@ -646,7 +633,14 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
        "${raw_package_renames}" == "${cli3_lexical_renames}" && \
        "${raw_public_exports}" == "${cli3_lexical_exports}" ]] || \
       die "CLI3 aggregate policy requires exact lexical repository inputs"
-    cli3_exact_roots lexical "${raw_include_dirs[@]}" || \
+    [[ "${#raw_include_dirs[@]}" == 7 && \
+       "${raw_include_dirs[0]}" == "${PROJECT_ROOT}/internal/p1/lib" && \
+       "${raw_include_dirs[1]}" == "${PROJECT_ROOT}/internal/c1/lib" && \
+       "${raw_include_dirs[2]}" == "${PROJECT_ROOT}/internal/t2/lib" && \
+       "${raw_include_dirs[3]}" == "${PROJECT_ROOT}/internal/t1/lib" && \
+       "${raw_include_dirs[4]}" == "${PROJECT_ROOT}/internal/d2/lib" && \
+       "${raw_include_dirs[5]}" == "${PROJECT_ROOT}/internal/e3/lib" && \
+       "${raw_include_dirs[6]}" == "${PROJECT_ROOT}/src" ]] || \
       die "CLI3 aggregate policy requires exact lexical ordered trusted roots"
     for raw_cli3_input in \
         "${raw_private_root}" "${raw_package_bridge}" \
@@ -675,7 +669,14 @@ elif [[ "${private_root}" == "${cli3_private_root}" || \
        "${package_renames}" == "${cli3_package_renames}" && \
        "${public_exports}" == "${cli3_public_exports}" ]] || \
       die "CLI3 aggregate policy requires the exact repository tuple"
-    cli3_exact_roots canonical "${canonical_include_dirs[@]}" || \
+    [[ "${#canonical_include_dirs[@]}" == 7 && \
+       "${canonical_include_dirs[0]}" == "${t1_include_p1}" && \
+       "${canonical_include_dirs[1]}" == "${t1_include_c1}" && \
+       "${canonical_include_dirs[2]}" == "${t2_include_t2}" && \
+       "${canonical_include_dirs[3]}" == "${t1_include_t1}" && \
+       "${canonical_include_dirs[4]}" == "${d2_include_d2}" && \
+       "${canonical_include_dirs[5]}" == "$(realpath -- "${PROJECT_ROOT}/internal/e3/lib")" && \
+       "${canonical_include_dirs[6]}" == "${t1_include_src}" ]] || \
       die "CLI3 aggregate policy requires exact ordered trusted include roots"
     package_policy=cli3-tr3-aggregate
     undefined_symbols="${cli3_undefined_symbols}"

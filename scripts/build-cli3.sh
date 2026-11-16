@@ -24,7 +24,7 @@ cp "${PROJECT_ROOT}/lib/transformer/cli3_corpus_validate.esk" \
   "${public_dir}/transformer/cli3_corpus_validate.esk"
 
 E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
-  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer.sh" \
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-e1b-consumer-cli3-data4.sh" \
     "${PROJECT_ROOT}/native/cli3_generate_root.esk" \
     "${PROJECT_ROOT}/native/cli3_generate_package_bridge.c" \
     "${PROJECT_ROOT}/native/cli3_generate_private_renames.txt" \
