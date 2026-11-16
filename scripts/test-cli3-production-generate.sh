@@ -48,6 +48,7 @@ cmp "${PROJECT_ROOT}/native/cli3_generate_public_exports.txt" \
   "${scratch}/cli3.o.evidence/package-exports.txt"
 cmp "${PROJECT_ROOT}/native/cli3_generate_undefined_symbols.txt" \
   "${scratch}/cli3.o.evidence/undefined.txt"
+sha256sum "${scratch}/eshkol-transformer" >"${evidence}/binary-before.sha256"
 cat >"${scratch}/config.json" <<'JSON'
 {"config-schema-major":1,"config-schema-minor":0,"model.context-length":2,"model.hidden-size":4,"model.layer-count":1,"model.query-head-count":2,"model.vocabulary-size":256,"run.seed":1729,"training.accumulation-steps":2}
 JSON
@@ -177,4 +178,7 @@ CLI3_GENERATE_EXPECTED=1 TMPDIR="${evidence}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3.sh" "${scratch}" \
   >"${evidence}/six-command-suite.stdout" \
   2>"${evidence}/six-command-suite.stderr"
+phase_begin tested-binary-unchanged
+sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
+printf 'CLI3-PRODUCTION-GENERATE-PASS\n' >"${evidence}/gate.pass"
 printf 'CLI3-PRODUCTION-GENERATE-PASS\n'
