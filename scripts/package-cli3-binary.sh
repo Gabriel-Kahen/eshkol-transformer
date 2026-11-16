@@ -35,6 +35,12 @@ binary="${scratch}/eshkol-transformer"
    -f "${scratch}/byte.t1" && ! -L "${scratch}/byte.t1" &&
    -f "${evidence}/tokenizer.json" && ! -L "${evidence}/tokenizer.json" ]] || \
   die "CLI3 production smoke inputs are unavailable"
+[[ -f "${evidence}/binary-before.sha256" && ! -L "${evidence}/binary-before.sha256" ]] || \
+  die "CLI3 pre-test executable receipt is unavailable"
+mapfile -t receipt <"${evidence}/binary-before.sha256"
+[[ "${#receipt[@]}" == 1 && "${receipt[0]}" == "$(sha256sum "${binary}")" ]] || \
+  die "CLI3 tested executable differs from its pre-test receipt"
+sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
 
 verify_toolchain
 [[ -z "$(git -C "${PROJECT_ROOT}" status --porcelain --untracked-files=all)" ]] || \
@@ -52,6 +58,8 @@ done
 mkdir -m 0700 -- "${artifact}"
 mkdir -m 0700 -- "${artifact}/metadata" "${artifact}/smoke"
 install -m 0755 -- "${binary}" "${artifact}/eshkol-transformer"
+cmp "${binary}" "${artifact}/eshkol-transformer"
+sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
 install -m 0644 -- "${LOCK_FILE}" "${artifact}/metadata/eshkol.lock"
 install -m 0644 -- "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" \
   "${artifact}/metadata/toolchain-provenance.tsv"

@@ -11,7 +11,10 @@ existing gates pass, `package-cli3-binary.sh` copies **that tested executable**
 from the production gate's disk-backed scratch directory into a new artifact
 directory outside the checkout. Packaging does not compile another executable.
 
-The packager requires the supported F0 toolchain, clean exact source tree,
+The production gate hashes its executable before the first command test and
+checks that receipt again after its last test. The packager rechecks the exact
+path and digest before copying and compares the installed copy byte for byte.
+It also requires the supported F0 toolchain, clean exact source tree,
 unchanged package manifests, a real executable under the recorded production
 scratch path, and an unused output path. It records the source commit/tree,
 toolchain lock and build provenance, five package manifests, ELF header/dynamic

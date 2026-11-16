@@ -329,6 +329,8 @@ def check(root, overrides=None):
     production = read("scripts/test-cli3-production-generate.sh")
     assert "tests.cli3.test_installed_corpus_validate" in production
     assert "CLI3_INSTALLED_BINARY=\"${scratch}/eshkol-transformer\"" in production
+    assert 'sha256sum "${scratch}/eshkol-transformer" >"${evidence}/binary-before.sha256"' in production
+    assert 'phase_begin tested-binary-unchanged\nsha256sum -c "${evidence}/binary-before.sha256" >/dev/null' in production
     assert targets["test-after-build"] == FULL
     assert targets["test-ci-clean-build-after-build"] == ["$(MAKE) smoke-after-build benchmark-after-build"]
     assert targets["test-acceptance-predecessors-after-build"] == [c for c in FULL if c != "/usr/bin/bash scripts/test-c2.sh"]

@@ -1,6 +1,7 @@
 """Reject artifact custody errors before any native build or host verification."""
 
 from pathlib import Path
+import hashlib
 import subprocess
 import tempfile
 import unittest
@@ -65,6 +66,29 @@ class CLI3BinaryArtifactTests(unittest.TestCase):
     def test_rejects_evidence_inside_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             self.run_rejected(ROOT / "tests/ci", Path(temporary) / "artifact")
+
+    def test_rejects_tampered_or_redirected_pretest_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "evidence"
+            scratch = evidence / ".build.fake"
+            scratch.mkdir(parents=True)
+            binary = scratch / "eshkol-transformer"
+            binary.write_bytes(b"#!/bin/sh\nexit 0\n")
+            binary.chmod(0o755)
+            (scratch / "config.json").write_text("{}\n")
+            (scratch / "byte.t1").write_bytes(b"fixture")
+            (evidence / "tokenizer.json").write_text("{}\n")
+            (evidence / "scratch-path.txt").write_text(str(scratch) + "\n")
+            receipt = evidence / "binary-before.sha256"
+            receipt.write_text("0" * 64 + "  " + str(binary) + "\n")
+            self.run_rejected(evidence, root / "artifact")
+            other = root / "other"
+            other.write_bytes(binary.read_bytes())
+            receipt.write_text(hashlib.sha256(other.read_bytes()).hexdigest()
+                               + "  " + str(other) + "\n")
+            self.run_rejected(evidence, root / "artifact")
+            self.assertFalse((root / "artifact").exists())
 
 
 if __name__ == "__main__":
