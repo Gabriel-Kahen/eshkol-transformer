@@ -1,7 +1,7 @@
 # B0 benchmark format and measurement contract
 
-Status: **B0 foundation complete; attention report v2 independently reviewed,
-hosted measurement pending**.
+Status: **B0 foundation complete; supported attention report v2 measured and
+independently reviewed on its exact candidate head**.
 
 ## Scope
 
@@ -217,10 +217,14 @@ verified provenance C compiler. It rejects any
 hashes, and publishes only after all checks pass. A failed check leaves an older
 report untouched. The checksum and embedded evidence make the report auditable;
 they are not a cryptographic attestation that the host executed it. Supported
-admission still requires an exact-head supported-lane run. Independent source and
-test review accepted this contract.
-No supported attention result or PA4 speed/memory claim has been established by
-this reviewed contract.
+admission requires an exact-head supported-lane run. Independent source and
+test review accepted this contract. Exact-head hosted run
+[43930911395](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43930911395)
+at `9af5513d` passed the supported report verifier for all ten shapes, forward
+and backward, with three repetitions each (60 samples). The sealed report's
+SHA-256 is `ab8bc9ba1f92ce2e92fcd58a34b5c876b714f7e79dd00b4bb8780e135709ab52`.
+The separate ordinary full CI run `43930811027` passed its exact head. Neither
+run establishes a PA4 speed or memory improvement.
 
 An explicit `workflow_dispatch` mode in `.github/workflows/ci.yml` selects only
 the supported attention benchmark. It requires the exact
