@@ -175,4 +175,4 @@
                         (else (cli3-generate (cdr arguments))))))
             (cli3-write-output text)
             (cli3-result 0 "" ""))))
-      (cli3-private-dispatch arguments)))
+      (cli3-data4-private-dispatch arguments)))

@@ -87,7 +87,7 @@ def check(root, overrides=None):
     engine = read(".github/workflows/full-coverage.yml")
     make = read("Makefile")
     cj, aj, ej = jobs(ci), jobs(acceptance), jobs(engine)
-    assert set(cj) == {"topology", "blocking", "f0-linux", "attention-supported-diagnostic"}
+    assert set(cj) == {"topology", "blocking", "f0-linux", "attention-supported-diagnostic", "data4-diagnostic"}
     assert set(aj) == {"select", "full", "accepted"}
     assert set(ej) == {"suites", "evidence"}
     for workflow in (ci, acceptance, engine):
@@ -104,17 +104,28 @@ def check(root, overrides=None):
         assert field(body, 4, "uses") == "./.github/workflows/full-coverage.yml"
     assert field(cj["blocking"], 4, "needs") == "topology"
     assert field(cj["blocking"], 4, "if") == "needs.topology.outputs.run_full == 'true'"
-    assert field(cj["topology"], 4, "if") == "${{ github.event_name != 'workflow_dispatch' || !inputs.attention_supported_diagnostic }}"
+    assert field(cj["topology"], 4, "if") == "${{ github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic }}"
     assert field(aj["full"], 4, "needs") == "select"
     assert field(aj["full"], 4, "if") == "needs.select.outputs.reused == 'false'"
     assert field(cj["f0-linux"], 4, "needs") == "[topology, blocking]"
     assert field(aj["accepted"], 4, "needs") == "[select, full]"
-    assert field(cj["f0-linux"], 4, "if") == "${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.attention_supported_diagnostic) }}"
+    assert field(cj["data4-diagnostic"], 4, "if") == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic && !inputs.attention_supported_diagnostic }}")
+    assert field(cj["data4-diagnostic"], 4, "uses") == (
+        "./.github/workflows/data4-installed-diagnostic.yml")
+    assert field(cj["f0-linux"], 4, "if") == (
+        "${{ always() && (github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) }}")
     assert field(aj["accepted"], 4, "if") == "${{ always() }}"
     assert run(steps(cj["f0-linux"])["Require successful checks for the selected scope"]) == [
         'test "$TOPOLOGY_RESULT" = success', 'case "$SCOPE:$BLOCKING_RESULT" in',
         "  full:success|docs:skipped|reused:skipped) ;;", "  *) exit 1 ;;", "esac"]
     cs = steps(cj["topology"])
+    assert run(cs["Reject simultaneous diagnostics"]) == [
+        'test "$ATTENTION_DIAGNOSTIC:$DATA4_DIAGNOSTIC" != true:true']
+    assert field(cs["Reject simultaneous diagnostics"], 10, "ATTENTION_DIAGNOSTIC") == (
+        "${{ inputs.attention_supported_diagnostic }}")
+    assert field(cs["Reject simultaneous diagnostics"], 10, "DATA4_DIAGNOSTIC") == (
+        "${{ inputs.data4_installed_diagnostic }}")
     assert field(cj["topology"], 6, "run_full") == "${{ steps.scope.outputs.run_full }}"
     assert field(cj["topology"], 6, "scope") == "${{ steps.scope.outputs.scope }}"
     assert field(cs["Find merged PR full-coverage evidence"], 8, "if") == "github.event_name == 'push'"
@@ -329,7 +340,7 @@ def check(root, overrides=None):
     assert read("scripts/build.sh").count('/usr/bin/bash "${PROJECT_ROOT}/scripts/build-e3-metrics.sh"') == 1
     diagnostic = cj["attention-supported-diagnostic"]
     assert field(diagnostic, 4, "name") == "A2 attention benchmark only (non-admission)"
-    assert field(diagnostic, 4, "if") == "${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic }}"
+    assert field(diagnostic, 4, "if") == "${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic }}"
     assert field(diagnostic, 4, "runs-on") == "ubuntu-22.04"
     assert field(diagnostic, 4, "timeout-minutes") == "75"
     assert diagnostic.count(CHECKOUT) == 1

@@ -1,8 +1,9 @@
 # DATA4-A bounded corpus selection
 
 Status: implementation candidate with focused local native evidence. This
-build-only Eshkol helper is not installed, linked into the production CLI, or
-accepted as the full DATA4 workstream.
+build-only Eshkol helper is not a public library API or accepted as the full
+DATA4 workstream. An opt-in [installed command and report candidate](DATA4_INSTALLED_REPORT.md)
+is separately staged for review.
 
 ## Input and selection
 
@@ -93,6 +94,7 @@ now require 22 suites and 38 commands; prior evidence without DATA4 is rejected.
 DATA4 code, gate, and oracle changes retain fail-closed full-suite selection,
 while allowlisted prose-only changes retain the existing selection rules.
 
-Public CLI wiring, installed boundary manifests, report persistence/validation,
-exact-successor hosted CI, and full DATA4 admission remain pending. Gate
-registration alone does not establish those acceptance results.
+The exact `562cb353` DATA4-A successor passed hosted full-suite run
+`43743963935`, including the required `data4-corpus` suite. Installed CLI3
+wiring, report persistence/validation and full DATA4 admission remain separate
+gates; that hosted result does not validate the later DATA4-B candidate.

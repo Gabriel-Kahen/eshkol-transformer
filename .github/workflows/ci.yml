@@ -17,6 +17,19 @@ on:
         description: 'Exact 40-character commit SHA required for attention mode'
         type: string
         required: false
+      data4_installed_diagnostic:
+        description: Run only the DATA4 installed command diagnostic
+        required: false
+        default: false
+        type: boolean
+      data4_expected_head:
+        description: Exact DATA4 branch commit
+        required: false
+        type: string
+      data4_expected_tree:
+        description: Exact DATA4 branch tree
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -30,13 +43,18 @@ concurrency:
 jobs:
   topology:
     name: CI topology
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.attention_supported_diagnostic }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic }}
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     outputs:
       run_full: ${{ steps.scope.outputs.run_full }}
       scope: ${{ steps.scope.outputs.scope }}
     steps:
+      - name: Reject simultaneous diagnostics
+        env:
+          ATTENTION_DIAGNOSTIC: ${{ inputs.attention_supported_diagnostic }}
+          DATA4_DIAGNOSTIC: ${{ inputs.data4_installed_diagnostic }}
+        run: test "$ATTENTION_DIAGNOSTIC:$DATA4_DIAGNOSTIC" != true:true
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
@@ -104,9 +122,17 @@ jobs:
     if: needs.topology.outputs.run_full == 'true'
     uses: ./.github/workflows/full-coverage.yml
 
+  data4-diagnostic:
+    name: DATA4 installed command diagnostic (non-admission)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic && !inputs.attention_supported_diagnostic }}
+    uses: ./.github/workflows/data4-installed-diagnostic.yml
+    with:
+      expected_head: ${{ inputs.data4_expected_head }}
+      expected_tree: ${{ inputs.data4_expected_tree }}
+
   f0-linux:
     name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
-    if: ${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.attention_supported_diagnostic) }}
+    if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) }}
     needs: [topology, blocking]
     runs-on: ubuntu-22.04
     timeout-minutes: 2
@@ -126,7 +152,7 @@ jobs:
 
   attention-supported-diagnostic:
     name: A2 attention benchmark only (non-admission)
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic }}
     runs-on: ubuntu-22.04
     timeout-minutes: 75
     env:
