@@ -644,6 +644,14 @@ the existing K1/I1/D2 build prerequisites and does not replace the full D2 gate.
 Shell syntax, five focused phase/diagnostic tests, and 22-suite topology discovery
 passed on the candidate; independent source/test review accepted the phase split.
 Supported resource execution remains pending.
+The follow-up manual diagnostic route is staged in the existing CI workflow:
+an opt-in `workflow_dispatch` input defaults off and selects one Ubuntu 22.04
+resource job against an exact supplied branch head. It reuses the pinned
+Clang/LLVM 21.1.8 setup and `shard-loader` prerequisites, uploads checksummed
+logs, and emits no full-suite admission evidence. The normal push, PR,
+merge-group, and default manual paths retain their full gates. Local topology
+and negative mutation checks pass, and independent source/test review accepted
+the route. Hosted dispatch remains pending.
 
 ## Wave 3 — first complete language model
 

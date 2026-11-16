@@ -276,6 +276,26 @@ class TopologyTests(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     check(ROOT, {"Makefile": text.replace(command, ":")})
 
+    def test_manual_d2_diagnostic_cannot_bypass_full_ci_or_reduce_resource_gate(self):
+        mutations = (
+            (CI, "        default: false\n", "        default: true\n"),
+            (CI, "    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.d2_resource_diagnostic }}\n", ""),
+            (CI, "    if: ${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.d2_resource_diagnostic) }}\n", "    if: ${{ always() }}\n"),
+            (CI, "    if: ${{ github.event_name == 'workflow_dispatch' && inputs.d2_resource_diagnostic }}\n", "    if: ${{ always() }}\n"),
+            (CI, "make test-ci-dataset-resources-after-build 2>&1", "make test-ci-dataset-after-build 2>&1"),
+            (CI, "scripts/ci-build-prerequisites.sh shard-loader", "scripts/ci-build-prerequisites.sh byte-tokenizer"),
+            ("Makefile", "scripts/test-d2.sh --phase resources", "scripts/test-d2.sh --phase all"),
+            ("scripts/test-d2.sh", "run_resource_probe large ", ": "),
+            ("scripts/test-d2.sh", "if (( elapsed > 300 )); then", "if (( elapsed > 600 )); then"),
+            ("scripts/test-d2.sh", "(( small_fds <= 8 && large_fds <= 8 ))", "(( small_fds <= 80 && large_fds <= 80 ))"),
+        )
+        for path, before, after in mutations:
+            with self.subTest(path=path, before=before):
+                source = (ROOT / path).read_text()
+                self.assertIn(before, source)
+                with self.assertRaises(AssertionError):
+                    check(ROOT, {path: source.replace(before, after, 1)})
+
     def test_e3_d2_failure_stops_every_registered_tier(self):
         make = (ROOT / "Makefile").read_text()
         for target in ("test-after-build", "test-acceptance-predecessors-after-build",
