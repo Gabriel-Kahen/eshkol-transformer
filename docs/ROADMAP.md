@@ -630,6 +630,14 @@ reported explicitly. The 1,800-second limit, checks and resource thresholds are
 unchanged. Current-main union review and a supported diagnostic run remain gates;
 the old-head failure does not establish current-main runtime behavior.
 
+D2 hosted revalidation note (2026-11-16): PR #222 run
+[43761163814](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814)
+hit the existing 300-second `large` resource-probe limit. The D2 source and
+probe script matched passing PR #224 run
+[43760593834](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43760593834).
+Probe-only shell diagnostics were independently reviewed and focused diagnostic
+tests passed; hosted results remain pending. The timeout cause is undetermined.
+
 ## Wave 3 — first complete language model
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
