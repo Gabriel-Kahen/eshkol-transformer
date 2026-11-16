@@ -228,9 +228,9 @@ class SingleRegistryContract(unittest.TestCase):
         expected = (prefix + validate_route
                     + '\n'.join('      ' + line for line in guard.splitlines())
                     + '))\n')
-        self.assertLess(expected.index('(cli3-corpus-validate-command arguments)'),
-                        expected.index('(cli3-dispatch (vector arguments) output)'))
         self.assertEqual(original, expected)
+        self.assertLess(original.index('(cli3-corpus-validate-command arguments)'),
+                        original.index('(cli3-dispatch (vector arguments) output)'))
 
 
 if __name__ == '__main__':
