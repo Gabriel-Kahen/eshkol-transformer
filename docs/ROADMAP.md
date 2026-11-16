@@ -553,6 +553,10 @@ metrics implementation.
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
 | B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed smoke and accepted-A2 CPU-f32 attention benchmark contracts](BENCHMARK_FORMAT.md). The attention foundation covers all ten admitted shapes in forward and backward, with separate dispatch timing and fresh-process RSS; independent source review and [PR #219](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/219) integration are complete. [Hosted PR CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43743833642) passed 24/24 checks on the exact merge tree; [merged-main CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43922467842) succeeded by exact-tree reuse, with the full suites skipped. Focused merged-main `make test-b0` passed 50/50 tests, including 20 real attention cases. Full-count latency/RSS measurements remain CachyOS compatibility-only; they establish no supported-lane performance, PA4 speedup, memory improvement, or admission of draft #215 | complete (smoke and A2 benchmark foundation) |
 
+The B0 supported attention report-v2 extension and explicit manual CI mode have
+independent source/test review. Exact-head hosted validation is pending; they
+have no supported latency/RSS result.
+
 The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
 is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
 exit and JIT startup timeouts under the 2 GiB probe cap to OpenBLAS worker

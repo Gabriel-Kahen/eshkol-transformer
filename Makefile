@@ -28,7 +28,8 @@ SHELL := /usr/bin/bash
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
-	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention clean
+	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
+	benchmark-attention-supported clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -419,6 +420,9 @@ benchmark-after-build:
 
 benchmark-attention:
 	/usr/bin/bash scripts/benchmark-attention.sh
+
+benchmark-attention-supported:
+	/usr/bin/bash scripts/benchmark-attention.sh --supported
 
 clean:
 	/usr/bin/bash scripts/clean.sh
