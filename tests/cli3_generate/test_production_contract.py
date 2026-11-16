@@ -112,6 +112,11 @@ class ProductionGenerateContract(unittest.TestCase):
             ('tests/cli3_generate/generate_extension.esk',
              'native/cli3_generate_extension.esk')):
             source = source.replace(old, new)
+        anchor = 'native/cli3_b_extension.esk\n'
+        self.assertEqual(source.count(anchor), 1)
+        source = source.replace(anchor, anchor +
+            'internal/data4/lib/data4_corpus.esk\n'
+            'internal/data4/lib/data4_report_reader.esk\n')
         self.assertEqual((NATIVE / 'cli3_generate_source_closure.txt').read_text(),
                          source)
         native = (FIXTURE / 'aggregate_native_source_closure.txt').read_text()
