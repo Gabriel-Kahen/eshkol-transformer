@@ -86,14 +86,16 @@ def check(root, overrides=None):
     engine = read(".github/workflows/full-coverage.yml")
     make = read("Makefile")
     cj, aj, ej = jobs(ci), jobs(acceptance), jobs(engine)
-    assert set(cj) == {"topology", "blocking", "f0-linux"}
+    assert set(cj) == {"topology", "blocking", "f0-linux", "d2-resource-diagnostic"}
     assert set(aj) == {"select", "full", "accepted"}
     assert set(ej) == {"suites", "io5-gguf", "evidence"}
     for workflow in (ci, acceptance, engine):
         assert "continue-on-error" not in workflow
         assert "pull_request_target" not in workflow
     assert "  workflow_call:" in engine
-    assert "  workflow_dispatch:" in ci
+    assert "  workflow_dispatch:\n    inputs:\n" in ci
+    assert re.search(r"^      d2_resource_diagnostic:\n        description: 'Run only the D2 resource diagnostic \(non-admission\)'\n        type: boolean\n        required: false\n        default: false$", ci, re.M)
+    assert re.search(r"^      expected_d2_head:\n        description: 'Exact 40-character commit SHA required for D2 diagnostic mode'\n        type: string\n        required: false$", ci, re.M)
     assert "  actions: read\n" in acceptance.split("\njobs:\n", 1)[0]
     assert "  actions: read\n" in ci.split("\njobs:\n", 1)[0]
     assert "  pull-requests: read\n" in ci.split("\njobs:\n", 1)[0]
@@ -101,11 +103,12 @@ def check(root, overrides=None):
         assert field(body, 4, "uses") == "./.github/workflows/full-coverage.yml"
     assert field(cj["blocking"], 4, "needs") == "topology"
     assert field(cj["blocking"], 4, "if") == "needs.topology.outputs.run_full == 'true'"
+    assert field(cj["topology"], 4, "if") == "${{ github.event_name != 'workflow_dispatch' || !inputs.d2_resource_diagnostic }}"
     assert field(aj["full"], 4, "needs") == "select"
     assert field(aj["full"], 4, "if") == "needs.select.outputs.reused == 'false'"
     assert field(cj["f0-linux"], 4, "needs") == "[topology, blocking]"
     assert field(aj["accepted"], 4, "needs") == "[select, full]"
-    assert field(cj["f0-linux"], 4, "if") == "${{ always() }}"
+    assert field(cj["f0-linux"], 4, "if") == "${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.d2_resource_diagnostic) }}"
     assert field(aj["accepted"], 4, "if") == "${{ always() }}"
     assert run(steps(cj["f0-linux"])["Require successful checks for the selected scope"]) == [
         'test "$TOPOLOGY_RESULT" = success', 'case "$SCOPE:$BLOCKING_RESULT" in',
@@ -310,6 +313,44 @@ def check(root, overrides=None):
     targets = recipes(make)
     assert re.search(r"^test-io5-gguf:\s*$", make, re.M)
     assert targets["test-io5-gguf"] == ["/usr/bin/bash scripts/test-io5-gguf.sh"]
+    assert targets["test-ci-dataset-resources-after-build"] == [
+        "/usr/bin/bash scripts/test-d2.sh --phase resources"]
+    diagnostic = cj["d2-resource-diagnostic"]
+    assert field(diagnostic, 4, "name") == "D2 resource diagnostic only (non-admission)"
+    assert field(diagnostic, 4, "if") == "${{ github.event_name == 'workflow_dispatch' && inputs.d2_resource_diagnostic }}"
+    assert field(diagnostic, 4, "runs-on") == "ubuntu-22.04"
+    assert field(diagnostic, 4, "timeout-minutes") == "75"
+    assert diagnostic.count(CHECKOUT) == 1
+    assert "uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830" in diagnostic
+    assert "uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in diagnostic
+    assert "test-ci-dataset-after-build" not in diagnostic
+    assert "full-coverage.yml" not in diagnostic
+    diagnostic_steps = steps(diagnostic)
+    assert run(diagnostic_steps["Install pinned host dependencies"]) == run(
+        steps(ej["suites"])["Install host dependencies"])
+    assert run(diagnostic_steps["Verify pinned Eshkol toolchain"]) == [
+        'make toolchain 2>&1 | tee "$RUNNER_TEMP/d2-resource-diagnostic/toolchain.log"']
+    assert run(diagnostic_steps["Build shard-loader prerequisites"]) == [
+        '/usr/bin/bash scripts/ci-build-prerequisites.sh shard-loader 2>&1 | tee "$RUNNER_TEMP/d2-resource-diagnostic/prerequisites.log"']
+    assert run(diagnostic_steps["Run exact D2 resource phase"]) == [
+        'export TMPDIR="$RUNNER_TEMP"',
+        'make test-ci-dataset-resources-after-build 2>&1 | tee "$RUNNER_TEMP/d2-resource-diagnostic/resources.log"']
+    assert 'test "$GITHUB_REF" = refs/heads/codex/d2-resource-phase-20261116' in run(
+        diagnostic_steps["Verify exact D2 diagnostic ref"])
+    assert 'test "$GITHUB_SHA" = "$EXPECTED_HEAD"' in run(
+        diagnostic_steps["Verify exact D2 diagnostic ref"])
+    d2 = read("scripts/test-d2.sh")
+    for required in (
+        'run_resource_probe small ', 'run_resource_probe large ',
+        'run_resource_probe topology-one ', 'run_resource_probe topology-many ',
+        'if (( elapsed > 300 )); then',
+        '(( small_fds <= 8 && large_fds <= 8 ))',
+        '(( topology_one_fds <= 8 && topology_many_fds <= 8 ))',
+        '[[ "${short_arena}" == "${long_arena}" ]]',
+        '(( open_retained_delta <= 83365 ))',
+        '[[ "${topology_packed[one-shards]}" == "${topology_packed[many-shard]}" ]]',
+    ):
+        assert required in d2, required
     # Evidence inventory includes the independent reference job as well as every
     # unchanged compiled matrix suite. Old 21-suite evidence cannot satisfy it.
     evidence_assignments = [node for node in ast.parse(read("tests/ci/evidence.py")).body

@@ -49,7 +49,7 @@ class D2ProbeDiagnosticsTests(unittest.TestCase):
         )
         result = self.run_probe(child)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertRegex(result.stdout, r"D2 RESOURCE PROBE START: large limit=300s\n")
+        self.assertRegex(result.stdout, r"D2 RESOURCE PROBE START: large limit=450s\n")
         self.assertRegex(
             result.stdout,
             r"D2 RESOURCE PROBE END: large elapsed=\d+s exit=0 rss-max=\d+ KiB fd-max=\d+\n",
@@ -71,12 +71,12 @@ class D2ProbeDiagnosticsTests(unittest.TestCase):
         )
         self.assertNotIn("D2 RESOURCE PROBE TIMEOUT", result.stdout)
 
-    def test_timeout_reports_last_observations_and_retains_300_second_cap(self):
-        result = self.run_probe("exec /bin/sleep 30\n", advance_to=301)
+    def test_timeout_reports_last_observations_and_retains_450_second_cap(self):
+        result = self.run_probe("exec /bin/sleep 30\n", advance_to=451)
         self.assertEqual(result.returncode, 1)
         self.assertRegex(
             result.stdout,
-            r"D2 RESOURCE PROBE TIMEOUT: large elapsed=301s limit=300s "
+            r"D2 RESOURCE PROBE TIMEOUT: large elapsed=451s limit=450s "
             r"last-rss=\d+ KiB rss-max=\d+ KiB last-fd=\d+ "
             r"fd-max=\d+ last-cpu-ticks=unavailable\n",
         )

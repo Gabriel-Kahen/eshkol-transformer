@@ -7,6 +7,16 @@ on:
     branches: [main]
   merge_group:
   workflow_dispatch:
+    inputs:
+      d2_resource_diagnostic:
+        description: 'Run only the D2 resource diagnostic (non-admission)'
+        type: boolean
+        required: false
+        default: false
+      expected_d2_head:
+        description: 'Exact 40-character commit SHA required for D2 diagnostic mode'
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -20,6 +30,7 @@ concurrency:
 jobs:
   topology:
     name: CI topology
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.d2_resource_diagnostic }}
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     outputs:
@@ -95,7 +106,7 @@ jobs:
 
   f0-linux:
     name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.d2_resource_diagnostic) }}
     needs: [topology, blocking]
     runs-on: ubuntu-22.04
     timeout-minutes: 2
@@ -112,3 +123,88 @@ jobs:
             full:success|docs:skipped|reused:skipped) ;;
             *) exit 1 ;;
           esac
+
+  d2-resource-diagnostic:
+    name: D2 resource diagnostic only (non-admission)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.d2_resource_diagnostic }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    env:
+      CC: clang-21
+      CXX: clang++-21
+      ESHKOL_CXX_COMPILER: clang++-21
+      LLVM_CONFIG_EXECUTABLE: llvm-config-21
+      ESHKOL_JOBS: '2'
+      D2_COMPILER_TIMEOUT_SECONDS: '900'
+    steps:
+      - name: Reserve D2 diagnostic evidence
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          root="$RUNNER_TEMP/d2-resource-diagnostic"
+          test ! -e "$root" && test ! -L "$root"
+          mkdir -m 0700 "$root"
+          printf 'run_id\t%s\nrun_attempt\t%s\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > "$root/status.tsv"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Verify exact D2 diagnostic ref
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_d2_head }}
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          test "$GITHUB_REF" = refs/heads/codex/d2-resource-phase-20261116
+          [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_HEAD"
+          printf 'commit\t%s\ntree\t%s\nref\t%s\n' \
+            "$GITHUB_SHA" "$(git rev-parse HEAD^{tree})" "$GITHUB_REF" \
+            > "$RUNNER_TEMP/d2-resource-diagnostic/identity.tsv"
+          echo 'D2 resource diagnostic only; no full-suite or admission evidence.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install pinned host dependencies
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+          sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y \
+            build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
+            ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
+            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
+            ripgrep time
+          test "$(llvm-config-21 --version)" = '21.1.8'
+      - name: Restore pinned Eshkol toolchain
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .deps
+          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
+      - name: Verify pinned Eshkol toolchain
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: make toolchain 2>&1 | tee "$RUNNER_TEMP/d2-resource-diagnostic/toolchain.log"
+      - name: Build shard-loader prerequisites
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash scripts/ci-build-prerequisites.sh shard-loader 2>&1 | tee "$RUNNER_TEMP/d2-resource-diagnostic/prerequisites.log"
+      - name: Run exact D2 resource phase
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          export TMPDIR="$RUNNER_TEMP"
+          make test-ci-dataset-resources-after-build 2>&1 | tee "$RUNNER_TEMP/d2-resource-diagnostic/resources.log"
+      - name: Seal D2 diagnostic logs
+        if: always()
+        env:
+          PREVIOUS_JOB_STATUS: ${{ job.status }}
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          root="$RUNNER_TEMP/d2-resource-diagnostic"
+          test -d "$root" && test ! -L "$root"
+          printf 'workflow_status_before_upload\t%s\n' "$PREVIOUS_JOB_STATUS" >> "$root/status.tsv"
+          (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | \
+            LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$root/SHA256SUMS"
+      - name: Upload D2 diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: d2-resource-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/d2-resource-diagnostic/
+          if-no-files-found: error
+          retention-days: 30
