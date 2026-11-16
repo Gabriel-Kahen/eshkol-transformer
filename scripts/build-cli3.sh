@@ -33,6 +33,7 @@ E1B_COMPILER_TIMEOUT_SECONDS="${CLI3_COMPILER_TIMEOUT_SECONDS:-900}" \
     "${PROJECT_ROOT}/internal/p1/lib" \
     "${PROJECT_ROOT}/internal/c1/lib" \
     "${PROJECT_ROOT}/internal/t2/lib" \
+    "${PROJECT_ROOT}/internal/data4/lib" \
     "${PROJECT_ROOT}/internal/t1/lib" \
     "${PROJECT_ROOT}/internal/d2/lib" \
     "${PROJECT_ROOT}/internal/e3/lib" \

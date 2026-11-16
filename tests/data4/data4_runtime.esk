@@ -19,12 +19,18 @@
   (vector-ref summary 0))
 (define (et-d1-private-token-corpus-summary-vocab-size summary)
   (vector-ref summary 1))
-(define (et-d1-private-token-corpus-summary-shard-count summary) 1)
+(define (et-d1-private-token-corpus-summary-shard-count summary)
+  (let ((count (et-d1-private-token-corpus-summary-total-tokens summary))
+        (limit (vector-ref summary 2)))
+    (if (= count 0) 0 (+ (quotient (- count 1) limit) 1))))
+(define (et-d1-private-token-corpus-summary-shard-token-limit summary)
+  (vector-ref summary 2))
 (define (et-d1-private-token-corpus-summary-total-tokens summary)
   (let loop ((rest (vector-ref summary 3)) (count 0))
     (if (null? rest) count (loop (cdr rest) (+ count 1)))))
 
 (load "data4_corpus.esk")
+(load "data4_report_reader.esk")
 
 (define checks 0)
 (define (check name condition)
@@ -100,6 +106,36 @@
                                             (string->utf8 prefix)))))
                            (string=? (substring report (+ start 9)
                                                 (+ start 73)) expected)))
+(check "report round trip"
+       (eq? (data4-report-validate (vector-ref published 1)
+                                    (vector-ref published 0))
+            (vector-ref published 0)))
+(define (report-corrupt? bytes summary)
+  (guard (caught (#t (and (t1-core-error? caught)
+                         (eq? (t1-core-error-category caught)
+                              'corrupt-data))))
+    (data4-report-validate bytes summary) #f))
+(define report-mutated (bytevector-copy (vector-ref published 1)))
+(bytevector-u8-set! report-mutated 0 88)
+(check "tampered report rejected"
+       (report-corrupt? report-mutated (vector-ref published 0)))
+(check "mismatched D1 summary rejected"
+       (report-corrupt? (vector-ref published 1)
+                        (vector "other-fingerprint" 257 3
+                                '(256 65 66 256 67 68))))
+(define (report-rechecksum prefix)
+  (string->utf8
+   (string-append prefix "checksum\t"
+                  (t1-core-hex (t1-core-sha256 (string->utf8 prefix))) "\n")))
+(define report-prefix
+  (substring report 0 (- (string-length report) 74)))
+(check "malformed row with valid checksum rejected"
+       (report-corrupt?
+        (report-rechecksum
+         (string-append report-prefix "document\t999\tx\t0\t"
+                        (t1-core-hex (t1-core-sha256 (bytevector)))
+                        "\tkeep\t\n"))
+        (vector-ref published 0)))
 (define repeated (data4-corpus-write! model "second" 3 prepared))
 (check "repeat report byte parity"
        (t1-core-bytes=? (vector-ref published 1) (vector-ref repeated 1)))

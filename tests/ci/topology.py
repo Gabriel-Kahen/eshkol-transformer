@@ -87,7 +87,7 @@ def check(root, overrides=None):
     engine = read(".github/workflows/full-coverage.yml")
     make = read("Makefile")
     cj, aj, ej = jobs(ci), jobs(acceptance), jobs(engine)
-    assert set(cj) == {"topology", "blocking", "f0-linux"}
+    assert set(cj) == {"topology", "blocking", "data4-diagnostic", "f0-linux"}
     assert set(aj) == {"select", "full", "accepted"}
     assert set(ej) == {"suites", "evidence"}
     for workflow in (ci, acceptance, engine):
@@ -106,7 +106,14 @@ def check(root, overrides=None):
     assert field(aj["full"], 4, "if") == "needs.select.outputs.reused == 'false'"
     assert field(cj["f0-linux"], 4, "needs") == "[topology, blocking]"
     assert field(aj["accepted"], 4, "needs") == "[select, full]"
-    assert field(cj["f0-linux"], 4, "if") == "${{ always() }}"
+    assert field(cj["topology"], 4, "if") == (
+        "${{ github.event_name != 'workflow_dispatch' || !inputs.data4_installed_diagnostic }}")
+    assert field(cj["data4-diagnostic"], 4, "if") == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic }}")
+    assert field(cj["data4-diagnostic"], 4, "uses") == (
+        "./.github/workflows/data4-installed-diagnostic.yml")
+    assert field(cj["f0-linux"], 4, "if") == (
+        "${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.data4_installed_diagnostic) }}")
     assert field(aj["accepted"], 4, "if") == "${{ always() }}"
     assert run(steps(cj["f0-linux"])["Require successful checks for the selected scope"]) == [
         'test "$TOPOLOGY_RESULT" = success', 'case "$SCOPE:$BLOCKING_RESULT" in',

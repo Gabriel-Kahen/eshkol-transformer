@@ -7,6 +7,20 @@ on:
     branches: [main]
   merge_group:
   workflow_dispatch:
+    inputs:
+      data4_installed_diagnostic:
+        description: Run only the DATA4 installed command diagnostic
+        required: false
+        default: false
+        type: boolean
+      data4_expected_head:
+        description: Exact DATA4 branch commit
+        required: false
+        type: string
+      data4_expected_tree:
+        description: Exact DATA4 branch tree
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -20,6 +34,7 @@ concurrency:
 jobs:
   topology:
     name: CI topology
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.data4_installed_diagnostic }}
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     outputs:
@@ -93,9 +108,17 @@ jobs:
     if: needs.topology.outputs.run_full == 'true'
     uses: ./.github/workflows/full-coverage.yml
 
+  data4-diagnostic:
+    name: DATA4 installed command diagnostic (non-admission)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic }}
+    uses: ./.github/workflows/data4-installed-diagnostic.yml
+    with:
+      expected_head: ${{ inputs.data4_expected_head }}
+      expected_tree: ${{ inputs.data4_expected_tree }}
+
   f0-linux:
     name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'workflow_dispatch' || !inputs.data4_installed_diagnostic) }}
     needs: [topology, blocking]
     runs-on: ubuntu-22.04
     timeout-minutes: 2

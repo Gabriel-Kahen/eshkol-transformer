@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in cmp python3 realpath sha256sum tail; do require_command "${command}"; done
+for command in cc cmp python3 realpath sha256sum tail; do require_command "${command}"; done
 [[ $# == 1 ]] || die "usage: $0 DISK_BACKED_EVIDENCE_DIR"
 evidence="$(realpath -m -- "$1")"
 mkdir -p -- "${evidence}"
@@ -78,6 +78,20 @@ phase_begin installed-corpus-validate \
   python3 -m unittest -v tests.cli3.test_installed_corpus_validate) \
   >"${evidence}/installed-corpus-validate.stdout" \
   2>"${evidence}/installed-corpus-validate.stderr"
+phase_begin installed-data4 \
+  "${evidence}/installed-data4.stdout" \
+  "${evidence}/installed-data4.stderr"
+cc -std=c11 -Wall -Wextra -Werror -fPIC -shared \
+  "${PROJECT_ROOT}/tests/cli3/write_fault.c" -ldl \
+  -o "${scratch}/data4-write-fault.so"
+(cd "${PROJECT_ROOT}" && env \
+  CLI3_DATA4_BINARY="${scratch}/eshkol-transformer" \
+  CLI3_DATA4_TOKENIZER="${scratch}/byte.t1" \
+  CLI3_DATA4_FAULT_SHIM="${scratch}/data4-write-fault.so" \
+  PYTHONDONTWRITEBYTECODE=1 \
+  python3 -m unittest -v tests.cli3.test_installed_data4) \
+  >"${evidence}/installed-data4.stdout" \
+  2>"${evidence}/installed-data4.stderr"
 phase_begin pretrain "${evidence}/pretrain.json"
 "${scratch}/eshkol-transformer" pretrain \
   --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
