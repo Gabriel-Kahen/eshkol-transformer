@@ -310,6 +310,8 @@ def check(root, overrides=None):
     targets = recipes(make)
     assert re.search(r"^test-io5-gguf:\s*$", make, re.M)
     assert targets["test-io5-gguf"] == ["/usr/bin/bash scripts/test-io5-gguf.sh"]
+    assert targets["test-ci-dataset-resources-after-build"] == [
+        "/usr/bin/bash scripts/test-d2.sh --phase resources"]
     # Evidence inventory includes the independent reference job as well as every
     # unchanged compiled matrix suite. Old 21-suite evidence cannot satisfy it.
     evidence_assignments = [node for node in ast.parse(read("tests/ci/evidence.py")).body

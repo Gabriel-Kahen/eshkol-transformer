@@ -637,6 +637,13 @@ probe script matched passing PR #224 run
 [43760593834](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43760593834).
 Probe-only shell diagnostics were independently reviewed and focused diagnostic
 tests passed; hosted results remain pending. The timeout cause is undetermined.
+An isolated follow-up adds a `--phase resources` diagnostic entry point over the
+same temporary instrumented aggregate, optimized public AOT, 300-second probes,
+retention checks, native counters, and eight-descriptor process ceiling. It uses
+the existing K1/I1/D2 build prerequisites and does not replace the full D2 gate.
+Shell syntax, five focused phase/diagnostic tests, and 22-suite topology discovery
+passed on the candidate; independent source/test review accepted the phase split.
+Supported resource execution remains pending.
 
 ## Wave 3 — first complete language model
 
