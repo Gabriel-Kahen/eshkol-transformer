@@ -58,9 +58,11 @@ proof, not a cached test artifact.
 
 Blocking CI and acceptance call the same reusable full engine. Manual acceptance
 may reuse only successful full CI for the exact candidate revision and actual tree.
-Every suite and clean-build job, evidence job and final CI status must succeed on
-the same run attempt. The evidence is data read from authenticated GitHub job logs;
-its commit tree is independently checked through GitHub. Failed, skipped, duplicate,
+Every required suite and clean-build job, evidence job and final CI status must
+succeed on the same run attempt. The two named non-admission diagnostic jobs may
+both be completed/skipped; a missing partner or active diagnostic is rejected.
+The evidence is data read from authenticated GitHub job logs; its commit tree is
+independently checked through GitHub. Failed or skipped required jobs, duplicate,
 truncated, stale and malformed evidence is not accepted. A matching running CI
 prevents duplicate dispatch. Nightly runs always execute fresh.
 
