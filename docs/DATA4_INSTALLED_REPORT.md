@@ -1,12 +1,17 @@
-# DATA4-B installed report candidate
+# DATA4-B installed report slice
 
 Status: command, reader, and focused diagnostic source/tests independently
 reviewed. [Supported installed diagnostic 43935284566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43935284566)
 passed at `2e656717`/tree `c99df006`: 32 DATA4 source checks, the exact CLI3
 package/manifest gate, and all 9 installed command tests. The downloaded outer
 and inner SHA256SUMS verify. The temporary binary was hashed on the runner but
-not uploaded as a deliverable. Ordinary full CI, integration, and complete
-DATA4 admission remain pending.
+not uploaded as a deliverable. The successor-only CLI3 builder repair and this
+installed command slice were integrated through PR #233 at `f0f56a8a`.
+Exact-head run `43952346894` and merged-main run `43965845021` passed the
+required DATA4 corpus, model-composition and CLI3 command suites. The latter
+uploaded fixed-profile binary artifact `14278541470`, whose outer/inner seals
+and source identity were independently checked. Complete DATA4 admission
+beyond this bounded installed report slice remains pending.
 
 ## Commands
 
