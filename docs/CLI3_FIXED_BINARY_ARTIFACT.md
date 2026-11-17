@@ -1,8 +1,18 @@
-# CLI3 fixed-profile binary artifact candidate
+# CLI3 fixed-profile binary artifact
 
-Status: source and CI wiring candidate. No hosted artifact or installed-binary
-acceptance is claimed until its exact head passes supported CI and the downloaded
-artifact is independently checked and run.
+Status: bounded fixed-profile artifact accepted. PR #233 merged at
+`f0f56a8afaa38d28e9e9f4ecc123a3d779f8998e` (tree `3fe5e0e6`). Its
+exact-head run `43952346894` and merged-main run `43965845021` each passed
+25 required jobs with two intended diagnostic skips. The merged-main run
+uploaded artifact `14278541470` (`cli3-fixed-binary-43965845021-1`).
+Independent download verified the tar SHA-256
+`20382a70354b905655e827c890ebe3e3612cb9e74b349ca0e34c3e866434d87c`,
+all 24 inner file hashes, the tested-binary receipt and six source identity
+files. The executable SHA-256 is
+`2d8599fca65fa234e531c46addea5200d4679bb911ca501f925284ed01ac1b25`.
+A fresh, network-disabled Ubuntu 22.04 container ran version, byte tokenizer,
+six-byte corpus build, one training update and checkpoint, then greedy `c5`
+and categorical `80` one-byte generation; all eight output hashes verified.
 
 The required `cli3-commands` suite builds `eshkol-transformer` through the
 production root, checks its package manifests, and exercises tokenizer, corpus,
@@ -43,5 +53,5 @@ does not bundle those libraries or claim portability to another host.
 
 This is a fixed CPU-f32, context-two, byte-tokenizer, one-byte diagnostic
 binary. It is not a trained SAN release. Held-out exact resume, multi-token and
-EOS persistence, evaluator/resource gates, complete walkthrough, combined
-review, and merged-main CPU-v1 admission remain separate.
+EOS persistence, evaluator/resource gates, a full trained-model walkthrough,
+and CPU-v1 admission remain separate.
