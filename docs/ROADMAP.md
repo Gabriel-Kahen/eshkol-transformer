@@ -563,6 +563,17 @@ the unchanged report-v2 into main at `f0f56a8a`; its exact-head run
 with two intended diagnostic skips. PA4 speed/memory improvement and full
 CPU-v1 admission remain open.
 
+The F0/CI-E2 evidence-selector follow-up addresses a docs-only main push that
+started duplicate full suites: the successful base run `43965845021` contained
+two intentionally skipped non-admission diagnostic jobs, which the selector
+treated as failures. Run `43987784585` was canceled after the topology log
+identified the cause.
+The focused candidate accepts exactly those two skipped diagnostics as a pair
+while requiring every supported suite, evidence job and final aggregation to
+succeed. Local CI tests (123), topology, and live API verification of the
+original PR and documentation base runs pass; hosted exact-head validation is
+pending.
+
 The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
 is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
 exit and JIT startup timeouts under the 2 GiB probe cap to OpenBLAS worker
