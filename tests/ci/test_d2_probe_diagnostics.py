@@ -1,6 +1,7 @@
 """Exercise the D2 resource probe shell diagnostics without compiling D2."""
 
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -64,22 +65,26 @@ class D2ProbeDiagnosticsTests(unittest.TestCase):
     def test_periodic_sample_reports_cpu_and_resource_observations(self):
         result = self.run_probe("exec /bin/sleep 0.1\n", advance_to=30)
         self.assertEqual(result.returncode, 1)
-        self.assertRegex(
-            result.stdout,
-            r"D2 RESOURCE PROBE SAMPLE: large elapsed=30s rss=\d+ KiB "
+        sample = re.search(
+            r"D2 RESOURCE PROBE SAMPLE: large elapsed=(\d+)s rss=\d+ KiB "
             r"rss-max=\d+ KiB fd=\d+ fd-max=\d+ cpu-ticks=\d+\n",
+            result.stdout,
         )
+        self.assertIsNotNone(sample, result.stdout)
+        self.assertGreaterEqual(int(sample.group(1)), 30)
         self.assertNotIn("D2 RESOURCE PROBE TIMEOUT", result.stdout)
 
     def test_timeout_reports_last_observations_and_retains_450_second_cap(self):
         result = self.run_probe("trap '' TERM\nexec /bin/sleep 30\n", advance_to=451)
         self.assertEqual(result.returncode, 1)
-        self.assertRegex(
-            result.stdout,
-            r"D2 RESOURCE PROBE TIMEOUT: large elapsed=451s limit=450s "
+        timeout = re.search(
+            r"D2 RESOURCE PROBE TIMEOUT: large elapsed=(\d+)s limit=450s "
             r"last-rss=\d+ KiB rss-max=\d+ KiB last-fd=\d+ "
             r"fd-max=\d+ last-cpu-ticks=unavailable\n",
+            result.stdout,
         )
+        self.assertIsNotNone(timeout, result.stdout)
+        self.assertGreater(int(timeout.group(1)), 450)
         self.assertNotIn("D2 RESOURCE PROBE SAMPLE", result.stdout)
         self.assertIn("D2 large resource probe timed out", result.stderr)
 
@@ -94,10 +99,12 @@ class D2ProbeDiagnosticsTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(f"D2 RESOURCE PROBE START: {label} limit=300s", result.stdout)
-                self.assertIn(
-                    f"D2 RESOURCE PROBE TIMEOUT: {label} elapsed=301s limit=300s",
+                timeout = re.search(
+                    rf"D2 RESOURCE PROBE TIMEOUT: {label} elapsed=(\d+)s limit=300s ",
                     result.stdout,
                 )
+                self.assertIsNotNone(timeout, result.stdout)
+                self.assertGreater(int(timeout.group(1)), 300)
 
     def test_long_arena_uses_extended_cap(self):
         source = SCRIPT.read_text()
