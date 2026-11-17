@@ -54,6 +54,14 @@ Several test-local-build suites need configuration only. Byte-tokenizer retains 
 conservatively. The canonical clean-build job remains a separate production-build
 proof, not a cached test artifact.
 
+The required shard-loader suite keeps the D2 resource proof in its full test
+path. Its 8,192-batch large probe and matching retained-arena run have finite
+450-second watchdogs on hosted runners; small and topology probes retain 300
+seconds. The sampled consume probes report elapsed time, process CPU ticks, RSS
+and descriptor samples to help investigate a timeout. At expiration the test
+runner kills and reaps the child. Batch, native-lifetime, descriptor and arena
+assertions remain required.
+
 ## Evidence reuse and failure handling
 
 Blocking CI and acceptance call the same reusable full engine. Manual acceptance
