@@ -595,6 +595,14 @@ readings both equaled 5,570,560 bytes. This pass does not establish that the
 longer limit was necessary or diagnose the earlier timeout. The bounded CI
 repair does not admit CPU-v1.
 
+The docs-only merged-main run `44138019434` at `3b92e6466` failed its CI
+topology job before the full suites ran: the D2 probe diagnostic test required
+`elapsed=301s`, while Bash reported `302s` after its synthetic clock advanced.
+A test-only follow-up checks that elapsed time crosses each 300- or 450-second
+limit, and that the periodic sample reaches 30 seconds, without changing the
+D2 runner or resource assertions. Local CI tests (132) and topology pass;
+hosted validation of this follow-up is pending.
+
 The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
 is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
 exit and JIT startup timeouts under the 2 GiB probe cap to OpenBLAS worker
