@@ -570,9 +570,15 @@ treated as failures. Run `43987784585` was canceled after the topology log
 identified the cause.
 The focused candidate accepts exactly those two skipped diagnostics as a pair
 while requiring every supported suite, evidence job and final aggregation to
-succeed. Local CI tests (123), topology, and live API verification of the
-original PR and documentation base runs pass; hosted exact-head validation is
-pending.
+succeed. PR #235 merged at `d8683df2`; its successful main run `44004869823`
+reused original full PR run `43994037539` and skipped the Full suites wrapper.
+That five-job main-run shape also includes both skipped optional diagnostics,
+which the documentation-base selector's three-job check did not recognize.
+The bounded successor admits either exact three- or five-job skipped-wrapper
+inventory only after a successful base run, then verifies the original merged
+PR's full exact-tree CI evidence. Local CI tests (132), topology, and a live
+selector check against `44004869823`/`43994037539` pass; successor exact-head
+hosted validation remains pending.
 
 PR #235's exact-head full run `43989331852` failed in the unchanged D2
 shard-loader suite: the 8,192-batch large resource process crossed its
