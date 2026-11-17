@@ -389,12 +389,17 @@ def _has_explicit_full_matrix_skips(
             _fail("collapsed skipped-run jobs are malformed")
         seen_ids.add(job_id)
         collapsed[name] = job
-    if set(collapsed) != {"CI topology", "Full suites", FINAL_AGGREGATION}:
+    required = {"CI topology", "Full suites", FINAL_AGGREGATION}
+    if set(collapsed) not in (required, required | OPTIONAL_DIAGNOSTIC_JOBS):
         _fail("collapsed skipped-run job inventory is not exact")
     return (
         collapsed["CI topology"].get("conclusion") == "success"
         and collapsed["Full suites"].get("conclusion") == "skipped"
         and collapsed[FINAL_AGGREGATION].get("conclusion") == "success"
+        and all(
+            collapsed[name].get("conclusion") == "skipped"
+            for name in set(collapsed) & OPTIONAL_DIAGNOSTIC_JOBS
+        )
     )
 
 
