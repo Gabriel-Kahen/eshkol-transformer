@@ -131,6 +131,18 @@ def jobs() -> list[dict[str, object]]:
     return result
 
 
+def jobs_with_skipped_diagnostics() -> list[dict[str, object]]:
+    result = jobs()
+    result.extend(
+        {
+            **successful_job(9004 + index, name),
+            "conclusion": "skipped",
+        }
+        for index, name in enumerate(sorted(evidence.OPTIONAL_DIAGNOSTIC_JOBS))
+    )
+    return result
+
+
 def report(**changes: object) -> dict[str, object]:
     value: dict[str, object] = {
         "version": 1,
@@ -314,6 +326,16 @@ class EvidenceTests(unittest.TestCase):
             ],
         )
 
+    def test_push_reuses_full_run_with_skipped_optional_diagnostics(self) -> None:
+        responses = successful_push_responses()
+        all_jobs = jobs_with_skipped_diagnostics()
+        responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
+        result = evidence.select_push_reuse(
+            "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
+            FakeApi(responses),
+        )
+        self.assertTrue(result.reused)
+
     def test_docs_push_verifies_exact_base_full_run_without_code_reuse(self) -> None:
         api = FakeApi(successful_docs_push_responses())
         result = evidence.select_push_reuse(
@@ -340,6 +362,45 @@ class EvidenceTests(unittest.TestCase):
                 commit_path_for(BASE_TESTED_COMMIT),
             ],
         )
+
+    def test_docs_push_verifies_full_base_with_skipped_optional_diagnostics(self) -> None:
+        responses = successful_docs_push_responses()
+        all_jobs = jobs_with_skipped_diagnostics()
+        responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
+        result = evidence.select_push_reuse(
+            "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
+            FakeApi(responses), prose_only="true", push_before=BASE_COMMIT,
+        )
+        self.assertFalse(result.reused)
+        self.assertTrue(result.docs_verified)
+
+    def test_optional_diagnostics_must_be_exactly_skipped_as_a_pair(self) -> None:
+        good = jobs_with_skipped_diagnostics()
+        cases = {
+            "one missing": good[:-1],
+            "one succeeded": [{**good[0]}] + [
+                {**job, "conclusion": "success"} if job["id"] == 9004 else job
+                for job in good[1:]
+            ],
+            "one active": [
+                {**job, "status": "in_progress"} if job["id"] == 9004 else job
+                for job in good
+            ],
+            "unrelated skipped": good + [
+                {**successful_job(9006, "unexpected diagnostic"), "conclusion": "skipped"}
+            ],
+        }
+        for label, altered in cases.items():
+            with self.subTest(label=label):
+                responses = successful_push_responses()
+                responses[jobs_path()] = {
+                    "total_count": len(altered), "jobs": altered,
+                }
+                result = evidence.select_push_reuse(
+                    "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT,
+                    TREE, FakeApi(responses),
+                )
+                self.assertFalse(result.reused)
 
     def test_docs_mode_requires_exact_lowercase_true(self) -> None:
         for value in ("TRUE", "1", "yes", "false", ""):

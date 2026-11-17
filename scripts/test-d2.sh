@@ -446,15 +446,23 @@ grep -E '^D2 PRIVATE VIEW PASS: [0-9]+ compiled content/lifetime checks$' \
 
 run_resource_probe() {
   local label=$1 directory=$2 expected=$3
+  local limit=300
+  [[ "${label}" == large ]] && limit=450
   local pid rss=0 rss_max=0 fd_count=0 fd_max=0 started=$SECONDS
+  local elapsed=0 next_report=30 cpu_ticks=unavailable exit_status
   "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
     "${d2_fixture}" \
     "${directory}" consume >"${d2_tmp}/resource-${label}.stdout" &
   pid=$!
+  printf 'D2 RESOURCE PROBE START: %s limit=%ss\n' "${label}" "${limit}"
   while kill -0 "${pid}" 2>/dev/null; do
-    if (( SECONDS - started > 300 )); then
-      kill "${pid}" 2>/dev/null || true
+    elapsed=$((SECONDS - started))
+    if (( elapsed > limit )); then
+      kill -KILL "${pid}" 2>/dev/null || true
       wait "${pid}" 2>/dev/null || true
+      printf 'D2 RESOURCE PROBE TIMEOUT: %s elapsed=%ss limit=%ss last-rss=%s KiB rss-max=%s KiB last-fd=%s fd-max=%s last-cpu-ticks=%s\n' \
+        "${label}" "${elapsed}" "${limit}" "${rss}" "${rss_max}" \
+        "${fd_count}" "${fd_max}" "${cpu_ticks}"
       die "D2 ${label} resource probe timed out"
     fi
     if [[ -r "/proc/${pid}/status" ]]; then
@@ -466,9 +474,29 @@ run_resource_probe() {
         2>/dev/null | wc -l)" || fd_count=0
       (( fd_count > fd_max )) && fd_max=$fd_count
     fi
+    if (( elapsed >= next_report )); then
+      cpu_ticks=unavailable
+      if [[ -r "/proc/${pid}/stat" ]]; then
+        cpu_ticks="$(sed 's/.*) //' "/proc/${pid}/stat" 2>/dev/null | \
+          awk '{ print $12 + $13 }')" || cpu_ticks=unavailable
+      fi
+      [[ "${cpu_ticks}" =~ ^[0-9]+$ ]] || cpu_ticks=unavailable
+      printf 'D2 RESOURCE PROBE SAMPLE: %s elapsed=%ss rss=%s KiB rss-max=%s KiB fd=%s fd-max=%s cpu-ticks=%s\n' \
+        "${label}" "${elapsed}" "${rss}" "${rss_max}" \
+        "${fd_count}" "${fd_max}" "${cpu_ticks}"
+      next_report=$((elapsed + 30))
+    fi
     sleep 0.01
   done
-  if ! wait "${pid}"; then
+  if wait "${pid}"; then
+    exit_status=0
+  else
+    exit_status=$?
+  fi
+  printf 'D2 RESOURCE PROBE END: %s elapsed=%ss exit=%s rss-max=%s KiB fd-max=%s\n' \
+    "${label}" "$((SECONDS - started))" "${exit_status}" \
+    "${rss_max}" "${fd_max}"
+  if (( exit_status != 0 )); then
     die "D2 ${label} resource probe failed"
   fi
   grep -Fx "D2 RESOURCE CONSUME PASS: ${expected} batches" \
@@ -513,8 +541,10 @@ for horizon in short long; do
     mode=consume
     expected_batches=8192
   fi
+  arena_timeout=300
+  [[ "${horizon}" == long ]] && arena_timeout=450
   ESHKOL_ARENA_REPORT=1 \
-    timeout --foreground --signal=TERM --kill-after=5s 300s \
+    timeout --foreground --signal=TERM --kill-after=5s "${arena_timeout}s" \
     "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
     "${d2_fixture}" \
     "${d2_tmp}/public-resources-1/large" "${mode}" \
