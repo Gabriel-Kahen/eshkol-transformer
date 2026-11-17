@@ -570,11 +570,16 @@ treated as failures. Run `43987784585` was canceled after the topology log
 identified the cause.
 The merged change accepts exactly those two skipped diagnostics as a pair
 while requiring every supported suite, evidence job and final aggregation to
-succeed. Local CI tests (129), topology, and live API verification of the
-original PR and documentation base runs pass. PR #235's exact-head run
-`43994037539` passed all 25 required jobs with only the two intended skips.
-It merged as `d8683df2c`; merged-main run `44004869823` reused that exact
-PR evidence, skipped the full suites, and passed the final gate.
+succeed. PR #235's exact-head run `43994037539` passed all 25 required jobs
+with only the two intended skips. It merged as `d8683df2c`; merged-main run
+`44004869823` reused that exact PR evidence, skipped the full suites, and
+passed the final gate. The five-job main-run shape also includes both skipped
+optional diagnostics. PR #237 now accepts that exact shape for a documentation
+base and verifies the original merged PR's full exact-tree CI evidence. Its
+exact-head run `44119689208` passed all required jobs; it merged as
+`fd8329252`, and merged-main run `44136572284` reused its PR evidence and
+passed. Local CI tests (132), topology, and a live documentation-base selector
+check against `fd8329252` pass.
 
 PR #235's exact-head full run `43989331852` failed in the unchanged D2
 shard-loader suite: the 8,192-batch large resource process crossed its
