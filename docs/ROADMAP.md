@@ -568,11 +568,13 @@ started duplicate full suites: the successful base run `43965845021` contained
 two intentionally skipped non-admission diagnostic jobs, which the selector
 treated as failures. Run `43987784585` was canceled after the topology log
 identified the cause.
-The focused candidate accepts exactly those two skipped diagnostics as a pair
+The merged change accepts exactly those two skipped diagnostics as a pair
 while requiring every supported suite, evidence job and final aggregation to
-succeed. Local CI tests (123), topology, and live API verification of the
-original PR and documentation base runs pass; hosted exact-head validation is
-pending.
+succeed. Local CI tests (129), topology, and live API verification of the
+original PR and documentation base runs pass. PR #235's exact-head run
+`43994037539` passed all 25 required jobs with only the two intended skips.
+It merged as `d8683df2c`; merged-main run `44004869823` reused that exact
+PR evidence, skipped the full suites, and passed the final gate.
 
 PR #235's exact-head full run `43989331852` failed in the unchanged D2
 shard-loader suite: the 8,192-batch large resource process crossed its
@@ -581,8 +583,12 @@ same suite. The sealed log cannot distinguish slow progress, a stalled probe,
 or runner contention because it lacks per-probe timing. The bounded follow-up adds
 30-second CPU/RSS/FD observations and a 450-second finite limit only for the
 large probe and matching retained-arena horizon; small/topology limits and
-all exact resource assertions remain. Focused source tests pass; exact-head
-hosted resource and full CI results are pending.
+all exact resource assertions remain. The exact-head shard-loader job
+`133741657046` passed: its large probe completed in 167 seconds, with rising
+CPU ticks and bounded RSS/FD samples; the 1,024- and 8,192-batch arena
+readings both equaled 5,570,560 bytes. This pass does not establish that the
+longer limit was necessary or diagnose the earlier timeout. The bounded CI
+repair does not admit CPU-v1.
 
 The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
 is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
