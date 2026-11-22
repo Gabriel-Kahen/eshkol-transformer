@@ -192,9 +192,47 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  io5-gguf:
+    name: Supported suite / io5-gguf
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install pinned native compiler
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+          sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y clang-21 cmake curl ninja-build
+          clang-21 --version | head -1 | grep -F 'version 21.1.8'
+      - name: Build pinned native GGUF witness library
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash scripts/prepare-io5-ggml-native.sh "$RUNNER_TEMP/io5-ggml" clang-21 clang++-21 21.1.8
+      - name: Select pinned IO5 Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.14.6'
+      - name: Install pinned IO5 reference
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/io5-reference"
+          "$RUNNER_TEMP/io5-reference/bin/python" -m pip install \
+            --disable-pip-version-check \
+            -r tests/io5/requirements-gguf-reference.lock
+      - name: Run mandatory IO5 reference gate
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          IO5_GGUF_REFERENCE_PYTHON="$RUNNER_TEMP/io5-reference/bin/python" \
+          IO5_GGUF_NATIVE_REQUIRED=1 \
+          IO5_GGUF_NATIVE_PREFIX="$RUNNER_TEMP/io5-ggml/prefix" \
+          IO5_GGUF_NATIVE_CC=clang-21 make test-io5-gguf
+
   evidence:
     name: Suite evidence
-    needs: suites
+    needs: [suites, io5-gguf]
     if: ${{ always() }}
     runs-on: ubuntu-22.04
     timeout-minutes: 2
@@ -203,7 +241,9 @@ jobs:
       - name: Require complete coverage and record tested tree
         env:
           SUITES_RESULT: ${{ needs.suites.result }}
+          IO5_RESULT: ${{ needs.io5-gguf.result }}
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           test "$SUITES_RESULT" = success
+          test "$IO5_RESULT" = success
           python3 tests/ci/evidence.py emit
