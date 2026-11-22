@@ -235,4 +235,5 @@ assert generation == {
     'prompt_hex': '41', 'sampling': 'greedy', 'seed': 1729,
 }
 PY
+printf 'CLI3-CROSS-COMMAND-CHAIN-PASS\n' >"${evidence}/gate.pass"
 printf 'CLI3-CROSS-COMMAND-CHAIN-PASS\n'

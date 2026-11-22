@@ -1,5 +1,8 @@
 ;;; Production CLI3 fixed CPU-f32 one-byte generation successor.
 (load "cli3_root.esk")
+(load "data4_corpus.esk")
+(load "data4_report_reader.esk")
+(load "cli3_data4_extension.esk")
 (load "cli3_generate_t2_bridge.esk")
 (load "g3t_model_admission_extension.esk")
 (load "g3t_generator_constructor_extension.esk")

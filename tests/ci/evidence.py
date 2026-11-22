@@ -23,6 +23,12 @@ MAX_COMMAND_BYTES = 4 * 1024 * 1024
 MAX_EVIDENCE_BYTES = 16 * 1024
 COMMAND_TIMEOUT_SECONDS = 20
 FINAL_AGGREGATION = "Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8"
+OPTIONAL_DIAGNOSTIC_JOBS = frozenset(
+    {
+        "A2 attention benchmark only (non-admission)",
+        "DATA4 installed command diagnostic (non-admission)",
+    }
+)
 CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 CI_EVENTS = {"push", "pull_request", "merge_group", "workflow_dispatch"}
 SUITES = (
@@ -41,6 +47,7 @@ SUITES = (
     "bpe-tokenizer",
     "bpe-boundary",
     "shard-loader",
+    "data4-corpus",
     "c2-format",
     "c2-state",
     "c2-save",
@@ -303,21 +310,29 @@ def _validated_jobs(payload: object, attempt: int) -> tuple[list[dict[str, objec
     jobs: list[dict[str, object]] = []
     seen_ids: set[int] = set()
     seen_names: set[str] = set()
+    optional_seen: set[str] = set()
     for raw in jobs_raw:
         job = _dict(raw, "job")
         job_id = _positive_int(job.get("id"), "job id")
         if job_id in seen_ids:
             _fail("jobs response contains a duplicate job")
         seen_ids.add(job_id)
-        if job.get("status") != "completed" or job.get("conclusion") != "success":
-            _fail(f"job is not completed successfully: {job.get('name', '<unnamed>')}")
         if "run_attempt" in job and job["run_attempt"] != attempt:
             _fail("job run_attempt does not match the selected attempt")
         name = job.get("name")
         if not isinstance(name, str) or not name or name in seen_names:
             _fail("jobs response contains a missing or duplicate job name")
         seen_names.add(name)
+        if name in OPTIONAL_DIAGNOSTIC_JOBS:
+            if job.get("status") != "completed" or job.get("conclusion") != "skipped":
+                _fail(f"optional diagnostic was not skipped: {name}")
+            optional_seen.add(name)
+        elif job.get("status") != "completed" or job.get("conclusion") != "success":
+            _fail(f"job is not completed successfully: {name}")
         jobs.append(job)
+
+    if optional_seen and optional_seen != OPTIONAL_DIAGNOSTIC_JOBS:
+        _fail("optional diagnostic job inventory is incomplete")
 
     expected_suffixes = {f"Supported suite / {suite}" for suite in SUITES}
     observed: dict[str, int] = {suffix: 0 for suffix in expected_suffixes}
@@ -374,12 +389,17 @@ def _has_explicit_full_matrix_skips(
             _fail("collapsed skipped-run jobs are malformed")
         seen_ids.add(job_id)
         collapsed[name] = job
-    if set(collapsed) != {"CI topology", "Full suites", FINAL_AGGREGATION}:
+    required = {"CI topology", "Full suites", FINAL_AGGREGATION}
+    if set(collapsed) not in (required, required | OPTIONAL_DIAGNOSTIC_JOBS):
         _fail("collapsed skipped-run job inventory is not exact")
     return (
         collapsed["CI topology"].get("conclusion") == "success"
         and collapsed["Full suites"].get("conclusion") == "skipped"
         and collapsed[FINAL_AGGREGATION].get("conclusion") == "success"
+        and all(
+            collapsed[name].get("conclusion") == "skipped"
+            for name in set(collapsed) & OPTIONAL_DIAGNOSTIC_JOBS
+        )
     )
 
 

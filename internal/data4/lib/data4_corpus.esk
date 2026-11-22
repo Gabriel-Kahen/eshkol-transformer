@@ -1,0 +1,196 @@
+;;; DATA4-A: bounded, build-only document selection and D1 publication.
+;;; Load only inside a trusted T2/D1 aggregate. Prepared values have one owner;
+;;; callers must not mutate them or their bytevectors between these operations.
+
+(define data4-max-documents 128)
+(define data4-max-input-bytes 65536)
+(define data4-max-tokens 65536)
+
+(define (data4-fail category message)
+  (t1-core-fail category 'data4-corpus message))
+
+(define (data4-reverse values)
+  (let loop ((rest values) (out '()))
+    (if (null? rest) out (loop (cdr rest) (cons (car rest) out)))))
+
+(define (data4-bounded-length values maximum)
+  (let loop ((rest values) (count 0))
+    (cond ((null? rest) count)
+          ((or (not (pair? rest)) (>= count maximum)) #f)
+          (else (loop (cdr rest) (+ count 1))))))
+
+(define (data4-source-id? value)
+  (and (string? value)
+       (>= (string-length value) 1)
+       (<= (string-length value) 64)
+       (let loop ((index 0))
+         (if (= index (string-length value)) #t
+             (let ((code (char->integer (string-ref value index))))
+               (and (or (and (>= code 65) (<= code 90))
+                        (and (>= code 97) (<= code 122))
+                        (and (>= code 48) (<= code 57))
+                        (= code 45) (= code 46) (= code 95))
+                    (loop (+ index 1))))))))
+
+(define (data4-seen-id? id records)
+  (and (not (null? records))
+       (or (string=? id (vector-ref (car records) 1))
+           (data4-seen-id? id (cdr records)))))
+
+(define (data4-bytes=? left right)
+  (and (= (bytevector-length left) (bytevector-length right))
+       (let loop ((index 0))
+         (if (= index (bytevector-length left)) #t
+             (and (= (bytevector-u8-ref left index)
+                     (bytevector-u8-ref right index))
+                  (loop (+ index 1)))))))
+
+(define (data4-first-equal bytes selected)
+  (cond ((null? selected) #f)
+        ((data4-bytes=? bytes (cdr (car selected))) (car (car selected)))
+        (else (data4-first-equal bytes (cdr selected)))))
+
+;;; Each document is exactly (source-id bytevector). Report rows are
+;;; #(ordinal source-id raw-bytes sha256-hex status duplicate-of-or-empty).
+;;; The result is #(selected-documents rows input-count input-bytes
+;;;                 kept-count kept-bytes minimum-bytes maximum-bytes),
+;;; with selected entries (id . bytes).
+(define (data4-corpus-prepare documents minimum-bytes maximum-bytes)
+  (let ((count (data4-bounded-length documents data4-max-documents)))
+    (if (or (not count) (= count 0))
+        (data4-fail 'invalid-argument "expected 1..128 proper documents"))
+    (if (or (not (integer? minimum-bytes)) (not (exact? minimum-bytes))
+            (not (real? minimum-bytes)) (< minimum-bytes 0)
+            (not (integer? maximum-bytes)) (not (exact? maximum-bytes))
+            (not (real? maximum-bytes)) (< maximum-bytes minimum-bytes)
+            (> maximum-bytes data4-max-input-bytes))
+        (data4-fail 'invalid-argument "invalid byte-length filter bounds"))
+    (let loop ((rest documents) (ordinal 0) (input-bytes 0)
+               (kept-bytes 0) (selected-reversed '()) (rows-reversed '()))
+      (if (null? rest)
+          (vector (data4-reverse selected-reversed)
+                  (data4-reverse rows-reversed) count input-bytes
+                  (data4-bounded-length selected-reversed data4-max-documents)
+                  kept-bytes minimum-bytes maximum-bytes)
+          (let ((document (car rest)))
+            (if (not (and (pair? document)
+                          (pair? (cdr document))
+                          (null? (cdr (cdr document)))
+                          (data4-source-id? (car document))
+                          (bytevector? (car (cdr document)))))
+                (data4-fail 'invalid-argument "malformed source document"))
+            (let* ((id (utf8->string (string->utf8 (car document))))
+                   (bytes (car (cdr document)))
+                   (length (bytevector-length bytes)))
+              (if (data4-seen-id? id rows-reversed)
+                  (data4-fail 'invalid-argument "duplicate source ID"))
+              (if (> (+ input-bytes length) data4-max-input-bytes)
+                  (data4-fail 'invalid-argument "input exceeds 65536 bytes"))
+              (let* ((owned (bytevector-copy bytes 0 length))
+                     (digest (t1-core-hex (t1-core-sha256 owned)))
+                     (duplicate (if (and (>= length minimum-bytes)
+                                         (<= length maximum-bytes))
+                                    (data4-first-equal owned selected-reversed)
+                                    #f))
+                     (status (cond ((< length minimum-bytes) 'below-min)
+                                   ((> length maximum-bytes) 'above-max)
+                                   (duplicate 'duplicate)
+                                   (else 'keep)))
+                     (keep? (eq? status 'keep))
+                     (row (vector ordinal id length digest status
+                                  (if duplicate duplicate ""))))
+                (loop (cdr rest) (+ ordinal 1) (+ input-bytes length)
+                      (if keep? (+ kept-bytes length) kept-bytes)
+                      (if keep? (cons (cons id owned) selected-reversed)
+                          selected-reversed)
+                      (cons row rows-reversed)))))))))
+
+(define (data4-append-staging-reversed staging reversed total)
+  (let ((count (t1-tokenizer-core-encoded-count staging)))
+    (if (> (+ total count) data4-max-tokens)
+        (data4-fail 'invalid-argument "encoded corpus exceeds 65536 tokens"))
+    (let loop ((index 0) (out reversed))
+      (if (= index count) (vector out (+ total count))
+          (let ((id (t1-core-read-u64-le staging (* index 8))))
+            (if (> id 9223372036854775807)
+                (data4-fail 'internal "tokenizer emitted non-i64 token"))
+            (loop (+ index 1) (cons id out)))))))
+
+(define (data4-encode-selected tokenizer selected)
+  (let loop ((rest selected) (reversed '()) (total 0))
+    (if (null? rest) (data4-reverse reversed)
+        (let* ((staging (t2-private-tokenizer-encode-staging
+                         tokenizer (cdr (car rest))))
+               (next (data4-append-staging-reversed staging reversed total)))
+          (loop (cdr rest) (vector-ref next 0) (vector-ref next 1))))))
+
+(define (data4-status-text status)
+  (cond ((eq? status 'keep) "keep")
+        ((eq? status 'below-min) "below-min")
+        ((eq? status 'above-max) "above-max")
+        ((eq? status 'duplicate) "duplicate")
+        (else (data4-fail 'invalid-argument "invalid prepared report row"))))
+
+(define (data4-report-prefix prepared fingerprint vocab shard-limit shard-count
+                             token-count)
+  (let ((header
+         (string-append
+          "format\teshkol-data4-corpus-report\nversion\t1\t0\n"
+          "filter\traw-byte-length-inclusive\n"
+          "dedup\traw-exact-first-passing\n"
+          "minimum-bytes\t" (number->string (vector-ref prepared 6))
+          "\nmaximum-bytes\t" (number->string (vector-ref prepared 7))
+          "\ntokenizer-fingerprint\t" fingerprint
+          "\nvocabulary-size\t" (number->string vocab)
+          "\ninput-count\t" (number->string (vector-ref prepared 2))
+          "\ninput-bytes\t" (number->string (vector-ref prepared 3))
+          "\nkept-count\t" (number->string (vector-ref prepared 4))
+          "\nkept-bytes\t" (number->string (vector-ref prepared 5))
+          "\nshard-token-limit\t" (number->string shard-limit)
+          "\nshard-count\t" (number->string shard-count)
+          "\ntotal-tokens\t" (number->string token-count)
+          "\n")))
+    (let loop ((rows (vector-ref prepared 1)) (parts (list header)))
+      (if (null? rows)
+          (let join ((remaining (data4-reverse
+                                  (cons "checksum-algorithm\tsha256\n" parts)))
+                     (out ""))
+            (if (null? remaining) out
+                (join (cdr remaining) (string-append out (car remaining)))))
+          (let ((row (car rows)))
+            (loop (cdr rows)
+                  (cons
+                   (string-append
+                    "document\t" (number->string (vector-ref row 0)) "\t"
+                    (vector-ref row 1) "\t"
+                    (number->string (vector-ref row 2)) "\t"
+                    (vector-ref row 3) "\t"
+                    (data4-status-text (vector-ref row 4)) "\t"
+                    (vector-ref row 5) "\n")
+                   parts)))))))
+
+;;; Returns #(D1-summary canonical-report-bytes) only after D1 publication.
+;;; The caller owns persistence of the report; this helper writes no sidecar.
+(define (data4-corpus-write! tokenizer directory shard-token-limit prepared)
+  (if (or (not (vector? prepared)) (not (= (vector-length prepared) 8))
+          (not (integer? shard-token-limit)) (not (exact? shard-token-limit))
+          (not (real? shard-token-limit)) (<= shard-token-limit 0)
+          (> shard-token-limit data4-max-tokens))
+      (data4-fail 'invalid-argument "invalid prepared corpus or shard limit"))
+  (let* ((tokens (data4-encode-selected tokenizer (vector-ref prepared 0)))
+         (token-count (data4-bounded-length tokens (+ data4-max-tokens 1)))
+         (shard-count (if (= token-count 0) 0
+                          (+ (quotient (- token-count 1) shard-token-limit) 1)))
+         (fingerprint (t2-private-tokenizer-fingerprint tokenizer))
+         (vocab (t2-private-tokenizer-vocab-size tokenizer))
+         (prefix (data4-report-prefix prepared fingerprint vocab
+                                      shard-token-limit shard-count token-count))
+         (digest (t1-core-hex (t1-core-sha256 (string->utf8 prefix))))
+         (report (string->utf8
+                  (string-append prefix "checksum\t" digest "\n")))
+         (result (vector #f report))
+         (summary (et-d1-private-token-corpus-write
+                   directory fingerprint vocab shard-token-limit tokens)))
+    ;; This assignment is the only work after D1's manifest commit.
+    (vector-set! result 0 summary)
+    result))

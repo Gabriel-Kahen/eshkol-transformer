@@ -1,7 +1,7 @@
 # PA4 bounded attention candidate
 
-Status: **source reviewed; bounded native parity verified**, with no performance
-or memory admission.
+Status: **opt-in candidate with independently reviewed native parity and
+measured forward improvement on the fixed ten-shape comparison**.
 
 ## Contract and frozen baseline
 
@@ -75,14 +75,21 @@ an attention workload. A reviewed B0 tensor-workload extension or new version is
 therefore a prerequisite to a PA4 acceptance report; B0 smoke timing cannot be
 relabelled as attention evidence.
 
-The future definition must pin exact semantic shape, masks, positions, f32 input
-bit patterns, forward or backward operation, backend/device, work-unit count,
-warmups, repetitions, compiler flags and source/binary hashes for both providers.
-Measure whole K1 dispatch (including validation and preflight) separately from
-provider `invoke_call` on a prevalidated immutable call. Use an identical
-process and repeated inputs with consumed output, report raw samples and the
-measurement source, and report host RSS separately from scratch size. Any
-invoke-only result describes a narrower region than end-to-end dispatch. No
-acceleration, device-memory, deterministic timing, or threshold claim follows
-from the current native parity tests. Supported Ubuntu 22.04 / Clang 21.1.8
-and exact-head repository gates are still required for final admission.
+The independently reviewed [B0 comparison extension](ATTENTION_COMPARISON.md)
+pins the exact shapes, inputs, masks, operation counts, binary identities and
+compiler flags. It measures whole K1 dispatch and prevalidated invocation in
+same-process AB/BA pairs, then measures selected-provider RSS in separate fresh
+processes. The [recorded supported-native result](ATTENTION_COMPARISON_RESULTS.md)
+shows lower aggregate forward time for both scopes on the fixed shape mix.
+Four forward dispatch ranges cross parity, and the RSS ranges overlap.
+Backward invocation was 3.179% slower in aggregate; joint forward/backward
+and training throughput remain unmeasured.
+
+[PR #224](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/224) carries
+the explicit candidate, parity gates and comparison together. Its integration
+keeps default A2 selection and the bounded candidate evidence identity. The
+previous [supported CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43760593834)
+passed for the comparison branch before the current-main refresh. Exact-tree
+CI and merged-main verification remain the integration gates for the refreshed
+candidate. Wider shapes, training-performance claims, and default provider
+admission remain open.
