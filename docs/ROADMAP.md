@@ -14,7 +14,7 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 - Full CPU-v1 admission depends on trained save/reload and continuation,
   public terminal generation, and supported E3 numerical and resource
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
-  tracks the combined gate. The [E3 runner measurement](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/225)
+  tracks the combined gate. The [E3 runner measurement](e3/E3_HOSTED_QUALIFICATION_20261115.md)
   records the resource shortfall on the standard hosted runner.
 
 ## Parallel execution strategy
