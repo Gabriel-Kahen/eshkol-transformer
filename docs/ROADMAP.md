@@ -2383,6 +2383,14 @@ integration review and updated-base hosted checks. Native O2 readiness does
 not establish the closed Eshkol ledger, graph retirement, public API or full
 G3-R candidate cleanup.
 
+The preserved O2 test follow-up from `d76ad4b79` reaches the 13/15-entry
+count checks without a diagnostic pointer and the duplicate-entry, same-entry
+moment, and all 28 cross-entry moment alias checks with matching fixture
+provenance. On main `dfd881c5d`, the host Clang 22.1.8 feature-off object,
+symbol and header checks pass, and normal, repeat, and ASan/UBSan/LSan each
+pass 1,935 checks. Supported exact-tree integration review and CI remain
+pending. The Eshkol ledger and whole-candidate graph are still separate gates.
+
 The proposed [G3-R P1/I2 sealed-graph retirement producer contract](g3/G3_R_P1_I2_SEALED_GRAPH_RETIREMENT_CONTRACT.md)
 pins the candidate-aware preseal M3T/I2/P1 handshake and a retained exact
 native P1 token roster. Graph preflight admits the candidate's exact live O2
