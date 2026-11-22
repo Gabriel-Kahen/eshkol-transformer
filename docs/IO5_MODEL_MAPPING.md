@@ -19,25 +19,23 @@ bijective mapping. Unknown names, wrong segment boundaries and collisions fail.
 | `token_embedding` | `model.embed_tokens` | `token_embd` | [256,4] |
 | `position_embedding` | `model.embed_positions` | `position_embd` | [2,4] |
 | `blocks.i.norm1` | `model.layers.i.input_layernorm` | `blk.i.attn_norm` | [4] |
-| `blocks.i.attention.q_proj` | `model.layers.i.self_attn.q_proj` | `blk.i.attn_q` | [4,4] |
-| `blocks.i.attention.k_proj` | `model.layers.i.self_attn.k_proj` | `blk.i.attn_k` | [4,4] |
-| `blocks.i.attention.v_proj` | `model.layers.i.self_attn.v_proj` | `blk.i.attn_v` | [4,4] |
-| `blocks.i.attention.o_proj` | `model.layers.i.self_attn.o_proj` | `blk.i.attn_output` | [4,4] |
+| `blocks.i.attention.query` | `model.layers.i.self_attn.q_proj` | `blk.i.attn_q` | [4,4] |
+| `blocks.i.attention.key` | `model.layers.i.self_attn.k_proj` | `blk.i.attn_k` | [4,4] |
+| `blocks.i.attention.value` | `model.layers.i.self_attn.v_proj` | `blk.i.attn_v` | [4,4] |
+| `blocks.i.attention.output` | `model.layers.i.self_attn.o_proj` | `blk.i.attn_output` | [4,4] |
 | `blocks.i.norm2` | `model.layers.i.post_attention_layernorm` | `blk.i.ffn_norm` | [4] |
-| `blocks.i.ffn.up_proj` | `model.layers.i.mlp.up_proj` | `blk.i.ffn_up` | [8,4] |
-| `blocks.i.ffn.down_proj` | `model.layers.i.mlp.down_proj` | `blk.i.ffn_down` | [4,8] |
-| `blocks.i.ffn.gate_proj` | `model.layers.i.mlp.gate_proj` | `blk.i.ffn_gate` | Decoder only |
+| `blocks.i.ffn.up` | `model.layers.i.mlp.up_proj` | `blk.i.ffn_up` | [8,4] |
+| `blocks.i.ffn.down` | `model.layers.i.mlp.down_proj` | `blk.i.ffn_down` | [4,8] |
+| `blocks.i.ffn.gate` | `model.layers.i.mlp.gate_proj` | `blk.i.ffn_gate` | Decoder only |
 | `norm_final` | `model.norm` | `output_norm` | [4] |
 | `head` | `lm_head` | `output` | [256,4] |
 
 - **`eshkol-m3-v1`** requires all M3 weights in the table, exactly layer zero,
   and a `bias` of shape [4] for each of `norm1`, `norm2` and `norm_final`.
-  The 15 paths represent 14 unique parameter tensors. C1 must contain exactly
-  one alias group linking `head.weight` to `token_embedding.weight`. The
-  projection stems use the spellings in the table. The native
-  [M3T transport roster](M3T_TRANSPORT_PROPOSAL.md) uses
-  `query`, `key`, `value`, `output`, `up` and `down` segments, so a
-  native snapshot using those segments fails this profile's path check.
+  The 15 paths represent 14 unique parameter tensors matching the canonical
+  [M3 reference manifest](../tests/m3/reference_manifest.json) and
+  [M3T transport roster](M3T_TRANSPORT_PROPOSAL.md). C1 must contain exactly
+  one alias group linking `head.weight` to `token_embedding.weight`.
 - **`eshkol-decoder-v1`** requires `weight` on every layer's norm, attention,
   up and down stems. It also requires token embedding, final norm and head
   weights. Zero layers are allowed. Position embedding and the SwiGLU gate

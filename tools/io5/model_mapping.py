@@ -47,14 +47,14 @@ TOP = (
 )
 BLOCK = (
     ("norm1", "input_layernorm", "attn_norm", (4,)),
-    ("attention.q_proj", "self_attn.q_proj", "attn_q", (4, 4)),
-    ("attention.k_proj", "self_attn.k_proj", "attn_k", (4, 4)),
-    ("attention.v_proj", "self_attn.v_proj", "attn_v", (4, 4)),
-    ("attention.o_proj", "self_attn.o_proj", "attn_output", (4, 4)),
+    ("attention.query", "self_attn.q_proj", "attn_q", (4, 4)),
+    ("attention.key", "self_attn.k_proj", "attn_k", (4, 4)),
+    ("attention.value", "self_attn.v_proj", "attn_v", (4, 4)),
+    ("attention.output", "self_attn.o_proj", "attn_output", (4, 4)),
     ("norm2", "post_attention_layernorm", "ffn_norm", (4,)),
-    ("ffn.up_proj", "mlp.up_proj", "ffn_up", (8, 4)),
-    ("ffn.down_proj", "mlp.down_proj", "ffn_down", (4, 8)),
-    ("ffn.gate_proj", "mlp.gate_proj", "ffn_gate", None),
+    ("ffn.up", "mlp.up_proj", "ffn_up", (8, 4)),
+    ("ffn.down", "mlp.down_proj", "ffn_down", (4, 8)),
+    ("ffn.gate", "mlp.gate_proj", "ffn_gate", None),
 )
 HEAD = ("head", "weight")
 EMBEDDING = ("token_embedding", "weight")
@@ -124,7 +124,7 @@ def mapped_names(state: State, profile: str, scheme: str) -> tuple[str, ...]:
     else:
         required = {path for path in top if path[-1] == "weight" and path[0] != "position_embedding"}
         require(required <= roots, "missing decoder root tensor")
-        required = {path for path in block if path[-1] == "weight" and path[-2] != "gate_proj"}
+        required = {path for path in block if path[-1] == "weight" and path[-2] != "gate"}
         require(all(required <= paths for paths in layers.values()), "missing decoder block tensor")
     groups = tuple(tuple(state.tensors[i].path for i in group) for group in state.aliases)
     require(groups in ((), (TIE_PATHS,)), "only the head/embedding tie is supported")

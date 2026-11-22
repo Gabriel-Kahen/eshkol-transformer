@@ -26,12 +26,12 @@ PROVIDER = "i2-dense-cpu-f32-v1"
 BITS = (0x80000000, 1, 0x007FFFFF, 0x7F800000, 0xFF800000, 0x7FC01234, 0x7F800001)
 # Independent fixed-profile roster and expected external spelling.
 M3_ROWS = (
-    ("blocks.0.attention.k_proj.weight", "model.layers.0.self_attn.k_proj.weight", "blk.0.attn_k.weight", (4, 4)),
-    ("blocks.0.attention.o_proj.weight", "model.layers.0.self_attn.o_proj.weight", "blk.0.attn_output.weight", (4, 4)),
-    ("blocks.0.attention.q_proj.weight", "model.layers.0.self_attn.q_proj.weight", "blk.0.attn_q.weight", (4, 4)),
-    ("blocks.0.attention.v_proj.weight", "model.layers.0.self_attn.v_proj.weight", "blk.0.attn_v.weight", (4, 4)),
-    ("blocks.0.ffn.down_proj.weight", "model.layers.0.mlp.down_proj.weight", "blk.0.ffn_down.weight", (4, 8)),
-    ("blocks.0.ffn.up_proj.weight", "model.layers.0.mlp.up_proj.weight", "blk.0.ffn_up.weight", (8, 4)),
+    ("blocks.0.attention.key.weight", "model.layers.0.self_attn.k_proj.weight", "blk.0.attn_k.weight", (4, 4)),
+    ("blocks.0.attention.output.weight", "model.layers.0.self_attn.o_proj.weight", "blk.0.attn_output.weight", (4, 4)),
+    ("blocks.0.attention.query.weight", "model.layers.0.self_attn.q_proj.weight", "blk.0.attn_q.weight", (4, 4)),
+    ("blocks.0.attention.value.weight", "model.layers.0.self_attn.v_proj.weight", "blk.0.attn_v.weight", (4, 4)),
+    ("blocks.0.ffn.down.weight", "model.layers.0.mlp.down_proj.weight", "blk.0.ffn_down.weight", (4, 8)),
+    ("blocks.0.ffn.up.weight", "model.layers.0.mlp.up_proj.weight", "blk.0.ffn_up.weight", (8, 4)),
     ("blocks.0.norm1.bias", "model.layers.0.input_layernorm.bias", "blk.0.attn_norm.bias", (4,)),
     ("blocks.0.norm1.weight", "model.layers.0.input_layernorm.weight", "blk.0.attn_norm.weight", (4,)),
     ("blocks.0.norm2.bias", "model.layers.0.post_attention_layernorm.bias", "blk.0.ffn_norm.bias", (4,)),
@@ -60,11 +60,11 @@ def decoder_fixture(*, tied=False):
     tensors = [tensor("token_embedding.weight", (17, 6)), tensor("head.weight", (17, 6)),
                tensor("norm_final.weight", (6,))]
     for i in range(3):
-        shapes = {"norm1.weight": (6,), "norm2.weight": (6,), "attention.q_proj.weight": (6, 6),
-                  "attention.k_proj.weight": (2, 6), "attention.v_proj.weight": (2, 6),
-                  "attention.o_proj.weight": (6, 6), "ffn.up_proj.weight": (10, 6),
-                  "ffn.down_proj.weight": (6, 10), "ffn.gate_proj.weight": (10, 6),
-                  "attention.k_proj.bias": (2,), "ffn.gate_proj.bias": (10,)}
+        shapes = {"norm1.weight": (6,), "norm2.weight": (6,), "attention.query.weight": (6, 6),
+                  "attention.key.weight": (2, 6), "attention.value.weight": (2, 6),
+                  "attention.output.weight": (6, 6), "ffn.up.weight": (10, 6),
+                  "ffn.down.weight": (6, 10), "ffn.gate.weight": (10, 6),
+                  "attention.key.bias": (2,), "ffn.gate.bias": (10,)}
         tensors.extend(tensor(f"blocks.{i}.{part}", shape, i) for part, shape in shapes.items())
     tensors.sort(key=lambda t: t.path)
     paths = [t.path for t in tensors]
@@ -121,6 +121,16 @@ class ModelMappingTests(unittest.TestCase):
             (self.root / name).write_bytes(data)
 
     def test_m3_exact_roster_and_all_bitwise_round_trips(self):
+        manifest = json.loads((ROOT / "tests/m3/reference_manifest.json").read_text(encoding="utf-8"))
+        manifest_shapes = {
+            tuple(path.split("/")): tuple(shape)
+            for path, shape in manifest["parameter_shapes"].items()
+        }
+        manifest_shapes[("token_embedding", "weight")] = manifest_shapes[("head", "weight")]
+        self.assertEqual(
+            {tuple(name.split(".")): shape for name, _, _, shape in M3_ROWS},
+            manifest_shapes,
+        )
         self.assertEqual(len(m3_fixture().tensors), 15)
         self.assertEqual(len(m3_fixture().tensors) - len(m3_fixture().aliases), 14)
         for format_name, scheme, column in (("safetensors", "huggingface", 1), ("gguf", "gguf", 2)):
@@ -205,12 +215,12 @@ class ModelMappingTests(unittest.TestCase):
         m3 = m3_fixture()
         decoder = decoder_fixture()
         bad_states = (
-            (replace(m3, tensors=(tensor("blocks.0.attention.k_proj.weight", (2, 8)),) + m3.tensors[1:]), mapping.M3),
+            (replace(m3, tensors=(tensor("blocks.0.attention.key.weight", (2, 8)),) + m3.tensors[1:]), mapping.M3),
             (replace(m3, tensors=m3.tensors[:-2] + m3.tensors[-1:], aliases=((10, 13),)), mapping.M3),
             (replace(m3, aliases=()), mapping.M3),
             (replace(m3, tensors=(replace(m3.tensors[0], kind="buffer"),) + m3.tensors[1:]), mapping.M3),
             (replace(decoder, tensors=decoder.tensors[11:]), mapping.DECODER),
-            (replace(decoder, tensors=tuple(t for t in decoder.tensors if t.path[-2:] != ("gate_proj", "weight"))),
+            (replace(decoder, tensors=tuple(t for t in decoder.tensors if t.path[-2:] != ("gate", "weight"))),
              mapping.DECODER),
             (replace(decoder, tensors=tuple(t for t in decoder.tensors if t.path != ("blocks", "1", "norm1", "weight"))),
              mapping.DECODER),
