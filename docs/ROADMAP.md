@@ -615,8 +615,16 @@ topology job before the full suites ran: the D2 probe diagnostic test required
 `elapsed=301s`, while Bash reported `302s` after its synthetic clock advanced.
 A test-only follow-up checks that elapsed time crosses each 300- or 450-second
 limit, and that the periodic sample reaches 30 seconds, without changing the
-D2 runner or resource assertions. Local CI tests (132) and topology pass;
-hosted validation of this follow-up is pending.
+D2 runner or resource assertions. Local CI tests (132) and topology passed.
+PR #238's full hosted run `44140870348` passed, and merged-main run
+`45066941452` at `dfd881c5d` reused the exact-tree evidence.
+
+The optional resource-only D2 phase from draft PR #229 is ported to the
+current main baseline as `make test-ci-dataset-resources-after-build`. It
+uses the current 300/450-second limits and D2 observer, exact counters,
+topology, and retained-arena assertions. The original resource-only hosted
+run `43924477682` validated the earlier draft tree. A fresh compiled run of
+the port and standard PR CI are pending.
 
 The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
 is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT

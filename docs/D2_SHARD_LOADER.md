@@ -231,6 +231,12 @@ and 450 seconds for the 8,192-batch large probe and retained-arena run. The
 watchdog is a runner limit, not a measured loader performance claim; all batch,
 native-lifetime, descriptor, and arena assertions remain required.
 
+After `make build-ci-dataset`, run `make test-ci-dataset-resources-after-build`
+for the resource portion. It checks the canonical D2 archive and source closure,
+deterministic resource-only builds, optimized instrumented probes, exact native
+lifetime counters, descriptor and arena bounds, and dependency isolation.
+`make test-ci-dataset-after-build` runs the full D2 and E3-D2 suites.
+
 Missing or unreadable manifest/shard data is `io`; malformed, noncanonical,
 truncated, trailing, digest-corrupt, record-inconsistent, out-of-range-token, or D1
 policy-excess data is `corrupt-data`; unsupported versions are `version-mismatch`;

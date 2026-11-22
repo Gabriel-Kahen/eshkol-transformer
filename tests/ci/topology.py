@@ -337,6 +337,8 @@ def check(root, overrides=None):
     targets = recipes(make)
     assert re.search(r"^test-io5-gguf:\s*$", make, re.M)
     assert targets["test-io5-gguf"] == ["/usr/bin/bash scripts/test-io5-gguf.sh"]
+    assert targets["test-ci-dataset-resources-after-build"] == [
+        "/usr/bin/bash scripts/test-d2.sh --phase resources"]
     assert targets["test-ci-m3-after-build"] == [
         "/usr/bin/bash scripts/test-m3.sh", "/usr/bin/bash scripts/test-e3-native-frame.sh",
         "/usr/bin/bash scripts/test-e3-native-parity.sh",
