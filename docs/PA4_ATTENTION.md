@@ -1,6 +1,7 @@
 # PA4 bounded attention candidate
 
-Status: **opt-in candidate on the fixed ten-shape attention contract**.
+Status: **opt-in candidate with measured joint forward and backward improvement
+on the fixed ten-shape attention contract**.
 
 ## Contract and frozen baseline
 
@@ -37,7 +38,26 @@ gradient overflow with untouched outputs, a multi-tile direct call, and direct
 default and frozen A2 objects byte for byte, and checks the candidate's export and
 undefined allocator symbols. The test links both providers explicitly.
 
-## Bounded validation, 2026-11-14
+## Bounded validation, 2026-11-22
+
+The supported Ubuntu 22.04.5 and Clang 21.1.8 run tested clean commit
+`2913b1b3d6e5ab6f9e3537c3538282ad40fe2e87`, tree
+`f01cb44c83cba89600942b809d7084c2ba827d33`.
+
+- `CC=clang-21 bash scripts/test-pa4.sh` passed 1,045 provider checks, bitwise
+  parity on all ten advertised shapes, direct-call edge cases and all five
+  predecessor-pin tests. The provider and parity executables also passed with
+  ASan, UBSan and LSan enabled.
+- `cmp` passed for same-basename frozen and default `-O2 -ffp-contract=off`
+  objects, both SHA-256 `85b917fab18c716f66143afcb954ee55b5f0c628343ba34652c2893ab2d03cc5`.
+  `nm` found no allocator references in the candidate and only the expected
+  public entry point. Clang `-fstack-usage` reported static frames of 312 bytes
+  for backward preflight, 120 bytes for row preparation and 568 bytes for
+  the provider invoke function after inlining.
+- `bash scripts/test-b0.sh` passed all 66 tests. The CI topology check and
+  all five Python isolation tests also passed.
+
+## Initial candidate validation, 2026-11-14
 
 An independent source/tests/script review approved the candidate after correcting
 RoPE capability attribution; four metadata assertions cover that correction.
@@ -77,21 +97,21 @@ an attention workload. A reviewed B0 tensor-workload extension or new version is
 therefore a prerequisite to a PA4 acceptance report; B0 smoke timing cannot be
 relabelled as attention evidence.
 
-The independently reviewed [B0 comparison extension](ATTENTION_COMPARISON.md)
-pins the exact shapes, inputs, masks, operation counts, binary identities and
-compiler flags. It measures whole K1 dispatch and prevalidated invocation in
-same-process AB/BA pairs, then measures selected-provider RSS in separate fresh
-processes. The [recorded supported-native result](ATTENTION_COMPARISON_RESULTS.md)
-shows lower aggregate forward time for both scopes on the fixed shape mix.
-Four forward dispatch ranges cross parity, and the RSS ranges overlap.
-Backward invocation was 3.179% slower in aggregate; joint forward/backward
-and training throughput remain unmeasured.
+The comparison extension measures K1 dispatch and prevalidated invocation in
+same-process AB/BA pairs, with RSS measured in separate fresh processes. Its
+opt-in joint definition times forward followed by backward in each iteration
+and verifies both outputs against the individual cases. [B0 comparison contract](ATTENTION_COMPARISON.md)
+
+Across the ten shapes, joint dispatch time was 51.934% lower and joint invoke
+time was 42.132% lower. Backward dispatch and invoke time were 62.151% and
+38.775% lower, respectively. Two joint dispatch shape ranges crossed parity.
+Process RSS ranges overlapped in 59 of 60 cases and do not isolate scratch.
+Training throughput and wider contexts remain unmeasured. [Supported comparison results](ATTENTION_COMPARISON_RESULTS.md)
 
 [PR #224](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/224) carries
 the explicit candidate, parity gates and comparison together. Its integration
 keeps default A2 selection and the bounded candidate evidence identity. The
 previous [supported CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43760593834)
-passed for the comparison branch before the current-main refresh. Exact-tree
-CI and merged-main verification remain the integration gates for the refreshed
-candidate. Wider shapes, training-performance claims, and default provider
-admission remain open.
+passed for the original comparison branch. The backward and preflight update
+awaits independent review, exact-tree repository and hosted CI, and an
+integration decision. Default provider selection remains A2.

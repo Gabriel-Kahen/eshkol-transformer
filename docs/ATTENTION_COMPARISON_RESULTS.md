@@ -1,4 +1,70 @@
-# A2 / PA4 supported native comparison, 2026-11-15
+# A2 / PA4 supported native comparison
+
+## Backward and preflight row scratch, 2026-11-22
+
+The optimized PA4 candidate used **51.934% less K1 dispatch time** and
+**42.132% less prevalidated invoke time** for directly timed forward followed
+by backward. The result covers the fixed ten-shape workload and preserves all
+output bits across providers, scopes, repetitions and RSS processes.
+
+### Measurement identity
+
+- Clean measured commit `2913b1b3d6e5ab6f9e3537c3538282ad40fe2e87`, tree
+  `f01cb44c83cba89600942b809d7084c2ba827d33`.
+- Frozen A2 at `ee24ef461ef7e313c36c6c6f97ba4f3d8155bac7`. The report's
+  baseline object and the default A2 object both hash to
+  `85b917fab18c716f66143afcb954ee55b5f0c628343ba34652c2893ab2d03cc5`.
+  The candidate object hashes to
+  `f4c6ffa07aa26e78a0da8fb1f9272469299f8f9a96a16227fcd264ba7b8a9b94`.
+- Ubuntu 22.04.5, Clang 21.1.8, Ryzen 7 3700X, Linux 7.2.7-1-cachyos,
+  CPU affinity `[2]`. Docker inspected image
+  `sha256:68e2e292a255c9b42206e2298d12770aea7594ff9b82219460cb27ee28dbdc99`,
+  memory 512 MiB, swap disabled, exit 0, `OOMKilled: false`.
+- `benchmarks/attention_compare_v1_joint.json` SHA-256
+  `c5803d3cf1e32fe1b3a1ca7ecfe67ee90b5b7eeb12dd683fec9771b52f5e06f0`.
+  Each of 60 cases uses 100 warmups, 10,000 timed iterations per batch,
+  12 AB/BA timing pairs and four selected-process RSS pairs. Each joint
+  iteration contains two calls and uses a fixed upstream gradient.
+- `attention-compare-v1-joint-report.json` passed `attention_compare.py verify`.
+  Report SHA-256
+  `6ef4cf8f2994d630b0b8890d484cf2ff0576a434fe8fe6171142d38f312a4a04`.
+
+### Aggregate timing
+
+Totals sum all 12 batches per arm across all ten shapes. Each shape receives
+equal iteration counts. The last column shows the earlier candidate's observed
+change from A2 on a separate run. Its joint cases were unmeasured.
+
+| Operation | Scope | A2 total ns | PA4 total ns | PA4 / A2 | Time change | 2026-11-15 change |
+|---|---|---:|---:|---:|---:|---:|
+| Forward | Dispatch | 1963543735 | 1477309084 | 0.752369 | -24.763% | -9.675% |
+| Forward | Invoke | 374676479 | 191135149 | 0.510134 | -48.987% | -50.004% |
+| Backward | Dispatch | 5168482886 | 1956221630 | 0.378490 | -62.151% | +0.160% |
+| Backward | Invoke | 632988913 | 387549750 | 0.612254 | -38.775% | +3.179% |
+| Joint | Dispatch | 7245348354 | 3482573002 | 0.480663 | -51.934% | Unmeasured |
+| Joint | Invoke | 1079377768 | 624618961 | 0.578684 | -42.132% | Unmeasured |
+
+Every per-shape paired median was below one across the six operation and scope
+combinations.
+Every observed pair favored PA4 for backward dispatch and for all invoke
+cases. Six forward dispatch shape ranges and two joint dispatch shape ranges
+crossed parity. For joint dispatch those shapes were `[1,2,2,2,2,1]`
+(0.678707–1.052283) and `[1,2,2,1,2,2]` (0.635642–1.034713).
+
+| Joint scope | Per-shape paired median span | AB median span | BA median span |
+|---|---:|---:|---:|
+| Dispatch | 0.332241–0.799930 | 0.326930–0.808874 | 0.326787–0.800991 |
+| Invoke | 0.516901–0.680204 | 0.515487–0.675818 | 0.517510–0.682788 |
+
+The ranges describe the observed pairs. CPU 2 was pinned on a shared host, so
+load, frequency, cache and code layout can affect the comparison. A2 RSS was
+1944–2288 KiB and PA4 RSS was 1948–2288 KiB across 240 selected-process samples
+per provider. The ranges overlapped in 59 of 60 cases. Whole-process RSS gives
+no evidence of a scratch-memory reduction. These results apply to the fixed
+f32 CPU mix with `Tk <= 3`. Training throughput, longer contexts, GPU speed
+and full PA4 admission remain open. [PA4 validation and gates](PA4_ATTENTION.md)
+
+## Initial forward candidate, 2026-11-15
 
 PA4 demonstrates **bounded forward speed improvement** for this fixed workload: exact
 output parity is preserved, total forward K1 dispatch time is 9.675% lower and
