@@ -35,6 +35,24 @@
   (cli3-path (string-append directory "/data4-report.tsv")
              'data4-report))
 
+(define (cli3-data4-read-manifest directory operation)
+  (cli3-read-file (string-append directory "/manifest.etm")
+                 data4-manifest-maximum-bytes operation))
+
+(define (cli3-data4-read-published-manifest directory)
+  (set! cli3-command-published? #t)
+  (guard (caught
+          ((transformer-error? caught)
+           (cli3-fail
+            'io 'corpus-prepare
+            "corpus published; report not published by this invocation"
+            (list (list 'corpus-published? #t)
+                  (list 'report-published? #f)
+                  (list 'report-durability 'not-published)
+                  (list 'source-message (transformer-error-message caught)))))
+          (else (raise caught)))
+    (cli3-data4-read-manifest directory 'corpus-prepare)))
+
 (define (cli3-data4-translate thunk)
   (guard (caught
           ((t1-core-error? caught)
@@ -88,8 +106,8 @@
                            "report sidecar already exists" '()))
             (let ((published (data4-corpus-write!
                               tokenizer checked-directory
-                              shard-limit prepared)))
-              (set! cli3-command-published? #t)
+                              shard-limit prepared
+                              cli3-data4-read-published-manifest)))
               (cli3-data4-publish-report checked-directory (vector-ref published 1))
               (cli3-summary-json (vector-ref published 0)))))
         (let ((option (car remaining)))
@@ -139,11 +157,12 @@
       (cli3-usage "corpus report-validate requires --input-directory DIRECTORY"))
   (let* ((directory (cli3-path (car (cdr options)) 'data4-report-validate))
          (summary (et-d1-private-token-corpus-validate
-                   directory 1048576 1048576 65536))
+                   directory data4-manifest-maximum-bytes 1048576 65536))
+         (manifest (cli3-data4-read-manifest directory 'data4-report-validate))
          (report (cli3-read-file (cli3-data4-report-path directory)
                                  data4-report-maximum-bytes
                                  'data4-report-validate)))
-    (data4-report-validate report summary)
+    (data4-report-validate report summary manifest)
     (cli3-summary-json summary)))
 
 (define (cli3-data4-command? arguments)

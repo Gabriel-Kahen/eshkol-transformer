@@ -32,7 +32,11 @@ class InstalledData4Tests(unittest.TestCase):
                 fault: str | None = None) -> subprocess.CompletedProcess[str]:
         env = {"PATH": "/definitely-not-a-real-path"}
         if fault is not None:
-            env.update(LD_PRELOAD=str(self.fault_shim), CLI3_TEST_FSYNC_MODE=fault)
+            env["LD_PRELOAD"] = str(self.fault_shim)
+            if fault == "manifest-read":
+                env["CLI3_TEST_MANIFEST_READ_FAIL"] = "1"
+            else:
+                env["CLI3_TEST_FSYNC_MODE"] = fault
         result = subprocess.run(
             [str(self.binary), *map(str, args)], capture_output=True, text=True,
             timeout=30, check=False, env=env,
@@ -56,6 +60,12 @@ class InstalledData4Tests(unittest.TestCase):
         return self.command("corpus", "report-validate", "--input-directory",
                             str(directory or self.output), status=status)
 
+    def assert_report_rejected(self, category: str, status: int,
+                               directory: Path | None = None) -> None:
+        result = self.validate(directory, status=status)
+        self.assertEqual(result.stdout, "")
+        self.assertIn(f'category="{category}"', result.stderr)
+
     def test_installed_help_routes(self) -> None:
         group = self.command("corpus", "--help")
         self.assertIn("prepare  Filter and deduplicate", group.stdout)
@@ -74,6 +84,12 @@ class InstalledData4Tests(unittest.TestCase):
         report = (self.output / "data4-report.tsv").read_bytes()
         prefix, checksum = report.rsplit(b"checksum\t", 1)
         self.assertEqual(checksum, hashlib.sha256(prefix).hexdigest().encode() + b"\n")
+        lines = prefix.splitlines()
+        digest = hashlib.sha256((self.output / "manifest.etm").read_bytes())
+        self.assertEqual(lines[1], b"version\t2\t0")
+        self.assertEqual(lines[14:16], [
+            b"total-tokens\t4", b"manifest-sha256\t" + digest.hexdigest().encode(),
+        ])
         self.assertIn(b"document\t1\tdup\t2\t", report)
         self.assertIn(b"\tduplicate\ta\n", report)
         self.assertIn(b"document\t3\tshort\t1\t", report)
@@ -87,7 +103,7 @@ class InstalledData4Tests(unittest.TestCase):
         path = self.output / "data4-report.tsv"
         original = path.read_bytes()
         altered = bytearray(original)
-        altered[0] ^= 1
+        altered[-2] = ord("1") if altered[-2] == ord("0") else ord("0")
         path.write_bytes(altered)
         self.assertIn("category=\"corrupt-data\"", self.validate(status=12).stderr)
         prefix = original.rsplit(b"checksum\t", 1)[0]
@@ -111,18 +127,51 @@ class InstalledData4Tests(unittest.TestCase):
         self.assertIn("category=\"corrupt-data\"",
                       self.validate(other, status=12).stderr)
 
-    def test_same_summary_swap_is_unbound(self) -> None:
-        self.prepare()
+    def test_same_summary_swap_is_rejected(self) -> None:
+        first = self.prepare()
         report = (self.output / "data4-report.tsv").read_bytes()
         other = self.root / "same-summary"
         other.mkdir()
-        (self.root / "different").write_bytes(b"WXYZ")
-        self.command("corpus", "build", "--tokenizer", str(self.tokenizer),
-                     "--document", str(self.root / "different"),
-                     "--output-directory", str(other), "--shard-token-limit", "3")
+        (self.root / "different-a").write_bytes(b"WX")
+        (self.root / "different-b").write_bytes(b"YZ")
+        second = self.prepare(other, sources=("different-a", "different-b"))
+        self.assertEqual(json.loads(first.stdout), json.loads(second.stdout))
+        self.assertEqual(self.validate(other).stdout, second.stdout)
+        self.assertNotEqual((self.output / "manifest.etm").read_bytes(),
+                            (other / "manifest.etm").read_bytes())
         (other / "data4-report.tsv").write_bytes(report)
-        # This is accepted only because v1 has no manifest-digest binding.
-        self.assertEqual(json.loads(self.validate(other).stdout)["total_tokens"], 4)
+        self.assert_report_rejected("corrupt-data", 12, other)
+
+    def test_legacy_unbound_report_is_rejected(self) -> None:
+        self.prepare()
+        path = self.output / "data4-report.tsv"
+        prefix = path.read_bytes().rsplit(b"checksum\t", 1)[0]
+        legacy = b"".join(
+            line.replace(b"version\t2\t0", b"version\t1\t0")
+            for line in prefix.splitlines(keepends=True)
+            if not line.startswith(b"manifest-sha256\t")
+        )
+        path.write_bytes(legacy + b"checksum\t" +
+                         hashlib.sha256(legacy).hexdigest().encode() + b"\n")
+        self.assert_report_rejected("version-mismatch", 11)
+
+    def test_rechecksummed_bad_manifest_fields_are_rejected(self) -> None:
+        self.prepare()
+        path = self.output / "data4-report.tsv"
+        lines = path.read_bytes().rsplit(b"checksum\t", 1)[0].splitlines(keepends=True)
+        key, digest = lines[15].rstrip(b"\n").split(b"\t")
+        self.assertEqual(key, b"manifest-sha256")
+        for name, value in (
+            ("missing", None), ("uppercase", digest.upper()),
+            ("short", digest[:-1]), ("nonhex", b"z" + digest[1:]),
+            ("wrong", (b"1" if digest.startswith(b"0") else b"0") + digest[1:]),
+        ):
+            with self.subTest(name=name):
+                field = b"" if value is None else key + b"\t" + value + b"\n"
+                prefix = b"".join([*lines[:15], field, *lines[16:]])
+                path.write_bytes(prefix + b"checksum\t" +
+                                 hashlib.sha256(prefix).hexdigest().encode() + b"\n")
+                self.assert_report_rejected("corrupt-data", 12)
 
     def test_missing_oversize_and_noncanonical_report(self) -> None:
         self.prepare()
@@ -147,6 +196,21 @@ class InstalledData4Tests(unittest.TestCase):
         self.assertIn('"report-published?":false', failed.stderr)
         self.assertTrue((self.output / "manifest.etm").is_file())
         self.assertFalse((self.output / "data4-report.tsv").exists())
+
+    def test_manifest_read_failure_preserves_published_d1(self) -> None:
+        failed = self.prepare(fault="manifest-read")
+        self.assertEqual(failed.stdout, "")
+        self.assertIn('category="io"', failed.stderr)
+        self.assertIn("corpus published; report not published by this invocation",
+                      failed.stderr)
+        self.assertIn('"corpus-published?":true', failed.stderr)
+        self.assertIn('"report-published?":false', failed.stderr)
+        self.assertIn("checked file read failed", failed.stderr)
+        manifest = self.output / "manifest.etm"
+        self.assertTrue(manifest.is_file())
+        self.assertFalse((self.output / "data4-report.tsv").exists())
+        checked = self.command("corpus", "inspect", "--input-directory", self.output)
+        self.assertEqual(json.loads(checked.stdout)["total_tokens"], 4)
 
     def test_dangling_sidecar_symlink_is_never_replaced(self) -> None:
         sidecar = self.output / "data4-report.tsv"
