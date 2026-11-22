@@ -109,9 +109,12 @@ F32 safetensors file. The index carries the IO5 metadata for the entire bundle.
 
 For a mapped index supply both `--profile` and `--scheme` on export.
 Without that pair, names are synthetic `t000000`, `t000001`, etc. in C1
-order and the full bounded C1 domain is supported, including buffers, empty
-tensors and empty states. Empty states have zero shards. On import, optional
-profile and scheme arguments assert existing metadata values.
+order and the bounded C1 domain (including buffers, empty tensors and empty
+states) is supported subject to the serialized index, metadata and shard byte
+ceilings below (for example, JSON escaping of non-ASCII paths can exceed the
+1 MiB index ceiling before the C1 file ceiling is reached). Empty states have
+zero shards. On import, optional profile and scheme arguments assert existing
+metadata values.
 
 The reader enforces exact index key sets, unique keys at every JSON object
 depth, valid UTF-8 and maximum depth 16. It accepts ASCII shard basenames

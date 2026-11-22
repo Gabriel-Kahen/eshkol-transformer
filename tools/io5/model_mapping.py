@@ -203,6 +203,7 @@ def restore_manifest(named: dict[str, Tensor], metadata: dict, digest_key: str,
 
 def encode_mapped(raw: bytes, format_name: str, profile: str, scheme: str,
                   limits: Limits = Limits()) -> bytes:
+    require(format_name in ("safetensors", "gguf"), "unsupported wire format")
     state = safe.decode_c1(raw, limits)
     names = mapped_names(state, profile, scheme)
     is_gguf = format_name == "gguf"
@@ -215,6 +216,7 @@ def encode_mapped(raw: bytes, format_name: str, profile: str, scheme: str,
 def decode_mapped(raw: bytes, format_name: str, limits: Limits = Limits(), *,
                   profile: str | None = None, scheme: str | None = None,
                   external: bool = False, provider: str | None = None, tie: bool = False) -> bytes:
+    require(format_name in ("safetensors", "gguf"), "unsupported wire format")
     is_gguf = format_name == "gguf"
     decode = gg.decode_gguf_tensors if is_gguf else safe.decode_safetensors_tensors
     named, metadata = decode(raw, limits)
@@ -331,9 +333,13 @@ def stage(directory: int, raw: bytes) -> str:
 
 
 def publish_sharded(path: Path, files: dict[str, bytes], overwrite: bool) -> None:
+    require(bool(files) and next(reversed(files)) == INDEX_NAME, "sharded index must be published last")
+    for name in files:
+        if name != INDEX_NAME:
+            require(type(name) is str and ".." not in name and SHARD_BASENAME.fullmatch(name),
+                    "invalid shard basename")
     with index_directory(path, writing=True) as directory:
         # The caller constructs the index last. It is the publication point for a bundle.
-        require(next(reversed(files)) == INDEX_NAME, "sharded index must be published last")
         existing = set()
         for name in files:
             try:

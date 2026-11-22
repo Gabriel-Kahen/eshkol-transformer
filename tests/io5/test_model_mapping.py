@@ -261,6 +261,12 @@ class ModelMappingTests(unittest.TestCase):
         repeated = b'{"duplicate":0,"duplicate":1}'
         with self.assertRaisesRegex(safe.InteropError, "duplicate JSON key"):
             mapping.decode_mapped(struct.pack("<Q", len(repeated)) + repeated, "safetensors", **options)
+        for bad_format in ("", "pickle", "GGUF", "safetensor"):
+            with self.subTest(bad_format=bad_format):
+                with self.assertRaisesRegex(safe.InteropError, "unsupported wire format"):
+                    mapping.encode_mapped(self.original, bad_format, mapping.M3, "huggingface")
+                with self.assertRaisesRegex(safe.InteropError, "unsupported wire format"):
+                    mapping.decode_mapped(mapped, bad_format)
 
     def test_invalid_index_schema_json_paths_and_checksums(self):
         files = self.build()
@@ -282,6 +288,10 @@ class ModelMappingTests(unittest.TestCase):
                 self.index.write_bytes(safe.json_bytes(index))
                 with self.assertRaisesRegex(safe.InteropError, "invalid shard basename"):
                     mapping.read_sharded(self.index)
+                with self.assertRaisesRegex(safe.InteropError, "invalid shard basename"):
+                    mapping.publish_sharded(self.index, {invalid: b"x", mapping.INDEX_NAME: b"{}"}, overwrite=False)
+        with self.assertRaisesRegex(safe.InteropError, "published last"):
+            mapping.publish_sharded(self.index, {}, overwrite=False)
         for field, bad, expected in ((safe.DIGEST_KEY, "0" * 64, "C1 checksum mismatch"),
                                      (safe.DIGEST_KEY, "A" * 64, "invalid IO5 C1 checksum"),
                                      ("total_size", True, "u64"),
