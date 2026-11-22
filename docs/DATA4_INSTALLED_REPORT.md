@@ -1,7 +1,16 @@
 # DATA4 installed report
 
-Status: command, reader, and focused diagnostic source/tests independently
-reviewed. [Supported installed diagnostic 43935284566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43935284566)
+The DATA4-C manifest binding passed the local installed gate from clean
+commit `a5f9b38f135fee36028ff633933850334c5a359b` in the pinned Ubuntu
+22.04/LLVM 21.1.8 container. The gate took 13:20.06 with 5,791,748 KiB peak
+RSS. All 42 source checks and all 13 installed tests passed. The source
+closure, native source closure, public strings, package exports, and
+undefined symbol manifests matched byte-for-byte. The package's defined
+symbol check passed as well. Independent review and hosted validation of
+DATA4-C are pending.
+
+The earlier DATA4-B command, reader, and focused diagnostic source/tests
+were independently reviewed. [Supported installed diagnostic 43935284566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43935284566)
 passed at `2e656717`/tree `c99df006`: 32 DATA4 source checks, the exact CLI3
 package/manifest gate, and all 9 installed command tests. The downloaded outer
 and inner SHA256SUMS verify. The temporary binary was hashed on the runner but
@@ -51,8 +60,8 @@ publication can leave a valid corpus without its report.
 
 `report-validate` fully validates D1 under CLI3's 1 MiB manifest/shard and
 65,536 token limits, then reads the manifest and at most 32,768 report bytes
-through the checked no-follow file reader. It accepts canonical printable ASCII, tab and LF,
-with exact field order/count, decimal spellings, source-ID grammar and
+through the checked no-follow file reader. It accepts canonical printable
+ASCII, tab and LF, with exact field order/count, decimal spellings, source-ID grammar and
 uniqueness, ordinal sequence, filter/duplicate status consistency, bounded
 counts and byte totals, exact SHA-256 checksum, and tokenizer fingerprint,
 vocabulary, shard limit/count and token count equal to the D1 summary. It
