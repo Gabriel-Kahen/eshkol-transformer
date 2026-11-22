@@ -21,6 +21,15 @@ builder-cleanup helper, not a safe live-retirement tail. The ordinary
 `et_f32_tensor_destroy_v1` authenticates a live tensor and rejects an active
 borrow or plan pin before freeing data, strides and shape and retaining a dead
 control shell. It has no read-only production destroy-readiness entry point.
+
+For each of the 14 ordered entries, both owned f32 moments have exactly the
+rank, shape, and element count of that entry's canonical parameter value;
+their backing and control identities are distinct from each other, every
+parameter value/gradient, and all other moments. The entry array and moments
+belong to O2. The parameter, P1 handle, and canonical storage fields are
+borrowed references and survive O2 retirement. The focused native test uses
+rank-one `[80]` values and moments; that fixture shape is not a model limit.
+
 Borrow-begin allocates and changes authority, so it cannot fill this gap.
 
 More fundamentally, f32's live registry proves a control address and magic,

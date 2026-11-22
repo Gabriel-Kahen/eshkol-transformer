@@ -187,8 +187,12 @@ int main(void) {
   count = first.optimizer->count;
   first.optimizer->count = 13u;
   expect_fail_closed(first.optimizer);
+  CHECK(et_o2_private_candidate_retire_preflight_v1(first.optimizer, NULL) ==
+        ET_O2_STATUS_INTERNAL);
   first.optimizer->count = 15u;
   expect_fail_closed(first.optimizer);
+  CHECK(et_o2_private_candidate_retire_preflight_v1(first.optimizer, NULL) ==
+        ET_O2_STATUS_INTERNAL);
   first.optimizer->count = count;
   et_o2_entry *original_entries = first.optimizer->entries;
   et_o2_entry decoy_entries[ET_O2_CANDIDATE_COUNT];
@@ -217,6 +221,37 @@ int main(void) {
                  ET_O2_CODE_ACTIVE_BORROW);
   first.optimizer->active_operation = NULL;
 #endif
+  /* Keep the publication roster in step so these reach alias admission. */
+  et_o2_retire_provenance *record = et_o2_retire_record_find(first.optimizer);
+  CHECK(record != NULL);
+  et_o2_entry original_entry = first.optimizer->entries[2];
+  first.optimizer->entries[2] = first.optimizer->entries[1];
+  record->roster[2] = first.optimizer->entries[2];
+  expect_failure(first.optimizer, ET_O2_STATUS_INVALID_STATE,
+                 ET_O2_CODE_OWNER_CONFLICT);
+  first.optimizer->entries[2] = original_entry;
+  record->roster[2] = original_entry;
+  saved = first.optimizer->entries[2].exp_avg_sq;
+  first.optimizer->entries[2].exp_avg_sq = first.optimizer->entries[2].exp_avg;
+  record->roster[2] = first.optimizer->entries[2];
+  expect_failure(first.optimizer, ET_O2_STATUS_INVALID_STATE,
+                 ET_O2_CODE_OWNER_CONFLICT);
+  first.optimizer->entries[2].exp_avg_sq = saved;
+  record->roster[2] = original_entry;
+  for (size_t i = 0u; i < ET_O2_CANDIDATE_COUNT; ++i) {
+    for (size_t kind = 0u; kind < 2u; ++kind) {
+      et_f32_tensor **slot = kind == 0u ? &first.optimizer->entries[i].exp_avg
+                                        : &first.optimizer->entries[i].exp_avg_sq;
+      saved = *slot;
+      size_t peer = (i + ET_O2_CANDIDATE_COUNT - 1u) % ET_O2_CANDIDATE_COUNT;
+      *slot = first.optimizer->entries[peer].exp_avg;
+      record->roster[i] = first.optimizer->entries[i];
+      expect_failure(first.optimizer, ET_O2_STATUS_INVALID_STATE,
+                     ET_O2_CODE_OWNER_CONFLICT);
+      *slot = saved;
+      record->roster[i] = first.optimizer->entries[i];
+    }
+  }
   for (size_t i = 0u; i < ET_O2_CANDIDATE_COUNT; ++i) {
     for (size_t kind = 0u; kind < 2u; ++kind) {
       size_t peer = (i + 1u) % ET_O2_CANDIDATE_COUNT;
