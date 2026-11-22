@@ -186,6 +186,38 @@ class NativeComparisonTests(unittest.TestCase):
         with self.assertRaisesRegex(compare.codec.BenchmarkFormatError, 'joint/standalone parity mismatch'):
             compare.encode_report(report)
 
+        # Verify clearing outputs before timing catches a timed joint batch that skips backward.
+        harness_src = (compare.ROOT / 'benchmarks/attention_compare_v1.c').read_text(encoding='utf-8')
+        mutated_line = '      run_batch(providers[p],runtime[p],call,next,invoke,iterations,&error);'
+        self.assertIn(mutated_line, harness_src)
+        mutated_c = self.directory / 'attention_compare_skip_backward.c'
+        mutated_c.write_text(
+            harness_src.replace(
+                mutated_line,
+                '      run_batch(providers[p],runtime[p],call,NULL,invoke,iterations,&error);',
+                1,
+            ),
+            encoding='utf-8',
+        )
+        mutated_bin = self.directory / 'attention_compare_skip_backward'
+        baseline_o = self.directory / 'baseline.o'
+        candidate_o = self.directory / 'candidate.o'
+        compiler = self.artifacts[2]['path']
+        subprocess.run(
+            [compiler, '-std=c11', '-O2', '-ffp-contract=off', '-I', str(compare.ROOT / 'include'),
+             str(mutated_c), str(baseline_o), str(candidate_o),
+             str(compare.ROOT / 'native/kernel_abi.c'), '-lm', '-o', str(mutated_bin)],
+            check=True, capture_output=True,
+        )
+        raw_out = subprocess.check_output([str(mutated_bin), '0', 'joint', 'dispatch', '1', '1', '2', 'paired'])
+        with self.assertRaisesRegex(compare.codec.BenchmarkFormatError, 'all-zero native output'):
+            compare.native_output(raw_out, compare.base.SHAPES[0], 'joint', 2)
+        parsed = json.loads(raw_out)
+        mutated_bits = parsed['samples'][0]['output_bits']
+        fwd_hex_len = len(cases[0]['output_bits'])
+        self.assertEqual(mutated_bits[:fwd_hex_len], cases[0]['output_bits'])
+        self.assertEqual(set(mutated_bits[fwd_hex_len:]), {'0'})
+
     def test_report_schema_rejects_parity_timing_provenance_and_summary_forgery(self):
         mutations = [lambda r:r['stable'].update(definition_sha256='0'*64),
             lambda r:r['stable']['baseline'].update(source_sha256='0'*64),

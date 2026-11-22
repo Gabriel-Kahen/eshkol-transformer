@@ -29,9 +29,13 @@ the composed current source with `ET_PA4_ATTENTION_CANDIDATE`; default-provider
 source is not rewritten. Both objects link into the same executable, with
 `-O2 -ffp-contract=off`, strict warnings and no LTO. Preparation/build is excluded.
 
-The checked-in definition predeclares 100 warmup calls before each timed batch,
-10,000 calls per batch, 12 same-process timing pairs and four separate-process
-RSS pairs per exact shape/operation/scope. Both pair counts must be even. Counts
+The checked-in definitions predeclare 100 warmup iterations before each timed
+batch, 10,000 timed iterations per batch (one call per iteration for `forward`
+or `backward`, and two calls — forward then backward — per iteration for
+`joint`), 12 same-process timing pairs and four separate-process
+RSS pairs per exact shape/operation/scope. Output buffers are zeroed after
+warmup and before starting the batch timer so every witness must be produced by
+the timed batch itself. Both pair counts must be even. Counts
 may change only through a newly checksummed definition within validator bounds.
 An AB pair measures A2 then PA4; the next BA pair reverses that order. This repeats
 without randomization or result-dependent sample removal. No core Eshkol build,

@@ -164,6 +164,8 @@ int main(int argc, char **argv) {
     for (unsigned slot = 0; slot < (selected < 0 ? 2u : 1u); ++slot) {
       unsigned p = selected < 0 ? (pair % 2) ^ slot : (unsigned)selected;
       run_batch(providers[p],runtime[p],call,next,invoke,warmup,&error);
+      for (size_t t = backward; t < output_end; ++t)
+        memset(outputs[t].data, 0, outputs[t].byte_length);
       uint64_t start = now_ns();
       run_batch(providers[p],runtime[p],call,next,invoke,iterations,&error);
       uint64_t elapsed = now_ns() - start;
