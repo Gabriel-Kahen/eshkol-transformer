@@ -105,7 +105,9 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3r-record-codec.py",
     ROOT / "scripts" / "check-g3r-p1-roster.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
-INTEROPERABILITY_TOOLS = frozenset({ROOT / "tools" / "io5" / "safetensors_interop.py"})
+INTEROPERABILITY_TOOLS = frozenset({ROOT / "tools" / "io5" / name for name in (
+    "safetensors_interop.py", "gguf_interop.py",
+)})
 
 
 def development_python(path: Path) -> bool:
@@ -181,7 +183,9 @@ class PythonIsolationTests(unittest.TestCase):
             self.assertTrue(development_python(path))
         for relative in ("tools/io5/runtime.py", "tools/io5/safetensors_interop.py.extra.py",
                          "tools/io5/nested/safetensors_interop.py", "tools/safetensors_interop.py",
-                         "lib/safetensors_interop.py", "native/safetensors_interop.py"):
+                         "lib/safetensors_interop.py", "native/safetensors_interop.py",
+                         "tools/io5/gguf_interop.py.extra.py", "tools/io5/nested/gguf_interop.py",
+                         "tools/gguf_interop.py", "lib/gguf_interop.py", "native/gguf_interop.py"):
             with self.subTest(path=relative):
                 self.assertFalse(development_python(ROOT / relative))
 

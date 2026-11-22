@@ -1,4 +1,7 @@
 #include "eshkol_transformer/a2_attention_abi.h"
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+#include "eshkol_transformer/pa4_attention_candidate.h"
+#endif
 
 #include <math.h>
 #include <stddef.h>
@@ -9,6 +12,17 @@
 #pragma STDC FP_CONTRACT OFF
 
 #define ET_ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
+
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+#define ET_ATTENTION_PROVIDER_NAME "pa4.cpu-f32.row-scratch.candidate"
+#define ET_ATTENTION_IMPLEMENTATION "pa4.cpu-f32.row-scratch"
+#define ET_ATTENTION_EVIDENCE "PA4:candidate-not-admitted"
+#define ET_PA4_MAX_KEYS 3u
+#else
+#define ET_ATTENTION_PROVIDER_NAME "a2.cpu-f32.serial"
+#define ET_ATTENTION_IMPLEMENTATION "a2.cpu-f32.serial"
+#define ET_ATTENTION_EVIDENCE "A2:cpu-f32-attention-rope-v1"
+#endif
 
 typedef struct attention_shape {
   size_t n;
@@ -571,6 +585,15 @@ static int32_t validate_attention_call(const et_kernel_call_v1 *call,
                      ET_KERNEL_CODE_INVALID_SHAPE, operation,
                      "attention requires Hkv>=2 and Hq divisible by Hkv");
   }
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+  /* Every advertised A2 row has at most three keys.  Reject wider direct
+     calls before touching output instead of selecting an implicit path. */
+  if (s.tk > ET_PA4_MAX_KEYS) {
+    return set_error(error, ET_KERNEL_ERROR_UNSUPPORTED,
+                     ET_KERNEL_CODE_PROVIDER_REJECTED, operation,
+                     "PA4 candidate supports at most three key positions");
+  }
+#endif
   result = table_views(call, 0, backward ? 7u : 6u, operation, inputs, error);
   if (result != 0) {
     return result;
@@ -691,19 +714,47 @@ static void invoke_attention_forward(const et_kernel_call_v1 *call) {
     for (size_t hq = 0; hq < s.hq; hq++) {
       const size_t hkv = hq / (s.hq / s.hkv);
       for (size_t tq = 0; tq < s.tq; tq++) {
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+        float scores[ET_PA4_MAX_KEYS];
+        float weights[ET_PA4_MAX_KEYS];
+        float maximum = 0.0f;
+        float denominator = 0.0f;
+        int any = 0;
+        for (size_t tk = 0; tk < s.tk; tk++) {
+          if (!admitted(&s, query_positions, key_positions, mask, n, tq, tk)) {
+            continue;
+          }
+          (void)attention_score(&s, q, k, scale, n, hq, tq, tk, &scores[tk]);
+          if (!any || scores[tk] > maximum) maximum = scores[tk];
+          any = 1;
+        }
+        if (!any) continue;
+        for (size_t tk = 0; tk < s.tk; tk++) {
+          if (!admitted(&s, query_positions, key_positions, mask, n, tq, tk)) {
+            continue;
+          }
+          weights[tk] = expf(scores[tk] - maximum);
+          denominator = denominator + weights[tk];
+        }
+#else
         float maximum;
         float denominator;
         if (attention_row(&s, q, k, query_positions, key_positions, mask,
                           scale, n, hq, tq, &maximum, &denominator) <= 0) {
           continue;
         }
+#endif
         for (size_t tk = 0; tk < s.tk; tk++) {
           float probability = 0.0f;
           if (!admitted(&s, query_positions, key_positions, mask, n, tq, tk)) {
             continue;
           }
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+          probability = weights[tk] / denominator;
+#else
           (void)attention_probability(&s, q, k, scale, n, hq, tq, tk,
                                       maximum, denominator, &probability);
+#endif
           for (size_t d = 0; d < s.dh; d++) {
             output[q_index(&s, n, hq, tq, d)] =
                 output[q_index(&s, n, hq, tq, d)] +
@@ -1056,9 +1107,9 @@ static const et_kernel_capability_v1 provider_capabilities[] = {
     {.struct_size = sizeof(et_kernel_capability_v1),
      .name = "kernel.causal-attention",
      .status = ET_KERNEL_CAPABILITY_VERIFIED,
-     .implementation = "a2.cpu-f32.serial",
+     .implementation = ET_ATTENTION_IMPLEMENTATION,
      .version = "1.0",
-     .evidence = "A2:cpu-f32-attention-rope-v1",
+     .evidence = ET_ATTENTION_EVIDENCE,
      .deterministic = 1u,
      .reserved = {0},
      .operation_count = ET_ARRAY_COUNT(attention_operations),
@@ -1091,9 +1142,9 @@ static const et_kernel_provider_v1 provider = {
     .abi_major = ET_KERNEL_ABI_MAJOR,
     .abi_minor = ET_KERNEL_ABI_MINOR,
     .required_features = 0u,
-    .name = "a2.cpu-f32.serial",
+    .name = ET_ATTENTION_PROVIDER_NAME,
     .version = "1.0",
-    .evidence = "A2:cpu-f32-attention-rope-v1",
+    .evidence = ET_ATTENTION_EVIDENCE,
     .capability_count = ET_ARRAY_COUNT(provider_capabilities),
     .capability_stride = sizeof(et_kernel_capability_v1),
     .capability_bytes = sizeof(provider_capabilities),
@@ -1102,6 +1153,10 @@ static const et_kernel_provider_v1 provider = {
     .invoke_call = provider_invoke_call,
 };
 
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+const et_kernel_provider_v1 *et_pa4_kernel_provider_v1(void) {
+#else
 const et_kernel_provider_v1 *et_a2_kernel_provider_v1(void) {
+#endif
   return &provider;
 }

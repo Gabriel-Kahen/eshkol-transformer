@@ -349,11 +349,45 @@ class EvidenceTests(unittest.TestCase):
         )
 
     def test_suite_inventory_includes_optimizer_after_native_numerics(self) -> None:
-        self.assertEqual(len(evidence.SUITES), 22)
+        self.assertEqual(len(evidence.SUITES), 23)
         index = evidence.SUITES.index("native-numerics")
         self.assertEqual(evidence.SUITES[index + 1], "native-optimizer")
         index = evidence.SUITES.index("shard-loader")
         self.assertEqual(evidence.SUITES[index + 1], "data4-corpus")
+
+    def test_io5_missing_skipped_duplicate_or_old_inventory_cannot_be_reused(self) -> None:
+        self.assertEqual(evidence.SUITES[-1], "io5-gguf")
+        for mode in ("manual", "push", "docs-base"):
+            for mutation in ("missing-job", "skipped-job", "duplicate-job", "old-report", "old-run"):
+                with self.subTest(mode=mode, mutation=mutation):
+                    responses = {"manual": successful_responses,
+                                 "push": successful_push_responses,
+                                 "docs-base": successful_docs_push_responses}[mode]()
+                    all_jobs = jobs()
+                    io5_job = next(job for job in all_jobs if str(job["name"]).endswith("Supported suite / io5-gguf"))
+                    if mutation in ("missing-job", "old-run"):
+                        all_jobs.remove(io5_job)
+                    elif mutation == "skipped-job":
+                        io5_job["conclusion"] = "skipped"
+                    elif mutation == "duplicate-job":
+                        all_jobs.append({**io5_job, "id": 9999})
+                    responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
+                    if mutation in ("old-report", "old-run"):
+                        changes = {"suites": list(evidence.SUITES[:-1])}
+                        if mode == "push":
+                            changes["commit"] = TESTED_COMMIT
+                        elif mode == "docs-base":
+                            changes.update(commit=BASE_TESTED_COMMIT, tree=BASE_TREE)
+                        responses[logs_path()] = report_log(report(**changes))
+                    api = FakeApi(responses)
+                    if mode == "manual":
+                        selected = evidence.select_reuse("workflow_dispatch", REPOSITORY, COMMIT, TREE, api)
+                    else:
+                        options = {"prose_only": "true", "push_before": BASE_COMMIT} if mode == "docs-base" else {}
+                        selected = evidence.select_push_reuse("push", "refs/heads/main", REPOSITORY,
+                                                              COMMIT, COMMIT, TREE, api, **options)
+                    self.assertFalse(selected.reused)
+                    self.assertFalse(selected.docs_verified)
 
     def test_push_reuses_exact_pr_run_and_actual_tested_tree(self) -> None:
         api = FakeApi(successful_push_responses())

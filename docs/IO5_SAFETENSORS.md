@@ -7,9 +7,12 @@ register a provider, construct a model, call P1, expose a trainer API, or partic
 in the delivered Eshkol training path. Provider text remains inert. C1/M3 source,
 installed facades, and production dependency manifests are unchanged.
 
-IO5 remains **active**: this bounded slice has independent source/test approval;
-integration and supported CI remain gates. GGUF and live state/model ingress are
-unimplemented. The M3 fixture uses
+IO5 remains **active**. This safetensors slice has independent source/test approval
+and is merged through PR #217 as `6668e52b`, preserving the exact `13c623c3` tree
+that passed all 24 hosted checks. A separate [bounded GGUF candidate](IO5_GGUF.md)
+has focused local evidence, independent source/test approval and a dedicated
+required CI lane; its integration and hosted evidence are tracked in PR #222.
+Live state/model ingress is unimplemented. The M3 fixture uses
 the accepted 15 logical paths, 14 unique parameter tensors and tied head/embedding from its
 development manifest, with deterministic generated f32 bytes. This is format
 compatibility evidence, not a real M3 snapshot, model load or forward-pass test.
@@ -124,8 +127,9 @@ from the accepted native C1 I/O ABI and supplies no new native failpoint evidenc
 
 ## Evidence and remaining gates
 
-`scripts/test-io5.sh` runs 11 focused unittest groups and the five Q0 Python
-isolation groups without Eshkol build prerequisites. Tests generate all fixtures:
+`scripts/test-io5.sh` runs the original 11 safetensors unittest groups and the five
+Q0 Python isolation groups without Eshkol build prerequisites; discovery also runs
+the sibling GGUF tests when present. Safetensors tests generate all fixtures:
 all-bit-pattern representatives, Unicode/ambiguous segmented paths, parameter and
 buffer kinds, ties, empty/scalar tensors, M3 shape roster, exact/one-over policies,
 malformed JSON/headers/offsets/shapes/checksums/aliases, 256 seeded byte mutations,
@@ -142,7 +146,8 @@ skipped in the stdlib-only run if that package is unavailable. Setting
 tests if the package is absent or differs from 0.6.2, pending an explicit review.
 Local final validation used that exact package: 11/11 IO5 and 5/5 isolation tests
 passed. Independent review approved the source and tests after lone-surrogate and
-lexical negative-zero parser fixes, both protected by regressions. This does not
-establish supported CI, native live-state ownership, GGUF,
+lexical negative-zero parser fixes, both protected by regressions. The subsequent
+supported hosted result is recorded above. This safetensors evidence does not
+establish native live-state ownership, GGUF compatibility,
 model-name remapping, sharded indexes, optimizer/RNG/tokenizer state, exact resume,
 GPU execution, mixed precision, or performance. Those remain downstream work.

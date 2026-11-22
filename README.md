@@ -8,9 +8,12 @@ development oracles for numerical parity tests and conversion tools.
 
 ## Project status
 
-Pre-alpha. The repository contains the implementation plan, architecture boundaries,
-quality gates, and an Eshkol-native build/smoke foundation. No training-capable public
-API is stable yet.
+Pre-alpha. The supported Ubuntu 22.04 CPU-f32 CLI can build a byte-tokenized
+corpus, perform one fixed-profile training update, save a checkpoint, and generate
+one byte using greedy or categorical sampling. The
+[fixed-profile binary artifact](docs/CLI3_FIXED_BINARY_ARTIFACT.md) records the
+tested build and reproduction steps. The [roadmap](docs/ROADMAP.md) tracks broader
+model, evaluation, and resume support.
 
 ## Build and test
 

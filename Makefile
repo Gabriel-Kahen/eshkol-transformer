@@ -13,7 +13,7 @@ SHELL := /usr/bin/bash
 	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
 	test-ci-tokenizer-bpe-after-build \
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
-	test-ci-data4-after-build \
+	test-ci-dataset-resources-after-build test-ci-data4-after-build \
 	test-ci-topology \
 	test-a0 test-a2 test-b0 test-c1 test-c2 test-c2-codec test-c2-core \
 	test-c2-checkpoint-inspect test-c2-checkpoint-load test-c2-checkpoint-save \
@@ -253,6 +253,9 @@ test-ci-dataset-after-build:
 	/usr/bin/bash scripts/test-d2.sh
 	/usr/bin/bash scripts/test-e3-d2.sh
 
+test-ci-dataset-resources-after-build:
+	/usr/bin/bash scripts/test-d2.sh --phase resources
+
 test-ci-data4-after-build:
 	/usr/bin/bash scripts/test-data4-source.sh
 	/usr/bin/bash scripts/test-data4-native.sh
@@ -343,6 +346,15 @@ test-c1: build
 .PHONY: test-io5
 test-io5:
 	/usr/bin/bash scripts/test-io5.sh
+
+.PHONY: test-io5-gguf
+test-io5-gguf:
+	/usr/bin/bash scripts/test-io5-gguf.sh
+
+.PHONY: test-io5-gguf-native
+test-io5-gguf-native:
+	test -n "$${IO5_GGUF_NATIVE_PREFIX:-}"
+	python3 -m unittest -v tests.io5.test_gguf_native
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
