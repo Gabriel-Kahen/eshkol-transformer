@@ -2,6 +2,21 @@
 
 Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 
+## Current integration
+
+- The supported CPU-f32 CLI covers a fixed-profile corpus, one training update,
+  checkpoint publication and one-byte generation. The
+  [binary verification record](CLI3_FIXED_BINARY_ARTIFACT.md) links the hosted
+  build and the independent walkthrough.
+- The bounded installed [DATA4 report commands](DATA4_INSTALLED_REPORT.md)
+  passed the required corpus, model-composition and CLI3 command suites.
+  Binding the report to the D1 manifest bytes remains open.
+- Full CPU-v1 admission depends on trained save/reload and continuation,
+  public terminal generation, and supported E3 numerical and resource
+  evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
+  tracks the combined gate. The [E3 runner measurement](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/225)
+  records the resource shortfall on the standard hosted runner.
+
 ## Parallel execution strategy
 
 Work proceeds in dependency-aware waves. Within a wave, workstreams may run in
