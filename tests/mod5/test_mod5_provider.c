@@ -636,6 +636,148 @@ static void check_strided_tables(const et_kernel_runtime *runtime) {
   CHECK(in[0].extension == UINT64_MAX && out[0].extension == UINT64_MAX);
 }
 
+static uint32_t float_bits(float value) {
+  uint32_t bits;
+  memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+static void check_metadata_aliasing(const et_kernel_runtime *runtime) {
+  fixture f;
+  elementwise_fixture(&f, swi_rows[0], 1);
+  seed_values(&f);
+  et_kernel_error error;
+  const et_kernel_provider_v1 *provider = et_mod5_kernel_provider_v1();
+
+  /* Point swiglu.forward output at its own writable shape array. */
+  uint64_t writable_shape[3] = {1u, 1u, 1u};
+  f.output.shape = writable_shape;
+  f.output.data = writable_shape;
+  CHECK(provider->validate_call(&f.forward, &error) ==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(error.code == ET_KERNEL_CODE_ALIASING_OUTPUT);
+  CHECK(et_kernel_runtime_dispatch(runtime, &f.forward, &error) ==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(error.code == ET_KERNEL_CODE_ALIASING_OUTPUT);
+  CHECK(writable_shape[0] == 1u && writable_shape[1] == 1u &&
+        writable_shape[2] == 1u);
+
+  /* Point swiglu.backward output at the live outputs table, request shape, and error. */
+  elementwise_fixture(&f, swi_rows[0], 1);
+  seed_values(&f);
+  const float sentinel = f.gradients[1][0];
+  et_kernel_tensor_view_v1 saved_grads[3];
+  memcpy(saved_grads, f.grads, sizeof(saved_grads));
+  f.grads[0].data = &f.grads[1];
+  CHECK(provider->validate_call(&f.backward, &error) ==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(error.code == ET_KERNEL_CODE_ALIASING_OUTPUT);
+  CHECK(et_kernel_runtime_dispatch(runtime, &f.backward, &error) ==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(error.code == ET_KERNEL_CODE_ALIASING_OUTPUT);
+  CHECK(f.gradients[1][0] == sentinel);
+  CHECK(memcmp(&f.grads[1], &saved_grads[1], sizeof(saved_grads[1])) == 0);
+
+  f.grads[0].data = f.gradients[0];
+  uint64_t req_shape[3] = {1u, 1u, 1u};
+  f.backward_request.shape = req_shape;
+  f.grads[1].data = req_shape;
+  CHECK(provider->validate_call(&f.backward, &error) ==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(error.code == ET_KERNEL_CODE_ALIASING_OUTPUT);
+  CHECK(req_shape[0] == 1u && req_shape[1] == 1u && req_shape[2] == 1u);
+
+  f.grads[1].data = &error;
+  CHECK(provider->validate_call(&f.backward, &error) ==
+        ET_KERNEL_ERROR_INVALID_ARGUMENT);
+  CHECK(error.code == ET_KERNEL_CODE_ALIASING_OUTPUT);
+}
+
+static void check_attention_accumulation_order(const et_kernel_runtime *runtime) {
+  /* Cancellation-sensitive MQA [1,4,1,3,3,2] fixture verifying exact bitwise
+     dQ (increasing tk) and shared dK/dV (query-head-major, then query-position)
+     accumulation order. */
+  fixture f;
+  attention_fixture(&f, attention_rows[1], 5);
+  memset(f.operands, 0, sizeof(f.operands));
+  memset(f.upstream, 0, sizeof(f.upstream));
+  memset(f.slopes, 0, sizeof(f.slopes));
+  f.query_pos[0] = 2;
+  f.query_pos[1] = 3;
+  f.query_pos[2] = 4;
+  f.key_pos[0] = 0;
+  f.key_pos[1] = 1;
+  f.key_pos[2] = 2;
+  /* Admit keys {0,1} for tq=0,1 (p = 0.5 each) and {0,1,2} for tq=2 (p = 1/3). */
+  memset(f.mask, 0, sizeof(f.mask));
+  f.mask[0] = 1u; f.mask[1] = 1u;
+  f.mask[3] = 1u; f.mask[4] = 1u;
+  f.mask[6] = 1u; f.mask[7] = 1u; f.mask[8] = 1u;
+
+  /* Q uses d=1 only and K uses d=0 only, so Q.K == 0 for every pair and
+     probabilities are exact uniform 1/2 (tq=0,1) and 1/3 (tq=2). */
+  const float big = 16777216.0f; /* 2^24 */
+  /* V[n=0, hkv=0, tk, d=0]: (3, -1, -2) => tq=0,1: dp=(3,-1), mean=1, ds0=1.0;
+     tq=2: dp=(3,-1,-2), mean=0, ds=(3p, -p, -2p). */
+  f.operands[2][0 * 2 + 0] = 3.0f;
+  f.operands[2][1 * 2 + 0] = -1.0f;
+  f.operands[2][2 * 2 + 0] = -2.0f;
+
+  /* K[n=0, hkv=0, tk, d=0] triggers exact cancellation on dQ[0, hq=0, tq=2, d=0]:
+     tk=0: +3p*scale*big, tk=1: -3p*scale*big, tk=2: +p*scale. */
+  f.operands[1][0 * 2 + 0] = big;
+  f.operands[1][1 * 2 + 0] = 3.0f * big;
+  f.operands[1][2 * 2 + 0] = -0.5f;
+
+  /* Q[n=0, hq, tq, d=1] triggers exact cancellation on dK[0, hkv=0, tk=0, d=1]:
+     (hq=0,tq=0)=+big, (hq=0,tq=1)=-big, (hq=1,tq=0)=+1.0. */
+  f.operands[0][(0u * 3u + 0u) * 2u + 1u] = big;
+  f.operands[0][(0u * 3u + 1u) * 2u + 1u] = -big;
+  f.operands[0][(1u * 3u + 0u) * 2u + 1u] = 1.0f;
+
+  /* upstream[n=0, hq, tq, d=0] = 1.0 for active rows;
+     upstream[n=0, hq, tq, d=1] triggers exact cancellation on dV[0, hkv=0, tk=0, d=1]:
+     (hq=0,tq=0)=+2*big, (hq=0,tq=1)=-2*big, (hq=1,tq=0)=+1.0. */
+  f.upstream[(0u * 3u + 0u) * 2u + 0u] = 1.0f;
+  f.upstream[(0u * 3u + 1u) * 2u + 0u] = 1.0f;
+  f.upstream[(0u * 3u + 2u) * 2u + 0u] = 1.0f;
+  f.upstream[(1u * 3u + 0u) * 2u + 0u] = 1.0f;
+  f.upstream[(0u * 3u + 0u) * 2u + 1u] = 2.0f * big;
+  f.upstream[(0u * 3u + 1u) * 2u + 1u] = -2.0f * big;
+  f.upstream[(1u * 3u + 0u) * 2u + 1u] = 1.0f;
+
+  dispatch(runtime, &f.backward);
+
+  const float scale = 1.0f / sqrtf(2.0f);
+  const float p3 = 1.0f / 3.0f;
+  const float mean3 =
+      ((0.0f + p3 * 3.0f) + p3 * (-1.0f)) + p3 * (-2.0f);
+  const float t0 = ((p3 * (3.0f - mean3)) * scale) * big;
+  const float t1 = ((p3 * (-1.0f - mean3)) * scale) * (3.0f * big);
+  const float t2 = ((p3 * (-2.0f - mean3)) * scale) * (-0.5f);
+  const float dq_expected = ((0.0f + t0) + t1) + t2;
+  const float dq_reversed = ((0.0f + t2) + t1) + t0;
+  CHECK(float_bits(dq_expected) != float_bits(dq_reversed));
+  CHECK(float_bits(f.gradients[0][(0u * 3u + 2u) * 2u + 0u]) ==
+        float_bits(dq_expected));
+
+  const float dk_head_major =
+      (((0.0f + (1.0f * scale) * big) + (1.0f * scale) * (-big)) +
+       (1.0f * scale) * 1.0f);
+  const float dk_token_major =
+      (((0.0f + (1.0f * scale) * big) + (1.0f * scale) * 1.0f) +
+       (1.0f * scale) * (-big));
+  CHECK(float_bits(dk_head_major) != float_bits(dk_token_major));
+  CHECK(float_bits(f.gradients[1][0u * 2u + 1u]) == float_bits(dk_head_major));
+
+  const float dv_head_major =
+      (((0.0f + 0.5f * (2.0f * big)) + 0.5f * (-2.0f * big)) + 0.5f * 1.0f);
+  const float dv_token_major =
+      (((0.0f + 0.5f * (2.0f * big)) + 0.5f * 1.0f) + 0.5f * (-2.0f * big));
+  CHECK(float_bits(dv_head_major) != float_bits(dv_token_major));
+  CHECK(float_bits(f.gradients[2][0u * 2u + 1u]) == float_bits(dv_head_major));
+}
+
 int main(int argc, char **argv) {
   const int oracle = argc == 2 && strcmp(argv[1], "--oracle") == 0;
   CHECK(argc == 1 || oracle);
@@ -643,9 +785,11 @@ int main(int argc, char **argv) {
   if (!oracle) {
     check_metadata(runtime);
     check_malformed(runtime);
+    check_metadata_aliasing(runtime);
     check_numeric_errors(runtime);
     check_fenv(runtime);
     check_strided_tables(runtime);
+    check_attention_accumulation_order(runtime);
   }
   check_cases(runtime, oracle);
   et_kernel_runtime_destroy(runtime);
