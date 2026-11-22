@@ -107,11 +107,20 @@ static int aligned_span(const void *p, size_t alignment, size_t bytes) {
          (uintptr_t)p <= UINTPTR_MAX - bytes;
 }
 
+static int spans_overlap(const void *a, size_t a_bytes, const void *b,
+                         size_t b_bytes) {
+  if (a_bytes == 0u || b_bytes == 0u)
+    return 0;
+  const uintptr_t left = (uintptr_t)a;
+  const uintptr_t right = (uintptr_t)b;
+  if (left > UINTPTR_MAX - a_bytes || right > UINTPTR_MAX - b_bytes)
+    return 1;
+  return left < right + b_bytes && right < left + a_bytes;
+}
+
 static int overlap(const et_kernel_tensor_view_v1 *a,
                    const et_kernel_tensor_view_v1 *b) {
-  const uintptr_t left = (uintptr_t)a->data;
-  const uintptr_t right = (uintptr_t)b->data;
-  return left < right + b->byte_length && right < left + a->byte_length;
+  return spans_overlap(a->data, a->byte_length, b->data, b->byte_length);
 }
 
 static int32_t fail(et_kernel_error *error, et_kernel_error_category category,
@@ -147,6 +156,61 @@ static const et_kernel_tensor_view_v1 *view_at(tensor_table table,
                                                size_t index) {
   return (const et_kernel_tensor_view_v1 *)((const unsigned char *)table.base +
                                             index * table.stride);
+}
+
+static size_t bounded_text_bytes(const char *text) {
+  size_t len = 0u;
+  while (len <= ET_KERNEL_MAX_SYMBOL_BYTES && text[len] != '\0')
+    ++len;
+  return len + 1u;
+}
+
+static int output_aliases_metadata(const et_kernel_tensor_view_v1 *view,
+                                   const et_kernel_call_v1 *call,
+                                   tensor_table in, tensor_table out,
+                                   const et_kernel_error *error) {
+  const void *data = view->data;
+  const size_t bytes = view->byte_length;
+  const et_kernel_request_v1 *request = call->request;
+  if (spans_overlap(data, bytes, call, call->struct_size) ||
+      spans_overlap(data, bytes, request, request->struct_size) ||
+      spans_overlap(data, bytes, request->shape,
+                    request->rank * sizeof(*request->shape)) ||
+      spans_overlap(data, bytes, call->capability,
+                    bounded_text_bytes(call->capability)) ||
+      spans_overlap(data, bytes, request->operation,
+                    bounded_text_bytes(request->operation)) ||
+      spans_overlap(data, bytes, request->dtype,
+                    bounded_text_bytes(request->dtype)) ||
+      spans_overlap(data, bytes, request->device,
+                    bounded_text_bytes(request->device)) ||
+      spans_overlap(data, bytes, in.base, in.bytes) ||
+      spans_overlap(data, bytes, out.base, out.bytes) ||
+      (error != NULL && spans_overlap(data, bytes, error, sizeof(*error))))
+    return 1;
+  for (size_t j = 0; j < in.count; ++j) {
+    const et_kernel_tensor_view_v1 *entry = view_at(in, j);
+    if ((entry->rank != 0u &&
+         spans_overlap(data, bytes, entry->shape,
+                       entry->rank * sizeof(*entry->shape))) ||
+        spans_overlap(data, bytes, entry->dtype,
+                      bounded_text_bytes(entry->dtype)) ||
+        spans_overlap(data, bytes, entry->device,
+                      bounded_text_bytes(entry->device)))
+      return 1;
+  }
+  for (size_t j = 0; j < out.count; ++j) {
+    const et_kernel_tensor_view_v1 *entry = view_at(out, j);
+    if ((entry->rank != 0u &&
+         spans_overlap(data, bytes, entry->shape,
+                       entry->rank * sizeof(*entry->shape))) ||
+        spans_overlap(data, bytes, entry->dtype,
+                      bounded_text_bytes(entry->dtype)) ||
+        spans_overlap(data, bytes, entry->device,
+                      bounded_text_bytes(entry->device)))
+      return 1;
+  }
+  return 0;
 }
 
 static int32_t validate_view(const et_kernel_tensor_view_v1 *view,
@@ -314,6 +378,10 @@ static int32_t validate_tables(const et_kernel_call_v1 *call, enum primitive op,
   }
   for (size_t i = 0; i < out.count; ++i) {
     const et_kernel_tensor_view_v1 *view = view_at(out, i);
+    if (output_aliases_metadata(view, call, in, out, error))
+      return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
+                  ET_KERNEL_CODE_ALIASING_OUTPUT, operation,
+                  "output aliases live K1 metadata");
     for (size_t j = 0; j < in.count; ++j) {
       if (overlap(view, view_at(in, j)))
         return fail(error, ET_KERNEL_ERROR_INVALID_ARGUMENT,
@@ -731,10 +799,15 @@ static void invoke_call(const et_kernel_call_v1 *call) {
       !evaluate(call, op, backward, result))
     return;
   const tensor_table out = outputs(call);
+  void *destinations[MAX_OUTPUTS];
+  size_t lengths[MAX_OUTPUTS];
   for (size_t i = 0; i < out.count; ++i) {
     const et_kernel_tensor_view_v1 *view = view_at(out, i);
-    memcpy(view->data, result[i], view->byte_length);
+    destinations[i] = view->data;
+    lengths[i] = view->byte_length;
   }
+  for (size_t i = 0; i < out.count; ++i)
+    memcpy(destinations[i], result[i], lengths[i]);
 }
 
 static const et_kernel_provider_v1 provider = {
