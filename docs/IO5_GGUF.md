@@ -8,8 +8,7 @@ model construction, live-state ingress or training. The delivered training path
 remains Eshkol-native. GGUF metadata cannot select executable behavior.
 
 The safetensors predecessor merged through PR #217. The bounded GGUF converter
-and mandatory supported GGML witness merged through PR #240. Live model/state
-integration remains a later IO5 gate.
+and mandatory supported GGML witness merged through PR #240.
 [Supported IO5 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45068055065/job/137349299032)
 IO5 remains active; model-name mapping and live model/state integration are later
 gates. Neither format slice establishes full trainer-state or resume equivalence.
