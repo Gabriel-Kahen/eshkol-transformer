@@ -1,7 +1,6 @@
 # PA4 bounded attention candidate
 
-Status: **opt-in candidate with independently reviewed native parity and
-measured forward improvement on the fixed ten-shape comparison**.
+Status: **opt-in candidate on the fixed ten-shape attention contract**.
 
 ## Contract and frozen baseline
 
@@ -10,30 +9,33 @@ The baseline is `native/a2_attention_provider.c` at commit
 `fdb4ca172ca7aa282e787ff42b2998592c8b77a30f67d35680f7e38b2f550b02`.
 The candidate is an explicitly linked, separate `et_pa4_kernel_provider_v1`
 compiled from the current source with `ET_PA4_ATTENTION_CANDIDATE`.
-The default A2 build retains `et_a2_kernel_provider_v1`. The candidate changes
-only forward attention invocation; backward attention, RoPE, validation preflight,
-and the ten advertised attention and six RoPE capability rows remain the A2
-contract in [A2_ATTENTION.md](A2_ATTENTION.md). Provider and attention implementation
+The default A2 build retains `et_a2_kernel_provider_v1`. PA4 uses row scratch
+for forward and backward attention invocation and preflight. RoPE and the ten
+advertised attention and six RoPE capability rows follow the A2 contract.
+[A2_ATTENTION.md](A2_ATTENTION.md) describes that contract. Provider and attention implementation
 identity identify this as `pa4.cpu-f32.row-scratch.candidate` and
 `pa4.cpu-f32.row-scratch`; its evidence string explicitly says it is not admitted.
 
 Only exact `cpu` f32 dense zero-offset tensors and the A2 shapes, masks, positions,
 arithmetic order, allocation-free dispatch, and failure atomicity are claimed.
-For each forward row, a fixed three-element stack scratch stores scores and
-unnormalized weights. Score accumulation and scaling, maximum-subtracted softmax
-sum order, probability division, and output accumulation order are unchanged.
-The candidate validator rejects direct calls with `Tk > 3` as unsupported before
-any output write. This excludes an unverified A2 direct-provider case; it does
-not enlarge the K1-advertised shape set or introduce a fallback. Preflight still
-rejects nonfinite intermediate values before invocation.
+Three-element stack arrays cache scores and softmax weights. Forward preflight
+and backward also cache admission flags and probabilities. Backward caches the
+upstream/value dot products and their probability-weighted mean. Forward and dQ
+sum in key order. Each dK and dV element sums in query-head-major, then query
+position order. Backward preflight uses four head dimensions of gradient scratch
+per KV head and checks each accumulation. All advertised shapes fit one tile.
+Wider direct calls repeat the row calculation per tile to bound stack use.
+The candidate validator rejects direct forward and backward calls with `Tk > 3`
+and rejects nonfinite preflight intermediates before writing outputs.
 
 `scripts/test-pa4.sh` builds the frozen baseline and candidate separately, runs
 the A2 reference and finite-difference provider suite against the candidate,
 then checks exact output bits against the baseline for forward and backward on
-all ten advertised shapes. The paired test also exercises direct `Tk > 3`
-rejection. A2 baseline and candidate are selected explicitly at link time;
-neither is dynamically discovered. These native checks alone do not establish
-full A2 integration or PA4 acceptance.
+all ten advertised shapes. It also covers fully masked rows, intermediate and
+gradient overflow with untouched outputs, a multi-tile direct call, and direct
+`Tk > 3` rejection in both directions. The script compares same-basename `-O2`
+default and frozen A2 objects byte for byte, and checks the candidate's export and
+undefined allocator symbols. The test links both providers explicitly.
 
 ## Bounded validation, 2026-11-14
 

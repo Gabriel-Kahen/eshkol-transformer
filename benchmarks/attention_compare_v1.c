@@ -56,8 +56,32 @@ static void fill(float *values, size_t count, unsigned role) {
     values[i] = (float)((int)((i * 7 + role * 3) % 23) - 11) / 16.0f;
 }
 
+static void run_batch(const et_kernel_provider_v1 *provider,
+                      et_kernel_runtime *runtime, const et_kernel_call_v1 *call,
+                      const et_kernel_call_v1 *next, int invoke, unsigned count,
+                      et_kernel_error *error) {
+  if (invoke) {
+    if (next) {
+      for (unsigned i = 0; i < count; ++i) {
+        provider->invoke_call(call);
+        provider->invoke_call(next);
+      }
+    } else {
+      for (unsigned i = 0; i < count; ++i) provider->invoke_call(call);
+    }
+  } else if (next) {
+    for (unsigned i = 0; i < count; ++i) {
+      if (et_kernel_runtime_dispatch(runtime, call, error) ||
+          et_kernel_runtime_dispatch(runtime, next, error)) fail(error->message);
+    }
+  } else {
+    for (unsigned i = 0; i < count; ++i)
+      if (et_kernel_runtime_dispatch(runtime, call, error)) fail(error->message);
+  }
+}
+
 int main(int argc, char **argv) {
-  if (argc != 8) fail("usage: attention-compare ROW forward|backward dispatch|invoke WARMUP ITERATIONS PAIRS paired|a2|pa4");
+  if (argc != 8) fail("usage: attention-compare ROW forward|backward|joint dispatch|invoke WARMUP ITERATIONS PAIRS paired|a2|pa4");
   unsigned row = number(argv[1], 9), warmup = number(argv[4], 100000);
   unsigned iterations = number(argv[5], 1000000);
   unsigned pairs = number(argv[6], 100);
@@ -67,7 +91,8 @@ int main(int argc, char **argv) {
   if ((!invoke && strcmp(argv[3], "dispatch")) || pairs < 2 || pairs % 2)
     fail("unsupported scope or unbalanced pair count");
   int backward = strcmp(argv[2], "backward") == 0;
-  if ((!backward && strcmp(argv[2], "forward")) || !iterations)
+  int joint = strcmp(argv[2], "joint") == 0;
+  if ((!backward && !joint && strcmp(argv[2], "forward")) || !iterations)
     fail("unsupported operation or zero iterations");
   const uint64_t *s = shapes[row];
   size_t n = s[0], hq = s[1], hkv = s[2], tq = s[3], tk = s[4], d = s[5];
@@ -92,19 +117,27 @@ int main(int argc, char **argv) {
       view(kp,n*tk*8,"i64",2,kps), view(mask,n*tq*tk,"bool",3,ms),
       view(upstream,nq*4,"f32",4,qs)};
   et_kernel_tensor_view_v1 outputs[] = {
-      view(backward ? dq : y,nq*4,"f32",4,qs),
+      view(y,nq*4,"f32",4,qs), view(dq,nq*4,"f32",4,qs),
       view(dk,nk*4,"f32",4,ks), view(dv,nk*4,"f32",4,ks)};
-  et_kernel_request_v1 request = {
-      .struct_size = sizeof(request),
-      .operation = backward ? "causal-attention.backward" : "causal-attention.forward",
-      .dtype = "f32", .device = "cpu", .rank = 6, .shape = s, .deterministic = 1};
-  et_kernel_call_v1 call = {
-      .struct_size = sizeof(call), .capability = "kernel.causal-attention",
-      .request = &request, .input_count = backward ? 7 : 6,
-      .input_stride = sizeof(inputs[0]),
-      .input_bytes = (backward ? 7 : 6)*sizeof(inputs[0]), .inputs = inputs,
-      .output_count = backward ? 3 : 1, .output_stride = sizeof(outputs[0]),
-      .output_bytes = (backward ? 3 : 1)*sizeof(outputs[0]), .outputs = outputs};
+  et_kernel_request_v1 requests[2];
+  et_kernel_call_v1 calls[2];
+  for (size_t b = 0; b < 2; ++b) {
+    size_t input_count = 6 + b, output_count = b ? 3 : 1;
+    requests[b] = (et_kernel_request_v1){
+        .struct_size = sizeof(requests[b]),
+        .operation = b ? "causal-attention.backward" : "causal-attention.forward",
+        .dtype = "f32", .device = "cpu", .rank = 6, .shape = s, .deterministic = 1};
+    calls[b] = (et_kernel_call_v1){
+        .struct_size = sizeof(calls[b]), .capability = "kernel.causal-attention",
+        .request = &requests[b], .input_count = input_count,
+        .input_stride = sizeof(inputs[0]),
+        .input_bytes = input_count * sizeof(inputs[0]), .inputs = inputs,
+        .output_count = output_count, .output_stride = sizeof(outputs[0]),
+        .output_bytes = output_count * sizeof(outputs[0]), .outputs = outputs + b};
+  }
+  const et_kernel_call_v1 *call = &calls[backward];
+  const et_kernel_call_v1 *next = joint ? &calls[1] : NULL;
+  const size_t output_end = backward || joint ? 4 : 1;
   const et_kernel_provider_v1 *providers[] = {
       et_a2_kernel_provider_v1(), et_pa4_kernel_provider_v1()};
   const char *names[] = {"a2.cpu-f32.serial", "pa4.cpu-f32.row-scratch.candidate"};
@@ -114,10 +147,14 @@ int main(int argc, char **argv) {
   for (unsigned p = 0; p < 2; ++p) {
     if (selected >= 0 && (int)p != selected) continue;
     if (strcmp(providers[p]->name,names[p])) fail("unexpected provider");
-    if (et_kernel_runtime_discover(resolve,(void *)providers[p],&runtime[p],&error) ||
-        et_kernel_runtime_capability_require(runtime[p],call.capability,&request,&entry,&error) ||
-        et_kernel_runtime_dispatch(runtime[p],&call,&error) ||
-        providers[p]->validate_call(&call,&error)) fail(error.message);
+    if (et_kernel_runtime_discover(resolve,(void *)providers[p],&runtime[p],&error))
+      fail(error.message);
+    for (int b = backward; b <= backward + joint; ++b) {
+      if (et_kernel_runtime_capability_require(runtime[p],calls[b].capability,
+                                               &requests[b],&entry,&error) ||
+          et_kernel_runtime_dispatch(runtime[p],&calls[b],&error) ||
+          providers[p]->validate_call(&calls[b],&error)) fail(error.message);
+    }
   }
   /* Calls and all inputs stay unchanged after successful K1/provider preflight.
      Only disjoint output storage is overwritten. Every measured batch's output
@@ -126,22 +163,14 @@ int main(int argc, char **argv) {
   for (unsigned pair = 0; pair < (selected < 0 ? pairs : 1); ++pair) {
     for (unsigned slot = 0; slot < (selected < 0 ? 2u : 1u); ++slot) {
       unsigned p = selected < 0 ? (pair % 2) ^ slot : (unsigned)selected;
-      for (unsigned i = 0; i < warmup; ++i) {
-        if (invoke) providers[p]->invoke_call(&call);
-        else if (et_kernel_runtime_dispatch(runtime[p],&call,&error)) fail(error.message);
-      }
+      run_batch(providers[p],runtime[p],call,next,invoke,warmup,&error);
       uint64_t start = now_ns();
-      if (invoke) {
-        for (unsigned i = 0; i < iterations; ++i) providers[p]->invoke_call(&call);
-      } else {
-        for (unsigned i = 0; i < iterations; ++i)
-          if (et_kernel_runtime_dispatch(runtime[p],&call,&error)) fail(error.message);
-      }
+      run_batch(providers[p],runtime[p],call,next,invoke,iterations,&error);
       uint64_t elapsed = now_ns() - start;
       if (!elapsed) fail("nonpositive duration");
       (void)printf("%s{\"pair\":%u,\"slot\":%u,\"provider\":\"%s\",\"elapsed_ns\":%" PRIu64 ",\"output_bits\":\"",
                    pair || slot ? "," : "",pair,slot,names[p],elapsed);
-      for (size_t t = 0; t < call.output_count; ++t) {
+      for (size_t t = backward; t < output_end; ++t) {
         const float *values = outputs[t].data;
         for (size_t i = 0; i < outputs[t].byte_length/4; ++i) {
           uint32_t bits;

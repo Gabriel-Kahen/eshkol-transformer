@@ -49,6 +49,16 @@ class ComparisonFormatTests(unittest.TestCase):
             with self.subTest(data=malformed[-40:]),self.assertRaises(compare.codec.BenchmarkFormatError):
                 compare.load_definition(malformed)
 
+    def test_joint_definition_is_opt_in_and_ordered(self):
+        path = compare.ROOT/'benchmarks/attention_compare_v1_joint.json'
+        self.assertEqual(compare.load_definition(path), compare.JOINT_CONTRACT)
+        self.assertEqual(compare.encode_definition(compare.JOINT_CONTRACT), path.read_bytes())
+        for definition in [dict(compare.CONTRACT, operations=['forward','backward','joint']),
+                           dict(compare.JOINT_CONTRACT, operations=['joint','forward','backward']),
+                           dict(compare.JOINT_CONTRACT, operations=['joint'])]:
+            with self.assertRaises(compare.codec.BenchmarkFormatError):
+                compare.encode_definition(definition)
+
     def test_native_protocol_parity_order_types_and_nonfinite(self):
         samples = [{'pair':p,'slot':s,'provider':compare.PROVIDERS[(p%2)^s],
             'elapsed_ns':10,'output_bits':'3f80000040000000'} for p in range(2) for s in range(2)]
@@ -71,6 +81,18 @@ class ComparisonFormatTests(unittest.TestCase):
                 compare.native_output(json.dumps(value).encode(),compare.base.SHAPES[0],'forward',2)
         with self.assertRaises(compare.codec.BenchmarkFormatError):
             compare.native_output(b'{"version":1,"version":1,"samples":[]}',compare.base.SHAPES[0],'forward',2)
+
+    def test_joint_witness_requires_both_finite_output_parts(self):
+        shape = compare.base.SHAPES[0]
+        y = '3f80000040000000'
+        gradients = '3f800000' * 6
+        bits = y + gradients
+        self.assertEqual(compare.witness(bits, shape, 'joint'),
+                         compare.hashlib.sha256(bytes.fromhex(bits)).hexdigest())
+        for invalid in [bits[8:], bits + y, '00000000' * 2 + gradients,
+                        y + '00000000' * 6, y + '7f800000' + gradients[8:], None]:
+            with self.subTest(bits=invalid), self.assertRaises(compare.codec.BenchmarkFormatError):
+                compare.witness(invalid, shape, 'joint')
 
     def test_support_label_requires_observed_environment_and_declared_image(self):
         env = {'os_release':'ID=ubuntu\nVERSION_ID="22.04"\n','architecture':'x86_64'}
@@ -136,6 +158,33 @@ class NativeComparisonTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode,0)
                 self.assertEqual(result.stdout,b'')
                 self.assertIn(b'attention benchmark:',result.stderr)
+
+    def test_real_joint_report_matches_both_standalone_witnesses(self):
+        definition = dict(compare.JOINT_CONTRACT, warmup=1, iterations=3, pairs=2, rss_pairs=2)
+        definition_path = self.directory/'joint-definition.json'
+        definition_path.write_bytes(compare.encode_definition(definition))
+        report_path = self.directory/'joint-report.json'
+        with mock.patch.object(compare, 'build', return_value=self.artifacts):
+            compare.run(definition_path, report_path, 'clang', self.directory, None)
+        report = compare.load_report(report_path)
+        cases = report['volatile']['cases']
+        self.assertEqual(len(cases), 60)
+        self.assertEqual(len(report['volatile']['aggregate']), 6)
+        for index, ordinary in enumerate(self.report['volatile']['cases']):
+            combined = cases[(index // 4) * 6 + index % 4]
+            self.assertEqual(ordinary['output_bits'], combined['output_bits'])
+        for index in range(0, 60, 6):
+            for slot in range(2):
+                forward, backward, joint = cases[index + slot:index + 6:2]
+                self.assertEqual(joint['output_bits'], forward['output_bits'] + backward['output_bits'])
+
+        joint = cases[4]
+        joint['output_bits'] = '3f800000' + joint['output_bits'][8:]
+        joint['output_sha256'] = compare.witness(joint['output_bits'], joint['shape'], 'joint')
+        for sample in joint['samples'] + joint['rss_samples']:
+            sample['output_sha256'] = joint['output_sha256']
+        with self.assertRaisesRegex(compare.codec.BenchmarkFormatError, 'joint/standalone parity mismatch'):
+            compare.encode_report(report)
 
     def test_report_schema_rejects_parity_timing_provenance_and_summary_forgery(self):
         mutations = [lambda r:r['stable'].update(definition_sha256='0'*64),
