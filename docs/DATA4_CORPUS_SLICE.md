@@ -67,9 +67,9 @@ a validated D1 summary and exact manifest bytes from the same trusted corpus.
 An unbound v1.0 report fails with `version-mismatch`. Regenerate the v2.0 report
 from the original documents, tokenizer and options in a fresh directory.
 
-D1 has no document boundaries, so the report is the only record of
-which retained source contributed each flat segment. Token offsets are not
-recorded in this slice. Content SHA-256 records support exact contamination
+D1 stores one flat token stream. The report gives the retained source IDs in
+input order. Token offsets and document boundaries are outside the format.
+Content SHA-256 records support exact contamination
 matching only; benchmark-aware contamination checks remain EVAL5 work.
 
 ## Limits and next gate
@@ -103,14 +103,14 @@ P1 link repair and strict source compile remain historical evidence, not the
 basis for this clean-gate result. These are local measurements, not release
 acceptance.
 
-The required shared CI engine now registers the dedicated `data4-corpus` suite
-with `make test-ci-data4-after-build`. It runs the unchanged source gate first
+The required shared CI engine registers the dedicated `data4-corpus` suite
+with `make test-ci-data4-after-build`. It runs the source gate first
 (including malformed shape, limit, cycle, and token-overflow negatives), then
-the unchanged same-aggregate native gate. Its prerequisite plan is clean and
+the same-aggregate native gate. Its prerequisite plan is clean and
 configuration only: both gates build their own inputs and consume no canonical
 package artifacts. Both commands also remain mandatory in the full test and
 acceptance-predecessor entry points. The engine and exact-evidence inventories
-now require 22 suites and 38 commands; prior evidence without DATA4 is rejected.
+require the DATA4 suite and its two commands.
 DATA4 code, gate, and oracle changes retain fail-closed full-suite selection,
 while allowlisted prose-only changes retain the existing selection rules.
 
