@@ -7,9 +7,9 @@ changing that implementation. It performs no provider lookup, P1 registration,
 model construction, live-state ingress or training. The delivered training path
 remains Eshkol-native. GGUF metadata cannot select executable behavior.
 
-The safetensors predecessor is merged through PR #217. This GGUF slice has
-independent source/test approval and a required supported CI lane; integration
-and exact hosted evidence are tracked in [PR #222](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/222).
+The safetensors predecessor merged through PR #217. The bounded GGUF converter
+and mandatory supported GGML witness merged through PR #240.
+[Supported IO5 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45068055065/job/137349299032)
 IO5 remains active; model-name mapping and live model/state integration are later
 gates. Neither format slice establishes full trainer-state or resume equivalence.
 
@@ -200,9 +200,11 @@ It disables the CPU backend, examples and upstream tests, then builds just the
 11-action `ggml-base` target with at most two jobs. [Supported IO5 job 132956162216](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814/job/132956162216)
 passed all 22 IO5 tests, including the native witness, and five isolation tests
 on the independently reviewed candidate. The same run failed in the separate
-D2 shard-loader job at its then-current 300-second resource watchdog. Current
-main contains the bounded D2 watchdog follow-up from PR #235. PR #222 requires
-fresh aggregate CI on the reconciled tree.
+D2 shard-loader job at its then-current 300-second resource watchdog. The
+reconciled tree includes the bounded D2 watchdog follow-up from PR #235.
+All 26 required jobs passed in PR #240, and merged main reused the exact-tree
+evidence.
+[Hosted validation](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45068055065)
 
 Independent source/test review approved the converter after the descriptor-order
 acceptance fix and its regression. Local validation of the reconciled tree uses

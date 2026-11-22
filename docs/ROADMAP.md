@@ -11,6 +11,11 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 - The bounded installed [DATA4 report commands](DATA4_INSTALLED_REPORT.md)
   passed the required corpus, model-composition and CLI3 command suites.
   Binding the report to the D1 manifest bytes remains open.
+- Main includes [bounded GGUF interchange](IO5_GGUF.md), the
+  [opt-in PA4 comparator](PA4_ATTENTION.md), the optional D2 resource phase,
+  and the focused O2 retirement coverage. All 26 required hosted jobs passed
+  on the integrated tree, and main reused that exact evidence.
+  [Integration PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240)
 - Full CPU-v1 admission depends on trained save/reload and continuation,
   public terminal generation, and supported E3 numerical and resource
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
@@ -619,12 +624,15 @@ D2 runner or resource assertions. Local CI tests (132) and topology passed.
 PR #238's full hosted run `44140870348` passed, and merged-main run
 `45066941452` at `dfd881c5d` reused the exact-tree evidence.
 
-The optional resource-only D2 phase from draft PR #229 is ported to the
-current main baseline as `make test-ci-dataset-resources-after-build`. It
+The optional resource-only D2 phase landed as
+`make test-ci-dataset-resources-after-build`. It
 uses the current 300/450-second limits and D2 observer, exact counters,
-topology, and retained-arena assertions. The original resource-only hosted
-run `43924477682` validated the earlier draft tree. A fresh compiled run of
-the port and standard PR CI are pending.
+topology, and retained-arena assertions. The pinned compiled run of port
+`c7a31ed5` passed all four resource probes in 1, 187, 86, and 12 seconds.
+The process FD peak was four, and the retained arena was 5,570,560 bytes at
+both 1,024 and 8,192 iterations. The standard shard-loader and aggregate
+checks passed on the integrated tree.
+[Hosted results](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45068055065)
 
 The historical R0 row remains complete. [Successor-pin R0 adoption](audits/R0_ESHKOL_CAPABILITY_AUDIT.md)
 is in **review**: the `fe9dfd5` supported-image audit traced inherited AOT
@@ -3334,14 +3342,14 @@ publication, public G2 and continuation remain pending.
 | MP4 | True f32 plus f16/bf16 policy, master weights and loss scaling | TR3, K1 | Numerical and storage-size evidence; overflow recovery tests | planned |
 | AC4 | Activation checkpointing and memory-bounded training | TR3 | Same update within tolerance and measured memory reduction | planned |
 | AMD4 | AMD HIP/rocBLAS backend and device observability | K1, TR3, B0 | Direct device execution, parity and benchmark evidence | planned |
-| PA4 | [Bounded CPU-f32 forward attention candidate](PA4_ATTENTION.md) | A2, B0 | The separately linked candidate preserves exact forward and backward output bits on all ten admitted shapes. The [paired native comparison](ATTENTION_COMPARISON_RESULTS.md) on clean `d1c5e4d7` measured 9.675% lower total forward K1 dispatch time and 50.004% lower prevalidated invocation time for that fixed shape mix. Four forward dispatch ratio ranges cross parity, backward invocation was 3.179% slower, and process RSS ranges overlapped. Joint forward/backward and training throughput remain unmeasured. [PR #224](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/224) combines the opt-in candidate, [comparison format](ATTENTION_COMPARISON.md), tests, and measured results. Its prior [supported CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43760593834) passed; the current-main composition requires fresh CI. | active; candidate integration |
+| PA4 | [Bounded CPU-f32 forward attention candidate](PA4_ATTENTION.md) | A2, B0 | The separately linked candidate preserves exact forward and backward output bits on all ten admitted shapes. The [paired native comparison](ATTENTION_COMPARISON_RESULTS.md) on clean `d1c5e4d7` measured 9.675% lower total forward K1 dispatch time and 50.004% lower prevalidated invocation time for that fixed shape mix. Four forward dispatch ratio ranges cross parity, backward invocation was 3.179% slower, and process RSS ranges overlapped. Joint forward/backward and training throughput remain unmeasured. [PR #224](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/224) combines the opt-in candidate, [comparison format](ATTENTION_COMPARISON.md), tests, and measured results. The opt-in comparator merged through [PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240) with exact hosted CI. Default PA4 admission remains open. | active |
 | DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | [DATA4-A bounded corpus selection](DATA4_CORPUS_SLICE.md) is a build-only candidate: raw length filtering, first-occurrence exact deduplication, per-document provenance/SHA-256, and a deterministic checksummed in-memory report composed with T2 staging and D1 publication. The clean one-command native gate passed from `6b885150` with two-run artifact parity, T2/D1 readback, preexisting-target rejection, and D1 corruption detection. The dedicated required `data4-corpus` CI suite now runs the unchanged source gate before the native gate; topology, full/acceptance inventories, and exact-evidence requirements include both commands. Exact PR #220 head `562cb353` passed hosted full run `43743963935` including `data4-corpus`. A separate [DATA4-B installed report candidate](DATA4_INSTALLED_REPORT.md) stages opt-in `corpus prepare`/`report-validate` commands, C1 no-replace sidecar publication and aggregate-only report validation; independent source/workflow review accepted; exact `2e656717` supported diagnostic run `43935284566` passed 32 source checks, the CLI3 package/manifest gate and 9/9 installed commands, with both evidence seals verified. The transient binary was hashed but not uploaded. Ordinary full CI run `43941165585` failed M3's unchanged predecessor-builder source pin after the installed CLI3 command suite passed; the successor-only builder split restored the M3 predecessor pin and was integrated through PR #233. Exact-head run `43952346894` and merged-main run `43965845021` passed the required model-composition, DATA4 corpus and CLI3 command gates. This accepts the bounded installed report slice; full DATA4 acceptance beyond that slice remains pending. | active |
 
 ## Wave 5 — ecosystem expansion
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| IO5 | [Safetensors](IO5_SAFETENSORS.md) and [GGUF](IO5_GGUF.md) safe interchange | C1, M3 | Bounded data-only C1 1.0 CPU-f32 safetensors predecessor merged through PR #217. Reviewed GGUF v3 LE/F32/rank1–4 slice preserves semantic metadata/checksum and adds explicit plain import, checked offsets/alignment/padding and corruption negatives. [PR #222](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/222) requires the native reader/writer witness built from a SHA-256-pinned GGML source archive. The [supported IO5 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814/job/132956162216) passed all 22 IO5 tests with the native witness. That run fell short of aggregate acceptance at the separate D2 resource watchdog. Current-main reconciliation preserves the 22 compiled suites and adds IO5 to the required evidence inventory. Exact reconciled hosted CI and live model/state ingress remain pending | active |
+| IO5 | [Safetensors](IO5_SAFETENSORS.md) and [GGUF](IO5_GGUF.md) safe interchange | C1, M3 | Bounded data-only C1 1.0 CPU-f32 safetensors predecessor merged through PR #217. Reviewed GGUF v3 LE/F32/rank1–4 slice preserves semantic metadata/checksum and adds explicit plain import, checked offsets/alignment/padding and corruption negatives. [PR #222](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/222) requires the native reader/writer witness built from a SHA-256-pinned GGML source archive. The [supported IO5 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814/job/132956162216) passed all 22 IO5 tests with the native witness. That run fell short of aggregate acceptance at the separate D2 resource watchdog. Current-main reconciliation preserves the 22 compiled suites and adds IO5 to the required evidence inventory. The bounded converter and mandatory native gate merged through [PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240) after all 26 required jobs passed. Live model/state ingress remains pending | active |
 | MOD5 | RMSNorm/SwiGLU/GQA/MQA/ALiBi/sliding-window model variants | M3 | Per-variant parity and training smoke tests | planned |
 | DIST5 | Data-parallel training and collective abstraction | TR3, K1 | Multi-process deterministic smoke and failure handling | planned |
 | EVAL5 | External evaluation adapters and contamination checks | E3, T2 | Reproducible benchmark manifests | planned |
