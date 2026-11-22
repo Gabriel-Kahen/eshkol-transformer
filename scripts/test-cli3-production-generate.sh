@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in cmp python3 realpath sha256sum tail; do require_command "${command}"; done
+for command in cc cmp python3 realpath sha256sum tail; do require_command "${command}"; done
 [[ $# == 1 ]] || die "usage: $0 DISK_BACKED_EVIDENCE_DIR"
 evidence="$(realpath -m -- "$1")"
 mkdir -p -- "${evidence}"
@@ -48,6 +48,7 @@ cmp "${PROJECT_ROOT}/native/cli3_generate_public_exports.txt" \
   "${scratch}/cli3.o.evidence/package-exports.txt"
 cmp "${PROJECT_ROOT}/native/cli3_generate_undefined_symbols.txt" \
   "${scratch}/cli3.o.evidence/undefined.txt"
+sha256sum "${scratch}/eshkol-transformer" >"${evidence}/binary-before.sha256"
 cat >"${scratch}/config.json" <<'JSON'
 {"config-schema-major":1,"config-schema-minor":0,"model.context-length":2,"model.hidden-size":4,"model.layer-count":1,"model.query-head-count":2,"model.vocabulary-size":256,"run.seed":1729,"training.accumulation-steps":2}
 JSON
@@ -78,6 +79,20 @@ phase_begin installed-corpus-validate \
   python3 -m unittest -v tests.cli3.test_installed_corpus_validate) \
   >"${evidence}/installed-corpus-validate.stdout" \
   2>"${evidence}/installed-corpus-validate.stderr"
+phase_begin installed-data4 \
+  "${evidence}/installed-data4.stdout" \
+  "${evidence}/installed-data4.stderr"
+cc -std=c11 -Wall -Wextra -Werror -fPIC -shared \
+  "${PROJECT_ROOT}/tests/cli3/write_fault.c" -ldl \
+  -o "${scratch}/data4-write-fault.so"
+(cd "${PROJECT_ROOT}" && env \
+  CLI3_DATA4_BINARY="${scratch}/eshkol-transformer" \
+  CLI3_DATA4_TOKENIZER="${scratch}/byte.t1" \
+  CLI3_DATA4_FAULT_SHIM="${scratch}/data4-write-fault.so" \
+  PYTHONDONTWRITEBYTECODE=1 \
+  python3 -m unittest -v tests.cli3.test_installed_data4) \
+  >"${evidence}/installed-data4.stdout" \
+  2>"${evidence}/installed-data4.stderr"
 phase_begin pretrain "${evidence}/pretrain.json"
 "${scratch}/eshkol-transformer" pretrain \
   --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
@@ -163,4 +178,7 @@ CLI3_GENERATE_EXPECTED=1 TMPDIR="${evidence}" \
   /usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3.sh" "${scratch}" \
   >"${evidence}/six-command-suite.stdout" \
   2>"${evidence}/six-command-suite.stderr"
+phase_begin tested-binary-unchanged
+sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
+printf 'CLI3-PRODUCTION-GENERATE-PASS\n' >"${evidence}/gate.pass"
 printf 'CLI3-PRODUCTION-GENERATE-PASS\n'

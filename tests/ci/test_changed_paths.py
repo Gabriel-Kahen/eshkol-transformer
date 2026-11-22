@@ -91,6 +91,35 @@ class ChangedPathSelectorTests(unittest.TestCase):
                            CI_PUSH_CREATED="false", CI_PUSH_DELETED="false")
                 self.assertTrue(ci_changed_paths.push_requires_full_suite(base, head, env, self.repository))
 
+    def test_data4_code_gates_and_oracles_require_full_suite(self) -> None:
+        paths = (
+            "internal/data4/lib/data4_corpus.esk",
+            "internal/data4/lib/data4_report_reader.esk",
+            "scripts/test-data4-source.sh",
+            "scripts/test-data4-native.sh",
+            "tests/data4/data4_runtime.esk",
+            "tests/data4/data4_same_aggregate_runtime.esk",
+            "tests/data4/check_native_report.py",
+            "tests/cli3/test_installed_data4.py",
+            "scripts/test-cli3-production-generate.sh",
+        )
+        base = self.base
+        for path in paths:
+            with self.subTest(path=path):
+                self._write(path, "changed\n")
+                head = self._commit(path)
+                self.assertTrue(ci_changed_paths.requires_full_suite(
+                    base, head, repository=self.repository))
+                base = head
+        self._write("docs/DATA4_CORPUS_SLICE.md", "report update\n")
+        docs = self._commit("DATA4 prose")
+        self.assertFalse(ci_changed_paths.requires_full_suite(
+            base, docs, repository=self.repository))
+        self._write("tests/data4/check_native_report.py", "oracle update\n")
+        mixed = self._commit("DATA4 mixed prose and oracle")
+        self.assertTrue(ci_changed_paths.requires_full_suite(
+            base, mixed, repository=self.repository))
+
     def test_mixed_prose_and_code_requires_full_suite(self) -> None:
         self._write("docs/guide.md", "updated\n")
         self._write("src/program.esk", "updated\n")

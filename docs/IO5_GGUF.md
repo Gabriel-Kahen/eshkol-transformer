@@ -159,11 +159,9 @@ with pinned Python 3.14.6 and Clang 21.1.8. It installs the combined reference l
 builds only `ggml-base` from the GGML commit and SHA-256 checked source archive
 below, and requires both the Python references and the native reader/writer witness.
 Missing references, native prefix, wrong compiler, source checksum, or native test
-failure fails the job. All 21 compiled matrix suites and their prerequisites remain
-unchanged. Suite evidence requires both
-the compiled matrix and IO5 job to succeed; the 22-suite inventory rejects old
-evidence or successful job lists missing GGUF, including exact-tree and docs-base
-reuse. The existing fail-closed change selector remains unchanged, with explicit
+failure fails the job. Suite evidence requires all 22 compiled matrix suites and
+the IO5 job to succeed. The 23-suite inventory rejects evidence and job lists
+missing GGUF in both exact-tree and docs-base reuse. The existing fail-closed change selector remains unchanged, with explicit
 tests that IO5 tool, test, lock and script changes require full coverage.
 
 ### Native reader/writer witness
@@ -199,16 +197,17 @@ run 43745109450 passed the 22-suite aggregation but skipped the native test beca
 `417a024b4fb6bc3116d41af7c067166a039bdf12` and source archive SHA-256
 `eb2fb2d60331e78de996f4fd3f9cee955cfcab2546b7ad64100444730f39ede7`.
 It disables the CPU backend, examples and upstream tests, then builds just the
-11-action `ggml-base` target with at most two jobs. The supported Clang 21.1.8
-hosted run remains the next evidence gate; local Clang 22.1.8 validation of this
-build path cannot substitute for it. The follow-up passes 22 IO5 tests with no
-skips, five isolation tests, 113 CI unit/mutation tests, and topology locally.
+11-action `ggml-base` target with at most two jobs. [Supported IO5 job 132956162216](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814/job/132956162216)
+passed all 22 IO5 tests, including the native witness, and five isolation tests
+on the independently reviewed candidate. The same run failed in the separate
+D2 shard-loader job at its then-current 300-second resource watchdog. Current
+main contains the bounded D2 watchdog follow-up from PR #235. PR #222 requires
+fresh aggregate CI on the reconciled tree.
 
-Local configured reference validation with the native prefix passed **22 IO5 +
-5 isolation groups**; 112 CI unit/mutation tests and the topology check also pass.
-Independent source/test review approved this GGUF slice after the descriptor-order
-acceptance fix and its regression. The CI/native follow-up is independently approved;
-the exact hosted result is recorded in PR #222, rather than inferred from local tests.
+Independent source/test review approved the converter after the descriptor-order
+acceptance fix and its regression. Local validation of the reconciled tree uses
+Python 3.14.6 with the pinned reference packages and Clang 22.1.8 for the SHA-256
+pinned native build. Supported Clang 21.1.8 validation is recorded separately.
 This evidence establishes no live M3 snapshot/load, forward output, provider
 ownership, optimizer/RNG/tokenizer state, resume equivalence, GPU execution,
 mixed precision or performance.

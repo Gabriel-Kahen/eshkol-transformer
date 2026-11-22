@@ -131,6 +131,18 @@ def jobs() -> list[dict[str, object]]:
     return result
 
 
+def jobs_with_skipped_diagnostics() -> list[dict[str, object]]:
+    result = jobs()
+    result.extend(
+        {
+            **successful_job(9004 + index, name),
+            "conclusion": "skipped",
+        }
+        for index, name in enumerate(sorted(evidence.OPTIONAL_DIAGNOSTIC_JOBS))
+    )
+    return result
+
+
 def report(**changes: object) -> dict[str, object]:
     value: dict[str, object] = {
         "version": 1,
@@ -217,7 +229,69 @@ def successful_docs_push_responses() -> dict[str, object]:
     }
 
 
+def skipped_docs_base_responses() -> dict[str, object]:
+    base_run_id = RUN_ID + 10
+    base_attempt = 1
+    base_jobs = [
+        {**successful_job(9201, "CI topology"), "run_attempt": base_attempt},
+        {
+            **successful_job(9202, "Full suites"),
+            "run_attempt": base_attempt,
+            "conclusion": "skipped",
+        },
+        {**successful_job(9203, evidence.FINAL_AGGREGATION), "run_attempt": base_attempt},
+    ]
+    base_jobs.extend(
+        {
+            **successful_job(9204 + index, name),
+            "run_attempt": base_attempt,
+            "conclusion": "skipped",
+        }
+        for index, name in enumerate(sorted(evidence.OPTIONAL_DIAGNOSTIC_JOBS))
+    )
+    responses = successful_push_responses()
+    responses.update({
+        commit_path_for(BASE_COMMIT): {
+            "sha": BASE_COMMIT,
+            "commit": {"tree": {"sha": BASE_TREE}},
+        },
+        runs_path_for(BASE_COMMIT): {
+            "total_count": 1,
+            "workflow_runs": [
+                run(run_id=base_run_id, attempt=base_attempt,
+                    commit=BASE_COMMIT, event="push")
+            ],
+        },
+        jobs_path_for(base_run_id, base_attempt): {
+            "total_count": len(base_jobs),
+            "jobs": base_jobs,
+        },
+        pulls_path_for(BASE_COMMIT): [pull_request(merge_commit_sha=BASE_COMMIT)],
+        logs_path(): report_log(report(commit=BASE_TESTED_COMMIT, tree=BASE_TREE)),
+        commit_path_for(BASE_TESTED_COMMIT): {
+            "sha": BASE_TESTED_COMMIT,
+            "commit": {"tree": {"sha": BASE_TREE}},
+        },
+    })
+    return responses
+
+
 class EvidenceTests(unittest.TestCase):
+    def test_pre_data4_suite_jobs_and_reports_cannot_be_reused(self) -> None:
+        for missing in ("jobs", "report"):
+            with self.subTest(missing=missing):
+                responses = successful_responses()
+                if missing == "jobs":
+                    old_jobs = [job for job in jobs() if not str(job["name"]).endswith(
+                        "Supported suite / data4-corpus")]
+                    responses[jobs_path()] = {"total_count": len(old_jobs), "jobs": old_jobs}
+                else:
+                    old_suites = [suite for suite in evidence.SUITES if suite != "data4-corpus"]
+                    responses[logs_path()] = report_log(report(suites=old_suites))
+                result = evidence.select_reuse(
+                    "workflow_dispatch", REPOSITORY, COMMIT, TREE, FakeApi(responses))
+                self.assertFalse(result.reused)
+
     def tearDown(self) -> None:
         evidence._gh_allows_escape_sequences.cache_clear()
 
@@ -275,9 +349,11 @@ class EvidenceTests(unittest.TestCase):
         )
 
     def test_suite_inventory_includes_optimizer_after_native_numerics(self) -> None:
-        self.assertEqual(len(evidence.SUITES), 22)
+        self.assertEqual(len(evidence.SUITES), 23)
         index = evidence.SUITES.index("native-numerics")
         self.assertEqual(evidence.SUITES[index + 1], "native-optimizer")
+        index = evidence.SUITES.index("shard-loader")
+        self.assertEqual(evidence.SUITES[index + 1], "data4-corpus")
 
     def test_io5_missing_skipped_duplicate_or_old_inventory_cannot_be_reused(self) -> None:
         self.assertEqual(evidence.SUITES[-1], "io5-gguf")
@@ -331,6 +407,16 @@ class EvidenceTests(unittest.TestCase):
             ],
         )
 
+    def test_push_reuses_full_run_with_skipped_optional_diagnostics(self) -> None:
+        responses = successful_push_responses()
+        all_jobs = jobs_with_skipped_diagnostics()
+        responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
+        result = evidence.select_push_reuse(
+            "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
+            FakeApi(responses),
+        )
+        self.assertTrue(result.reused)
+
     def test_docs_push_verifies_exact_base_full_run_without_code_reuse(self) -> None:
         api = FakeApi(successful_docs_push_responses())
         result = evidence.select_push_reuse(
@@ -357,6 +443,45 @@ class EvidenceTests(unittest.TestCase):
                 commit_path_for(BASE_TESTED_COMMIT),
             ],
         )
+
+    def test_docs_push_verifies_full_base_with_skipped_optional_diagnostics(self) -> None:
+        responses = successful_docs_push_responses()
+        all_jobs = jobs_with_skipped_diagnostics()
+        responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
+        result = evidence.select_push_reuse(
+            "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
+            FakeApi(responses), prose_only="true", push_before=BASE_COMMIT,
+        )
+        self.assertFalse(result.reused)
+        self.assertTrue(result.docs_verified)
+
+    def test_optional_diagnostics_must_be_exactly_skipped_as_a_pair(self) -> None:
+        good = jobs_with_skipped_diagnostics()
+        cases = {
+            "one missing": good[:-1],
+            "one succeeded": [{**good[0]}] + [
+                {**job, "conclusion": "success"} if job["id"] == 9004 else job
+                for job in good[1:]
+            ],
+            "one active": [
+                {**job, "status": "in_progress"} if job["id"] == 9004 else job
+                for job in good
+            ],
+            "unrelated skipped": good + [
+                {**successful_job(9006, "unexpected diagnostic"), "conclusion": "skipped"}
+            ],
+        }
+        for label, altered in cases.items():
+            with self.subTest(label=label):
+                responses = successful_push_responses()
+                responses[jobs_path()] = {
+                    "total_count": len(altered), "jobs": altered,
+                }
+                result = evidence.select_push_reuse(
+                    "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT,
+                    TREE, FakeApi(responses),
+                )
+                self.assertFalse(result.reused)
 
     def test_docs_mode_requires_exact_lowercase_true(self) -> None:
         for value in ("TRUE", "1", "yes", "false", ""):
@@ -581,6 +706,78 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse(result.reused)
         self.assertTrue(result.docs_verified)
         self.assertEqual(result.run_id, RUN_ID)
+
+    def test_docs_five_job_wrapper_skip_verifies_original_pr(self) -> None:
+        api = FakeApi(skipped_docs_base_responses())
+        result = evidence.select_push_reuse(
+            "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
+            api, prose_only="true", push_before=BASE_COMMIT,
+        )
+        self.assertFalse(result.reused)
+        self.assertTrue(result.docs_verified)
+        self.assertEqual(result.run_id, RUN_ID)
+        self.assertEqual(api.calls, [
+            commit_path_for(BASE_COMMIT), runs_path_for(BASE_COMMIT),
+            jobs_path_for(RUN_ID + 10, 1), jobs_path_for(RUN_ID + 10, 1),
+            pulls_path_for(BASE_COMMIT), runs_path_for(PR_HEAD), jobs_path(),
+            logs_path(), commit_path_for(BASE_TESTED_COMMIT),
+        ])
+
+    def test_docs_five_job_wrapper_skip_rejects_inexact_jobs(self) -> None:
+        path = jobs_path_for(RUN_ID + 10, 1)
+        base_jobs = skipped_docs_base_responses()[path]["jobs"]
+        cases = {
+            "one optional missing": base_jobs[:-1],
+            "optional succeeded": [
+                {**job, "conclusion": "success"} if job["id"] == 9204 else job
+                for job in base_jobs
+            ],
+            "optional active": [
+                {**job, "status": "in_progress"} if job["id"] == 9204 else job
+                for job in base_jobs
+            ],
+            "other skipped job": base_jobs + [
+                {**successful_job(9206, "other diagnostic"),
+                 "run_attempt": 1, "conclusion": "skipped"}
+            ],
+            "wrong attempt": [
+                {**base_jobs[0], "run_attempt": 2}, *base_jobs[1:]
+            ],
+        }
+        for label, altered in cases.items():
+            with self.subTest(label=label):
+                responses = skipped_docs_base_responses()
+                responses[path] = {"total_count": len(altered), "jobs": altered}
+                api = FakeApi(responses)
+                result = evidence.select_push_reuse(
+                    "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT,
+                    TREE, api, prose_only="true", push_before=BASE_COMMIT,
+                )
+                self.assertFalse(result.docs_verified)
+                self.assertNotIn(pulls_path_for(BASE_COMMIT), api.calls)
+
+    def test_docs_five_job_wrapper_skip_requires_original_pr_evidence(self) -> None:
+        cases = {
+            "missing PR": (pulls_path_for(BASE_COMMIT), []),
+            "failed PR run": (runs_path_for(PR_HEAD), {
+                "total_count": 1,
+                "workflow_runs": [run(commit=PR_HEAD, conclusion="failure")],
+            }),
+            "altered tested tree": (commit_path_for(BASE_TESTED_COMMIT), {
+                "sha": BASE_TESTED_COMMIT,
+                "commit": {"tree": {"sha": TREE}},
+            }),
+        }
+        for label, (path, value) in cases.items():
+            with self.subTest(label=label):
+                responses = skipped_docs_base_responses()
+                responses[path] = value
+                result = evidence.select_push_reuse(
+                    "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT,
+                    TREE, FakeApi(responses), prose_only="true",
+                    push_before=BASE_COMMIT,
+                )
+                self.assertFalse(result.docs_verified)
 
     def test_docs_three_job_wrapper_skip_shape_is_exact(self) -> None:
         base_run_id = RUN_ID + 10

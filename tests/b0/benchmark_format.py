@@ -569,13 +569,16 @@ def validate_report_payload(raw: Any) -> dict[str, Any]:
     return _validate_report_payload(raw)
 
 
-def _integrity_object(format_name: str, payload: Any) -> dict[str, Any]:
-    return {"format": format_name, "payload": payload, "version": FORMAT_VERSION}
+def _integrity_object(format_name: str, payload: Any, version: int = FORMAT_VERSION) -> dict[str, Any]:
+    return {"format": format_name, "payload": payload, "version": version}
 
 
-def _encode(format_name: str, payload: Mapping[str, Any], validator: Any) -> bytes:
+def _encode(
+    format_name: str, payload: Mapping[str, Any], validator: Any,
+    *, version: int = FORMAT_VERSION,
+) -> bytes:
     validated = validator(dict(payload))
-    integrity = _integrity_object(format_name, validated)
+    integrity = _integrity_object(format_name, validated, version)
     digest = hashlib.sha256(canonical_json(integrity)).hexdigest()
     envelope = {
         "checksum": {"algorithm": "sha256", "digest": digest},
@@ -602,6 +605,7 @@ def _load(
     source: bytes | bytearray | memoryview | str | Path,
     format_name: str,
     validator: Any,
+    *, version: int = FORMAT_VERSION,
 ) -> dict[str, Any]:
     raw = _source_bytes(source)
     if len(raw) > MAX_DOCUMENT_BYTES:
@@ -644,11 +648,11 @@ def _load(
     if not hmac.compare_digest(expected, actual):
         _fail("benchmark document checksum mismatch")
     actual_format = _string(envelope["format"], "$.format")
-    version = _integer(envelope["version"], "$.version", 1)
+    actual_version = _integer(envelope["version"], "$.version", 1)
     if actual_format != format_name:
         _fail(f"unsupported benchmark format {actual_format!r}")
-    if version != FORMAT_VERSION:
-        _fail(f"unsupported benchmark version {version!r}")
+    if actual_version != version:
+        _fail(f"unsupported benchmark version {actual_version!r}")
     return validator(envelope["payload"])
 
 

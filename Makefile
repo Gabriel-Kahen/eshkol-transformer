@@ -13,6 +13,7 @@ SHELL := /usr/bin/bash
 	test-ci-parameters-after-build test-ci-tokenizer-byte-after-build \
 	test-ci-tokenizer-bpe-after-build \
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
+	test-ci-data4-after-build \
 	test-ci-topology \
 	test-a0 test-a2 test-b0 test-c1 test-c2 test-c2-codec test-c2-core \
 	test-c2-checkpoint-inspect test-c2-checkpoint-load test-c2-checkpoint-save \
@@ -27,7 +28,8 @@ SHELL := /usr/bin/bash
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
-	smoke smoke-after-build benchmark benchmark-after-build clean
+	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
+	benchmark-attention-supported clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -133,6 +135,8 @@ test-after-build:
 	/usr/bin/bash scripts/test-g3n.sh
 	/usr/bin/bash scripts/test-g3c4.sh
 	/usr/bin/bash scripts/test-cli3-ci.sh
+	/usr/bin/bash scripts/test-data4-source.sh
+	/usr/bin/bash scripts/test-data4-native.sh
 
 test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test.sh
@@ -170,6 +174,8 @@ test-acceptance-predecessors-after-build:
 	/usr/bin/bash scripts/test-g3n.sh
 	/usr/bin/bash scripts/test-g3c4.sh
 	/usr/bin/bash scripts/test-cli3-ci.sh
+	/usr/bin/bash scripts/test-data4-source.sh
+	/usr/bin/bash scripts/test-data4-native.sh
 
 test-acceptance-c2-after-build:
 	/usr/bin/bash scripts/test-c2.sh
@@ -246,6 +252,10 @@ test-ci-tokenizer-bpe-boundary-after-build:
 test-ci-dataset-after-build:
 	/usr/bin/bash scripts/test-d2.sh
 	/usr/bin/bash scripts/test-e3-d2.sh
+
+test-ci-data4-after-build:
+	/usr/bin/bash scripts/test-data4-source.sh
+	/usr/bin/bash scripts/test-data4-native.sh
 
 test-ci-topology:
 	/usr/bin/bash scripts/check-ci-topology.sh
@@ -416,6 +426,12 @@ benchmark: build
 
 benchmark-after-build:
 	/usr/bin/bash scripts/benchmark.sh
+
+benchmark-attention:
+	/usr/bin/bash scripts/benchmark-attention.sh
+
+benchmark-attention-supported:
+	/usr/bin/bash scripts/benchmark-attention.sh --supported
 
 clean:
 	/usr/bin/bash scripts/clean.sh

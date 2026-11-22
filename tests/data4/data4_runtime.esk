@@ -1,0 +1,217 @@
+;;; Focused DATA4-A source test with genuine T2 BPE encoding and a D1 writer
+;;; stub. A same-aggregate test must separately prove D1 publication.
+(load "t1_tokenizer_core.esk")
+(load "t2_bpe_core.esk")
+
+(define data4-test-written #f)
+(define (t2-private-tokenizer-encode-staging tokenizer bytes)
+  (t2-tokenizer-core-encode-i64-le tokenizer bytes))
+(define (t2-private-tokenizer-fingerprint tokenizer)
+  (t2-tokenizer-core-fingerprint tokenizer))
+(define (t2-private-tokenizer-vocab-size tokenizer)
+  (t2-tokenizer-core-vocab-size tokenizer))
+(define (et-d1-private-token-corpus-write directory fingerprint vocab limit tokens)
+  (if (string=? directory "preexisting")
+      (t1-core-fail 'io 'token-corpus-write! "fixture writer failure"))
+  (set! data4-test-written (vector directory fingerprint vocab limit tokens))
+  (vector fingerprint vocab limit tokens))
+(define (et-d1-private-token-corpus-summary-tokenizer-fingerprint summary)
+  (vector-ref summary 0))
+(define (et-d1-private-token-corpus-summary-vocab-size summary)
+  (vector-ref summary 1))
+(define (et-d1-private-token-corpus-summary-shard-count summary)
+  (let ((count (et-d1-private-token-corpus-summary-total-tokens summary))
+        (limit (vector-ref summary 2)))
+    (if (= count 0) 0 (+ (quotient (- count 1) limit) 1))))
+(define (et-d1-private-token-corpus-summary-shard-token-limit summary)
+  (vector-ref summary 2))
+(define (et-d1-private-token-corpus-summary-total-tokens summary)
+  (let loop ((rest (vector-ref summary 3)) (count 0))
+    (if (null? rest) count (loop (cdr rest) (+ count 1)))))
+
+(load "data4_corpus.esk")
+(load "data4_report_reader.esk")
+
+(define checks 0)
+(define (check name condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "FAIL ") (display name) (newline) (exit 1))))
+(define (contains? haystack needle)
+  (let ((limit (- (string-length haystack) (string-length needle))))
+    (let loop ((index 0))
+      (and (<= index limit)
+           (or (string=? (substring haystack index
+                                   (+ index (string-length needle))) needle)
+               (loop (+ index 1)))))))
+(define (invalid? thunk)
+  (guard (caught (#t (and (t1-core-error? caught)
+                         (eq? (t1-core-error-category caught)
+                              'invalid-argument))))
+    (thunk) #f))
+(define (io? thunk)
+  (guard (caught (#t (and (t1-core-error? caught)
+                         (eq? (t1-core-error-category caught) 'io))))
+    (thunk) #f))
+(define (selected-ids prepared)
+  (let loop ((rest (vector-ref prepared 0)) (out '()))
+    (if (null? rest) (data4-reverse out)
+        (loop (cdr rest) (cons (car (car rest)) out)))))
+
+(define input
+  (list (list "a" (bytevector 65 66))
+        (list "too-short" (bytevector 65))
+        (list "b" (bytevector 65 66))
+        (list "c" (bytevector 67 68))
+        (list "too-long" (bytevector 1 2 3 4))))
+(define prepared (data4-corpus-prepare input 2 2))
+(check "selected order" (equal? (selected-ids prepared) '("a" "c")))
+(check "counts" (and (= (vector-ref prepared 2) 5)
+                     (= (vector-ref prepared 3) 11)
+                     (= (vector-ref prepared 4) 2)
+                     (= (vector-ref prepared 5) 4)))
+(check "first duplicate" (string=?
+                         (vector-ref (car (cdr (cdr (vector-ref prepared 1)))) 5)
+                         "a"))
+(check "duplicate hash" (string=?
+                          (vector-ref (car (vector-ref prepared 1)) 3)
+                          (vector-ref (car (cdr (cdr (vector-ref prepared 1)))) 3)))
+(bytevector-u8-set! (car (cdr (car input))) 0 0)
+(check "owned bytes" (= (bytevector-u8-ref
+                          (cdr (car (vector-ref prepared 0))) 0) 65))
+(define model (t2-bpe-train-core '() 0 1 'raw
+                                 (list (list "bos" 'omit)) (list "bos") '()))
+(define published (data4-corpus-write! model "out" 3 prepared))
+(check "separate document encode"
+       (equal? (vector-ref data4-test-written 4)
+               '(256 65 66 256 67 68)))
+(check "writer metadata" (and (string=? (vector-ref data4-test-written 1)
+                                         (t2-tokenizer-core-fingerprint model))
+                              (= (vector-ref data4-test-written 2) 257)))
+(define report (utf8->string (vector-ref published 1)))
+(check "report version" (and (contains? report
+                                               "format\teshkol-data4-corpus-report\n")
+                             (contains? report "version\t1\t0\n")))
+(check "report bind" (and (contains? report
+                                            (string-append
+                                             "tokenizer-fingerprint\t"
+                                             (t2-tokenizer-core-fingerprint model)
+                                             "\n"))
+                          (contains? report "total-tokens\t6\n")
+                          (contains? report "minimum-bytes\t2\n")
+                          (contains? report "shard-token-limit\t3\n")))
+(check "report checksum" (let* ((start (- (string-length report) 74))
+                                (prefix (substring report 0 start))
+                                (expected (t1-core-hex
+                                           (t1-core-sha256
+                                            (string->utf8 prefix)))))
+                           (string=? (substring report (+ start 9)
+                                                (+ start 73)) expected)))
+(check "report round trip"
+       (eq? (data4-report-validate (vector-ref published 1)
+                                    (vector-ref published 0))
+            (vector-ref published 0)))
+(define (report-corrupt? bytes summary)
+  (guard (caught (#t (and (t1-core-error? caught)
+                         (eq? (t1-core-error-category caught)
+                              'corrupt-data))))
+    (data4-report-validate bytes summary) #f))
+(define report-mutated (bytevector-copy (vector-ref published 1)))
+(bytevector-u8-set! report-mutated 0 88)
+(check "tampered report rejected"
+       (report-corrupt? report-mutated (vector-ref published 0)))
+(check "mismatched D1 summary rejected"
+       (report-corrupt? (vector-ref published 1)
+                        (vector "other-fingerprint" 257 3
+                                '(256 65 66 256 67 68))))
+(define (report-rechecksum prefix)
+  (string->utf8
+   (string-append prefix "checksum\t"
+                  (t1-core-hex (t1-core-sha256 (string->utf8 prefix))) "\n")))
+(define report-prefix
+  (substring report 0 (- (string-length report) 74)))
+(check "malformed row with valid checksum rejected"
+       (report-corrupt?
+        (report-rechecksum
+         (string-append report-prefix "document\t999\tx\t0\t"
+                        (t1-core-hex (t1-core-sha256 (bytevector)))
+                        "\tkeep\t\n"))
+        (vector-ref published 0)))
+(define repeated (data4-corpus-write! model "second" 3 prepared))
+(check "repeat report byte parity"
+       (t1-core-bytes=? (vector-ref published 1) (vector-ref repeated 1)))
+(define mutable-id (string-append "mutable"))
+(define id-prepared
+  (data4-corpus-prepare (list (list mutable-id (bytevector 7))) 0 1))
+(string-set! mutable-id 0 #\X)
+(check "owned source ID"
+       (string=? (car (car (vector-ref id-prepared 0))) "mutable"))
+(check "duplicate ID" (invalid? (lambda ()
+                                    (data4-corpus-prepare
+                                     (list (list "x" (bytevector 1))
+                                           (list "x" (bytevector 2))) 0 2))))
+(check "bad ID" (invalid? (lambda ()
+                              (data4-corpus-prepare
+                               (list (list "a\tb" (bytevector 1))) 0 2))))
+(check "bad document" (invalid? (lambda ()
+                                    (data4-corpus-prepare
+                                     (list (list "x" 1)) 0 2))))
+(check "bad filter" (invalid? (lambda ()
+                                  (data4-corpus-prepare
+                                   (list (list "x" (bytevector 1))) 2 1))))
+(check "over byte budget" (invalid? (lambda ()
+                                        (data4-corpus-prepare
+                                         (list (list "x"
+                                                     (make-bytevector 65537 0)))
+                                         0 65536))))
+(check "over doc budget" (invalid? (lambda ()
+                                       (data4-corpus-prepare
+                                        (let loop ((n 129) (out '()))
+                                          (if (= n 0) out
+                                              (loop (- n 1)
+                                                    (cons (list "x" (bytevector 1))
+                                                          out))))
+                                        0 1))))
+(define exact-documents
+  (let loop ((n 127) (out '()))
+    (if (< n 0) out
+        (loop (- n 1)
+              (cons (list (string-append "d" (number->string n))
+                          (bytevector)) out)))))
+(check "exact document budget"
+       (= (vector-ref (data4-corpus-prepare exact-documents 0 0) 2) 128))
+(check "exact byte budget"
+       (= (vector-ref
+           (data4-corpus-prepare
+            (list (list "maximum" (make-bytevector 65536 0))) 0 65536) 3)
+          65536))
+(check "improper list" (invalid? (lambda ()
+                                     (data4-corpus-prepare
+                                      (cons (list "x" (bytevector 1)) 1)
+                                      0 1))))
+(define all-filtered
+  (data4-corpus-prepare (list (list "short" (bytevector 1))) 2 2))
+(check "all filtered" (and (= (vector-ref all-filtered 4) 0)
+                            (null? (vector-ref all-filtered 0))))
+(define empty-published (data4-corpus-write! model "empty" 3 all-filtered))
+(check "empty corpus" (and (null? (vector-ref data4-test-written 4))
+                            (contains? (utf8->string (vector-ref empty-published 1))
+                                       "total-tokens\t0\n")))
+(define before-overflow data4-test-written)
+(check "token limit overflow"
+       (invalid? (lambda ()
+                   (data4-corpus-write!
+                    model "overflow" 3
+                    (data4-corpus-prepare
+                     (list (list "maximum" (make-bytevector 65536 0)))
+                     0 65536)))))
+(check "no D1 write after token limit"
+       (eq? data4-test-written before-overflow))
+(check "writer failure propagates"
+       (io? (lambda ()
+              (data4-corpus-write! model "preexisting" 3 prepared))))
+(check "writer failure does not record a stub write"
+       (eq? data4-test-written before-overflow))
+(define cyclic (list (list "x" (bytevector 1))))
+(set-cdr! cyclic cyclic)
+(check "cyclic list" (invalid? (lambda () (data4-corpus-prepare cyclic 0 1))))
+(display "DATA4 source checks: ") (display checks) (newline)

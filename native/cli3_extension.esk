@@ -127,8 +127,9 @@
          (guard (caught (#t (cli3-fail 'io operation "file size query failed"
                                        '())))
            (file-size path))))
-    (if (or (not (integer? size)) (not (exact? size)) (< size 0)
-            (> size maximum))
+    (if (or (not (integer? size)) (not (exact? size)) (< size 0))
+        (cli3-fail 'io operation "cannot determine file size" '()))
+    (if (> size maximum)
         (cli3-fail 'corrupt-data operation "file exceeds command limit"
                    (list (list 'maximum-bytes maximum))))
     (let ((bytes (make-bytevector size 0)))
