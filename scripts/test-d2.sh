@@ -3,6 +3,16 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+d2_phase=all
+if (( $# != 0 )); then
+  if (( $# != 2 )) || [[ "$1" != --phase ]]; then
+    die "usage: $0 [--phase all|resources]"
+  fi
+  d2_phase=$2
+fi
+[[ "${d2_phase}" == all || "${d2_phase}" == resources ]] || \
+  die "usage: $0 [--phase all|resources]"
+
 verify_toolchain
 for command in ar awk cmp find grep ldd nm python3 rg sha256sum sleep strings timeout; do
   require_command "${command}"
@@ -45,6 +55,21 @@ cmp "${PROJECT_ROOT}/native/d2_native_defined_symbols.txt" \
 cmp "${PROJECT_ROOT}/native/d2_native_undefined_symbols.txt" \
   "${d2_tmp}/d2-undefined.txt"
 
+wave2_evidence="${d2_dir}/d2_wave2.o.evidence"
+[[ "$(wc -l <"${wave2_evidence}/global-defined.txt")" == 58 ]] || \
+  die "D2 aggregate must have exactly 58 globals"
+[[ "$(wc -l <"${wave2_evidence}/package-exports.txt")" == 52 ]] || \
+  die "D2 aggregate must have exactly 52 exports"
+[[ "$(ar t "${d2_wave2_library}")" == "d2_wave2.o" ]] || \
+  die "D2 aggregate archive must contain only d2_wave2.o"
+sed -e 's/^[^:]*://' -e 's/\\//g' "${wave2_evidence}/private.d" | \
+  tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
+  sed "s#^${PROJECT_ROOT}/##" >"${d2_tmp}/wave2-source-closure.txt"
+cmp "${PROJECT_ROOT}/native/d2_wave2_source_closure.txt" \
+  "${d2_tmp}/wave2-source-closure.txt" || \
+  die "D2 aggregate trusted source closure drifted"
+
+if [[ "${d2_phase}" == all ]]; then
 (
   cd -- "${PROJECT_ROOT}"
   PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -v \
@@ -149,20 +174,25 @@ ASAN_OPTIONS=detect_leaks="${D2_ASAN_DETECT_LEAKS:-0}":halt_on_error=1 \
 UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 90s \
   "${d2_tmp}/test-d2-native-sanitized" >/dev/null
+fi
 
 (
   cd -- "${PROJECT_ROOT}"
   for repetition in 1 2; do
     PYTHONDONTWRITEBYTECODE=1 python3 -m tests.d2.prepare_public_resources \
       --output "${d2_tmp}/public-resources-${repetition}"
-    PYTHONDONTWRITEBYTECODE=1 python3 -m \
-      tests.t2.generate_adversarial_fixtures \
-      --output-directory "${d2_tmp}/t2-adversarial-${repetition}" >/dev/null
+    if [[ "${d2_phase}" == all ]]; then
+      PYTHONDONTWRITEBYTECODE=1 python3 -m \
+        tests.t2.generate_adversarial_fixtures \
+        --output-directory "${d2_tmp}/t2-adversarial-${repetition}" >/dev/null
+    fi
   done
 )
 diff -ru "${d2_tmp}/public-resources-1" "${d2_tmp}/public-resources-2"
-cmp "${d2_tmp}/t2-adversarial-1/alternate-same-vocab.tsv" \
-  "${d2_tmp}/t2-adversarial-2/alternate-same-vocab.tsv"
+if [[ "${d2_phase}" == all ]]; then
+  cmp "${d2_tmp}/t2-adversarial-1/alternate-same-vocab.tsv" \
+    "${d2_tmp}/t2-adversarial-2/alternate-same-vocab.tsv"
+fi
 
 # Build a temporary copy of the exact D2 aggregate with native counters
 # enabled. The canonical production object remains byte-for-byte untouched;
@@ -312,20 +342,29 @@ compile_public_d2() {
     die "D2 public ${source} compiler reported ERROR while returning success"
 }
 
-for public_source in public_runtime public_errors_runtime resource_runtime \
-    resource_instrumented_runtime; do
+public_sources=(resource_runtime resource_instrumented_runtime)
+if [[ "${d2_phase}" == all ]]; then
+  public_sources=(public_runtime public_errors_runtime "${public_sources[@]}")
+fi
+for public_source in "${public_sources[@]}"; do
   compile_public_d2 "${public_source}" "public-a-${public_source}"
   compile_public_d2 "${public_source}" "public-b-${public_source}"
   cmp "${d2_tmp}/public-a-${public_source}/${public_source}" \
     "${d2_tmp}/public-b-${public_source}/${public_source}"
 done
-for production_public_aot in \
-    "${d2_tmp}/public-a-public_runtime/public_runtime" \
-    "${d2_tmp}/public-b-public_runtime/public_runtime" \
-    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-a-resource_runtime/resource_runtime" \
-    "${d2_tmp}/public-b-resource_runtime/resource_runtime"; do
+production_public_aots=(
+  "${d2_tmp}/public-a-resource_runtime/resource_runtime"
+  "${d2_tmp}/public-b-resource_runtime/resource_runtime"
+)
+if [[ "${d2_phase}" == all ]]; then
+  production_public_aots+=(
+    "${d2_tmp}/public-a-public_runtime/public_runtime"
+    "${d2_tmp}/public-b-public_runtime/public_runtime"
+    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime"
+    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime"
+  )
+fi
+for production_public_aot in "${production_public_aots[@]}"; do
   if nm -a "${production_public_aot}" | \
       grep -E 'et_d2_.*test|et_d2_test_owned|et_e1b_public_d2_test' \
         >/dev/null; then
@@ -333,6 +372,7 @@ for production_public_aot in \
   fi
 done
 
+if [[ "${d2_phase}" == all ]]; then
 for repetition in a b; do
   resource_index=1
   [[ "${repetition}" == b ]] && resource_index=2
@@ -443,6 +483,7 @@ done
 cmp "${d2_tmp}/private-view-a.stdout" "${d2_tmp}/private-view-b.stdout"
 grep -E '^D2 PRIVATE VIEW PASS: [0-9]+ compiled content/lifetime checks$' \
   "${d2_tmp}/private-view-a.stdout" >/dev/null
+fi
 
 run_resource_probe() {
   local label=$1 directory=$2 expected=$3
@@ -620,19 +661,6 @@ timeout --foreground --signal=TERM --kill-after=5s 180s \
 grep -Fx 'D2 RESOURCE ACCESSORS PASS: live=0 bytes released=0 bytes' \
   "${d2_tmp}/resource-accessors.stdout" >/dev/null
 
-wave2_evidence="${d2_dir}/d2_wave2.o.evidence"
-[[ "$(wc -l <"${wave2_evidence}/global-defined.txt")" == 58 ]] || \
-  die "D2 aggregate must have exactly 58 globals"
-[[ "$(wc -l <"${wave2_evidence}/package-exports.txt")" == 52 ]] || \
-  die "D2 aggregate must have exactly 52 exports"
-[[ "$(ar t "${d2_wave2_library}")" == "d2_wave2.o" ]] || \
-  die "D2 aggregate archive must contain only d2_wave2.o"
-sed -e 's/^[^:]*://' -e 's/\\//g' "${wave2_evidence}/private.d" | \
-  tr -s '[:space:]' '\n' | grep -F "${PROJECT_ROOT}/" | \
-  sed "s#^${PROJECT_ROOT}/##" >"${d2_tmp}/wave2-source-closure.txt"
-cmp "${PROJECT_ROOT}/native/d2_wave2_source_closure.txt" \
-  "${d2_tmp}/wave2-source-closure.txt" || \
-  die "D2 aggregate trusted source closure drifted"
 mapfile -t d2_production_sources \
   <"${PROJECT_ROOT}/native/d2_wave2_source_closure.txt"
 (( ${#d2_production_sources[@]} == 18 )) || \
@@ -641,6 +669,7 @@ for d2_source_index in "${!d2_production_sources[@]}"; do
   d2_production_sources[${d2_source_index}]="${PROJECT_ROOT}/${d2_production_sources[${d2_source_index}]}"
 done
 
+if [[ "${d2_phase}" == all ]]; then
 for evidence_name in global-defined.txt package-exports.txt undefined.txt \
     expected-undefined.txt public-strings.txt readelf-symbols.txt nm.txt \
     strings.txt private.d link.map allowlist-provenance.tsv; do
@@ -799,6 +828,8 @@ for private_binding in d2-token-dataset-open d2-token-tensor-with-view-internal 
   fi
 done
 
+fi
+
 if rg -ni 'python|pytorch|torch|libpython|(^|[^[:alnum:]_])Py_' \
     "${d2_production_sources[@]}" \
     "${PROJECT_ROOT}/lib/transformer/data.esk" \
@@ -806,19 +837,27 @@ if rg -ni 'python|pytorch|torch|libpython|(^|[^[:alnum:]_])Py_' \
     "${PROJECT_ROOT}/native/d2_native.h" >/dev/null; then
   die "D2 production candidate references a Python runtime"
 fi
-for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
-    "${d2_tmp}/a/d2-semantic" "${d2_tmp}/b/d2-semantic" \
-    "${d2_tmp}/public-a-public_runtime/public_runtime" \
-    "${d2_tmp}/public-b-public_runtime/public_runtime" \
-    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime" \
-    "${d2_tmp}/public-a-resource_runtime/resource_runtime" \
-    "${d2_tmp}/public-b-resource_runtime/resource_runtime" \
-    "${d2_resource_runtime_dir}/d2_wave2_test.o" \
-    "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime" \
-    "${d2_tmp}/public-b-resource_instrumented_runtime/resource_instrumented_runtime" \
-    "${d2_tmp}/private-a/private-view" \
-    "${d2_tmp}/private-b/private-view"; do
+
+delivered_candidates=(
+  "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o"
+  "${d2_tmp}/public-a-resource_runtime/resource_runtime"
+  "${d2_tmp}/public-b-resource_runtime/resource_runtime"
+  "${d2_resource_runtime_dir}/d2_wave2_test.o"
+  "${d2_tmp}/public-a-resource_instrumented_runtime/resource_instrumented_runtime"
+  "${d2_tmp}/public-b-resource_instrumented_runtime/resource_instrumented_runtime"
+)
+if [[ "${d2_phase}" == all ]]; then
+  delivered_candidates+=(
+    "${d2_tmp}/a/d2-semantic" "${d2_tmp}/b/d2-semantic"
+    "${d2_tmp}/public-a-public_runtime/public_runtime"
+    "${d2_tmp}/public-b-public_runtime/public_runtime"
+    "${d2_tmp}/public-a-public_errors_runtime/public_errors_runtime"
+    "${d2_tmp}/public-b-public_errors_runtime/public_errors_runtime"
+    "${d2_tmp}/private-a/private-view"
+    "${d2_tmp}/private-b/private-view"
+  )
+fi
+for delivered in "${delivered_candidates[@]}"; do
   if ! /usr/bin/bash \
       "${PROJECT_ROOT}/scripts/check-d2-development-dependency.sh" \
       "${delivered}"; then
@@ -826,6 +865,9 @@ for delivered in "${d2_dir}/d2_native.o" "${d2_dir}/d2_wave2.o" \
   fi
 done
 
-/usr/bin/bash "${PROJECT_ROOT}/scripts/test-tr3-c-d2-restore.sh"
-
-printf 'D2 PASS: carrier-neutral shift/shuffle/cursor semantics, frozen Q0 fixture, private carrier lifetime, determinism, resource, sanitizer, and isolation gates\n'
+if [[ "${d2_phase}" == all ]]; then
+  /usr/bin/bash "${PROJECT_ROOT}/scripts/test-tr3-c-d2-restore.sh"
+  printf 'D2 PASS: carrier-neutral shift/shuffle/cursor semantics, frozen Q0 fixture, private carrier lifetime, determinism, resource, sanitizer, and isolation gates\n'
+else
+  printf 'D2 RESOURCE PHASE PASS: exact instrumented AOT, resource, and isolation gates\n'
+fi

@@ -287,6 +287,8 @@ def check(root, overrides=None):
     assert '"${PROJECT_ROOT}/tests/e3_native_parity/test_frame_parity.c"' in e3_parity
     assert "e3_frame.c" not in read("scripts/build.sh")
     targets = recipes(make)
+    assert targets["test-ci-dataset-resources-after-build"] == [
+        "/usr/bin/bash scripts/test-d2.sh --phase resources"]
     assert targets["test-ci-m3-after-build"] == [
         "/usr/bin/bash scripts/test-m3.sh", "/usr/bin/bash scripts/test-e3-native-frame.sh",
         "/usr/bin/bash scripts/test-e3-native-parity.sh",
