@@ -130,3 +130,58 @@ topology checks also passed.
 Live device enumeration and rocBLAS handle checks on hardware, direct AMD GPU
 execution, numerical parity, and GPU benchmarks remain pending a
 ROCm-provisioned runner.
+
+## Eshkol AOT bridge and compiled validation
+
+Build the Eshkol AOT bridge archive with `bash scripts/build-amd4-aot.sh` to
+produce `build/amd4_aot/libeshkol_transformer_amd4_aot.a` alongside its SHA-256
+file. Include `native/amd4_eshkol_bridge.h` from C11 or C++17 and link
+`libeshkol_transformer_amd4_aot.a`, `libeshkol_transformer_amd4.a`,
+`libeshkol_transformer_k1.a`, and `-ldl`. The archive exports 24
+`et_amd4_aot_*` entry points covering:
+
+- Live host probing (`et_amd4_aot_probe_live` via `et_amd4_probe_v1`),
+  report field accessors, formatting (`et_amd4_aot_format_report`), and byte
+  inspection (`et_amd4_aot_read_byte`).
+- Four deterministic `injected` mock scenarios via `et_amd4_probe_with_ops_v1`:
+  a two-device MI250X (`gfx90a:sramecc+:xnack-`, 110 CUs, wavefront 64) plus
+  RX 7900 XTX (`gfx1100`, 96 CUs, wavefront 32) host, an OOM memory-query fault
+  (`ET_AMD4_ERR_ALLOC`), a HIP driver failure prioritized over a rocBLAS handle
+  error (`ET_AMD4_ERR_DRIVER_FAILURE`), and a rocBLAS missing-symbols state
+  (`ET_AMD4_ERR_ROCBLAS_UNAVAILABLE`).
+- K1 runtime registration for `et_amd4_kernel_provider_v1()`, capability status
+  and JSON report queries, and explicit dispatch rejection for
+  `kernel.amd-hip.gemm` and `kernel.amd-hip.attention` with 32-bit canary
+  marshaling (`et_amd4_aot_store_u32` / `et_amd4_aot_load_u32`).
+
+### Measured AOT validation
+
+In `eshkol-r0-debug:20260928` on x86-64 with Clang 21.1.8 and pinned Eshkol
+(`--strict-types --optimize 0 --no-stdlib`),
+`CC=clang-21 CXX=clang++-21 bash scripts/test-amd4-aot.sh` passed:
+
+- Reproducible bridge archive `libeshkol_transformer_amd4_aot.a`
+  (SHA-256 `6afb0c891d49c029a7aaabf49530772829bf277e54c83c47ee793dd75239d5c6`),
+  exact 24-symbol export audit, import allowlist audit, and C++17 linkage check
+  (`tests/amd4/header_bridge_cpp.cpp`).
+- Direct C11 bridge tests (`tests/amd4/test_amd4_aot_bridge.c`, 153 checks) in
+  both normal and ASan/UBSan/LSan (`detect_leaks=1:halt_on_error=1`) builds.
+- Two fresh AOT compilations of `tests/amd4/test_amd4_aot.esk` from isolated
+  output and cache directories produced byte-identical ELFs
+  (SHA-256 `0754b33e058338bf1f2bcaab0d335b3f0f81a5ea4ec4996b60bcb8020e6d3efe`)
+  and identical stdout with empty stderr:
+  - Live host absence: `status=unavailable-runtime`, `kfd=absent`,
+    `hip.library=unavailable`, `rocblas.library=unavailable`, `devices=0`
+    (460-byte formatted report).
+  - Injected two-device report: `status=ok`, `devices=2` (1164-byte formatted
+    report) verifying exact `eshkol-transformer-amd4-observability:v1` lines.
+  - Injected failure scenarios: `oom=alloc`, `driver=driver-failure`,
+    `rocblas=missing-symbols`, plus invalid scenario, out-of-range ordinal, and
+    untouched short-buffer checks.
+  - K1 rejection: both AMD capabilities reported `unsupported` (in capability
+    queries and K1 JSON), dispatch rejected with `ET_KERNEL_ERROR_UNSUPPORTED`
+    and `ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED` (`15`), zero silent CPU
+    fallback, and output canary `0xdeadbeef` preserved unchanged.
+
+Live ROCm device execution and hardware validation remain pending a
+ROCm-provisioned runner.
