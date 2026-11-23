@@ -142,6 +142,17 @@
   (store-f32 (ffi-pointer online-a) 0 7.0)
   (store-f32 (ffi-pointer online-b) 0 7.0)
   (store-f32 (ffi-pointer online-c) 0 7.0)
+  ;; Exercise misaligned pointer rejection through Eshkol's raw-pointer FFI.
+  (let ((cell (checked-allocate 16)))
+    (expect-status "misaligned open" 1 (open-attention 1 (ptr-add cell 1)))
+    (release (ffi-pointer cell)))
+  (expect-status "misaligned backward dQ" 1
+                 (attention-backward (ffi-pointer runtime) 1 query-heads 1 32 32 head-width
+                                     (ffi-pointer q) (ffi-pointer k) (ffi-pointer v)
+                                     (ffi-pointer query-positions) (ffi-pointer key-positions)
+                                     (ffi-pointer keep-mask) (ffi-pointer upstream)
+                                     (ptr-add online-a 1) (ffi-pointer online-b)
+                                     (ffi-pointer online-c)))
   ;; K1 rejects the head pair, then the provider rejects the mask and positions.
   (expect-status "nondivisible head pair" 6 (call-forward runtime 32 3 online-a))
   (store-u8 (ffi-pointer keep-mask) 0 2)

@@ -56,7 +56,7 @@ Eshkol driver twice with `eshkol-run --strict-types --no-stdlib`. Each run
 used a fresh cache directory and linked the PA4-Wider and K1 archives with
 the bridge object. The resulting ELF files and stdout matched byte for
 byte. The ELF SHA-256 was
-`f4fd4a9911db9309b50a1cfc85e61b29bfff7e2e45234ddfe92d8778f1e5e138`.
+`1484e9ef4197999eeecc147b17a67251f46669ba0a35d24a0801cd3ca49cc130`.
 
 The compiled driver compares every forward output and every backward
 gradient from both providers. All 13,312 gradient comparisons passed

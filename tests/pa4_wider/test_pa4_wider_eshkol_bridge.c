@@ -141,8 +141,6 @@ static void check_bad_calls(et_kernel_runtime *runtime, int variant) {
   CHECK(et_pa4_wider_aot_open(-1, &unchanged) == invalid);
   CHECK(unchanged == runtime);
   CHECK(et_pa4_wider_aot_open(variant, NULL) == invalid);
-  _Alignas(et_kernel_runtime *) unsigned char cell[sizeof(runtime) + 1] = {0};
-  CHECK(et_pa4_wider_aot_open(variant, (void *)(cell + 1)) == invalid);
   CHECK(et_pa4_wider_aot_forward(NULL, 1, 2, 1, 2, 2, 2, q, k, v, qpos, kpos,
                                  mask, out) == invalid);
   CHECK(et_pa4_wider_aot_forward(runtime, 1, 2, 1, -1, 2, 2, q, k, v, qpos,
@@ -160,10 +158,6 @@ static void check_bad_calls(et_kernel_runtime *runtime, int variant) {
                                  mask, q) == invalid);
   CHECK(et_pa4_wider_aot_backward(runtime, 1, 2, 1, 2, 2, 2, q, k, v, qpos,
                                   kpos, mask, dout, dq, dk, dk) == invalid);
-  float *misaligned = (float *)((unsigned char *)dq + 1);
-  CHECK(et_pa4_wider_aot_backward(runtime, 1, 2, 1, 2, 2, 2, q, k, v, qpos,
-                                  kpos, mask, dout, misaligned, dk,
-                                  dv) == invalid);
 
   qpos[1] = 0;
   CHECK(et_pa4_wider_aot_forward(runtime, 1, 2, 1, 2, 2, 2, q, k, v, qpos, kpos,
