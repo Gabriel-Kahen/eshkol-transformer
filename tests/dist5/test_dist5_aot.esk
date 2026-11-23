@@ -1,0 +1,827 @@
+;;; Compiled Eshkol AOT multi-process data-parallel training verification.
+;;; Runs as an independent rank process:
+;;;   --sock-dir DIR --rank R --world W --mode train|nonfinite|mismatch [--accum A]
+;;; Combines Eshkol native tensor operations (matmul, transpose, residuals, loss)
+;;; with MOD5 K1 kernels (RMSNorm, causal MQA attention, SwiGLU) and DIST5
+;;; Unix-domain-socket collectives (broadcast, barrier, allreduce, allgather,
+;;; reduce-scatter, sync_gradients_f32).
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 dist5-open char* i64 i64 i64 ptr :real et_dist5_aot_open)
+(extern void dist5-close ptr :real et_dist5_aot_close)
+(extern i64 dist5-rank ptr :real et_dist5_aot_rank)
+(extern i64 dist5-world-size ptr :real et_dist5_aot_world_size)
+
+(extern i32 dist5-barrier ptr i64 i64 :real et_dist5_aot_barrier)
+(extern i32 dist5-broadcast-f32 ptr ptr i64 i64 i64 i64
+        :real et_dist5_aot_broadcast_f32)
+(extern i32 dist5-allreduce-f32 ptr ptr ptr i64 i32 i64 i64
+        :real et_dist5_aot_allreduce_f32)
+(extern i32 dist5-allgather-f32 ptr ptr i64 ptr i64 i64
+        :real et_dist5_aot_allgather_f32)
+(extern i32 dist5-reduce-scatter-f32 ptr ptr ptr i64 i32 i64 i64
+        :real et_dist5_aot_reduce_scatter_f32)
+(extern i32 dist5-sync-gradients-f32 ptr ptr ptr i64 i64 i64
+        :real et_dist5_aot_sync_gradients_f32)
+
+(extern ptr dist5-alloc-f32 i64 :real et_dist5_aot_alloc_f32)
+(extern void dist5-free-f32 ptr :real et_dist5_aot_free_f32)
+(extern i32 dist5-store-f32 ptr i64 i64 f64 :real et_dist5_aot_store_f32)
+(extern f64 dist5-load-f32 ptr i64 i64 :real et_dist5_aot_load_f32)
+(extern i32 dist5-store-f32-bits ptr i64 i64 i64
+        :real et_dist5_aot_store_f32_bits)
+(extern i64 dist5-load-f32-bits ptr i64 i64 :real et_dist5_aot_load_f32_bits)
+(extern i32 dist5-equal-bits-f32 ptr ptr i64 :real et_dist5_aot_equal_bits_f32)
+(extern i32 dist5-sha256-hex-f32 ptr i64 ptr i64
+        :real et_dist5_aot_sha256_hex_f32)
+(extern i32 dist5-read-byte ptr i64 i64 :real et_dist5_aot_read_byte)
+(extern i32 dist5-f32-add-inplace ptr ptr i64
+        :real et_dist5_aot_f32_add_inplace)
+(extern i32 dist5-f32-div-scalar-inplace ptr i64 f64
+        :real et_dist5_aot_f32_div_scalar_inplace)
+
+(extern i32 mod5-rms-forward ptr ptr ptr ptr ptr
+        :real et_dist5_aot_mod5_rms_forward)
+(extern i32 mod5-rms-backward ptr ptr ptr ptr ptr ptr ptr
+        :real et_dist5_aot_mod5_rms_backward)
+(extern i32 mod5-glu-forward ptr ptr ptr ptr
+        :real et_dist5_aot_mod5_swiglu_forward)
+(extern i32 mod5-glu-backward ptr ptr ptr ptr ptr ptr
+        :real et_dist5_aot_mod5_swiglu_backward)
+(extern i32 mod5-attn-forward ptr i64 ptr ptr ptr ptr ptr ptr ptr i64 ptr
+        :real et_dist5_aot_mod5_attention_forward)
+(extern i32 mod5-attn-backward ptr i64 ptr ptr ptr ptr ptr ptr ptr i64 ptr ptr ptr ptr
+        :real et_dist5_aot_mod5_attention_backward)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; DIST5 status and op constants.
+(define dist5-ok 0)
+(define dist5-err-mismatch 2)
+(define dist5-err-nonfinite 5)
+(define dist5-op-sum 1)
+(define dist5-op-mean 2)
+(define timeout-ms 15000)
+
+;; Pre-norm MQA decoder block constants.
+(define tokens 8)
+(define width 16)
+(define hidden 32)
+(define query-heads 4)
+(define kv-heads 1)
+(define head-width 4)
+(define kv-width (* kv-heads head-width))
+(define window 4)
+(define global-micros 4)
+(define train-steps 10)
+(define epsilon 0.125)
+(define learning-rate 2.0)
+(define inverse-elements (/ 1.0 (* tokens width)))
+
+;; Flat f32 parameter layout (2208 floats = 8832 bytes):
+;;   0: wq     [16,16] = 256  offset 0
+;;   1: wk     [16, 4] =  64  offset 256
+;;   2: wv     [16, 4] =  64  offset 320
+;;   3: wo     [16,16] = 256  offset 384
+;;   4: wgate  [16,32] = 512  offset 640
+;;   5: wup    [16,32] = 512  offset 1152
+;;   6: wdown  [32,16] = 512  offset 1664
+;;   7: gamma1 [ 1,16] =  16  offset 2176
+;;   8: gamma2 [ 1,16] =  16  offset 2192
+(define wq 0)
+(define wk 1)
+(define wv 2)
+(define wo 3)
+(define wgate 4)
+(define wup 5)
+(define wdown 6)
+(define gamma1 7)
+(define gamma2 8)
+(define param-count 9)
+(define total-weights 2208)
+
+(define param-rows (vector 16 16 16 16 16 16 32 1 1))
+(define param-cols (vector 16 4 4 16 32 32 16 16 16))
+(define param-offsets (vector 0 256 320 384 640 1152 1664 2176 2192))
+
+(define (require-check label ok)
+  (unless ok
+    (display "FAIL: ") (display label) (newline)
+    (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= actual expected)
+    (display "FAIL: ") (display label)
+    (display " expected ") (display expected)
+    (display " got ") (display actual) (newline)
+    (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "malloc failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (checked-alloc-f32 count)
+  (let ((p (dist5-alloc-f32 count)))
+    (require-check "dist5-alloc-f32 failed" (not (= (ptr->usize p) 0)))
+    p))
+
+;; Parse non-negative decimal integer without relying on stdlib helpers.
+(define (char->digit ch)
+  (cond
+    ((char=? ch #\0) 0) ((char=? ch #\1) 1) ((char=? ch #\2) 2)
+    ((char=? ch #\3) 3) ((char=? ch #\4) 4) ((char=? ch #\5) 5)
+    ((char=? ch #\6) 6) ((char=? ch #\7) 7) ((char=? ch #\8) 8)
+    ((char=? ch #\9) 9)
+    (else -1)))
+
+(define (parse-nonneg-int s)
+  (let ((len (string-length s)))
+    (require-check "empty integer argument" (> len 0))
+    (do ((i 0 (+ i 1))
+         (acc 0 (+ (* acc 10) (let ((d (char->digit (string-ref s i))))
+                                (require-check "invalid integer digit" (>= d 0))
+                                d))))
+        ((= i len) acc))))
+
+;; Print 64 lowercase hex ASCII bytes from a C buffer without integer->char.
+(define hex-digits "0123456789abcdef")
+
+(define (display-hex-digest buf)
+  (do ((i 0 (+ i 1)))
+      ((= i 64))
+    (let ((b (dist5-read-byte (ffi-pointer buf) 65 i)))
+      (require-check "valid hex digest byte" (>= b 0))
+      (cond
+        ((and (>= b 48) (<= b 57))
+         (display (string-ref hex-digits (- b 48))))
+        ((and (>= b 97) (<= b 102))
+         (display (string-ref hex-digits (+ 10 (- b 97)))))
+        (else
+         (require-check "unexpected non-hex digest byte" #f))))))
+
+;; Parse CLI: --sock-dir DIR --rank R --world W --mode M [--accum A]
+(define cli-sock-dir "")
+(define cli-rank -1)
+(define cli-world -1)
+(define cli-mode "")
+(define cli-accum -1)
+
+(define (parse-args args)
+  (let loop ((rest args))
+    (unless (null? rest)
+      (require-check "flag missing value" (pair? (cdr rest)))
+      (let ((flag (car rest))
+            (val (car (cdr rest))))
+        (cond
+          ((string=? flag "--sock-dir") (set! cli-sock-dir val))
+          ((string=? flag "--rank") (set! cli-rank (parse-nonneg-int val)))
+          ((string=? flag "--world") (set! cli-world (parse-nonneg-int val)))
+          ((string=? flag "--mode") (set! cli-mode val))
+          ((string=? flag "--accum") (set! cli-accum (parse-nonneg-int val)))
+          (else (require-check "unknown CLI flag" #f)))
+        (loop (cdr (cdr rest)))))))
+
+(let ((argv (command-line)))
+  (require-check "missing command-line args" (pair? argv))
+  (parse-args (cdr argv)))
+
+(require-check "missing --sock-dir" (> (string-length cli-sock-dir) 0))
+(require-check "invalid --rank" (>= cli-rank 0))
+(require-check "invalid --world" (and (>= cli-world 1) (<= cli-world 64)))
+(require-check "rank >= world" (< cli-rank cli-world))
+(when (< cli-accum 0)
+  (set! cli-accum global-micros))
+
+;; Open DIST5 + MOD5 AOT handle.
+(define handle-cell (checked-allocate 8))
+(expect-status "dist5-open" dist5-ok
+               (dist5-open cli-sock-dir cli-rank cli-world timeout-ms
+                           (ffi-pointer handle-cell)))
+(define handle (volatile-load ptr handle-cell))
+(release handle-cell)
+(require-check "rank metadata matches" (= (dist5-rank (ffi-pointer handle)) cli-rank))
+(require-check "world metadata matches" (= (dist5-world-size (ffi-pointer handle)) cli-world))
+
+;; Allocate MOD5 K1 workspace buffers.
+(define span-elems (* tokens hidden))
+(define input-a (checked-alloc-f32 span-elems))
+(define input-b (checked-alloc-f32 span-elems))
+(define input-c (checked-alloc-f32 span-elems))
+(define upstream (checked-alloc-f32 span-elems))
+(define output-a (checked-alloc-f32 span-elems))
+(define output-b (checked-alloc-f32 span-elems))
+(define output-c (checked-alloc-f32 span-elems))
+(define query-positions (checked-allocate (* tokens 8)))
+(define key-positions (checked-allocate (* tokens 8)))
+(define keep-mask (checked-allocate (* tokens tokens)))
+(define slopes (checked-alloc-f32 query-heads))
+(define epsilon-buffer (checked-alloc-f32 1))
+
+(do ((t 0 (+ t 1)))
+    ((= t tokens))
+  (volatile-store! i64 (ptr-add query-positions (* 8 t)) t)
+  (volatile-store! i64 (ptr-add key-positions (* 8 t)) t))
+(do ((i 0 (+ i 1)))
+    ((= i (* tokens tokens)))
+  (volatile-store! u8 (ptr-add keep-mask i) (if (= (modulo (+ i 3) 11) 0) 0 1)))
+(do ((h 0 (+ h 1)))
+    ((= h query-heads))
+  (expect-status "store slope" dist5-ok
+                 (dist5-store-f32 (ffi-pointer slopes) query-heads h (* 0.125 (+ h 1)))))
+(expect-status "store epsilon" dist5-ok
+               (dist5-store-f32 (ffi-pointer epsilon-buffer) 1 0 epsilon))
+
+;; Tensor <-> f32 buffer marshaling.
+(define (pack-tensor tensor buffer)
+  (let* ((count (tensor-length tensor))
+         (flat (reshape tensor (list count))))
+    (do ((i 0 (+ i 1)))
+        ((= i count))
+      (expect-status "pack store" dist5-ok
+                     (dist5-store-f32 (ffi-pointer buffer) span-elems i (tensor-ref flat i))))))
+
+(define (unpack-tensor buffer rows cols)
+  (let* ((count (* rows cols))
+         (flat (zeros (list count))))
+    (do ((i 0 (+ i 1)))
+        ((= i count) (reshape flat (list rows cols)))
+      (tensor-set! flat i (dist5-load-f32 (ffi-pointer buffer) span-elems i)))))
+
+(define (pack-heads tensor heads buffer)
+  (do ((h 0 (+ h 1)))
+      ((= h heads))
+    (do ((t 0 (+ t 1)))
+        ((= t tokens))
+      (do ((d 0 (+ d 1)))
+          ((= d head-width))
+        (expect-status "pack-heads store" dist5-ok
+                       (dist5-store-f32 (ffi-pointer buffer) span-elems
+                                        (+ (* (+ (* h tokens) t) head-width) d)
+                                        (tensor-get tensor t (+ (* h head-width) d))))))))
+
+(define (unpack-heads buffer heads)
+  (let ((tensor (zeros (list tokens (* heads head-width)))))
+    (do ((h 0 (+ h 1)))
+        ((= h heads) tensor)
+      (do ((t 0 (+ t 1)))
+          ((= t tokens))
+        (do ((d 0 (+ d 1)))
+            ((= d head-width))
+          (tensor-set! tensor t (+ (* h head-width) d)
+                       (dist5-load-f32 (ffi-pointer buffer) span-elems
+                                       (+ (* (+ (* h tokens) t) head-width) d))))))))
+
+;; MOD5 K1 primitives dispatched via DIST5 AOT handle.
+(define (rms x gamma)
+  (pack-tensor x input-a)
+  (pack-tensor gamma input-b)
+  (expect-status "MOD5 RMSNorm forward" 0
+                 (mod5-rms-forward (ffi-pointer handle) (ffi-pointer input-a)
+                                   (ffi-pointer input-b) (ffi-pointer epsilon-buffer)
+                                   (ffi-pointer output-a)))
+  (unpack-tensor output-a tokens width))
+
+(define (rms-grad x gamma dy)
+  (pack-tensor x input-a)
+  (pack-tensor gamma input-b)
+  (pack-tensor dy upstream)
+  (expect-status "MOD5 RMSNorm backward" 0
+                 (mod5-rms-backward (ffi-pointer handle) (ffi-pointer input-a)
+                                    (ffi-pointer input-b) (ffi-pointer epsilon-buffer)
+                                    (ffi-pointer upstream)
+                                    (ffi-pointer output-a) (ffi-pointer output-b)))
+  (vector (unpack-tensor output-a tokens width) (unpack-tensor output-b 1 width)))
+
+(define (glu gate up)
+  (pack-tensor gate input-a)
+  (pack-tensor up input-b)
+  (expect-status "MOD5 SwiGLU forward" 0
+                 (mod5-glu-forward (ffi-pointer handle) (ffi-pointer input-a)
+                                   (ffi-pointer input-b) (ffi-pointer output-a)))
+  (unpack-tensor output-a tokens hidden))
+
+(define (glu-grad gate up dy)
+  (pack-tensor gate input-a)
+  (pack-tensor up input-b)
+  (pack-tensor dy upstream)
+  (expect-status "MOD5 SwiGLU backward" 0
+                 (mod5-glu-backward (ffi-pointer handle) (ffi-pointer input-a)
+                                    (ffi-pointer input-b) (ffi-pointer upstream)
+                                    (ffi-pointer output-a) (ffi-pointer output-b)))
+  (vector (unpack-tensor output-a tokens hidden) (unpack-tensor output-b tokens hidden)))
+
+(define (attend q k v)
+  (pack-heads q query-heads input-a)
+  (pack-heads k kv-heads input-b)
+  (pack-heads v kv-heads input-c)
+  (expect-status "MOD5 attention forward" 0
+                 (mod5-attn-forward (ffi-pointer handle) kv-heads
+                                    (ffi-pointer input-a) (ffi-pointer input-b)
+                                    (ffi-pointer input-c) (ffi-pointer query-positions)
+                                    (ffi-pointer key-positions) (ffi-pointer keep-mask)
+                                    (ffi-pointer slopes) window (ffi-pointer output-a)))
+  (unpack-heads output-a query-heads))
+
+(define (attend-grad q k v dy)
+  (pack-heads q query-heads input-a)
+  (pack-heads k kv-heads input-b)
+  (pack-heads v kv-heads input-c)
+  (pack-heads dy query-heads upstream)
+  (expect-status "MOD5 attention backward" 0
+                 (mod5-attn-backward (ffi-pointer handle) kv-heads
+                                     (ffi-pointer input-a) (ffi-pointer input-b)
+                                     (ffi-pointer input-c) (ffi-pointer query-positions)
+                                     (ffi-pointer key-positions) (ffi-pointer keep-mask)
+                                     (ffi-pointer slopes) window (ffi-pointer upstream)
+                                     (ffi-pointer output-a) (ffi-pointer output-b)
+                                     (ffi-pointer output-c)))
+  (vector (unpack-heads output-a query-heads)
+          (unpack-heads output-b kv-heads)
+          (unpack-heads output-c kv-heads)))
+
+;; Eshkol-native matrix projections.
+(define (project x w) (matmul x w))
+(define (project-dx w dy) (matmul dy (transpose w)))
+(define (project-dw x dy) (matmul (transpose x) dy))
+
+;; Pack/unpack full flat parameter vector (2208 binary32 floats).
+(define (pack-params tensors flat-buf)
+  (do ((p 0 (+ p 1)))
+      ((= p param-count))
+    (let* ((t (vector-ref tensors p))
+           (rows (vector-ref param-rows p))
+           (cols (vector-ref param-cols p))
+           (off (vector-ref param-offsets p))
+           (count (* rows cols))
+           (flat (reshape t (list count))))
+      (do ((i 0 (+ i 1)))
+          ((= i count))
+        (expect-status "pack-params" dist5-ok
+                       (dist5-store-f32 (ffi-pointer flat-buf) total-weights
+                                        (+ off i) (tensor-ref flat i)))))))
+
+(define (unpack-params flat-buf)
+  (let ((tensors (make-vector param-count #f)))
+    (do ((p 0 (+ p 1)))
+        ((= p param-count) tensors)
+      (let* ((rows (vector-ref param-rows p))
+             (cols (vector-ref param-cols p))
+             (off (vector-ref param-offsets p))
+             (count (* rows cols))
+             (flat (zeros (list count))))
+        (do ((i 0 (+ i 1)))
+            ((= i count)
+             (vector-set! tensors p (reshape flat (list rows cols))))
+          (tensor-set! flat i (dist5-load-f32 (ffi-pointer flat-buf) total-weights
+                                              (+ off i))))))))
+
+(define (seed-tensor rows cols salt base scale)
+  (let ((tensor (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) tensor)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (let* ((i (+ (* r cols) c))
+               (seed (- (modulo (+ (* 29 salt) (* 11 i) (quotient i 5)) 37) 18)))
+          (tensor-set! tensor r c (+ base (* scale seed))))))))
+
+(define (init-weights-buf flat-buf)
+  (let ((tensors (vector (seed-tensor width width wq 0.0 0.0078125)
+                         (seed-tensor width kv-width wk 0.0 0.0078125)
+                         (seed-tensor width kv-width wv 0.0 0.0078125)
+                         (seed-tensor width width wo 0.0 0.0078125)
+                         (seed-tensor width hidden wgate 0.0 0.0078125)
+                         (seed-tensor width hidden wup 0.0 0.0078125)
+                         (seed-tensor hidden width wdown 0.0 0.0078125)
+                         (seed-tensor 1 width gamma1 1.0 0.0078125)
+                         (seed-tensor 1 width gamma2 1.0 0.0078125))))
+    (pack-params tensors flat-buf)))
+
+;; Pre-generate the 4 deterministic microbatches (inputs + targets).
+(define micro-inputs (make-vector global-micros #f))
+(define micro-targets (make-vector global-micros #f))
+(do ((m 0 (+ m 1)))
+    ((= m global-micros))
+  (let* ((x (seed-tensor tokens width (+ 11 (* m 3)) 0.0 0.03125))
+         (tgt (tensor-add (tensor-scale x 0.65)
+                          (seed-tensor tokens width (+ 12 (* m 3)) 0.0 0.00390625))))
+    (vector-set! micro-inputs m x)
+    (vector-set! micro-targets m tgt)))
+
+;; One pre-norm MQA decoder forward + optional backward pass.
+(define (block-forward-backward weights x target gradients)
+  (let* ((q-weight (vector-ref weights wq))
+         (k-weight (vector-ref weights wk))
+         (v-weight (vector-ref weights wv))
+         (o-weight (vector-ref weights wo))
+         (gate-weight (vector-ref weights wgate))
+         (up-weight (vector-ref weights wup))
+         (down-weight (vector-ref weights wdown))
+         (gamma-a (vector-ref weights gamma1))
+         (gamma-b (vector-ref weights gamma2))
+         (norm-a (rms x gamma-a))
+         (q (project norm-a q-weight))
+         (k (project norm-a k-weight))
+         (v (project norm-a v-weight))
+         (attn (attend q k v))
+         (residual (tensor-add x (project attn o-weight)))
+         (norm-b (rms residual gamma-b))
+         (gate (project norm-b gate-weight))
+         (up (project norm-b up-weight))
+         (gated (glu gate up))
+         (result (tensor-add residual (project gated down-weight)))
+         (delta (tensor-sub result target))
+         (loss (* 0.5 inverse-elements (tensor-sum (tensor-mul delta delta)))))
+    (when gradients
+      (let* ((dy (tensor-scale delta inverse-elements))
+             (dgated (project-dx down-weight dy))
+             (dglu (glu-grad gate up dgated))
+             (dgate (vector-ref dglu 0))
+             (dup (vector-ref dglu 1))
+             (dnorm-b (tensor-add (project-dx gate-weight dgate) (project-dx up-weight dup)))
+             (drms-b (rms-grad residual gamma-b dnorm-b))
+             (dresidual (tensor-add dy (vector-ref drms-b 0)))
+             (dattn (project-dx o-weight dresidual))
+             (dqkv (attend-grad q k v dattn))
+             (dq (vector-ref dqkv 0))
+             (dk (vector-ref dqkv 1))
+             (dv (vector-ref dqkv 2))
+             (dnorm-a (tensor-add (tensor-add (project-dx q-weight dq) (project-dx k-weight dk))
+                                  (project-dx v-weight dv)))
+             (drms-a (rms-grad x gamma-a dnorm-a)))
+        (vector-set! gradients wq (project-dw norm-a dq))
+        (vector-set! gradients wk (project-dw norm-a dk))
+        (vector-set! gradients wv (project-dw norm-a dv))
+        (vector-set! gradients wo (project-dw attn dresidual))
+        (vector-set! gradients wgate (project-dw norm-b dgate))
+        (vector-set! gradients wup (project-dw norm-b dup))
+        (vector-set! gradients wdown (project-dw gated dy))
+        (vector-set! gradients gamma1 (vector-ref drms-a 1))
+        (vector-set! gradients gamma2 (vector-ref drms-b 1))))
+    loss))
+
+;; Finite-difference check on representative parameters (W=1 reference sanity).
+(define (check-block-finite-differences weights)
+  (let* ((x (vector-ref micro-inputs 0))
+         (target (vector-ref micro-targets 0))
+         (grads (make-vector param-count #f))
+         (step 0.001953125))
+    (block-forward-backward weights x target grads)
+    (do ((p 0 (+ p 1)))
+        ((= p param-count))
+      (let* ((w (vector-ref weights p))
+             (g (vector-ref grads p))
+             (orig (tensor-get w 0 0))
+             (analytic (tensor-get g 0 0)))
+        (tensor-set! w 0 0 (+ orig step))
+        (let ((plus (block-forward-backward weights x target #f)))
+          (tensor-set! w 0 0 (- orig step))
+          (let* ((minus (block-forward-backward weights x target #f))
+                 (numerical (/ (- plus minus) (* 2.0 step))))
+            (tensor-set! w 0 0 orig)
+            (require-check "block finite difference mismatch"
+                           (<= (abs (- analytic numerical))
+                               (+ 0.000002 (* 0.005 (abs numerical)))))))))))
+
+;; Compute mean f32 gradient and mean f32 loss across microbatches [begin, begin+count).
+(define (zero-f32-buf buf count)
+  (do ((i 0 (+ i 1)))
+      ((= i count))
+    (expect-status "zero f32" dist5-ok
+                   (dist5-store-f32 (ffi-pointer buf) count i 0.0))))
+
+(define (compute-shard-grad weights begin count out-grad-buf tmp-grad-buf loss-cell)
+  (zero-f32-buf out-grad-buf total-weights)
+  (expect-status "zero loss" dist5-ok (dist5-store-f32 (ffi-pointer loss-cell) 1 0 0.0))
+  (let ((loss-one (checked-alloc-f32 1))
+        (grads (make-vector param-count #f)))
+    (do ((m begin (+ m 1)))
+        ((= m (+ begin count)))
+      (let ((l (block-forward-backward weights
+                                       (vector-ref micro-inputs m)
+                                       (vector-ref micro-targets m)
+                                       grads)))
+        (expect-status "store loss-one" dist5-ok
+                       (dist5-store-f32 (ffi-pointer loss-one) 1 0 l))
+        (expect-status "add loss" dist5-ok
+                       (dist5-f32-add-inplace (ffi-pointer loss-cell) (ffi-pointer loss-one) 1))
+        (pack-params grads tmp-grad-buf)
+        (expect-status "add grad" dist5-ok
+                       (dist5-f32-add-inplace (ffi-pointer out-grad-buf)
+                                              (ffi-pointer tmp-grad-buf)
+                                              total-weights))))
+    (dist5-free-f32 (ffi-pointer loss-one)))
+  (when (> count 1)
+    (expect-status "div loss" dist5-ok
+                   (dist5-f32-div-scalar-inplace (ffi-pointer loss-cell) 1 count))
+    (expect-status "div grad" dist5-ok
+                   (dist5-f32-div-scalar-inplace (ffi-pointer out-grad-buf)
+                                                 total-weights count))))
+
+;; Exercise barrier, allgather, and reduce-scatter on every rank before training.
+(define (check-live-collectives)
+  (expect-status "initial barrier" dist5-ok
+                 (dist5-barrier (ffi-pointer handle) 10 timeout-ms))
+  (let ((send-ag (checked-alloc-f32 2))
+        (recv-ag (checked-alloc-f32 (* 2 cli-world)))
+        (send-rs (checked-alloc-f32 (* 2 cli-world)))
+        (recv-rs (checked-alloc-f32 2)))
+    (expect-status "ag s0" dist5-ok (dist5-store-f32 (ffi-pointer send-ag) 2 0 (+ (* cli-rank 10) 1)))
+    (expect-status "ag s1" dist5-ok (dist5-store-f32 (ffi-pointer send-ag) 2 1 (+ (* cli-rank 10) 2)))
+    (expect-status "allgather probe" dist5-ok
+                   (dist5-allgather-f32 (ffi-pointer handle) (ffi-pointer send-ag) 2
+                                        (ffi-pointer recv-ag) 11 timeout-ms))
+    (do ((r 0 (+ r 1)))
+        ((= r cli-world))
+      (require-check "allgather val 0"
+                     (= (dist5-load-f32 (ffi-pointer recv-ag) (* 2 cli-world) (* 2 r))
+                        (+ (* r 10) 1)))
+      (require-check "allgather val 1"
+                     (= (dist5-load-f32 (ffi-pointer recv-ag) (* 2 cli-world) (+ (* 2 r) 1))
+                        (+ (* r 10) 2))))
+    (do ((i 0 (+ i 1)))
+        ((= i (* 2 cli-world)))
+      (expect-status "rs store" dist5-ok
+                     (dist5-store-f32 (ffi-pointer send-rs) (* 2 cli-world) i
+                                      (* (+ cli-rank 1) (+ i 1)))))
+    (expect-status "reduce-scatter probe" dist5-ok
+                   (dist5-reduce-scatter-f32 (ffi-pointer handle) (ffi-pointer send-rs)
+                                             (ffi-pointer recv-rs) 2 dist5-op-sum 12 timeout-ms))
+    (let ((rank-sum (quotient (* cli-world (+ cli-world 1)) 2)))
+      (require-check "reduce-scatter val 0"
+                     (= (dist5-load-f32 (ffi-pointer recv-rs) 2 0)
+                        (* rank-sum (+ (* cli-rank 2) 1))))
+      (require-check "reduce-scatter val 1"
+                     (= (dist5-load-f32 (ffi-pointer recv-rs) 2 1)
+                        (* rank-sum (+ (* cli-rank 2) 2)))))
+    (dist5-free-f32 (ffi-pointer send-ag))
+    (dist5-free-f32 (ffi-pointer recv-ag))
+    (dist5-free-f32 (ffi-pointer send-rs))
+    (dist5-free-f32 (ffi-pointer recv-rs))))
+
+(define (run-train-mode)
+  (require-check "global-micros divisible by world" (= (modulo global-micros cli-world) 0))
+  (when (= cli-world 1)
+    (require-check "global-micros divisible by accum" (= (modulo global-micros cli-accum) 0)))
+  (check-live-collectives)
+
+  (let ((weights-buf (checked-alloc-f32 total-weights))
+        (local-grad (checked-alloc-f32 total-weights))
+        (mean-grad (checked-alloc-f32 total-weights))
+        (tmp-grad (checked-alloc-f32 total-weights))
+        (shard-grad (checked-alloc-f32 total-weights))
+        (local-loss-buf (checked-alloc-f32 1))
+        (global-loss-buf (checked-alloc-f32 1))
+        (shard-loss-buf (checked-alloc-f32 1))
+        (hex-buf (checked-allocate 65)))
+    ;; Rank 0 initializes weights and broadcasts to all ranks.
+    (when (= cli-rank 0)
+      (init-weights-buf weights-buf))
+    (expect-status "broadcast initial weights" dist5-ok
+                   (dist5-broadcast-f32 (ffi-pointer handle) (ffi-pointer weights-buf)
+                                        total-weights 0 20 timeout-ms))
+
+    (let ((weights (unpack-params weights-buf))
+          (initial-loss 0.0)
+          (prev-loss 0.0))
+      (when (and (= cli-world 1) (= cli-accum global-micros))
+        (check-block-finite-differences weights))
+
+      (do ((step 0 (+ step 1)))
+          ((> step train-steps))
+        ;; Compute local gradient + local loss.
+        (if (= cli-world 1)
+            (let ((per-shard (quotient global-micros cli-accum)))
+              (zero-f32-buf local-grad total-weights)
+              (expect-status "zero accum loss" dist5-ok
+                             (dist5-store-f32 (ffi-pointer local-loss-buf) 1 0 0.0))
+              (do ((s 0 (+ s 1)))
+                  ((= s cli-accum))
+                (compute-shard-grad weights (* s per-shard) per-shard
+                                    shard-grad tmp-grad shard-loss-buf)
+                (expect-status "accum shard grad" dist5-ok
+                               (dist5-f32-add-inplace (ffi-pointer local-grad)
+                                                      (ffi-pointer shard-grad)
+                                                      total-weights))
+                (expect-status "accum shard loss" dist5-ok
+                               (dist5-f32-add-inplace (ffi-pointer local-loss-buf)
+                                                      (ffi-pointer shard-loss-buf) 1)))
+              (when (> cli-accum 1)
+                (expect-status "div accum grad" dist5-ok
+                               (dist5-f32-div-scalar-inplace (ffi-pointer local-grad)
+                                                             total-weights cli-accum))
+                (expect-status "div accum loss" dist5-ok
+                               (dist5-f32-div-scalar-inplace (ffi-pointer local-loss-buf)
+                                                             1 cli-accum))))
+            (let ((per-rank (quotient global-micros cli-world)))
+              (compute-shard-grad weights (* cli-rank per-rank) per-rank
+                                  local-grad tmp-grad local-loss-buf)))
+
+        ;; Allreduce global mean loss across ranks.
+        (expect-status "allreduce mean loss" dist5-ok
+                       (dist5-allreduce-f32 (ffi-pointer handle)
+                                            (ffi-pointer local-loss-buf)
+                                            (ffi-pointer global-loss-buf)
+                                            1 dist5-op-mean (+ 100 (* step 2)) timeout-ms))
+        (let ((step-loss (dist5-load-f32 (ffi-pointer global-loss-buf) 1 0)))
+          (require-check "loss finite and nonnegative"
+                         (and (>= step-loss 0.0) (< step-loss 1.0e30)))
+          (if (= step 0)
+              (set! initial-loss step-loss)
+              (require-check "loss strictly decreased" (< step-loss prev-loss)))
+          (set! prev-loss step-loss)
+          (display "DIST5 AOT LOSS world=") (display cli-world)
+          (display " rank=") (display cli-rank)
+          (display " step=") (display step)
+          (display " loss=") (display (number->string step-loss)) (newline))
+
+        ;; Sync gradients and apply f32 SGD update for steps 0..train-steps-1.
+        (when (< step train-steps)
+          (expect-status "sync_gradients_f32" dist5-ok
+                         (dist5-sync-gradients-f32 (ffi-pointer handle)
+                                                   (ffi-pointer local-grad)
+                                                   (ffi-pointer mean-grad)
+                                                   total-weights (+ 101 (* step 2))
+                                                   timeout-ms))
+          ;; SGD update in binary32: w[i] = f32(w[i] - lr * mean_grad[i]).
+          (do ((i 0 (+ i 1)))
+              ((= i total-weights))
+            (let ((w-old (dist5-load-f32 (ffi-pointer weights-buf) total-weights i))
+                  (g-val (dist5-load-f32 (ffi-pointer mean-grad) total-weights i)))
+              (expect-status "sgd store weight" dist5-ok
+                             (dist5-store-f32 (ffi-pointer weights-buf) total-weights i
+                                              (- w-old (* learning-rate g-val))))))
+          (set! weights (unpack-params weights-buf))))
+
+      ;; Allgather full weights across ranks and verify exact bitwise equality.
+      (let ((all-weights (checked-alloc-f32 (* total-weights cli-world))))
+        (expect-status "allgather final weights" dist5-ok
+                       (dist5-allgather-f32 (ffi-pointer handle)
+                                            (ffi-pointer weights-buf)
+                                            total-weights
+                                            (ffi-pointer all-weights)
+                                            999 timeout-ms))
+        (do ((r 0 (+ r 1)))
+            ((= r cli-world))
+          (let ((peer-ptr (ptr-add all-weights (* r total-weights 4))))
+            (require-check "peer weights bitwise identical"
+                           (= (dist5-equal-bits-f32 (ffi-pointer weights-buf)
+                                                    (ffi-pointer peer-ptr)
+                                                    total-weights)
+                              1))))
+        (dist5-free-f32 (ffi-pointer all-weights)))
+
+      (expect-status "sha256 final weights" dist5-ok
+                     (dist5-sha256-hex-f32 (ffi-pointer weights-buf) total-weights
+                                           (ffi-pointer hex-buf) 65))
+      (display "DIST5 AOT RESULT world=") (display cli-world)
+      (display " rank=") (display cli-rank)
+      (display " accum=") (display (if (= cli-world 1) cli-accum cli-world))
+      (display " steps=") (display train-steps)
+      (display " initial=") (display (number->string initial-loss))
+      (display " final=") (display (number->string prev-loss))
+      (display " weights_sha256=") (display-hex-digest hex-buf)
+      (display " peer_bitwise=PASS") (newline))
+
+    (release hex-buf)
+    (dist5-free-f32 (ffi-pointer shard-loss-buf))
+    (dist5-free-f32 (ffi-pointer global-loss-buf))
+    (dist5-free-f32 (ffi-pointer local-loss-buf))
+    (dist5-free-f32 (ffi-pointer shard-grad))
+    (dist5-free-f32 (ffi-pointer tmp-grad))
+    (dist5-free-f32 (ffi-pointer mean-grad))
+    (dist5-free-f32 (ffi-pointer local-grad))
+    (dist5-free-f32 (ffi-pointer weights-buf))))
+
+(define (run-nonfinite-mode)
+  (let ((weights-buf (checked-alloc-f32 total-weights))
+        (weights-snap (checked-alloc-f32 total-weights))
+        (local-grad (checked-alloc-f32 total-weights))
+        (bad-grad (checked-alloc-f32 total-weights))
+        (mean-grad (checked-alloc-f32 total-weights))
+        (tmp-grad (checked-alloc-f32 total-weights))
+        (loss-buf (checked-alloc-f32 1))
+        (hex-buf (checked-allocate 65)))
+    (when (= cli-rank 0)
+      (init-weights-buf weights-buf))
+    (expect-status "nonfinite broadcast weights" dist5-ok
+                   (dist5-broadcast-f32 (ffi-pointer handle) (ffi-pointer weights-buf)
+                                        total-weights 0 50 timeout-ms))
+    ;; Copy weights into snapshot buffer.
+    (do ((i 0 (+ i 1)))
+        ((= i total-weights))
+      (expect-status "copy weight snap" dist5-ok
+                     (dist5-store-f32-bits (ffi-pointer weights-snap) total-weights i
+                                           (dist5-load-f32-bits (ffi-pointer weights-buf)
+                                                                total-weights i))))
+
+    ;; Compute a real finite local gradient via MOD5 K1.
+    (let ((weights (unpack-params weights-buf)))
+      (compute-shard-grad weights (modulo cli-rank global-micros) 1
+                          local-grad tmp-grad loss-buf))
+
+    ;; Copy local_grad to bad_grad and inject qNaN on rank W-1.
+    (do ((i 0 (+ i 1)))
+        ((= i total-weights))
+      (expect-status "copy bad grad" dist5-ok
+                     (dist5-store-f32-bits (ffi-pointer bad-grad) total-weights i
+                                           (dist5-load-f32-bits (ffi-pointer local-grad)
+                                                                total-weights i))))
+    (when (= cli-rank (- cli-world 1))
+      (expect-status "inject qNaN" dist5-ok
+                     (dist5-store-f32-bits (ffi-pointer bad-grad) total-weights 3
+                                           #x7fc00000)))
+    ;; Sync directly into weights-buf to prove atomic abort leaves weights intact.
+    (let ((nan-st (dist5-sync-gradients-f32 (ffi-pointer handle)
+                                            (ffi-pointer bad-grad)
+                                            (ffi-pointer weights-buf)
+                                            total-weights 51 timeout-ms)))
+      (expect-status "atomic NaN abort" dist5-err-nonfinite nan-st)
+      (require-check "weights intact after NaN abort"
+                     (= (dist5-equal-bits-f32 (ffi-pointer weights-buf)
+                                              (ffi-pointer weights-snap)
+                                              total-weights)
+                        1))
+
+      ;; Inject +Inf on rank W-1 and verify atomic abort again.
+      (when (= cli-rank (- cli-world 1))
+        (expect-status "inject +Inf" dist5-ok
+                       (dist5-store-f32-bits (ffi-pointer bad-grad) total-weights 3
+                                             #x7f800000)))
+      (let ((inf-st (dist5-sync-gradients-f32 (ffi-pointer handle)
+                                              (ffi-pointer bad-grad)
+                                              (ffi-pointer weights-buf)
+                                              total-weights 52 timeout-ms)))
+        (expect-status "atomic Inf abort" dist5-err-nonfinite inf-st)
+        (require-check "weights intact after Inf abort"
+                       (= (dist5-equal-bits-f32 (ffi-pointer weights-buf)
+                                                (ffi-pointer weights-snap)
+                                                total-weights)
+                          1))
+
+        ;; Prove communicator remains reusable for clean gradient sync.
+        (expect-status "recovery sync after nonfinite abort" dist5-ok
+                       (dist5-sync-gradients-f32 (ffi-pointer handle)
+                                                 (ffi-pointer local-grad)
+                                                 (ffi-pointer mean-grad)
+                                                 total-weights 53 timeout-ms))
+
+        (expect-status "sha256 preserved weights" dist5-ok
+                       (dist5-sha256-hex-f32 (ffi-pointer weights-buf) total-weights
+                                             (ffi-pointer hex-buf) 65))
+        (display "DIST5 AOT NONFINITE world=") (display cli-world)
+        (display " rank=") (display cli-rank)
+        (display " nan_status=") (display nan-st)
+        (display " inf_status=") (display inf-st)
+        (display " weights_preserved=1 recovered=1 weights_sha256=")
+        (display-hex-digest hex-buf)
+        (display " PASS") (newline)))
+
+    (release hex-buf)
+    (dist5-free-f32 (ffi-pointer loss-buf))
+    (dist5-free-f32 (ffi-pointer tmp-grad))
+    (dist5-free-f32 (ffi-pointer mean-grad))
+    (dist5-free-f32 (ffi-pointer bad-grad))
+    (dist5-free-f32 (ffi-pointer local-grad))
+    (dist5-free-f32 (ffi-pointer weights-snap))
+    (dist5-free-f32 (ffi-pointer weights-buf))))
+
+(define (run-mismatch-mode)
+  (require-check "mismatch requires world >= 2" (>= cli-world 2))
+  (let* ((tag (if (= cli-rank (- cli-world 1)) 99 42))
+         (st (dist5-barrier (ffi-pointer handle) tag timeout-ms))
+         (sticky (dist5-barrier (ffi-pointer handle) 100 timeout-ms)))
+    (expect-status "mismatch status" dist5-err-mismatch st)
+    (expect-status "sticky mismatch status" dist5-err-mismatch sticky)
+    (display "DIST5 AOT MISMATCH world=") (display cli-world)
+    (display " rank=") (display cli-rank)
+    (display " status=") (display st)
+    (display " sticky_status=") (display sticky)
+    (display " PASS") (newline)))
+
+(cond
+  ((string=? cli-mode "train") (run-train-mode))
+  ((string=? cli-mode "nonfinite") (run-nonfinite-mode))
+  ((string=? cli-mode "mismatch") (run-mismatch-mode))
+  (else (require-check "unsupported --mode" #f)))
+
+;; Clean up handle and MOD5 workspace.
+(dist5-close (ffi-pointer handle))
+(dist5-free-f32 (ffi-pointer input-a))
+(dist5-free-f32 (ffi-pointer input-b))
+(dist5-free-f32 (ffi-pointer input-c))
+(dist5-free-f32 (ffi-pointer upstream))
+(dist5-free-f32 (ffi-pointer output-a))
+(dist5-free-f32 (ffi-pointer output-b))
+(dist5-free-f32 (ffi-pointer output-c))
+(release query-positions)
+(release key-positions)
+(release keep-mask)
+(dist5-free-f32 (ffi-pointer slopes))
+(dist5-free-f32 (ffi-pointer epsilon-buffer))
