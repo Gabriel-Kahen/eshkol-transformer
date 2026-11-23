@@ -392,6 +392,10 @@ test-dist5:
 test-eval5:
 	/usr/bin/bash scripts/test-eval5.sh
 
+.PHONY: test-doc5
+test-doc5:
+	/usr/bin/bash scripts/test-doc5-walkthrough.sh
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 
