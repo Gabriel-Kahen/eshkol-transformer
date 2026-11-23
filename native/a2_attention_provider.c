@@ -285,6 +285,7 @@ static int attention_score(const attention_shape *s, const float *q,
   return 1;
 }
 
+#ifndef ET_PA4_ATTENTION_CANDIDATE
 static int attention_row(const attention_shape *s, const float *q,
                          const float *k, const int64_t *query_positions,
                          const int64_t *key_positions, const uint8_t *mask,
@@ -380,6 +381,66 @@ static int attention_mean_dp(
   *result = mean;
   return 1;
 }
+#else
+typedef struct pa4_row {
+  int admitted_flags[ET_PA4_MAX_KEYS];
+  float probs[ET_PA4_MAX_KEYS];
+} pa4_row;
+
+static int pa4_prepare_row(
+    const attention_shape *s, const float *q, const float *k,
+    const int64_t *query_positions, const int64_t *key_positions,
+    const uint8_t *mask, float scale, size_t n, size_t hq, size_t tq,
+    pa4_row *row) {
+  float scores[ET_PA4_MAX_KEYS];
+  float weights[ET_PA4_MAX_KEYS];
+  float maximum = 0.0f;
+  float denominator = 0.0f;
+  int any = 0;
+  for (size_t tk = 0; tk < s->tk; tk++) {
+    row->admitted_flags[tk] = admitted(s, query_positions, key_positions,
+                                       mask, n, tq, tk);
+    if (!row->admitted_flags[tk]) continue;
+    if (!attention_score(s, q, k, scale, n, hq, tq, tk, &scores[tk])) return -1;
+    if (!any || scores[tk] > maximum) maximum = scores[tk];
+    any = 1;
+  }
+  if (!any) return 0;
+  for (size_t tk = 0; tk < s->tk; tk++) {
+    if (!row->admitted_flags[tk]) continue;
+    weights[tk] = expf(scores[tk] - maximum);
+    denominator = denominator + weights[tk];
+    if (!isfinite(weights[tk]) || !isfinite(denominator)) return -1;
+  }
+  for (size_t tk = 0; tk < s->tk; tk++) {
+    if (!row->admitted_flags[tk]) continue;
+    row->probs[tk] = weights[tk] / denominator;
+    if (!isfinite(row->probs[tk])) return -1;
+  }
+  return 1;
+}
+
+static inline int pa4_row_dp(const attention_shape *s, const pa4_row *row,
+                             const float *v, const float *upstream,
+                             int checked, float *dps, float *mean_dp) {
+  float mean = 0.0f;
+  for (size_t tk = 0; tk < s->tk; tk++) {
+    if (!row->admitted_flags[tk]) continue;
+    float dp = 0.0f;
+    for (size_t d = 0; d < s->dh; d++) {
+      const float product = upstream[d] * v[tk * s->dh + d];
+      if (checked && !isfinite(product)) return 0;
+      dp = dp + product;
+      if (checked && !isfinite(dp)) return 0;
+    }
+    dps[tk] = dp;
+    mean = mean + row->probs[tk] * dp;
+    if (checked && !isfinite(mean)) return 0;
+  }
+  *mean_dp = mean;
+  return 1;
+}
+#endif
 
 static int attention_forward_preflight(
     const attention_shape *s, const float *q, const float *k, const float *v,
@@ -390,11 +451,18 @@ static int attention_forward_preflight(
     for (size_t hq = 0; hq < s->hq; hq++) {
       const size_t hkv = hq / (s->hq / s->hkv);
       for (size_t tq = 0; tq < s->tq; tq++) {
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+        pa4_row row;
+        const int state = pa4_prepare_row(s, q, k, query_positions,
+                                          key_positions, mask, scale, n, hq,
+                                          tq, &row);
+#else
         float maximum;
         float denominator;
         const int state = attention_row(s, q, k, query_positions, key_positions,
                                         mask, scale, n, hq, tq, &maximum,
                                         &denominator);
+#endif
         if (state < 0) {
           return 0;
         }
@@ -404,6 +472,10 @@ static int attention_forward_preflight(
         for (size_t d = 0; d < s->dh; d++) {
           float output = 0.0f;
           for (size_t tk = 0; tk < s->tk; tk++) {
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+            if (!row.admitted_flags[tk]) continue;
+            const float probability = row.probs[tk];
+#else
             float probability;
             if (!admitted(s, query_positions, key_positions, mask, n, tq, tk)) {
               continue;
@@ -412,6 +484,7 @@ static int attention_forward_preflight(
                                        maximum, denominator, &probability)) {
               return 0;
             }
+#endif
             output = output + probability * v[kv_index(s, n, hkv, tk, d)];
             if (!isfinite(output)) {
               return 0;
@@ -429,6 +502,57 @@ static int attention_backward_preflight(
     const int64_t *query_positions, const int64_t *key_positions,
     const uint8_t *mask, const float *upstream) {
   const float scale = attention_scale(s->dh);
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+  enum { gradient_tile = 4 };  /* Covers every advertised head dimension. */
+  const size_t group = s->hq / s->hkv;
+  for (size_t n = 0; n < s->n; n++) {
+    for (size_t hkv = 0; hkv < s->hkv; hkv++) {
+      const size_t first_hq = hkv * group;
+      const size_t kv_base = kv_index(s, n, hkv, 0u, 0u);
+      /* Wider direct calls use more tiles, keeping scratch independent of Dh. */
+      for (size_t start = 0; start < s->dh; start += gradient_tile) {
+        const size_t remaining = s->dh - start;
+        const size_t width = remaining < gradient_tile ? remaining : gradient_tile;
+        float dk[ET_PA4_MAX_KEYS][gradient_tile] = {{0.0f}};
+        float dv[ET_PA4_MAX_KEYS][gradient_tile] = {{0.0f}};
+        /* Each dK/dV element visits query heads, then query positions. */
+        for (size_t hq = first_hq; hq < first_hq + group; hq++) {
+          for (size_t tq = 0; tq < s->tq; tq++) {
+            pa4_row row;
+            float dps[ET_PA4_MAX_KEYS];
+            float mean_dp;
+            const size_t q_base = q_index(s, n, hq, tq, 0u);
+            const int state = pa4_prepare_row(s, q, k, query_positions,
+                                              key_positions, mask, scale, n,
+                                              hq, tq, &row);
+            if (state < 0) return 0;
+            if (state == 0) continue;
+            if (!pa4_row_dp(s, &row, v + kv_base, upstream + q_base, 1,
+                            dps, &mean_dp)) return 0;
+            float dq[gradient_tile] = {0.0f};
+            /* Each dQ element visits keys in key-position order. */
+            for (size_t tk = 0; tk < s->tk; tk++) {
+              if (!row.admitted_flags[tk]) continue;
+              const float probability = row.probs[tk];
+              const float ds = probability * (dps[tk] - mean_dp);
+              if (!isfinite(ds)) return 0;
+              const float scaled_ds = ds * scale;
+              const size_t ki = kv_base + tk * s->dh + start;
+              const size_t qi = q_base + start;
+              for (size_t d = 0; d < width; d++) {
+                dq[d] = dq[d] + scaled_ds * k[ki + d];
+                dk[tk][d] = dk[tk][d] + scaled_ds * q[qi + d];
+                dv[tk][d] = dv[tk][d] + probability * upstream[qi + d];
+                if (!isfinite(dq[d]) || !isfinite(dk[tk][d]) ||
+                    !isfinite(dv[tk][d])) return 0;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+#else
   /* dQ: accumulation order is key position order. */
   for (size_t n = 0; n < s->n; n++) {
     for (size_t hq = 0; hq < s->hq; hq++) {
@@ -535,6 +659,7 @@ static int attention_backward_preflight(
       }
     }
   }
+#endif
   return 1;
 }
 
@@ -799,6 +924,28 @@ static void invoke_attention_backward(const et_kernel_call_v1 *call) {
     for (size_t hq = 0; hq < s.hq; hq++) {
       const size_t hkv = hq / (s.hq / s.hkv);
       for (size_t tq = 0; tq < s.tq; tq++) {
+#ifdef ET_PA4_ATTENTION_CANDIDATE
+        pa4_row row;
+        float dps[ET_PA4_MAX_KEYS];
+        float mean_dp;
+        const size_t q_base = q_index(&s, n, hq, tq, 0u);
+        const size_t kv_base = kv_index(&s, n, hkv, 0u, 0u);
+        if (pa4_prepare_row(&s, q, k, query_positions, key_positions, mask,
+                            scale, n, hq, tq, &row) <= 0) continue;
+        (void)pa4_row_dp(&s, &row, v + kv_base, upstream + q_base, 0,
+                         dps, &mean_dp);
+        for (size_t tk = 0; tk < s.tk; tk++) {
+          if (!row.admitted_flags[tk]) continue;
+          const float probability = row.probs[tk];
+          const float scaled_ds = (probability * (dps[tk] - mean_dp)) * scale;
+          const size_t ki = kv_base + tk * s.dh;
+          for (size_t d = 0; d < s.dh; d++) {
+            dq[q_base + d] = dq[q_base + d] + scaled_ds * k[ki + d];
+            dk[ki + d] = dk[ki + d] + scaled_ds * q[q_base + d];
+            dv[ki + d] = dv[ki + d] + probability * upstream[q_base + d];
+          }
+        }
+#else
         float maximum;
         float denominator;
         float mean_dp = 0.0f;
@@ -835,6 +982,7 @@ static void invoke_attention_backward(const et_kernel_call_v1 *call) {
                 probability * upstream[q_index(&s, n, hq, tq, d)];
           }
         }
+#endif
       }
     }
   }

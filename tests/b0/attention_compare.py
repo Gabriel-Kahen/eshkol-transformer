@@ -41,13 +41,16 @@ CONTRACT = {
         'rss': 'separate-selected-provider-process-linux-wait4-ru-maxrss-kib',
         'completion': 'linux-pidfd-poll', 'analysis': 'descriptive-ratios-min-lower-median-max-v1'},
     'warmup': 100, 'iterations': 10000, 'pairs': 12, 'rss_pairs': 4, 'timeout_ms': 30000}
+JOINT_CONTRACT = dict(CONTRACT, id='a2-pa4-comparison-v1-joint',
+                      operations=[*CONTRACT['operations'], 'joint'])
 
 
 def validate_definition(value):
     keys(value, set(CONTRACT), 'definition')
+    contract = JOINT_CONTRACT if value['id'] == JOINT_CONTRACT['id'] else CONTRACT
     adjustable = {'warmup', 'iterations', 'pairs', 'rss_pairs', 'timeout_ms'}
-    for name in set(CONTRACT) - adjustable:
-        require(codec.canonical_json(value[name]) == codec.canonical_json(CONTRACT[name]),
+    for name in set(contract) - adjustable:
+        require(codec.canonical_json(value[name]) == codec.canonical_json(contract[name]),
                 'unsupported definition ' + name)
     for name, lower, upper in [('warmup', 0, 100000), ('iterations', 1, 1000000),
             ('pairs', 2, 100), ('rss_pairs', 2, 100), ('timeout_ms', 1, 3600000)]:
@@ -90,11 +93,11 @@ def rss_summary(samples):
     return {p:interval([s['process_peak_rss_kib'] for s in samples if s['provider'] == p]) for p in PROVIDERS}
 
 
-def aggregate(cases):
-    # Equal dispatch counts for every row; totals describe this bounded shape mix.
+def aggregate(cases, definition):
+    # Equal iteration counts for every row; totals describe this bounded shape mix.
     result = []
-    for operation in CONTRACT['operations']:
-        for scope in CONTRACT['scopes']:
+    for operation in definition['operations']:
+        for scope in definition['scopes']:
             samples = [s for c in cases if c['operation'] == operation and c['scope'] == scope for s in c['samples']]
             totals = {p:sum(s['elapsed_ns'] for s in samples if s['provider'] == p) for p in PROVIDERS}
             result.append({'operation':operation,'scope':scope,'total_elapsed_ns':totals,
@@ -103,9 +106,21 @@ def aggregate(cases):
 
 
 def witness(bits, shape, operation):
+    if operation == 'joint':
+        parts = joint_output_parts(bits, shape)
+        for part, single in zip(parts, CONTRACT['operations']):
+            witness(part, shape, single)
+        return hashlib.sha256(bytes.fromhex(bits)).hexdigest()
     _, digest = base.native_output(json.dumps({'version':1, 'provider':PROVIDERS[0],
         'dispatch_elapsed_ns':1, 'output_bits':bits}).encode(), shape, operation)
     return digest
+
+
+def joint_output_parts(bits, shape):
+    require(isinstance(bits, str), 'invalid output bits/shape')
+    n, hq, _, tq, _, dh = shape
+    split = n * hq * tq * dh * 8
+    return bits[:split], bits[split:]
 
 
 def validate_samples(samples, count, shape, operation, expected_bits, rss=False):
@@ -202,7 +217,7 @@ def validate_report(value):
     require(affinity == sorted(set(affinity)),'invalid affinity')
     require(volatile['support_status'] == support_status(env,stable['compiler'],stable['container_image']), 'support label mismatch')
     cases = codec._array(volatile['cases'],'cases')
-    identities = [(s,op,scope) for s in base.SHAPES for op in CONTRACT['operations'] for scope in CONTRACT['scopes']]
+    identities = [(s,op,scope) for s in base.SHAPES for op in definition['operations'] for scope in definition['scopes']]
     require(len(cases) == len(identities),'case count')
     witnesses = {}
     for case,(shape,op,scope) in zip(cases,identities):
@@ -210,7 +225,11 @@ def validate_report(value):
         require(codec.canonical_json(case['shape']) == codec.canonical_json(shape) and case['operation'] == op and case['scope'] == scope,'case order')
         digest = validate_samples(case['samples'],definition['pairs'],shape,op,case['output_bits'])
         require(case['output_sha256'] == digest,'case digest')
-        require(witnesses.setdefault((tuple(shape),op),digest) == digest,'scope parity mismatch')
+        bits = case['output_bits']
+        require(witnesses.setdefault((tuple(shape),op),bits) == bits,'scope parity mismatch')
+        if op == 'joint':
+            expected_parts = tuple(witnesses[tuple(shape),single] for single in CONTRACT['operations'])
+            require(joint_output_parts(bits, shape) == expected_parts, 'joint/standalone parity mismatch')
         validate_samples(case['rss_samples'],definition['rss_pairs'],shape,op,case['output_bits'],True)
         require(codec.canonical_json(case['rss_summary']) == codec.canonical_json(rss_summary(case['rss_samples'])),'RSS summary mismatch')
         require(codec.canonical_json(case['summary']) == codec.canonical_json(summarize(case['samples'])),'summary mismatch')
@@ -218,7 +237,7 @@ def validate_report(value):
         for name in case['paired_process']:
             codec._integer(case['paired_process'][name],name,1)
         require(case['paired_process']['elapsed_ns'] >= sum(s['elapsed_ns'] for s in case['samples']),'timing exceeds process')
-    require(codec.canonical_json(volatile['aggregate']) == codec.canonical_json(aggregate(cases)),'aggregate mismatch')
+    require(codec.canonical_json(volatile['aggregate']) == codec.canonical_json(aggregate(cases, definition)),'aggregate mismatch')
     return value
 
 
@@ -278,8 +297,8 @@ def run(definition_path,report_path,compiler,directory,image):
     cases = []
     with tempfile.TemporaryDirectory(prefix='attention-compare.',dir=directory) as temp:
         for row,shape in enumerate(base.SHAPES):
-            for op in CONTRACT['operations']:
-                for scope in CONTRACT['scopes']:
+            for op in definition['operations']:
+                for scope in definition['scopes']:
                     samples,bits,process = measure(helper,target,row,op,scope,definition,Path(temp))
                     rss = []
                     for pair in range(definition['rss_pairs']):
@@ -299,9 +318,9 @@ def run(definition_path,report_path,compiler,directory,image):
         'project':{'commit':common.git_output('rev-parse','HEAD'),'dirty':bool(common.git_output('status','--porcelain','--untracked-files=all'))},
         'sources':sources,'compiler':cc,'binaries':binaries,'baseline':{'commit':BASELINE_COMMIT,'source_sha256':BASELINE_SHA256},'container_image':image},
         'volatile':{'observed_at_utc':datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00','Z'),
-        'support_status':support_status(env,cc,image),'environment':env,'cases':cases,'aggregate':aggregate(cases)}}
+        'support_status':support_status(env,cc,image),'environment':env,'cases':cases,'aggregate':aggregate(cases, definition)}}
     common.write_atomic(report_path,encode_report(report))
-    print(f'attention comparison: PASS (40 cases; {report["volatile"]["support_status"]}); report: {report_path}')
+    print(f'attention comparison: PASS ({len(cases)} cases; {report["volatile"]["support_status"]}); report: {report_path}')
 
 
 def main():

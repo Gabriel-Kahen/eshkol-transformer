@@ -12,8 +12,15 @@ the PA4 admission rule.
 `benchmarks/attention_compare_v1.json` fixes all ten A2 shapes, f32 CPU inputs,
 forward and backward operations, and the exact dyadic/positions/selective-mask
 recipe in [BENCHMARK_FORMAT.md](BENCHMARK_FORMAT.md). Both providers receive the
-same input and output tensor views, buffers, counts, masks and positions. The
-baseline source is carried in
+same input and output tensor views, buffers, counts, masks and positions.
+`benchmarks/attention_compare_v1_joint.json` retains those cases and adds
+`joint` for both scopes. Each joint iteration runs forward then backward in
+one timed batch. Backward takes the same immutable upstream gradient as the
+standalone case. The two calls write disjoint outputs and share their inputs.
+The joint witness concatenates forward output, dQ, dK and dV in that order.
+Verification compares its forward and backward sections bit for bit with the
+corresponding standalone witnesses. The original v1 definition and reports
+remain valid. The baseline source is carried in
 `tests/b0/frozen/a2_attention_provider_ee24ef46.c`, extracted from historical
 commit `ee24ef461ef7e313c36c6c6f97ba4f3d8155bac7` and checked against the
 SHA-256 frozen in [PA4_ATTENTION.md](PA4_ATTENTION.md). This makes the build
@@ -22,9 +29,13 @@ the composed current source with `ET_PA4_ATTENTION_CANDIDATE`; default-provider
 source is not rewritten. Both objects link into the same executable, with
 `-O2 -ffp-contract=off`, strict warnings and no LTO. Preparation/build is excluded.
 
-The checked-in definition predeclares 100 warmup calls before each timed batch,
-10,000 calls per batch, 12 same-process timing pairs and four separate-process
-RSS pairs per exact shape/operation/scope. Both pair counts must be even. Counts
+The checked-in definitions predeclare 100 warmup iterations before each timed
+batch, 10,000 timed iterations per batch (one call per iteration for `forward`
+or `backward`, and two calls — forward then backward — per iteration for
+`joint`), 12 same-process timing pairs and four separate-process
+RSS pairs per exact shape/operation/scope. Output buffers are zeroed after
+warmup and before starting the batch timer so every witness must be produced by
+the timed batch itself. Both pair counts must be even. Counts
 may change only through a newly checksummed definition within validator bounds.
 An AB pair measures A2 then PA4; the next BA pair reverses that order. This repeats
 without randomization or result-dependent sample removal. No core Eshkol build,
@@ -73,8 +84,9 @@ ratio ranges; and the ratio of total candidate time to total baseline time.
 Ratios below one describe faster observed candidate batches. Separate provider
 RSS minima/lower medians/maxima describe fresh-process variability.
 
-The four operation/scope aggregates divide summed candidate times by summed
-baseline times across all ten shapes, each receiving equal dispatch counts.
+The four original operation/scope aggregates and two opt-in joint aggregates
+divide summed candidate times by summed baseline times across all ten shapes,
+each receiving equal iteration counts.
 This is this bounded shape mix, not a representative training distribution.
 Ratios use decimal half-even rounding to six places. Raw timing remains integral
 nanoseconds and raw RSS integral KiB. Ratio ranges are observed ranges, **not**
@@ -83,9 +95,10 @@ is introduced. CPU affinity, CPU model, kernel, OS, logical CPU count and compil
 identity are retained; load, scheduler/frequency/cache effects and code layout
 can affect observations even with balanced order and warmup.
 
-Backward uses the unchanged analytic A2 implementation and is an explicit
-control. A performance conclusion must examine every forward shape/scope,
-regressions, AB/BA variation and backward-control variation. Invoke-only benefit
+The original candidate reused the A2 backward path. The optimized candidate
+uses row scratch for backward and preflight while retaining the A2 equations
+and accumulation order. A performance conclusion must examine per-shape
+ratios, regressions and AB/BA variation. Invoke-only benefit
 is narrower than K1 dispatch benefit. A tiny aggregate ratio below one by itself
 does not establish a reliable end-to-end gain. PA4's existing rule remains exact
 parity plus measured speed **or** memory improvement on the same workload; this
@@ -112,6 +125,11 @@ CC=clang-21 bash scripts/benchmark-attention-compare.sh
 python3 -B tests/b0/attention_compare.py verify \
   benchmarks/attention_compare_v1.json \
   build/benchmarks/attention-compare-v1-report.json
+CC=clang-21 BENCHMARK_DEFINITION=benchmarks/attention_compare_v1_joint.json \
+  bash scripts/benchmark-attention-compare.sh
+python3 -B tests/b0/attention_compare.py verify \
+  benchmarks/attention_compare_v1_joint.json \
+  build/benchmarks/attention-compare-v1-joint-report.json
 TMPDIR="$PWD/build/benchmarks/compare-tmp" \
   flock /tmp/eshkol-transformer-heavy-build.lock \
   python3 -B -m unittest tests.b0.test_attention_compare -v
@@ -122,6 +140,5 @@ A supported native container invocation supplies
 after the orchestrator verifies its actual container image. Optional CPU pinning
 must be applied before invoking the wrapper and remains visible in report
 `cpu_affinity`. Generated reports/binaries stay outside Git. The [supported native results](ATTENTION_COMPARISON_RESULTS.md) record exact
-measurement identity, raw-report checksum, forward gains, control regressions and
-uncertainty. Independent source/test review approved the bounded harness; the
-full B0 discovery gate passes 59 tests. Full PA4 admission remains separate.
+measurement identity, raw-report checksum, observed changes and uncertainty.
+Full PA4 admission remains separate.
