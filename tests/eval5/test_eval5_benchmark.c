@@ -401,6 +401,40 @@ static void test_invalid_lm_manifest(const et_eval5_manifest *manifest,
   }
 }
 
+static void test_subnormal_lm_manifest(const et_eval5_manifest *manifest,
+                                      const char *directory) {
+  const float logits[] = {0, -745, 0, -1000};
+  const uint32_t targets[] = {0, 0};
+  const et_eval5_sequence sequence = SEQUENCE(logits, targets, 2);
+  et_eval5_manifest record = *manifest;
+  CHECK(et_eval5_score_lm(&sequence, 1, &record.lm) == ET_EVAL5_OK);
+  CHECK(record.lm.total_nll == DBL_TRUE_MIN && record.lm.mean_nll == 0.0 &&
+        record.lm.perplexity == 1.0 && record.lm.bits_per_byte == 0.0);
+
+  char canonical[ET_EVAL5_MANIFEST_MAX_BYTES + 1u];
+  char written[sizeof(canonical)];
+  size_t size, written_size;
+  et_eval5_manifest parsed;
+  CHECK(et_eval5_manifest_format(&record, canonical, sizeof(canonical), &size) == ET_EVAL5_OK);
+  CHECK(et_eval5_manifest_parse(canonical, size, &parsed) == ET_EVAL5_OK);
+
+  char path[4096];
+  make_path(path, sizeof(path), directory, "subnormal.manifest");
+  CHECK(et_eval5_manifest_write_atomic(path, &record) == ET_EVAL5_OK);
+  CHECK(et_eval5_manifest_read_file(path, &parsed) == ET_EVAL5_OK);
+  CHECK(et_eval5_manifest_format(&parsed, written, sizeof(written), &written_size) == ET_EVAL5_OK);
+  CHECK(size == written_size && memcmp(canonical, written, size) == 0);
+  CHECK(unlink(path) == 0);
+
+  record.lm.perplexity = nextafter(1.0, INFINITY);
+  CHECK(et_eval5_manifest_format(&record, NULL, 0, &size) == ET_EVAL5_ERR_FORMAT);
+  record.lm.perplexity = 1.0;
+  record.lm.bits_per_byte = record.lm.total_nll / log(2.0);
+  CHECK(et_eval5_manifest_format(&record, NULL, 0, &size) == ET_EVAL5_OK);
+  record.lm.bits_per_byte = 1.0;
+  CHECK(et_eval5_manifest_format(&record, NULL, 0, &size) == ET_EVAL5_ERR_FORMAT);
+}
+
 static void test_manifest(et_eval5_manifest *manifest, const char *directory) {
   char canonical[ET_EVAL5_MANIFEST_MAX_BYTES + 1u];
   char changed[sizeof(canonical)];
@@ -509,6 +543,7 @@ static void test_manifest(et_eval5_manifest *manifest, const char *directory) {
   invalid.context_length = 0;
   CHECK(et_eval5_manifest_write_atomic(path, &invalid) == ET_EVAL5_ERR_FORMAT);
   test_invalid_lm_manifest(manifest, path);
+  test_subnormal_lm_manifest(manifest, directory);
   CHECK(et_eval5_manifest_read_file(path, &parsed) == ET_EVAL5_OK);
   CHECK(et_eval5_manifest_format(&parsed, changed, sizeof(changed), &other_size) == ET_EVAL5_OK);
   CHECK(size == other_size && memcmp(canonical, changed, size + 1) == 0);

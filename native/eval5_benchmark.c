@@ -557,14 +557,15 @@ static int valid_lm(const et_eval5_lm_metrics *lm, int enabled) {
            lm->mean_nll == 0.0 && lm->perplexity == 0.0 && lm->bits_per_byte == 0.0;
   if (lm->token_count == 0 || lm->byte_count == 0 || lm->perplexity < 1.0)
     return 0;
-  if (lm->total_nll == 0.0 || lm->mean_nll == 0.0)
-    return lm->total_nll == 0.0 && lm->mean_nll == 0.0 &&
-           lm->perplexity == 1.0 && lm->bits_per_byte == 0.0;
-  if (lm->mean_nll > max_perplexity_exponent ||
-      lm->mean_nll != lm->total_nll / (double)lm->token_count)
+  double expected_mean = lm->total_nll / (double)lm->token_count;
+  if (lm->mean_nll != expected_mean || expected_mean > max_perplexity_exponent)
+    return 0;
+  if (lm->total_nll == 0.0)
+    return lm->perplexity == 1.0 && lm->bits_per_byte == 0.0;
+  if (expected_mean == 0.0 && lm->perplexity != 1.0)
     return 0;
 
-  double perplexity = exp(lm->mean_nll);
+  double perplexity = exp(expected_mean);
   double bits_per_byte = lm->total_nll / (ln2 * (double)lm->byte_count);
   return isfinite(perplexity) &&
          fabs(lm->perplexity - perplexity) <= 1e-9 * perplexity &&
