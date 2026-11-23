@@ -194,11 +194,19 @@ Clang's static frame report showed 536 bytes for forward computation,
 984 bytes for the backward head helper, 200 bytes for numeric validation,
 and 8,376 bytes for the separately invoked large-input backward preflight.
 These are function frames. They exclude called frames and are not
-measurements of process memory. Two archive builds produced the same
-SHA-256 `27a99413b0e47a08949b40f32e25c7ac4c8e496be47a4acf2a4ba9b0af616783`.
-The measured provider source SHA-256 was
-`b11a709b7c31d5b32e6988c599adad9d21034dcb60c4ba7d0d965b9a681f341e`, and the full run log SHA-256 was
-`cdb442ea7a39cbe15d07b7f7f55a81be3ace2a462f4a6642a1c446e01db15d76`.
+measurements of process memory. Two archive builds at the measured baseline (`5cb41d4a`) produced the same
+SHA-256 `27a99413b0e47a08949b40f32e25c7ac4c8e496be47a4acf2a4ba9b0af616783`,
+with provider source SHA-256
+`b11a709b7c31d5b32e6988c599adad9d21034dcb60c4ba7d0d965b9a681f341e` and full run
+log SHA-256
+`cdb442ea7a39cbe15d07b7f7f55a81be3ace2a462f4a6642a1c446e01db15d76`. A subsequent
+direct-validation alias-hardening commit updated `aliases_table`/`aliases_call`
+only (provider source SHA-256
+`291afecd59a7ea439f378f3ade7e0213ac3e85d51796f149ac51ca640d581079`, reproducible
+archive SHA-256
+`d0d564fd90f656d691556415e3e87611015a097882e12aca1d55ab78e9bb68fe`) and
+re-verified the full conformance, sanitizer, and 864-sample benchmark suite in
+`eshkol-r0-debug:20260928`.
 
 ### Reproduce
 
