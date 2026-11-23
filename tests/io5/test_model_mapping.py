@@ -350,7 +350,12 @@ class ModelMappingTests(unittest.TestCase):
                     else (name, shape, kind, offset, payload)
                     for name, shape, kind, offset, payload in mutated
                 ]
-            return wire(metadata=fields, tensors=mutated)
+            repacked = []
+            offset = 0
+            for name, shape, kind, _, payload in mutated:
+                repacked.append((name, shape, kind, offset, payload))
+                offset += len(payload) + ((-len(payload)) % 32)
+            return wire(metadata=fields, tensors=repacked)
 
         def mutate_sharded(files, case):
             mutated = dict(files)
@@ -391,14 +396,61 @@ class ModelMappingTests(unittest.TestCase):
                 index["metadata"]["total_size"] += 32
             elif case == "wrong_rank":
                 header[target]["shape"] = [1, 8]
-            rebuilt = rebuild_safetensors(header, data)
-            mutated[shard_name] = rebuilt
-            checksums[shard_name] = hashlib.sha256(rebuilt).hexdigest()
+            if any(k != "__metadata__" for k in header):
+                rebuilt = rebuild_safetensors(header, data)
+                mutated[shard_name] = rebuilt
+                checksums[shard_name] = hashlib.sha256(rebuilt).hexdigest()
+            else:
+                mutated.pop(shard_name)
+                checksums.pop(shard_name)
             index["weight_map"] = weight_map
             index["metadata"][mapping.SHARD_SHA256] = checksums
             mutated[mapping.INDEX_NAME] = json.dumps(index, sort_keys=True, separators=(",", ":")).encode()
             return mutated
 
+        def signed_invalid_sharded(files, case):
+            mutated = mutate_sharded(files, case)
+            index = json.loads(mutated[mapping.INDEX_NAME])
+            base_tensors = list(state.tensors)
+            if case == "missing_root":
+                bad_tensors = [t for t in base_tensors if t.path != ("norm_final", "weight")]
+            elif case == "missing_block":
+                bad_tensors = [t for t in base_tensors if t.path != ("blocks", "1", "ffn", "gate", "weight")]
+            elif case == "extra":
+                bad_tensors = sorted(base_tensors + [tensor("extra.weight", (4,))], key=lambda t: t.path)
+            elif case == "biased":
+                bad_tensors = sorted(base_tensors + [tensor("norm_final.bias", (8,))], key=lambda t: t.path)
+            else:
+                bad_tensors = [replace(t, shape=(1, 8)) if t.path == ("norm_final", "weight") else t
+                               for t in base_tensors]
+            bad_state = replace(state, tensors=tuple(bad_tensors), aliases=())
+            bad_c1 = c1_bytes(bad_state)
+            path_to_ext = {
+                tuple(row[0].split(".")): row[1]
+                for row in mod5_fixture(2, tied=False)[1]
+            }
+            path_to_ext[("extra", "weight")] = "model.extra.weight"
+            path_to_ext[("norm_final", "bias")] = "model.norm.bias"
+            ext_names = tuple(path_to_ext[t.path] for t in bad_state.tensors)
+            index["metadata"][safe.MANIFEST_KEY] = safe.make_manifest(bad_state, ext_names)
+            index["metadata"][safe.DIGEST_KEY] = hashlib.sha256(bad_c1).hexdigest()
+            mutated[mapping.INDEX_NAME] = json.dumps(index, sort_keys=True, separators=(",", ":")).encode()
+            return mutated
+
+        expected_plain_regex = {
+            "missing_root": "missing MOD5 root tensor",
+            "missing_block": "missing MOD5 block tensor",
+            "extra": "unmapped external tensor name",
+            "biased": "unmapped external tensor name",
+            "wrong_rank": "decoder tensor rank/extent mismatch",
+        }
+        expected_roster_regex = {
+            "missing_root": "missing MOD5 root tensor",
+            "missing_block": "missing MOD5 block tensor",
+            "extra": "unknown canonical path",
+            "biased": "unknown canonical path",
+            "wrong_rank": "decoder tensor rank/extent mismatch",
+        }
         cases = ("missing_root", "missing_block", "extra", "biased", "wrong_rank", "corrupted")
         st_encoded = mapping.encode_mapped(original, "safetensors", mapping.MOD5, "huggingface")
         gguf_encoded = mapping.encode_mapped(original, "gguf", mapping.MOD5, "gguf")
@@ -407,18 +459,20 @@ class ModelMappingTests(unittest.TestCase):
         for case in cases:
             with self.subTest(route="safetensors-mapped", case=case):
                 mutated = mutate_safetensors(st_encoded, case)
-                with self.assertRaises(safe.InteropError):
+                with self.assertRaises(safe.InteropError) as ctx:
                     mapping.decode_mapped(mutated, "safetensors", profile=mapping.MOD5, scheme="huggingface")
                 if case != "corrupted":
-                    with self.assertRaises(safe.InteropError):
+                    self.assertNotIn("noncontiguous", str(ctx.exception))
+                    with self.assertRaisesRegex(safe.InteropError, expected_plain_regex[case]):
                         mapping.decode_mapped(safetensors_plain(mutated), "safetensors", external=True,
                                               profile=mapping.MOD5, scheme="huggingface", provider=PROVIDER)
             with self.subTest(route="gguf-mapped", case=case):
                 mutated = mutate_gguf(gguf_encoded, case)
-                with self.assertRaises(safe.InteropError):
+                with self.assertRaises(safe.InteropError) as ctx:
                     mapping.decode_mapped(mutated, "gguf", profile=mapping.MOD5, scheme="gguf")
+                self.assertNotIn("noncontiguous", str(ctx.exception))
                 if case != "corrupted":
-                    with self.assertRaises(safe.InteropError):
+                    with self.assertRaisesRegex(safe.InteropError, expected_plain_regex[case]):
                         mapping.decode_mapped(gguf_plain(mutated), "gguf", external=True,
                                               profile=mapping.MOD5, scheme="gguf", provider=PROVIDER)
             with self.subTest(route="sharded-safetensors", case=case):
@@ -426,8 +480,17 @@ class ModelMappingTests(unittest.TestCase):
                 mutated_dir.mkdir()
                 for name, blob in mutate_sharded(sharded_files, case).items():
                     (mutated_dir / name).write_bytes(blob)
-                with self.assertRaises(safe.InteropError):
+                with self.assertRaises(safe.InteropError) as ctx:
                     mapping.read_sharded(mutated_dir / mapping.INDEX_NAME, profile=mapping.MOD5, scheme="huggingface")
+                if case != "corrupted":
+                    self.assertNotIn("coverage", str(ctx.exception))
+                    self.assertNotIn("checksum", str(ctx.exception))
+                    signed_dir = self.root / f"mod5_signed_bad_{case}"
+                    signed_dir.mkdir()
+                    for name, blob in signed_invalid_sharded(sharded_files, case).items():
+                        (signed_dir / name).write_bytes(blob)
+                    with self.assertRaisesRegex(safe.InteropError, expected_roster_regex[case]):
+                        mapping.read_sharded(signed_dir / mapping.INDEX_NAME, profile=mapping.MOD5, scheme="huggingface")
 
     def test_unmapped_shards_preserve_arbitrary_paths_kinds_and_empty_state(self):
         for state in (safe.State("utf8 λ", ()),
