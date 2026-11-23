@@ -702,6 +702,18 @@ static void test_scaler(void) {
   CHECK(et_mp4_loss_scaler_update(&state, 1u) ==
         ET_MP4_LOSS_SCALER_UNDERFLOW_FAULT);
   CHECK(bits_of(state.scale) == 2u && state.clean_steps == 0u);
+
+  /* Backoff whose exact product exceeds min_scale but rounds back to scale
+   * must fault rather than stalling at an unchanged scale. */
+  CHECK(et_mp4_loss_scaler_init(&state, 0x1p-127f, 2.0f, 0x1.fffffep-1f, 2u,
+                                0x1p-128f, 1.0f) ==
+        ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
+  CHECK(et_mp4_loss_scaler_update(&state, 0u) ==
+        ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
+  const et_mp4_loss_scaler_v1 before_stall = state;
+  CHECK(et_mp4_loss_scaler_update(&state, 1u) ==
+        ET_MP4_LOSS_SCALER_UNDERFLOW_FAULT);
+  CHECK(memcmp(&state, &before_stall, sizeof(state)) == 0);
 }
 
 typedef struct train_result {

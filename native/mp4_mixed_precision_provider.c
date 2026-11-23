@@ -595,10 +595,11 @@ et_mp4_loss_scaler_update(et_mp4_loss_scaler_v1 *state,
   if (overflow_detected) {
     /* Every product of two finite binary32 values is exact in binary64. */
     const double backed_off = (double)next.scale * (double)next.backoff_factor;
-    if (backed_off < (double)next.min_scale) {
+    const float rounded = (float)backed_off;
+    if (backed_off < (double)next.min_scale || rounded >= next.scale) {
       status = ET_MP4_LOSS_SCALER_UNDERFLOW_FAULT;
     } else {
-      next.scale = (float)backed_off;
+      next.scale = rounded;
       next.clean_steps = 0u;
       status = ET_MP4_LOSS_SCALER_OVERFLOW_BACKOFF;
     }

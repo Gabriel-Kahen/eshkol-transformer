@@ -90,15 +90,18 @@ and `clean_steps < growth_interval`, which update validates before use.
 | --- | --- | --- |
 | `STEP_ACCEPTED` | Increment clean steps. At the interval, multiply by `growth_factor`, clamp to `max_scale`, and reset the counter. | Apply the optimizer step to the f32 master weights. |
 | `OVERFLOW_BACKOFF` | Multiply by `backoff_factor` and reset the counter. | Skip the optimizer step and use the backed-off scale for the next attempt. |
-| `UNDERFLOW_FAULT` | The exact backoff product is below `min_scale`. Leave state byte-for-byte unchanged. | Skip the optimizer step and surface the fault. |
+| `UNDERFLOW_FAULT` | The exact backoff product is below `min_scale`, or rounds in binary32 to a value not strictly smaller than `scale`. Leave state byte-for-byte unchanged. | Skip the optimizer step and surface the fault. |
 | `INVALID_ARGUMENT` or `UNSUPPORTED_ENVIRONMENT` | Leave state byte-for-byte unchanged. | Skip the optimizer step and surface the error. |
 
 The scaler forms an exact binary64 product of its binary32 operands, applies
 the bound in binary64, then rounds any committed product to binary32 with
-ties to even. A backoff exactly equal to the minimum is accepted. The
+ties to even. A backoff exactly equal to the minimum is accepted provided the
+rounded binary32 scale is strictly smaller than the current scale. The
 underflow fault also covers products below the minimum that would round to
-the minimum in binary32. Growth clamps safely even if the unclamped value
-exceeds finite binary32. An overflow flag outside `0` and `1` is invalid.
+the minimum in binary32, as well as products whose rounded binary32 scale
+equals the current scale (preventing stalled backoff). Growth clamps safely
+even if the unclamped value exceeds finite binary32. An overflow flag outside
+`0` and `1` is invalid.
 The caller is responsible for keeping its inverse scale representable and
 for treating an upstream gradient-production error as a skipped step.
 

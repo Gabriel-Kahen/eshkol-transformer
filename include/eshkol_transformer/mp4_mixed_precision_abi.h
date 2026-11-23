@@ -39,8 +39,9 @@ et_mp4_loss_scaler_init(et_mp4_loss_scaler_v1 *state, float scale,
                         uint32_t growth_interval, float min_scale,
                         float max_scale);
 
-/* Only STEP_ACCEPTED and OVERFLOW_BACKOFF commit state. Skip the optimizer
- * on every other status. UNDERFLOW_FAULT requires caller intervention. */
+/* Only STEP_ACCEPTED and OVERFLOW_BACKOFF commit state. Only STEP_ACCEPTED
+ * permits an optimizer step; skip the optimizer step on OVERFLOW_BACKOFF and
+ * every fault or error status. UNDERFLOW_FAULT requires caller intervention. */
 et_mp4_loss_scaler_status
 et_mp4_loss_scaler_update(et_mp4_loss_scaler_v1 *state,
                           uint8_t overflow_detected);
