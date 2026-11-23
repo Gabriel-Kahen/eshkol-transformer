@@ -109,7 +109,8 @@ typedef struct {
 } et_eval5_mc_metrics;
 
 /* byte_count is the number of original bytes represented by the target
- * tokens. Metrics and the audit require round-to-nearest floating point. */
+ * tokens. Metrics and the audit require round-to-nearest floating point
+ * with masked exceptions and gradual underflow. */
 et_eval5_status et_eval5_score_lm(const et_eval5_sequence *sequence,
                                  uint64_t byte_count, et_eval5_lm_metrics *out);
 et_eval5_status et_eval5_score_mc(const et_eval5_choice_item *items,
