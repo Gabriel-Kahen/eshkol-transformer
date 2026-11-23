@@ -356,6 +356,10 @@ test-io5-gguf-native:
 	test -n "$${IO5_GGUF_NATIVE_PREFIX:-}"
 	python3 -m unittest -v tests.io5.test_gguf_native
 
+.PHONY: test-mod5
+test-mod5:
+	/usr/bin/bash scripts/test-mod5.sh
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 
