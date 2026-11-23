@@ -4,6 +4,14 @@
 (load "t2_bpe_core.esk")
 
 (define data4-test-written #f)
+(define data4-test-manifest (string->utf8 "abc"))
+(define data4-test-read-directory #f)
+(define (data4-test-read-manifest directory)
+  (set! data4-test-read-directory directory)
+  (if (not (string=? (vector-ref data4-test-written 0) directory))
+      (error "manifest read preceded D1 write"))
+  data4-test-manifest)
+
 (define (t2-private-tokenizer-encode-staging tokenizer bytes)
   (t2-tokenizer-core-encode-i64-le tokenizer bytes))
 (define (t2-private-tokenizer-fingerprint tokenizer)
@@ -80,7 +88,10 @@
                           (cdr (car (vector-ref prepared 0))) 0) 65))
 (define model (t2-bpe-train-core '() 0 1 'raw
                                  (list (list "bos" 'omit)) (list "bos") '()))
-(define published (data4-corpus-write! model "out" 3 prepared))
+(define published
+  (data4-corpus-write! model "out" 3 prepared data4-test-read-manifest))
+(define summary (vector-ref published 0))
+(define report-bytes (vector-ref published 1))
 (check "separate document encode"
        (equal? (vector-ref data4-test-written 4)
                '(256 65 66 256 67 68)))
@@ -90,7 +101,13 @@
 (define report (utf8->string (vector-ref published 1)))
 (check "report version" (and (contains? report
                                                "format\teshkol-data4-corpus-report\n")
-                             (contains? report "version\t1\t0\n")))
+                             (contains? report "version\t2\t0\n")))
+(define manifest-digest
+  "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+(check "exact manifest digest and field position"
+       (contains? report
+                  (string-append "total-tokens\t6\nmanifest-sha256\t"
+                                 manifest-digest "\ndocument\t0\t")))
 (check "report bind" (and (contains? report
                                             (string-append
                                              "tokenizer-fingerprint\t"
@@ -107,18 +124,23 @@
                            (string=? (substring report (+ start 9)
                                                 (+ start 73)) expected)))
 (check "report round trip"
-       (eq? (data4-report-validate (vector-ref published 1)
-                                    (vector-ref published 0))
-            (vector-ref published 0)))
-(define (report-corrupt? bytes summary)
+       (eq? (data4-report-validate report-bytes summary data4-test-manifest)
+            summary))
+(define (report-error? category bytes summary manifest)
   (guard (caught (#t (and (t1-core-error? caught)
                          (eq? (t1-core-error-category caught)
-                              'corrupt-data))))
-    (data4-report-validate bytes summary) #f))
-(define report-mutated (bytevector-copy (vector-ref published 1)))
-(bytevector-u8-set! report-mutated 0 88)
-(check "tampered report rejected"
-       (report-corrupt? report-mutated (vector-ref published 0)))
+                              category))))
+    (data4-report-validate bytes summary manifest) #f))
+(define (report-corrupt? bytes summary)
+  (report-error? 'corrupt-data bytes summary data4-test-manifest))
+(define report-mutated (bytevector-copy report-bytes))
+(define checksum-last-digit (- (bytevector-length report-mutated) 2))
+(bytevector-u8-set! report-mutated checksum-last-digit
+                   (if (= (bytevector-u8-ref report-mutated checksum-last-digit) 48)
+                       49 48))
+(check "tampered checksum rejected" (report-corrupt? report-mutated summary))
+(check "different manifest with same summary rejected"
+       (report-error? 'corrupt-data report-bytes summary (string->utf8 "abd")))
 (check "mismatched D1 summary rejected"
        (report-corrupt? (vector-ref published 1)
                         (vector "other-fingerprint" 257 3
@@ -129,6 +151,45 @@
                   (t1-core-hex (t1-core-sha256 (string->utf8 prefix))) "\n")))
 (define report-prefix
   (substring report 0 (- (string-length report) 74)))
+(define (report-replace-line prefix target replacement)
+  (let loop ((lines (data4-report-split prefix #\newline)) (out ""))
+    (cond ((null? (cdr lines)) out)
+          ((string=? (car lines) target)
+           (loop (cdr lines) (string-append out replacement)))
+          (else (loop (cdr lines) (string-append out (car lines) "\n"))))))
+(define manifest-line (string-append "manifest-sha256\t" manifest-digest))
+(define (report-with-manifest-line replacement)
+  (report-rechecksum
+   (report-replace-line report-prefix manifest-line replacement)))
+(check "legacy unbound report rejected as version mismatch"
+       (report-error? 'version-mismatch
+                      (report-rechecksum
+                       (report-replace-line
+                        (report-replace-line report-prefix manifest-line "")
+                        "version\t2\t0" "version\t1\t0\n"))
+                      summary data4-test-manifest))
+(check "missing manifest digest rejected"
+       (report-corrupt? (report-with-manifest-line "") summary))
+(check "uppercase manifest digest rejected"
+       (report-corrupt?
+        (report-with-manifest-line
+         (string-append "manifest-sha256\tB" (substring manifest-digest 1 64)
+                        "\n")) summary))
+(check "nonhex manifest digest rejected"
+       (report-corrupt?
+        (report-with-manifest-line
+         (string-append "manifest-sha256\tz" (substring manifest-digest 1 64)
+                        "\n")) summary))
+(check "short manifest digest rejected"
+       (report-corrupt?
+        (report-with-manifest-line
+         (string-append "manifest-sha256\t" (substring manifest-digest 1 64)
+                        "\n")) summary))
+(check "incorrect manifest digest with valid report checksum rejected"
+       (report-corrupt?
+        (report-with-manifest-line
+         (string-append "manifest-sha256\t0" (substring manifest-digest 1 64)
+                        "\n")) summary))
 (check "malformed row with valid checksum rejected"
        (report-corrupt?
         (report-rechecksum
@@ -136,7 +197,8 @@
                         (t1-core-hex (t1-core-sha256 (bytevector)))
                         "\tkeep\t\n"))
         (vector-ref published 0)))
-(define repeated (data4-corpus-write! model "second" 3 prepared))
+(define repeated
+  (data4-corpus-write! model "second" 3 prepared data4-test-read-manifest))
 (check "repeat report byte parity"
        (t1-core-bytes=? (vector-ref published 1) (vector-ref repeated 1)))
 (define mutable-id (string-append "mutable"))
@@ -192,7 +254,8 @@
   (data4-corpus-prepare (list (list "short" (bytevector 1))) 2 2))
 (check "all filtered" (and (= (vector-ref all-filtered 4) 0)
                             (null? (vector-ref all-filtered 0))))
-(define empty-published (data4-corpus-write! model "empty" 3 all-filtered))
+(define empty-published
+  (data4-corpus-write! model "empty" 3 all-filtered data4-test-read-manifest))
 (check "empty corpus" (and (null? (vector-ref data4-test-written 4))
                             (contains? (utf8->string (vector-ref empty-published 1))
                                        "total-tokens\t0\n")))
@@ -203,14 +266,25 @@
                     model "overflow" 3
                     (data4-corpus-prepare
                      (list (list "maximum" (make-bytevector 65536 0)))
-                     0 65536)))))
+                     0 65536)
+                    data4-test-read-manifest))))
 (check "no D1 write after token limit"
        (eq? data4-test-written before-overflow))
 (check "writer failure propagates"
        (io? (lambda ()
-              (data4-corpus-write! model "preexisting" 3 prepared))))
+              (data4-corpus-write! model "preexisting" 3 prepared
+                                   data4-test-read-manifest))))
 (check "writer failure does not record a stub write"
        (eq? data4-test-written before-overflow))
+(check "writer failure does not trigger a read"
+       (string=? data4-test-read-directory "empty"))
+(check "manifest read failure keeps the published corpus"
+       (and (io? (lambda ()
+                   (data4-corpus-write!
+                    model "read-fails" 3 prepared
+                    (lambda (directory)
+                      (t1-core-fail 'io 'data4-test-read-manifest "fixture error")))))
+            (string=? (vector-ref data4-test-written 0) "read-fails")))
 (define cyclic (list (list "x" (bytevector 1))))
 (set-cdr! cyclic cyclic)
 (check "cyclic list" (invalid? (lambda () (data4-corpus-prepare cyclic 0 1))))

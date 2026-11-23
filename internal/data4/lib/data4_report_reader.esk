@@ -1,5 +1,5 @@
-;;; DATA4-B private report reader. D1 validates the corpus separately; this
-;;; checks only the canonical report and its aggregate agreement with D1.
+;;; Private report reader. D1 validates the corpus separately; this checks the
+;;; canonical report against the D1 summary and the complete manifest bytes.
 
 (define data4-report-maximum-bytes 32768)
 
@@ -125,15 +125,27 @@
        (or (string=? id (car seen))
            (data4-report-id-present? id (cdr seen)))))
 
-;;; Returns the validated D1 summary; no manifest-byte or raw-document binding.
-(define (data4-report-validate bytes summary)
+(define (data4-report-check-version line)
+  (let ((fields (data4-report-split line #\tab)))
+    (if (or (not (equal? (data4-bounded-length fields 4) 3))
+            (not (string=? (car fields) "version")))
+        (data4-report-fail "wrong report version field"))
+    (let ((major (data4-report-number (cadr fields) 9223372036854775807))
+          (minor (data4-report-number (caddr fields) 9223372036854775807)))
+      (if (or (not (= major 2)) (not (= minor 0)))
+          (t1-core-fail 'version-mismatch 'data4-report-validate
+                        "unsupported DATA4 report version; expected 2.0")))))
+
+;;; Returns the supplied D1 summary after verifying its manifest binding.
+(define (data4-report-validate bytes summary manifest-bytes)
   (let ((lines (data4-report-lines bytes)))
-    (let ((count (data4-bounded-length lines 146)))
-      (if (or (not count) (< count 17))
+    (if (or (null? lines) (null? (cdr lines)))
         (data4-report-fail "truncated report"))
-      )
     (data4-report-expected (car lines) "format\teshkol-data4-corpus-report")
-    (data4-report-expected (car (cdr lines)) "version\t1\t0")
+    (data4-report-check-version (cadr lines))
+    (let ((count (data4-bounded-length lines 146)))
+      (if (or (not count) (< count 19))
+          (data4-report-fail "wrong report line count")))
     (data4-report-expected (car (cdr (cdr lines)))
                            "filter\traw-byte-length-inclusive")
     (data4-report-expected (car (cdr (cdr (cdr lines))))
@@ -161,7 +173,15 @@
            (shards (data4-report-decimal (vector-ref limit 1)
                                           "shard-count" 65536))
            (tokens (data4-report-decimal (vector-ref shards 1)
-                                          "total-tokens" 65536)))
+                                          "total-tokens" 65536))
+           (manifest (data4-report-field (vector-ref tokens 1)
+                                         "manifest-sha256"))
+           (manifest-digest (vector-ref manifest 0)))
+      (if (not (data4-report-hex? manifest-digest))
+          (data4-report-fail "malformed manifest SHA-256"))
+      (if (not (string=? manifest-digest
+                         (t1-core-hex (t1-core-sha256 manifest-bytes))))
+          (data4-report-fail "report manifest SHA-256 mismatch"))
       (if (or (> minimum maximum) (= (vector-ref input-count 0) 0)
               (= (vector-ref limit 0) 0)
               (> (vector-ref kept-count 0) (vector-ref input-count 0))
@@ -183,7 +203,7 @@
                           (+ (quotient (- (vector-ref tokens 0) 1)
                                        (vector-ref limit 0)) 1)))))
           (data4-report-fail "report and corpus totals disagree"))
-      (let loop ((rest (vector-ref tokens 1)) (ordinal 0) (seen '())
+      (let loop ((rest (vector-ref manifest 1)) (ordinal 0) (seen '())
                  (kept '()) (raw-total 0) (kept-total 0) (kept-n 0))
         (if (= ordinal (vector-ref input-count 0))
             (begin

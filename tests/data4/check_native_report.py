@@ -16,7 +16,7 @@ def main() -> None:
     assert trailer == hashlib.sha256(prefix).hexdigest().encode() + b"\n"
     expected_header = (
         b"format\teshkol-data4-corpus-report\n",
-        b"version\t1\t0\n",
+        b"version\t2\t0\n",
         b"filter\traw-byte-length-inclusive\n",
         b"dedup\traw-exact-first-passing\n",
         b"minimum-bytes\t2\n",
@@ -31,6 +31,9 @@ def main() -> None:
         b"shard-token-limit\t3\n",
         b"shard-count\t2\n",
         b"total-tokens\t6\n",
+        b"manifest-sha256\t"
+        + hashlib.sha256((directory / "manifest.etm").read_bytes()).hexdigest().encode()
+        + b"\n",
     )
     lines = prefix.splitlines(keepends=True)
     a = hashlib.sha256(b"AB").hexdigest().encode()
@@ -41,14 +44,14 @@ def main() -> None:
         b"document\t2\tb\t2\t" + b + b"\tkeep\t\n",
         b"checksum-algorithm\tsha256\n",
     )
-    assert len(lines) == 19
+    assert len(lines) == 20
     assert tuple(lines[:6]) == expected_header
     assert re.fullmatch(
         rb"tokenizer-fingerprint\tsha256:eshkol-bpe-tokenizer-v1:[0-9a-f]{64}\n",
         lines[6],
     )
-    assert tuple(lines[7:15]) == expected_totals
-    assert tuple(lines[15:]) == expected_rows
+    assert tuple(lines[7:16]) == expected_totals
+    assert tuple(lines[16:]) == expected_rows
 
     shard = directory / "shard-0000000000000000.ets"
     raw = bytearray(shard.read_bytes())
