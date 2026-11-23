@@ -6,6 +6,7 @@ cd "${PROJECT_ROOT}"
 verify_toolchain
 export LC_ALL=C
 cc="${CC:-$(tsv_value "$(eshkol_build_dir)/eshkol-transformer-provenance.tsv" cc_path)}"
+cxx="${CXX:-clang++}"
 runner="$(eshkol_build_dir)/eshkol-run"
 provider_dir="${PROJECT_ROOT}/build/mod5"
 bash scripts/build-mod5.sh
@@ -47,6 +48,7 @@ for run in 1 2; do
   [[ ! -s "${diagnostic}" ]] || die "compiled training emitted stderr"
 done
 diagnostic=''
+cmp "${scratch}/training-1" "${scratch}/training-2"
 cmp "${scratch}/run-1.stdout" "${scratch}/run-2.stdout"
 awk '
   BEGIN { number = "^-?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$" }
@@ -80,7 +82,28 @@ awk '
   }
 ' "${scratch}/run-1.stdout" || die "invalid AOT loss trace"
 cat "${scratch}/run-1.stdout"
-printf 'MOD5 AOT two fresh compilations, byte-identical stdout: PASS\n'
+printf 'MOD5 AOT two fresh compilations, byte-identical ELF and stdout: PASS\n'
+
+cat >"${scratch}/bridge_cpp_check.cpp" <<'EOF'
+#include "mod5_eshkol_bridge.h"
+
+int main() {
+  et_kernel_runtime *runtime = nullptr;
+  if (et_mod5_aot_open(&runtime) != 0 || runtime == nullptr)
+    return 1;
+  float buf[1] = {0.0f};
+  et_mod5_aot_store_f32(buf, 0, 1.25);
+  const double v = et_mod5_aot_load_f32(buf, 0);
+  et_mod5_aot_close(runtime);
+  return v == 1.25 ? 0 : 2;
+}
+EOF
+"${cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic -I include -I native \
+  "${scratch}/bridge_cpp_check.cpp" "${scratch}/mod5_eshkol_bridge.o" \
+  "${provider_dir}/libeshkol_transformer_mod5.a" \
+  "${scratch}/k1/libeshkol_transformer_k1.a" -lm -o "${scratch}/bridge-cpp"
+"${scratch}/bridge-cpp"
+printf 'MOD5 AOT bridge C++17 header and linkage: PASS\n'
 
 san=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
 wrap=(-Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free)

@@ -3,6 +3,10 @@
 
 #include "eshkol_transformer/kernel_abi.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Private AOT transport. Status is zero on success or a K1 error category.
  * Keep the discovered runtime alive for all calls, then close it once.
  * All tensor spans are borrowed, correctly sized, aligned and disjoint.
@@ -43,5 +47,9 @@ int32_t et_mod5_aot_attention_backward(const et_kernel_runtime *runtime,
  */
 void et_mod5_aot_store_f32(float *buffer, int64_t index, double value);
 double et_mod5_aot_load_f32(const float *buffer, int64_t index);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
