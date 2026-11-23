@@ -376,6 +376,22 @@ test-mp4:
 test-pa4-wider:
 	/usr/bin/bash scripts/test-pa4-wider.sh
 
+.PHONY: test-ac4
+test-ac4:
+	/usr/bin/bash scripts/test-ac4.sh
+
+.PHONY: test-amd4
+test-amd4:
+	/usr/bin/bash scripts/test-amd4.sh
+
+.PHONY: test-dist5
+test-dist5:
+	/usr/bin/bash scripts/test-dist5.sh
+
+.PHONY: test-eval5
+test-eval5:
+	/usr/bin/bash scripts/test-eval5.sh
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 
