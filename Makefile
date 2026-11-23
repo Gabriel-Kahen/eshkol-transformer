@@ -400,6 +400,10 @@ test-eval5:
 test-doc5:
 	/usr/bin/bash scripts/test-doc5-walkthrough.sh
 
+.PHONY: test-wave4-composed
+test-wave4-composed:
+	/usr/bin/bash scripts/test-wave4-composed.sh
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 
