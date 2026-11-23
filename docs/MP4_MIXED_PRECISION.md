@@ -126,6 +126,58 @@ omits the failed attempt agree bit-for-bit on weights, momentum, and loss.
 The initial loss is 4.6875 and final losses are approximately 0.0000148133
 for binary16 and 0.0000161482 for bfloat16.
 
+## Eshkol AOT bridge and compiled validation
+
+`native/mp4_eshkol_bridge.h` and `native/mp4_eshkol_bridge.c` provide a C11 and
+C++17 compatible AOT transport (`build/mp4_aot/libeshkol_transformer_mp4_aot.a`)
+over `et_mp4_kernel_provider_v1()` and `et_mp4_loss_scaler_init` /
+`et_mp4_loss_scaler_update` with no allocator imports in the bridge object:
+
+- Runtime lifecycle: `et_mp4_aot_open` and `et_mp4_aot_close`.
+- Verified K1 cast and unscale dispatch (`void *` pointer boundaries for
+  UB-free misaligned negative testing): `et_mp4_aot_cast_f32_to_f16`,
+  `et_mp4_aot_cast_f16_to_f32`, `et_mp4_aot_cast_f32_to_bf16`,
+  `et_mp4_aot_cast_bf16_to_f32`, `et_mp4_aot_grad_unscale_f16`, and
+  `et_mp4_aot_grad_unscale_bf16`.
+- Dynamic loss-scaler wrapper (`et_mp4_aot_scaler`, 40-byte standard-layout,
+  trivially copyable): `et_mp4_aot_scaler_bytes`, `et_mp4_aot_scaler_init`,
+  `et_mp4_aot_scaler_scale`, `et_mp4_aot_scaler_scale_f32`,
+  `et_mp4_aot_scaler_unscale_f16`, `et_mp4_aot_scaler_unscale_bf16`,
+  `et_mp4_aot_scaler_step`, `et_mp4_aot_scaler_get_scale`,
+  `et_mp4_aot_scaler_get_growth_tracker`, and
+  `et_mp4_aot_scaler_get_overflow_count`.
+- Bounds-, alignment-, and null-checked buffer marshaling and sizing:
+  `et_mp4_aot_element_bytes`, `et_mp4_aot_tensor_bytes`,
+  `et_mp4_aot_store_f32`, `et_mp4_aot_load_f32`, `et_mp4_aot_store_f32_bits`,
+  `et_mp4_aot_load_f32_bits`, `et_mp4_aot_store_u16`, `et_mp4_aot_load_u16`,
+  `et_mp4_aot_store_u8`, and `et_mp4_aot_load_u8`.
+
+Validated in `eshkol-r0-debug:20260928` (Ubuntu 22.04.5 x86-64, Clang 21.1.8,
+pinned `eshkol-run`) via `bash scripts/test-mp4-aot.sh`:
+
+- Deterministic archive build (`scripts/build-mp4-aot.sh`), export/import
+  symbol audit, and byte-identical archive reproduction passed.
+- C++17 header/linkage check (`tests/mp4/header_bridge_cpp.cpp`) and C11 bridge
+  tests (`tests/mp4/test_mp4_aot_bridge.c`) passed in normal mode (with
+  `--wrap=malloc/calloc/realloc/free` enforcing allocation-free dispatch) and
+  under ASan/UBSan/LSan (`detect_leaks=1:halt_on_error=1`).
+- Compiled Eshkol AOT program (`tests/mp4/test_mp4_aot.esk`,
+  `--strict-types --optimize 0 --no-stdlib`) compiled twice from fresh build
+  and cache directories produced byte-identical ELFs and identical stdout:
+  - Compiled ELF SHA-256:
+    `f688eccf2aca1c59c557681fb1fe7f88a1f55e5820c68f39d74c4343f7ce3453`
+  - Storage ratio: `f16=512`, `bf16=512`, `f32=1024` bytes (`2:1`).
+  - RNE bit-exact round trips: `f16=8/8`, `bf16=8/8`.
+  - Negative checks from Eshkol: non-finite `+Inf`/`qNaN`/overflow rejection
+    with destination sentinel preservation, unsupported shape rejection, and
+    loss-scaler underflow fault preserving state.
+  - 12-step momentum/SGD training with injected overflow on attempt 2
+    (`scale 64 -> 32`, all 8 master gradients zeroed to `+0.0f`, master weights
+    and velocity bit-for-bit unchanged, strictly decreasing loss on all 12
+    accepted steps, final scale `256`):
+    - `F16`: `initial=4.6875`, `final=1.4813304005656391e-05`
+    - `BF16`: `initial=4.6875`, `final=1.6148208032973344e-05`
+
 This foundation covers bounded serial CPU storage conversions, f32 master
 gradients, and loss-scaling state. GPU tensor cores, other devices and shapes,
 TR3 trainer wiring, and checkpoint integration are outside this ABI.
