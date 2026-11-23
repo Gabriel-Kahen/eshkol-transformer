@@ -142,3 +142,74 @@ Evaluation metrics consume caller-provided logits and use the platform's
 requires separate validation. The manifest stores the exact emitted bits.
 Integration with dataset readers, tokenizers, model inference, and external
 benchmark runners is outside this standalone library.
+
+## Live Eshkol AOT bridge and MOD5/D1/C1 runner
+
+`native/eval5_eshkol_bridge.h` and `native/eval5_eshkol_bridge.c` provide a
+C11/C++17-compatible (`extern "C"`) Eshkol AOT bridge compiled into
+`build/eval5_aot/libeshkol_transformer_eval5_aot.a` via
+`bash scripts/build-eval5-aot.sh`. The bridge exposes opaque corpus,
+multiple-choice batch, and manifest handles plus checked SHA-256 and scalar
+marshaling helpers over `et_eval5_*`, with explicit error returns,
+`O_NOFOLLOW` regular-file verification, fail-closed contamination rejection on
+manifest publication (`ET_EVAL5_ERR_CONTAMINATED`), and zero silent fallbacks.
+
+`tests/eval5/test_eval5_mod5_runner.esk` is compiled with
+`--strict-types --optimize 0 --no-stdlib` by `bash scripts/test-eval5-aot.sh`
+and links live D1 token-shard validators, MOD5 K1 kernels
+(`libeshkol_transformer_mod5.a`), trusted C1/P1/I2 checkpoint I/O
+(`libeshkol_transformer_checkpoint_io.a`), the EVAL5 AOT bridge
+(`libeshkol_transformer_eval5_aot.a`), and `libeshkol_eval5.a`.
+The end-to-end validation runs across separate OS processes:
+
+1. **D1 corpus generation & MOD5 training (`--mode write-corpora`, `--mode train-save`)**:
+   Writes five checksummed D1 1.0 corpora (`train`, `eval-clean`, `eval-exact`,
+   `eval-ngram`, `eval-both`; 2 documents of 9 tokens each, vocabulary size 16,
+   identity `eval5-mod5-token-v1`), verifies all 12 numerical gradients, runs
+   12 SGD steps (`lr = 0.25`) with monotonically decreasing loss from
+   `2.8233956733753063` to `2.3179403849844751`, and saves a canonical
+   `eshkol-mod5-v1` C1 checkpoint.
+2. **Contaminated fail-closed rejections (`--mode eval`)**:
+   Reloads the C1 checkpoint in a fresh process and audits each contaminated
+   split against `train` with token 3-grams (`ngram_mode=2`, `ngram_order=3`,
+   `forbid_exact_match=1`, `min_ngram_overlap=0.25`, `max_allowed_rate=0.0`).
+   Every contaminated split fails closed with exit status `7`, returns
+   `ET_EVAL5_ERR_CONTAMINATED (-7)` from both audit and
+   `et_eval5_aot_manifest_write_atomic`, and publishes no manifest file.
+3. **Clean evaluation & atomic publication (`--mode eval`)**:
+   In a fresh process, reloads the C1 checkpoint, passes the contamination gate
+   on `eval-clean` (`0/2` contaminated documents, `0/14` matched token 3-grams),
+   runs live MOD5 forward passes into the EVAL5 binary64 LM scorer (16 target
+   tokens, 32 original bytes) and 4-item length-normalized MC scorer, and
+   publishes a canonical checksummed manifest atomically.
+4. **Independent reload, tamper & symlink rejection (`--mode verify-manifest`)**:
+   In a third fresh process, reloads the manifest via `O_NOFOLLOW`, verifies
+   the SHA-256 checksum, schema, contamination gate, and all four provenance
+   digests (`train` shard, `eval-clean` shard, tokenizer identity, C1
+   checkpoint), reproducing the emitted metrics and `manifest_sha256`
+   identically. Tampered manifests are rejected with `ET_EVAL5_ERR_CHECKSUM (-9)`
+   and symlink paths are rejected with `ET_EVAL5_ERR_IO (-11)`.
+
+### Measured results (`eshkol-r0-debug:20260928`, Clang 21.1.8)
+
+| Artifact or metric | Measured value |
+| --- | --- |
+| `libeshkol_transformer_eval5_aot.a` (normal) SHA-256 | `421d320a507476f7e70944bac07b21c2f954e39ba90fcf0c6950fbd9fd373984` |
+| `libeshkol_transformer_eval5_aot.a` (sanitize) SHA-256 | `04016fb1474d7e8cc721b459c7ed981b340c431ddd96458ee4549d466873a67f` |
+| Byte-identical AOT ELF (`eval5-mod5-runner`, two fresh dirs) SHA-256 | `c2fdcec03f856da507327023acf87c973a85bf041c80309f308173bf31f747fd` |
+| Trained `eshkol-mod5-v1` C1 checkpoint SHA-256 | `4e576d7d66388bd18246285ac73ce1ce0962812640a7a63ff61f571243194789` |
+| Clean LM `total_nll` / `mean_nll` | `45.233785199966874` / `2.8271115749979296` |
+| Clean LM `perplexity` / `bits_per_byte` | `16.896585751795243` / `2.0393299246446501` |
+| Clean MC `correct` / `total` / `accuracy` | `4` / `4` / `1` (`1.0`, length-normalized) |
+| Clean manifest `manifest_sha256` (emitted & reloaded) | `13097465e6c42e81bbcb926f9f50bef54e3343cd937d8e0302d7877219427ca6` |
+
+| Contaminated split | `exact_matches` | `ngram_docs` | `matched_ngrams` / `total_ngrams` | `rate` | `write_status` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `eval-exact` | `1` | `1` | `7` / `14` | `0.5` | `-7` (`ET_EVAL5_ERR_CONTAMINATED`) |
+| `eval-ngram` | `0` | `1` | `3` / `14` | `0.5` | `-7` (`ET_EVAL5_ERR_CONTAMINATED`) |
+| `eval-both` | `1` | `2` | `10` / `14` | `1.0` | `-7` (`ET_EVAL5_ERR_CONTAMINATED`) |
+
+Native C11/C++17 bridge tests (`tests/eval5/test_eval5_aot_bridge.c` and
+`tests/eval5/header_bridge_cpp.cpp`) pass under normal builds and under
+ASan/UBSan/LSan (`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
+UBSAN_OPTIONS=halt_on_error=1`).
