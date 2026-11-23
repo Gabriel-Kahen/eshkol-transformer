@@ -22,7 +22,8 @@ from safetensors_interop import InteropError, Limits, State, Tensor, require
 
 M3 = "eshkol-m3-v1"
 DECODER = "eshkol-decoder-v1"
-PROFILES = (M3, DECODER)
+MOD5 = "eshkol-mod5-v1"
+PROFILES = (M3, DECODER, MOD5)
 SCHEMES = ("huggingface", "gguf")
 
 MAPPING_VERSION = "eshkol.io5.mapping_version"
@@ -38,7 +39,7 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 LAYER = re.compile(r"0|[1-9][0-9]{0,3}")
 
 # Each row is canonical stem, Hugging Face stem, GGUF stem, and required matrix/vector shape for M3.
-# None marks the decoder-only gate. Parameters remain individual C1 path segments.
+# None marks the SwiGLU gate, which is absent from M3.
 TOP = (
     ("token_embedding", "model.embed_tokens", "token_embd", (256, 4)),
     ("position_embedding", "model.embed_positions", "position_embd", (2, 4)),
@@ -65,14 +66,16 @@ def check_selection(profile: str | None, scheme: str | None) -> None:
     require(profile in PROFILES and scheme in SCHEMES, "explicit supported profile and scheme required")
 
 
-def tables(rows: tuple, scheme: str, *, block: bool) -> tuple[dict, dict]:
+def tables(rows: tuple, profile: str, scheme: str, *, block: bool) -> tuple[dict, dict]:
     names, shapes = {}, {}
     for canonical, hf, gguf, shape in rows:
+        if profile == MOD5 and canonical == "position_embedding":
+            continue
         stem = tuple(canonical.split("."))
         external = hf if scheme == "huggingface" else gguf
         names[stem + ("weight",)] = external + ".weight"
         shapes[stem + ("weight",)] = shape
-        if block or canonical == "norm_final":
+        if profile != MOD5 and (block or canonical == "norm_final"):
             names[stem + ("bias",)] = external + ".bias"
             if shape is not None and len(shape) == 1:
                 shapes[stem + ("bias",)] = shape
@@ -88,8 +91,8 @@ def layer_index(segment: str) -> int:
 
 def mapped_names(state: State, profile: str, scheme: str) -> tuple[str, ...]:
     check_selection(profile, scheme)
-    top, m3_top = tables(TOP, scheme, block=False)
-    block, m3_block = tables(BLOCK, scheme, block=True)
+    top, m3_top = tables(TOP, profile, scheme, block=False)
+    block, m3_block = tables(BLOCK, profile, scheme, block=True)
     prefix = "model.layers" if scheme == "huggingface" else "blk"
     names, roots, layers = [], set(), defaultdict(set)
     by_path = {tensor.path: tensor for tensor in state.tensors}
@@ -121,6 +124,10 @@ def mapped_names(state: State, profile: str, scheme: str) -> tuple[str, ...]:
     if profile == M3:
         require(roots == m3_top.keys() and layers.get(0) == {p for p, s in m3_block.items() if s is not None},
                 "missing M3 tensor")
+    elif profile == MOD5:
+        require(roots == top.keys(), "missing MOD5 root tensor")
+        require(layers, "MOD5 requires at least one layer")
+        require(all(paths == block.keys() for paths in layers.values()), "missing MOD5 block tensor")
     else:
         required = {path for path in top if path[-1] == "weight" and path[0] != "position_embedding"}
         require(required <= roots, "missing decoder root tensor")
@@ -134,8 +141,8 @@ def mapped_names(state: State, profile: str, scheme: str) -> tuple[str, ...]:
 
 def plain_state(named: dict[str, Tensor], profile: str, scheme: str,
                 provider: str, tie: bool) -> State:
-    top, _ = tables(TOP, scheme, block=False)
-    block, _ = tables(BLOCK, scheme, block=True)
+    top, _ = tables(TOP, profile, scheme, block=False)
+    block, _ = tables(BLOCK, profile, scheme, block=True)
     top_paths = {name: path for path, name in top.items()}
     block_paths = {name: path for path, name in block.items()}
     prefix = "model.layers." if scheme == "huggingface" else "blk."

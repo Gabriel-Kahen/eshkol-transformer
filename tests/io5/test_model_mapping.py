@@ -42,6 +42,22 @@ M3_ROWS = (
     ("position_embedding.weight", "model.embed_positions.weight", "position_embd.weight", (2, 4)),
     ("token_embedding.weight", "model.embed_tokens.weight", "token_embd.weight", (256, 4)),
 )
+MOD5_ROOT_ROWS = (
+    ("head.weight", "lm_head.weight", "output.weight", (17, 8)),
+    ("norm_final.weight", "model.norm.weight", "output_norm.weight", (8,)),
+    ("token_embedding.weight", "model.embed_tokens.weight", "token_embd.weight", (17, 8)),
+)
+MOD5_BLOCK_ROWS = (
+    ("attention.key.weight", "self_attn.k_proj.weight", "attn_k.weight", (0, 8)),
+    ("attention.output.weight", "self_attn.o_proj.weight", "attn_output.weight", (8, 8)),
+    ("attention.query.weight", "self_attn.q_proj.weight", "attn_q.weight", (8, 8)),
+    ("attention.value.weight", "self_attn.v_proj.weight", "attn_v.weight", (0, 8)),
+    ("ffn.down.weight", "mlp.down_proj.weight", "ffn_down.weight", (8, 12)),
+    ("ffn.gate.weight", "mlp.gate_proj.weight", "ffn_gate.weight", (12, 8)),
+    ("ffn.up.weight", "mlp.up_proj.weight", "ffn_up.weight", (12, 8)),
+    ("norm1.weight", "input_layernorm.weight", "attn_norm.weight", (8,)),
+    ("norm2.weight", "post_attention_layernorm.weight", "ffn_norm.weight", (8,)),
+)
 
 
 def tensor(name, shape, seed=0):
@@ -70,6 +86,20 @@ def decoder_fixture(*, tied=False):
     paths = [t.path for t in tensors]
     groups = (tuple(paths.index(p) for p in (("head", "weight"), ("token_embedding", "weight"))),) if tied else ()
     return safe.State(PROVIDER, tuple(tensors), groups)
+
+
+def mod5_fixture(kv_width, *, tied):
+    rows = [
+        (f"blocks.{i}.{path}", f"model.layers.{i}.{hf}", f"blk.{i}.{gguf}",
+         shape if shape[0] else (kv_width, shape[1]))
+        for i in range(2)
+        for path, hf, gguf, shape in MOD5_BLOCK_ROWS
+    ] + list(MOD5_ROOT_ROWS)
+    tensors = [tensor(path, shape, index) for index, (path, _, _, shape) in enumerate(rows)]
+    head, embedding = len(rows) - 3, len(rows) - 1
+    if tied:
+        tensors[embedding] = replace(tensors[embedding], data=tensors[head].data)
+    return safe.State(PROVIDER, tuple(tensors), ((head, embedding),) if tied else ()), rows
 
 
 def c1_bytes(state):
@@ -174,6 +204,89 @@ class ModelMappingTests(unittest.TestCase):
         files = self.build(original, profile=mapping.DECODER, scheme="gguf", max_shard_bytes=900)
         self.install(files)
         self.assertEqual(mapping.read_sharded(self.index, scheme="gguf"), original)
+
+    def test_mod5_multilayer_mqa_gqa_mha_mapped_and_sharded_round_trips(self):
+        for kv_width in (2, 4, 8):
+            for tied in (False, True):
+                state, rows = mod5_fixture(kv_width, tied=tied)
+                original = c1_bytes(state)
+                for format_name, scheme, name_column in (
+                    ("safetensors", "huggingface", 1), ("gguf", "gguf", 2),
+                ):
+                    with self.subTest(kv_width=kv_width, tied=tied, scheme=scheme):
+                        encoded = mapping.encode_mapped(original, format_name, mapping.MOD5, scheme)
+                        if format_name == "safetensors":
+                            header, _ = unpack(encoded)
+                            metadata = header.pop("__metadata__")
+                            actual = {name: tuple(entry["shape"]) for name, entry in header.items()}
+                        else:
+                            fields, infos, _, _ = unpack_export(encoded)
+                            metadata = {key: value for key, _, value in fields}
+                            actual = {name: dims[::-1] for name, dims, _, _, _ in infos}
+                        self.assertEqual(actual, {row[name_column]: row[3] for row in rows})
+                        self.assertEqual(metadata[mapping.PROFILE], mapping.MOD5)
+                        self.assertEqual(mapping.decode_mapped(encoded, format_name), original)
+                        files = self.build(original, profile=mapping.MOD5, scheme=scheme, max_shard_bytes=900)
+                        self.assertGreater(len(files), 2)
+                        self.install(files)
+                        self.assertEqual(mapping.read_sharded(self.index, profile=mapping.MOD5,
+                                                              scheme=scheme), original)
+
+    def test_mod5_plain_external_import_and_exact_tie(self):
+        for tied in (False, True):
+            state, rows = mod5_fixture(4, tied=tied)
+            for format_name, scheme, name_column, plain in (
+                ("safetensors", "huggingface", 1, safetensors_plain),
+                ("gguf", "gguf", 2, gguf_plain),
+            ):
+                with self.subTest(tied=tied, scheme=scheme):
+                    options = dict(external=True, profile=mapping.MOD5, scheme=scheme, provider=PROVIDER)
+                    original = c1_bytes(state)
+                    encoded = mapping.encode_mapped(original, format_name, mapping.MOD5, scheme)
+                    imported = mapping.decode_mapped(plain(encoded), format_name, tie=tied, **options)
+                    self.assertEqual(imported, original)
+                    if tied:
+                        self.assertEqual(mapping.decode_mapped(plain(encoded), format_name, **options),
+                                         c1_bytes(replace(state, aliases=())))
+                        with self.assertRaisesRegex(safe.InteropError, "equal shapes and exact bits"):
+                            mapping.decode_mapped(plain(encoded, mismatch=flip), format_name, tie=True, **options)
+                        shape_mismatch = replace(state.tensors[-3], shape=(8, 17))
+                        unexpected = replace(state, tensors=state.tensors[:-3] + (shape_mismatch,) + state.tensors[-2:],
+                                             aliases=())
+                        external = mapping.encode_mapped(c1_bytes(unexpected), format_name, mapping.MOD5, scheme)
+                        with self.assertRaisesRegex(safe.InteropError, "equal shapes and exact bits"):
+                            mapping.decode_mapped(plain(external), format_name, tie=True, **options)
+
+    def test_mod5_rejects_incompatible_rosters_on_export_and_external_import(self):
+        fixture, _ = mod5_fixture(2, tied=False)
+        tensors = fixture.tensors
+        for label, invalid in (
+            ("final norm bias", tensors + (tensor("norm_final.bias", (8,)),)),
+            ("norm1 bias", tensors + (tensor("blocks.0.norm1.bias", (8,)),)),
+            ("norm2 bias", tensors + (tensor("blocks.0.norm2.bias", (8,)),)),
+            ("attention bias", tensors + (tensor("blocks.0.attention.query.bias", (8,)),)),
+            ("SwiGLU bias", tensors + (tensor("blocks.0.ffn.gate.bias", (12,)),)),
+            ("learned positions", tensors + (tensor("position_embedding.weight", (2, 8)),)),
+            ("missing gate", tuple(t for t in tensors if t.path != ("blocks", "1", "ffn", "gate", "weight"))),
+            ("no layers", tuple(t for t in tensors if t.path[0] != "blocks")),
+            ("missing layer 0", tuple(t for t in tensors if t.path[:2] != ("blocks", "0"))),
+            ("missing root", tuple(t for t in tensors if t.path[0] != "norm_final")),
+            ("wrong norm rank", tuple(replace(t, shape=(1, 8)) if t.path == ("norm_final", "weight") else t
+                                     for t in tensors)),
+        ):
+            raw = c1_bytes(replace(fixture, tensors=tuple(sorted(invalid, key=lambda t: t.path))))
+            for format_name, scheme, plain in (
+                ("safetensors", "huggingface", safetensors_plain), ("gguf", "gguf", gguf_plain),
+            ):
+                with self.subTest(case=label, scheme=scheme):
+                    with self.assertRaises(safe.InteropError):
+                        mapping.encode_mapped(raw, format_name, mapping.MOD5, scheme)
+                    if label in ("missing layer 0", "missing root", "wrong norm rank"):
+                        continue  # These rosters also fail legacy decoder export.
+                    encoded = mapping.encode_mapped(raw, format_name, mapping.DECODER, scheme)
+                    with self.assertRaises(safe.InteropError):
+                        mapping.decode_mapped(plain(encoded), format_name, external=True,
+                                              profile=mapping.MOD5, scheme=scheme, provider=PROVIDER)
 
     def test_unmapped_shards_preserve_arbitrary_paths_kinds_and_empty_state(self):
         for state in (safe.State("utf8 λ", ()),
