@@ -1,0 +1,361 @@
+;;; AC4 activation-checkpointed multi-layer training verification in compiled Eshkol.
+;;; Trains L=4 and L=8 GQA stacks for 8 SGD steps across all four checkpointing
+;;; policies (NONE, EVERY_LAYER, SQRT_SEGMENTS, EVERY_K), with dropout=0.0 and
+;;; dropout=0.2, checking bitwise parity of losses, outputs, gradients, and
+;;; post-update weights, peak activation memory reductions, and negative errors.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 ac4-create i64 i64 i64 i64 i64 i64 i64 i64 i64 f64 f64 i64 i64 ptr
+        :real et_ac4_aot_create)
+(extern void ac4-destroy ptr :real et_ac4_aot_destroy)
+(extern i32 ac4-set-limit ptr i64 :real et_ac4_aot_set_activation_limit)
+
+(extern i64 ac4-activation-floats ptr :real et_ac4_aot_activation_floats)
+(extern i64 ac4-parameter-floats ptr :real et_ac4_aot_parameter_floats)
+(extern i64 ac4-parameter-floats-per-layer ptr :real et_ac4_aot_parameter_floats_per_layer)
+(extern i64 ac4-planned-peak-bytes ptr :real et_ac4_aot_planned_peak_bytes)
+(extern i64 ac4-planned-recomp ptr :real et_ac4_aot_planned_rematerialized_layers)
+
+(extern i32 ac4-set-input ptr i64 f64 :real et_ac4_aot_set_input)
+(extern i32 ac4-set-target ptr i64 f64 :real et_ac4_aot_set_target)
+(extern i32 ac4-set-param ptr i64 f64 :real et_ac4_aot_set_parameter)
+
+(extern i32 ac4-run ptr i64 :real et_ac4_aot_run)
+(extern i32 ac4-sgd-step ptr f64 :real et_ac4_aot_sgd_step)
+
+(extern i64 ac4-peak-bytes ptr :real et_ac4_aot_peak_activation_bytes)
+(extern i64 ac4-recomp-count ptr :real et_ac4_aot_recomputation_count)
+(extern i64 ac4-workspace-bytes ptr :real et_ac4_aot_workspace_bytes)
+
+(extern f64 ac4-get-loss ptr :real et_ac4_aot_get_loss)
+(extern f64 ac4-get-param ptr i64 :real et_ac4_aot_get_parameter)
+
+(extern i64 ac4-loss-bits-lo ptr :real et_ac4_aot_loss_bits_lo)
+(extern i64 ac4-loss-bits-hi ptr :real et_ac4_aot_loss_bits_hi)
+(extern i64 ac4-output-bits ptr i64 :real et_ac4_aot_output_bits)
+(extern i64 ac4-param-bits ptr i64 :real et_ac4_aot_parameter_bits)
+(extern i64 ac4-d-input-bits ptr i64 :real et_ac4_aot_d_input_bits)
+(extern i64 ac4-d-param-bits ptr i64 :real et_ac4_aot_d_parameter_bits)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; AC4 ABI constants.
+(define status-ok 0)
+(define status-invalid-arg 1)
+(define status-activation-limit 5)
+(define status-numeric-error 7)
+
+(define mode-forward-only 0)
+(define mode-forward-backward 1)
+
+(define policy-none 0)
+(define policy-every-layer 1)
+(define policy-sqrt 2)
+(define policy-every-k 3)
+
+;; GQA shape row: (N=2, T=3, Hq=4, Hkv=2, Dh=2) -> D=8, V=4, X=48, per-layer=400.
+(define batch 2)
+(define tokens 3)
+(define query-heads 4)
+(define kv-heads 2)
+(define head-dim 2)
+(define width 8)
+(define kv-width 4)
+(define gamma2-offset (+ width (* 2 width width) (* 2 kv-width width)))
+
+(define epsilon 0.125)
+(define learning-rate 0.035)
+(define train-steps 8)
+(define rng-seed 6273229700918280112)
+
+(define (require-check label ok)
+  (unless ok
+    (display "AC4 AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "AC4 AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-context layers mode policy k dropout-rate)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "ac4-create" status-ok
+                   (ac4-create layers batch tokens query-heads kv-heads head-dim
+                               mode policy k epsilon dropout-rate rng-seed 0
+                               (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context after ok create" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (expect-create-error label layers mode policy k dropout-rate expected)
+  (let ((cell (checked-allocate 8)))
+    (volatile-store! i64 (ffi-pointer cell) 0)
+    (expect-status label expected
+                   (ac4-create layers batch tokens query-heads kv-heads head-dim
+                               mode policy k epsilon dropout-rate rng-seed 0
+                               (ffi-pointer cell)))
+    (require-check "failed create mutated out_ctx" (= (volatile-load i64 (ffi-pointer cell)) 0))
+    (release (ffi-pointer cell))))
+
+;; Deterministic Eshkol-authored fixture generator.
+(define (det-val index salt)
+  (let ((r (- (modulo (+ (* 31 index) (* 17 salt) (quotient index 3)) 41) 20)))
+    (* 0.05 r)))
+
+(define (populate-fixture ctx layers)
+  (let ((x-count (ac4-activation-floats (ffi-pointer ctx)))
+        (p-count (ac4-parameter-floats (ffi-pointer ctx)))
+        (per-layer (ac4-parameter-floats-per-layer (ffi-pointer ctx))))
+    (require-check "activation count mismatch" (= x-count 48))
+    (require-check "per-layer parameter count mismatch" (= per-layer 400))
+    (require-check "total parameter count mismatch" (= p-count (* layers per-layer)))
+    (do ((i 0 (+ i 1)))
+        ((= i x-count))
+      (let* ((x (* 0.65 (det-val i 1)))
+             (t (+ (* 0.62 x) (* 0.27 (det-val i 2)))))
+        (expect-status "set-input" status-ok (ac4-set-input (ffi-pointer ctx) i x))
+        (expect-status "set-target" status-ok (ac4-set-target (ffi-pointer ctx) i t))))
+    (do ((i 0 (+ i 1)))
+        ((= i p-count))
+      (expect-status "set-param" status-ok
+                     (ac4-set-param (ffi-pointer ctx) i (* 0.28 (det-val i 3)))))
+    (do ((l 0 (+ l 1)))
+        ((= l layers))
+      (let ((base (* l per-layer)))
+        (do ((d 0 (+ d 1)))
+            ((= d width))
+          (expect-status "set-gamma1" status-ok
+                         (ac4-set-param (ffi-pointer ctx) (+ base d)
+                                        (+ 0.92 (* 0.16 (det-val (+ (* l 16) d) 4)))))
+          (expect-status "set-gamma2" status-ok
+                         (ac4-set-param (ffi-pointer ctx) (+ base gamma2-offset d)
+                                        (+ 0.87 (* 0.16 (det-val (+ (* l 16) d) 5))))))))))
+
+(define (sync-eval-params src dst p-count)
+  (do ((i 0 (+ i 1)))
+      ((= i p-count))
+    (expect-status "sync-eval-param" status-ok
+                   (ac4-set-param (ffi-pointer dst) i (ac4-get-param (ffi-pointer src) i)))))
+
+(define (policy-name p)
+  (cond
+    ((= p policy-none) "NONE")
+    ((= p policy-every-layer) "EVERY_LAYER")
+    ((= p policy-sqrt) "SQRT_SEGMENTS")
+    (else "EVERY_K")))
+
+(define (check-bitwise-step base other x-count p-count)
+  (require-check "loss lo bits mismatch"
+                 (= (ac4-loss-bits-lo (ffi-pointer base))
+                    (ac4-loss-bits-lo (ffi-pointer other))))
+  (require-check "loss hi bits mismatch"
+                 (= (ac4-loss-bits-hi (ffi-pointer base))
+                    (ac4-loss-bits-hi (ffi-pointer other))))
+  (do ((i 0 (+ i 1)))
+      ((= i x-count))
+    (require-check "output bits mismatch"
+                   (= (ac4-output-bits (ffi-pointer base) i)
+                      (ac4-output-bits (ffi-pointer other) i)))
+    (require-check "d_input bits mismatch"
+                   (= (ac4-d-input-bits (ffi-pointer base) i)
+                      (ac4-d-input-bits (ffi-pointer other) i))))
+  (do ((i 0 (+ i 1)))
+      ((= i p-count))
+    (require-check "d_param bits mismatch"
+                   (= (ac4-d-param-bits (ffi-pointer base) i)
+                      (ac4-d-param-bits (ffi-pointer other) i)))))
+
+(define (check-bitwise-weights base other p-count)
+  (do ((i 0 (+ i 1)))
+      ((= i p-count))
+    (require-check "post-update weight bits mismatch"
+                   (= (ac4-param-bits (ffi-pointer base) i)
+                      (ac4-param-bits (ffi-pointer other) i)))))
+
+(define (check-active-gradients ctx p-count)
+  (let ((nonzero 0))
+    (do ((i 0 (+ i 1)))
+        ((= i p-count))
+      (let ((bits (ac4-d-param-bits (ffi-pointer ctx) i)))
+        (require-check "invalid gradient bits" (>= bits 0))
+        (when (and (not (= bits 0)) (not (= bits 2147483648)))
+          (set! nonzero (+ nonzero 1)))))
+    (require-check "gradients are all zero" (> nonzero 0))))
+
+(define (run-training-suite layers dropout-rate dropout-label)
+  (let* ((ctx-none (create-context layers mode-forward-backward policy-none 0 dropout-rate))
+         (ctx-layer (create-context layers mode-forward-backward policy-every-layer 0 dropout-rate))
+         (ctx-sqrt (create-context layers mode-forward-backward policy-sqrt 0 dropout-rate))
+         (ctx-k (create-context layers mode-forward-backward policy-every-k layers dropout-rate))
+         (ctx-eval (create-context layers mode-forward-only policy-none 0 0.0))
+         (x-count (ac4-activation-floats (ffi-pointer ctx-none)))
+         (p-count (ac4-parameter-floats (ffi-pointer ctx-none)))
+         (peak-none (ac4-planned-peak-bytes (ffi-pointer ctx-none)))
+         (peak-layer (ac4-planned-peak-bytes (ffi-pointer ctx-layer)))
+         (peak-sqrt (ac4-planned-peak-bytes (ffi-pointer ctx-sqrt)))
+         (peak-k (ac4-planned-peak-bytes (ffi-pointer ctx-k))))
+
+    ;; Enforce exact planned activation caps on each policy.
+    (expect-status "limit-none" status-ok (ac4-set-limit (ffi-pointer ctx-none) peak-none))
+    (expect-status "limit-layer" status-ok (ac4-set-limit (ffi-pointer ctx-layer) peak-layer))
+    (expect-status "limit-sqrt" status-ok (ac4-set-limit (ffi-pointer ctx-sqrt) peak-sqrt))
+    (expect-status "limit-k" status-ok (ac4-set-limit (ffi-pointer ctx-k) peak-k))
+
+    (populate-fixture ctx-none layers)
+    (populate-fixture ctx-layer layers)
+    (populate-fixture ctx-sqrt layers)
+    (populate-fixture ctx-k layers)
+    (populate-fixture ctx-eval layers)
+
+    ;; Measure initial dropout-free evaluation loss.
+    (expect-status "eval-initial" status-ok (ac4-run (ffi-pointer ctx-eval) 0))
+    (let ((initial-eval-loss (ac4-get-loss (ffi-pointer ctx-eval)))
+          (prev-eval-loss (ac4-get-loss (ffi-pointer ctx-eval))))
+
+      ;; 8 SGD steps across all four policies.
+      (do ((step 0 (+ step 1)))
+          ((= step train-steps))
+        (expect-status "run-none" status-ok (ac4-run (ffi-pointer ctx-none) step))
+        (expect-status "run-layer" status-ok (ac4-run (ffi-pointer ctx-layer) step))
+        (expect-status "run-sqrt" status-ok (ac4-run (ffi-pointer ctx-sqrt) step))
+        (expect-status "run-k" status-ok (ac4-run (ffi-pointer ctx-k) step))
+
+        ;; Verify observed peaks & recomputations match plans exactly.
+        (require-check "peak-none mismatch" (= (ac4-peak-bytes (ffi-pointer ctx-none)) peak-none))
+        (require-check "peak-layer mismatch" (= (ac4-peak-bytes (ffi-pointer ctx-layer)) peak-layer))
+        (require-check "peak-sqrt mismatch" (= (ac4-peak-bytes (ffi-pointer ctx-sqrt)) peak-sqrt))
+        (require-check "peak-k mismatch" (= (ac4-peak-bytes (ffi-pointer ctx-k)) peak-k))
+
+        (require-check "recomp-none mismatch"
+                       (= (ac4-recomp-count (ffi-pointer ctx-none))
+                          (ac4-planned-recomp (ffi-pointer ctx-none))))
+        (require-check "recomp-layer mismatch"
+                       (= (ac4-recomp-count (ffi-pointer ctx-layer))
+                          (ac4-planned-recomp (ffi-pointer ctx-layer))))
+        (require-check "recomp-sqrt mismatch"
+                       (= (ac4-recomp-count (ffi-pointer ctx-sqrt))
+                          (ac4-planned-recomp (ffi-pointer ctx-sqrt))))
+        (require-check "recomp-k mismatch"
+                       (= (ac4-recomp-count (ffi-pointer ctx-k))
+                          (ac4-planned-recomp (ffi-pointer ctx-k))))
+
+        ;; Verify strict peak activation memory reduction across policies.
+        (require-check "EVERY_LAYER peak not < NONE" (< peak-layer peak-none))
+        (require-check "SQRT_SEGMENTS peak not < NONE" (< peak-sqrt peak-none))
+        (require-check "EVERY_K peak not < NONE" (< peak-k peak-none))
+        (require-check "policy peak ordering" (and (> peak-none peak-layer)
+                                                   (> peak-layer peak-sqrt)
+                                                   (> peak-sqrt peak-k)))
+
+        ;; Verify bitwise-identical loss, outputs, input grads, and parameter grads.
+        (check-bitwise-step ctx-none ctx-layer x-count p-count)
+        (check-bitwise-step ctx-none ctx-sqrt x-count p-count)
+        (check-bitwise-step ctx-none ctx-k x-count p-count)
+        (when (= step 0)
+          (check-active-gradients ctx-none p-count))
+
+        ;; Apply SGD step on all four policies and verify bitwise-identical weights.
+        (expect-status "sgd-none" status-ok (ac4-sgd-step (ffi-pointer ctx-none) learning-rate))
+        (expect-status "sgd-layer" status-ok (ac4-sgd-step (ffi-pointer ctx-layer) learning-rate))
+        (expect-status "sgd-sqrt" status-ok (ac4-sgd-step (ffi-pointer ctx-sqrt) learning-rate))
+        (expect-status "sgd-k" status-ok (ac4-sgd-step (ffi-pointer ctx-k) learning-rate))
+        (check-bitwise-weights ctx-none ctx-layer p-count)
+        (check-bitwise-weights ctx-none ctx-sqrt p-count)
+        (check-bitwise-weights ctx-none ctx-k p-count)
+
+        ;; Check dropout-free evaluation loss decreases monotonically.
+        (sync-eval-params ctx-none ctx-eval p-count)
+        (expect-status "eval-step" status-ok (ac4-run (ffi-pointer ctx-eval) step))
+        (let ((eval-loss (ac4-get-loss (ffi-pointer ctx-eval))))
+          (require-check "eval loss failed to decrease" (< eval-loss prev-eval-loss))
+          (set! prev-eval-loss eval-loss)))
+
+      ;; Report measured memory reductions and parity summary.
+      (let ((print-row
+             (lambda (name ctx peak)
+               (let ((saved-pct (/ (* 100.0 (- peak-none peak)) (* 1.0 peak-none))))
+                 (display "AC4 AOT MEMORY L=") (display layers)
+                 (display " dropout=") (display dropout-label)
+                 (display " policy=") (display name)
+                 (display " peak_bytes=") (display peak)
+                 (display " workspace_bytes=") (display (ac4-workspace-bytes (ffi-pointer ctx)))
+                 (display " replays=") (display (ac4-recomp-count (ffi-pointer ctx)))
+                 (display " saved_pct=") (display (number->string saved-pct))
+                 (newline)))))
+        (print-row (policy-name policy-none) ctx-none peak-none)
+        (print-row (policy-name policy-every-layer) ctx-layer peak-layer)
+        (print-row (policy-name policy-sqrt) ctx-sqrt peak-sqrt)
+        (print-row (policy-name policy-every-k) ctx-k peak-k))
+
+      (display "AC4 AOT TRAIN L=") (display layers)
+      (display " dropout=") (display dropout-label)
+      (display " steps=") (display train-steps)
+      (display " eval_initial=") (display (number->string initial-eval-loss))
+      (display " eval_final=") (display (number->string prev-eval-loss))
+      (display " bitwise_parity=PASS")
+      (newline))
+
+    (ac4-destroy (ffi-pointer ctx-eval))
+    (ac4-destroy (ffi-pointer ctx-k))
+    (ac4-destroy (ffi-pointer ctx-sqrt))
+    (ac4-destroy (ffi-pointer ctx-layer))
+    (ac4-destroy (ffi-pointer ctx-none))))
+
+(define (run-negative-checks)
+  ;; Invalid policy, invalid k, out-of-range layer counts.
+  (expect-create-error "invalid policy 99" 4 mode-forward-backward 99 0 0.0 status-invalid-arg)
+  (expect-create-error "invalid policy -1" 4 mode-forward-backward -1 0 0.0 status-invalid-arg)
+  (expect-create-error "invalid k=0 for EVERY_K" 4 mode-forward-backward policy-every-k 0 0.0 status-invalid-arg)
+  (expect-create-error "invalid k>L for EVERY_K" 4 mode-forward-backward policy-every-k 5 0.0 status-invalid-arg)
+  (expect-create-error "nonzero k for NONE" 4 mode-forward-backward policy-none 2 0.0 status-invalid-arg)
+  (expect-create-error "layers=0" 0 mode-forward-backward policy-none 0 0.0 status-invalid-arg)
+  (expect-create-error "layers=17" 17 mode-forward-backward policy-none 0 0.0 status-invalid-arg)
+
+  ;; Non-finite input and activation-cap rejection preserve prior good state.
+  (let* ((ctx (create-context 4 mode-forward-backward policy-every-layer 0 0.0))
+         (peak (ac4-planned-peak-bytes (ffi-pointer ctx))))
+    (populate-fixture ctx 4)
+    (expect-status "baseline run" status-ok (ac4-run (ffi-pointer ctx) 0))
+    (let ((good-lo (ac4-loss-bits-lo (ffi-pointer ctx)))
+          (good-hi (ac4-loss-bits-hi (ffi-pointer ctx)))
+          (good-out0 (ac4-output-bits (ffi-pointer ctx) 0))
+          (good-dp0 (ac4-d-param-bits (ffi-pointer ctx) 0)))
+      ;; Activation limit below peak.
+      (expect-status "set tight limit" status-ok (ac4-set-limit (ffi-pointer ctx) (- peak 1)))
+      (expect-status "activation limit rejected" status-activation-limit
+                     (ac4-run (ffi-pointer ctx) 1))
+      (expect-status "restore limit" status-ok (ac4-set-limit (ffi-pointer ctx) peak))
+      ;; Non-finite input via f32 overflow (1.0e300 -> +INF in binary32).
+      (expect-status "set overflow input" status-ok (ac4-set-input (ffi-pointer ctx) 0 1.0e300))
+      (expect-status "non-finite input rejected" status-numeric-error
+                     (ac4-run (ffi-pointer ctx) 1))
+      ;; Out-of-bounds index and invalid lr.
+      (expect-status "oob input index" status-invalid-arg (ac4-set-input (ffi-pointer ctx) 48 0.0))
+      (expect-status "invalid negative lr" status-invalid-arg (ac4-sgd-step (ffi-pointer ctx) -0.1))
+      ;; Verify failure atomicity.
+      (require-check "rejected calls mutated loss lo" (= (ac4-loss-bits-lo (ffi-pointer ctx)) good-lo))
+      (require-check "rejected calls mutated loss hi" (= (ac4-loss-bits-hi (ffi-pointer ctx)) good-hi))
+      (require-check "rejected calls mutated output" (= (ac4-output-bits (ffi-pointer ctx) 0) good-out0))
+      (require-check "rejected calls mutated d_param" (= (ac4-d-param-bits (ffi-pointer ctx) 0) good-dp0)))
+    (ac4-destroy (ffi-pointer ctx)))
+
+  (display "AC4 AOT NEGATIVE PASS")
+  (newline))
+
+(run-negative-checks)
+(run-training-suite 4 0.0 "0.0")
+(run-training-suite 4 0.2 "0.2")
+(run-training-suite 8 0.0 "0.0")
+(run-training-suite 8 0.2 "0.2")
