@@ -103,13 +103,15 @@ The SHA-256 covers the entire prefix through the LF immediately preceding the
 checksum line. There are no trailing bytes or NUL terminators in the file.
 The decoder checks the fixed schema, length, digest, value ranges, and count
 relationships. Enabled LM metrics require positive token and byte counts.
-If either NLL is zero, both NLLs and bits per byte must be zero and perplexity
-must be one. Otherwise the mean must equal total NLL divided by token count.
-Perplexity and bits per byte must match their derived values within
-`1e-9 * max(1, expected)`. Validation rejects a positive subnormal total NLL
-whose mean rounds to zero. The record is data only. The runner supplies
-trusted input digests and is responsible for associating them with the data
-it actually scored. The manifest stores the audit summary. The audit API
+Mean NLL must equal total NLL divided by token count in binary64. Zero
+total NLL requires zero bits per byte and perplexity of exactly one. A
+positive subnormal total NLL can yield a mean that rounds to zero. The
+validator accepts this scorer result when perplexity is exactly one and
+bits per byte agrees with `total_nll / (ln(2) * byte_count)` within
+`1e-9 * max(1, expected)`. For a positive mean, the same tolerance applies
+to both perplexity and bits per byte. The record is data only. The runner
+supplies trusted input digests and is responsible for associating them with
+the data it actually scored. The manifest stores the audit summary. The audit API
 returns the individual contaminated indices.
 
 `et_eval5_manifest_format` supports a size query, then emits the complete
