@@ -1,0 +1,457 @@
+;;; Wave 4/5 composed trainer (MP4 + AC4 + DIST5 + MOD5 + EVAL5) compiled
+;;; Eshkol AOT multi-process rank driver.
+;;;
+;;; Invoked per rank as:
+;;;   test_wave4_composed_aot --sock-dir DIR --rank R --world W --layers L \
+;;;     --dtype f16|bf16 --policy none|every-layer|sqrt|every-k --eval-path PATH
+;;;
+;;; Runs bootstrap + 7 training steps with single-rank narrow overflow
+;;; injection at step 2 (rank W-1):
+;;;   - Verifies coordinated OVERFLOW_BACKOFF (64 -> 32) across ALL ranks
+;;;     with bitwise-preserved master weights;
+;;;   - Verifies immediate UNDERFLOW_FAULT rejection at min_scale=32 leaving
+;;;     master weights and scaler untouched;
+;;;   - Verifies strictly decreasing loss recovery on steps 3..6;
+;;;   - On rank 0, runs EVAL5 held-out evaluation, emits & reloads/verifies
+;;;     the canonical SHA-256 manifest, and prints exact telemetry.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+(extern i32 format-f64 ptr i64 char* f64 :real strfromd)
+
+(extern i32 w4-create
+        char* i64 i64 i64 i64 i64 i64 i64
+        f64 f64 i64 f64 f64
+        f64 f64 f64 f64 f64 i64
+        ptr
+        :real et_wave4_composed_aot_create)
+(extern void w4-destroy ptr :real et_wave4_composed_aot_destroy)
+
+(extern i32 w4-set-master ptr i64 f64 :real et_wave4_composed_aot_set_master)
+(extern i32 w4-set-input ptr i64 f64 :real et_wave4_composed_aot_set_input)
+(extern i32 w4-set-target ptr i64 f64 :real et_wave4_composed_aot_set_target)
+(extern i32 w4-set-overflow-inject ptr i64
+        :real et_wave4_composed_aot_set_overflow_inject)
+(extern i32 w4-set-activation-limit ptr i64
+        :real et_wave4_composed_aot_set_activation_limit)
+
+(extern i32 w4-bootstrap ptr :real et_wave4_composed_aot_bootstrap)
+(extern i32 w4-step ptr i64 :real et_wave4_composed_aot_step)
+(extern i32 w4-evaluate ptr char* :real et_wave4_composed_aot_evaluate)
+(extern i32 w4-verify-manifest ptr char*
+        :real et_wave4_composed_aot_verify_manifest)
+
+(extern i64 w4-param-count ptr :real et_wave4_composed_aot_parameter_count)
+(extern i64 w4-act-count ptr :real et_wave4_composed_aot_activation_count)
+(extern i64 w4-planned-peak ptr
+        :real et_wave4_composed_aot_planned_activation_peak_bytes)
+(extern i64 w4-planned-workspace ptr
+        :real et_wave4_composed_aot_planned_workspace_bytes)
+(extern i64 w4-narrow-bytes ptr
+        :real et_wave4_composed_aot_narrow_parameter_bytes)
+
+(extern i32 w4-last-status ptr :real et_wave4_composed_aot_last_status)
+(extern f64 w4-last-loss ptr :real et_wave4_composed_aot_last_loss)
+(extern i64 w4-last-local-overflow ptr
+        :real et_wave4_composed_aot_last_local_overflow)
+(extern i64 w4-live-peak ptr
+        :real et_wave4_composed_aot_live_activation_peak_bytes)
+(extern i64 w4-workspace-bytes ptr :real et_wave4_composed_aot_workspace_bytes)
+(extern f64 w4-scaler-scale ptr :real et_wave4_composed_aot_scaler_scale)
+(extern i64 w4-scaler-clean-steps ptr
+        :real et_wave4_composed_aot_scaler_clean_steps)
+(extern f64 w4-get-master ptr i64 :real et_wave4_composed_aot_get_master)
+
+(extern i32 w4-param-digest-hex ptr ptr i64
+        :real et_wave4_composed_aot_param_digest_hex)
+(extern i64 w4-param-digest-byte ptr i64
+        :real et_wave4_composed_aot_param_digest_byte)
+
+(extern f64 w4-eval-mean-nll ptr :real et_wave4_composed_aot_eval_mean_nll)
+(extern f64 w4-eval-perplexity ptr :real et_wave4_composed_aot_eval_perplexity)
+(extern i64 w4-eval-contaminated ptr
+        :real et_wave4_composed_aot_eval_contaminated_documents)
+(extern i32 w4-manifest-digest-hex ptr ptr i64
+        :real et_wave4_composed_aot_manifest_digest_hex)
+(extern i64 w4-read-byte ptr i64 :real et_wave4_composed_aot_read_byte)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Wave 4/5 composed ABI constants.
+(define status-ok 0)
+(define status-overflow-backoff 1)
+(define status-underflow-fault 2)
+
+(define dtype-f16 1)
+(define dtype-bf16 2)
+
+(define policy-none 0)
+(define policy-every-layer 1)
+(define policy-sqrt 2)
+(define policy-every-k 3)
+
+(define total-steps 7)
+(define fault-step 2)
+(define per-layer 104)
+(define act-count 8)
+(define timeout-ms 15000)
+
+(define (fail-msg msg)
+  (display "WAVE4 AOT FAIL: ")
+  (display msg)
+  (newline)
+  (exit 1))
+
+(define (require-check label ok)
+  (unless ok
+    (fail-msg label)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "WAVE4 AOT FAIL: ")
+    (display label)
+    (display " expected=")
+    (display expected)
+    (display " actual=")
+    (display actual)
+    (newline)
+    (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (display-cstr buf max-len)
+  (let loop ((i 0))
+    (when (< i max-len)
+      (let ((b (w4-read-byte (ffi-pointer buf) i)))
+        (when (> b 0)
+          (display (integer->char b))
+          (loop (+ i 1)))))))
+
+(define (display-f64-exact fmt-buf value)
+  (let ((n (format-f64 (ffi-pointer fmt-buf) 64 "%.17g" value)))
+    (require-check "strfromd failed" (and (> n 0) (< n 64)))
+    (display-cstr fmt-buf 64)))
+
+(define (parse-nonneg-int s)
+  (let ((n (string-length s)))
+    (if (= n 0)
+        -1
+        (let loop ((i 0) (acc 0))
+          (if (= i n)
+              acc
+              (let ((c (char->integer (string-ref s i))))
+                (if (and (>= c 48) (<= c 57))
+                    (loop (+ i 1) (+ (* acc 10) (- c 48)))
+                    -1)))))))
+
+(define (parse-dtype s)
+  (cond
+    ((string=? s "f16") dtype-f16)
+    ((string=? s "bf16") dtype-bf16)
+    (else -1)))
+
+(define (parse-policy s)
+  (cond
+    ((string=? s "none") policy-none)
+    ((string=? s "every-layer") policy-every-layer)
+    ((string=? s "sqrt") policy-sqrt)
+    ((string=? s "every-k") policy-every-k)
+    (else -1)))
+
+(define (policy-label p)
+  (cond
+    ((= p policy-none) "NONE")
+    ((= p policy-every-layer) "EVERY_LAYER")
+    ((= p policy-sqrt) "SQRT_SEGMENTS")
+    (else "EVERY_K")))
+
+(define (dtype-label d)
+  (if (= d dtype-f16) "f16" "bf16"))
+
+;; Deterministic LCG matching tests/wave4/test_wave4_composed_trainer.c:
+;;   seed = (seed * 1664525 + 1013904223) mod 2^32
+;;   sample = (seed >> 16) * 2^-15 - 1.0
+(define lcg-mod 4294967296)
+(define (lcg-next seed)
+  (modulo (+ (* seed 1664525) 1013904223) lcg-mod))
+
+(define (lcg-sample seed)
+  (- (/ (* 1.0 (quotient seed 65536)) 32768.0) 1.0))
+
+(define (populate-fixture ctx layers rank)
+  (let ((p (w4-param-count (ffi-pointer ctx)))
+        (x (w4-act-count (ffi-pointer ctx))))
+    (require-check "parameter count mismatch" (= p (* layers per-layer)))
+    (require-check "activation count mismatch" (= x act-count))
+
+    ;; Master weights: rank 0 initializes deterministic weights; other ranks
+    ;; write -7.0 to verify bootstrap broadcasts rank 0 weights cleanly.
+    (let loop ((i 0) (rng 241))
+      (when (< i p)
+        (let ((next (lcg-next rng)))
+          (let ((val (if (= rank 0) (* 0.20 (lcg-sample next)) -7.0)))
+            (expect-status "set-master" status-ok
+                           (w4-set-master (ffi-pointer ctx) i val)))
+          (loop (+ i 1) next))))
+
+    (when (= rank 0)
+      (do ((l 0 (+ l 1)))
+          ((= l layers))
+        (do ((i 0 (+ i 1)))
+            ((= i 4))
+          (expect-status "set-gamma1" status-ok
+                         (w4-set-master (ffi-pointer ctx)
+                                        (+ (* l per-layer) i) 1.0))
+          (expect-status "set-gamma2" status-ok
+                         (w4-set-master (ffi-pointer ctx)
+                                        (+ (* l per-layer) 52 i) 1.0)))))
+
+    ;; Per-rank input and target shards.
+    (let loop ((i 0) (rng 61))
+      (when (< i x)
+        (let* ((s1 (lcg-next rng))
+               (common (lcg-sample s1))
+               (s2 (lcg-next s1))
+               (offset (lcg-sample s2))
+               (s3 (lcg-next s2))
+               (noise (lcg-sample s3))
+               (in (+ (* 0.75 common) (* (* 1.0 rank) 0.025 offset)))
+               (tgt (+ (- (* 0.70 in) 0.20) (* 0.15 noise))))
+          (expect-status "set-input" status-ok
+                         (w4-set-input (ffi-pointer ctx) i in))
+          (expect-status "set-target" status-ok
+                         (w4-set-target (ffi-pointer ctx) i tgt))
+          (loop (+ i 1) s3))))))
+
+(define (snapshot-digest ctx snap-hex-buf)
+  (expect-status "snapshot param-digest-hex" status-ok
+                 (w4-param-digest-hex (ffi-pointer ctx)
+                                      (ffi-pointer snap-hex-buf) 80))
+  (let ((b0 (w4-param-digest-byte (ffi-pointer ctx) 0)))
+    (require-check "param digest byte valid" (and (>= b0 0) (<= b0 255)))))
+
+(define (verify-digest-matches label ctx snap-hex-buf tmp-hex-buf)
+  (expect-status "verify param-digest-hex" status-ok
+                 (w4-param-digest-hex (ffi-pointer ctx)
+                                      (ffi-pointer tmp-hex-buf) 80))
+  (do ((i 0 (+ i 1)))
+      ((= i 64))
+    (let ((expected (w4-read-byte (ffi-pointer snap-hex-buf) i))
+          (actual (w4-read-byte (ffi-pointer tmp-hex-buf) i)))
+      (require-check label (and (> expected 0) (= expected actual))))))
+
+(define (run-rank sock-dir rank world layers dtype policy eval-path)
+  (let* ((cell (checked-allocate 8))
+         (fmt-buf (checked-allocate 64))
+         (hex-buf (checked-allocate 80))
+         (snap-buf (checked-allocate 80))
+         (ckpt-every (if (= policy policy-every-k) 2 0))
+         (seed (+ 412775 rank)))
+    (volatile-store! i64 (ffi-pointer cell) 0)
+    (expect-status "w4-create" status-ok
+                   (w4-create sock-dir rank world timeout-ms layers dtype
+                              policy ckpt-every 0.125 0.03125 seed 0.22 0.5
+                              64.0 2.0 0.5 32.0 128.0 5
+                              (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context after create" (not (= (ptr->usize ctx) 0)))
+
+      (let ((planned-peak (w4-planned-peak (ffi-pointer ctx)))
+            (planned-ws (w4-planned-workspace (ffi-pointer ctx)))
+            (narrow-bytes (w4-narrow-bytes (ffi-pointer ctx))))
+        (require-check "planned peak positive" (> planned-peak 0))
+        (require-check "planned workspace positive" (> planned-ws planned-peak))
+        (expect-status "set-activation-limit" status-ok
+                       (w4-set-activation-limit (ffi-pointer ctx) planned-peak))
+
+        (populate-fixture ctx layers rank)
+
+        ;; Bootstrap across all ranks.
+        (expect-status "bootstrap" status-ok (w4-bootstrap (ffi-pointer ctx)))
+        (require-check "post-bootstrap master[0]=1.0"
+                       (= (w4-get-master (ffi-pointer ctx) 0) 1.0))
+        (require-check "post-bootstrap scale=64.0"
+                       (= (w4-scaler-scale (ffi-pointer ctx)) 64.0))
+        (require-check "post-bootstrap clean_steps=0"
+                       (= (w4-scaler-clean-steps (ffi-pointer ctx)) 0))
+
+        ;; 7 training steps with single-rank narrow overflow injection at step 2.
+        (let ((prev-recovery-loss 1.0e300))
+          (do ((step 0 (+ step 1)))
+              ((= step total-steps))
+            (if (= step fault-step)
+                (begin
+                  (snapshot-digest ctx snap-buf)
+                  (let ((inject (if (= rank (- world 1)) 1 0)))
+                    (expect-status "enable-overflow-inject" status-ok
+                                   (w4-set-overflow-inject (ffi-pointer ctx)
+                                                           inject))
+                    ;; First attempt at step 2: coordinated OVERFLOW_BACKOFF 64 -> 32.
+                    (expect-status "step2-overflow-backoff"
+                                   status-overflow-backoff
+                                   (w4-step (ffi-pointer ctx) step))
+                    (expect-status "last-status-backoff"
+                                   status-overflow-backoff
+                                   (w4-last-status (ffi-pointer ctx)))
+                    (require-check "local-overflow flag matches rank"
+                                   (= (w4-last-local-overflow (ffi-pointer ctx))
+                                      inject))
+                    (require-check "backoff scale=32.0"
+                                   (= (w4-scaler-scale (ffi-pointer ctx)) 32.0))
+                    (require-check "backoff clean_steps=0"
+                                   (= (w4-scaler-clean-steps (ffi-pointer ctx)) 0))
+                    (require-check "live peak matches plan on backoff"
+                                   (= (w4-live-peak (ffi-pointer ctx)) planned-peak))
+                    (verify-digest-matches "backoff mutated weights" ctx snap-buf hex-buf)
+
+                    (let ((backoff-loss (w4-last-loss (ffi-pointer ctx))))
+                      ;; Retry at min_scale=32: coordinated UNDERFLOW_FAULT.
+                      (expect-status "step2-underflow-fault"
+                                     status-underflow-fault
+                                     (w4-step (ffi-pointer ctx) step))
+                      (expect-status "last-status-underflow"
+                                     status-underflow-fault
+                                     (w4-last-status (ffi-pointer ctx)))
+                      (require-check "underflow mutated scale"
+                                     (= (w4-scaler-scale (ffi-pointer ctx)) 32.0))
+                      (require-check "underflow mutated clean_steps"
+                                     (= (w4-scaler-clean-steps (ffi-pointer ctx)) 0))
+                      (verify-digest-matches "underflow mutated weights" ctx snap-buf hex-buf)
+
+                      (display "WAVE4 AOT STEP rank=") (display rank)
+                      (display " step=") (display step)
+                      (display " status=OVERFLOW_BACKOFF")
+                      (display " scale=") (display-f64-exact fmt-buf 32.0)
+                      (display " local_overflow=") (display inject)
+                      (display " loss=") (display-f64-exact fmt-buf backoff-loss)
+                      (display " underflow_rejected=PASS")
+                      (newline))
+
+                    (expect-status "disable-overflow-inject" status-ok
+                                   (w4-set-overflow-inject (ffi-pointer ctx) 0))))
+                (begin
+                  (expect-status "clear-overflow-inject" status-ok
+                                 (w4-set-overflow-inject (ffi-pointer ctx) 0))
+                  (expect-status "clean-step" status-ok
+                                 (w4-step (ffi-pointer ctx) step))
+                  (expect-status "last-status-ok" status-ok
+                                 (w4-last-status (ffi-pointer ctx)))
+                  (require-check "clean step local_overflow=0"
+                                 (= (w4-last-local-overflow (ffi-pointer ctx)) 0))
+                  (require-check "live peak matches plan"
+                                 (= (w4-live-peak (ffi-pointer ctx)) planned-peak))
+                  (require-check "workspace matches plan"
+                                 (= (w4-workspace-bytes (ffi-pointer ctx)) planned-ws))
+                  (let ((loss (w4-last-loss (ffi-pointer ctx)))
+                        (scale (w4-scaler-scale (ffi-pointer ctx))))
+                    (when (>= step 3)
+                      (when (> step 3)
+                        (require-check "recovery loss did not strictly decrease"
+                                       (< loss prev-recovery-loss)))
+                      (set! prev-recovery-loss loss))
+                    (display "WAVE4 AOT STEP rank=") (display rank)
+                    (display " step=") (display step)
+                    (display " status=OK")
+                    (display " scale=") (display-f64-exact fmt-buf scale)
+                    (display " local_overflow=0")
+                    (display " loss=") (display-f64-exact fmt-buf loss)
+                    (newline))))))
+
+        ;; Emit per-rank summary with exact weight SHA-256 and memory figures.
+        (expect-status "param-digest-hex" status-ok
+                       (w4-param-digest-hex (ffi-pointer ctx)
+                                            (ffi-pointer hex-buf) 80))
+        (display "WAVE4 AOT RANK rank=") (display rank)
+        (display " world=") (display world)
+        (display " layers=") (display layers)
+        (display " dtype=") (display (dtype-label dtype))
+        (display " policy=") (display (policy-label policy))
+        (display " peak_bytes=") (display (w4-live-peak (ffi-pointer ctx)))
+        (display " workspace_bytes=") (display (w4-workspace-bytes (ffi-pointer ctx)))
+        (display " narrow_bytes=") (display narrow-bytes)
+        (display " final_scale=")
+        (display-f64-exact fmt-buf (w4-scaler-scale (ffi-pointer ctx)))
+        (display " weight_sha256=") (display-cstr hex-buf 65)
+        (newline)
+
+        ;; Rank 0 executes EVAL5 held-out evaluation and manifest reload verification.
+        (when (= rank 0)
+          (expect-status "evaluate" status-ok
+                         (w4-evaluate (ffi-pointer ctx) eval-path))
+          (expect-status "verify-manifest" status-ok
+                         (w4-verify-manifest (ffi-pointer ctx) eval-path))
+          (let ((nll (w4-eval-mean-nll (ffi-pointer ctx)))
+                (ppl (w4-eval-perplexity (ffi-pointer ctx)))
+                (contam (w4-eval-contaminated (ffi-pointer ctx))))
+            (require-check "contaminated documents must be 0" (= contam 0))
+            (require-check "perplexity must exceed 1.0" (> ppl 1.0))
+            (expect-status "manifest-digest-hex" status-ok
+                           (w4-manifest-digest-hex (ffi-pointer ctx)
+                                                   (ffi-pointer hex-buf) 80))
+            (display "WAVE4 AOT EVAL rank=0")
+            (display " world=") (display world)
+            (display " layers=") (display layers)
+            (display " dtype=") (display (dtype-label dtype))
+            (display " policy=") (display (policy-label policy))
+            (display " eval_nll=") (display-f64-exact fmt-buf nll)
+            (display " perplexity=") (display-f64-exact fmt-buf ppl)
+            (display " contaminated=") (display contam)
+            (display " manifest_sha256=") (display-cstr hex-buf 65)
+            (newline))))
+
+      (w4-destroy (ffi-pointer ctx)))
+    (release (ffi-pointer snap-buf))
+    (release (ffi-pointer hex-buf))
+    (release (ffi-pointer fmt-buf))))
+
+;; Parse CLI arguments:
+;;   --sock-dir DIR --rank R --world W --layers L --dtype D --policy P --eval-path PATH
+(define (main-parse args)
+  (let ((sock-dir "")
+        (rank -1)
+        (world -1)
+        (layers -1)
+        (dtype -1)
+        (policy -1)
+        (eval-path ""))
+    (let loop ((rest args))
+      (unless (null? rest)
+        (when (null? (cdr rest))
+          (fail-msg "missing value for CLI flag"))
+        (let ((flag (car rest))
+              (val (car (cdr rest)))
+              (tail (cdr (cdr rest))))
+          (cond
+            ((string=? flag "--sock-dir") (set! sock-dir val))
+            ((string=? flag "--rank") (set! rank (parse-nonneg-int val)))
+            ((string=? flag "--world") (set! world (parse-nonneg-int val)))
+            ((string=? flag "--layers") (set! layers (parse-nonneg-int val)))
+            ((string=? flag "--dtype") (set! dtype (parse-dtype val)))
+            ((string=? flag "--policy") (set! policy (parse-policy val)))
+            ((string=? flag "--eval-path") (set! eval-path val))
+            (else (fail-msg "unknown CLI flag")))
+          (loop tail))))
+    (require-check "invalid --rank" (>= rank 0))
+    (require-check "invalid --world" (and (>= world 1) (< rank world)))
+    (require-check "invalid --layers (expected 4 or 8)"
+                   (or (= layers 4) (= layers 8)))
+    (require-check "invalid --dtype (expected f16 or bf16)"
+                   (or (= dtype dtype-f16) (= dtype dtype-bf16)))
+    (require-check "invalid --policy"
+                   (and (>= policy policy-none) (<= policy policy-every-k)))
+    (when (> world 1)
+      (require-check "missing --sock-dir for world > 1"
+                     (> (string-length sock-dir) 0)))
+    (when (= rank 0)
+      (require-check "missing --eval-path for rank 0"
+                     (> (string-length eval-path) 0)))
+    (run-rank sock-dir rank world layers dtype policy eval-path)))
+
+(main-parse (cdr (command-line)))

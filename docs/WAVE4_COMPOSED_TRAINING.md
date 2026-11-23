@@ -121,6 +121,64 @@ spans, narrow weight range errors, a one-rank short workspace, and peer
 disconnection. ASan, UBSan, and LeakSanitizer cover the composed trainer
 and its native dependencies.
 
+## Eshkol AOT compiled multi-process driver
+
+The private AOT bridge ([wave4_composed_eshkol_bridge.h](../native/wave4_composed_eshkol_bridge.h),
+[wave4_composed_eshkol_bridge.c](../native/wave4_composed_eshkol_bridge.c))
+wraps `et_wave4_composed_plan_v1`, `et_wave4_composed_bootstrap_v1`,
+`et_wave4_composed_step_v1`, and `et_wave4_composed_evaluate_v1` behind an
+opaque handle over Unix-domain-socket DIST5 communicators. Each rank process
+runs the compiled Eshkol AOT executable built from
+[test_wave4_composed_aot.esk](../tests/wave4/test_wave4_composed_aot.esk)
+(`--strict-types --optimize 0 --no-stdlib`) linked statically against
+`libeshkol_transformer_wave4_composed_aot.a` and the foundation archives.
+
+Two fresh compilations from clean cache and output directories produce
+byte-identical ELFs and archives in `eshkol-r0-debug:20260928` with Clang 21:
+
+- Bridge archive (`libeshkol_transformer_wave4_composed_aot.a`) SHA-256:
+  `286154b7d33847f4c2daecd2034bbfd98846aa3dae53b4f39f77a5037d104252`
+- Compiled Eshkol AOT ELF (`test_wave4_composed_aot`) SHA-256:
+  `d9d3741932a9101fc10b6d9b3505bbc8bcf16228d6a144a83f7be768e8d0b791`
+
+Across `L={4,8}`, `W={1,2}`, and `dtype={f16,bf16}`, independent compiled
+rank processes execute bootstrap plus 7 training steps with single-rank narrow
+overflow injection on rank `W-1` at step 2. Every lane verifies coordinated
+`OVERFLOW_BACKOFF` (`64 -> 32`) across all ranks with bitwise-preserved master
+weights, immediate `UNDERFLOW_FAULT` rejection at `min_scale=32` leaving
+weights and scaler untouched, strictly decreasing recovery loss across steps
+3–6, rank-0 EVAL5 manifest emission and SHA-256 reload verification
+(`contaminated_documents = 0`), and bitwise-identical weight SHA-256,
+manifest SHA-256, per-step losses, and `eval_nll` across ranks and between
+`NONE` and `SQRT_SEGMENTS`:
+
+- `L=4`: live activation peak `1,472 -> 576` bytes (`60.87%` reduction),
+  workspace `7,360 -> 6,464` bytes.
+- `L=8`: live activation peak `2,752 -> 640` bytes (`76.74%` reduction),
+  workspace `14,464 -> 12,352` bytes.
+
+| Layers | Ranks | Storage | Final weight SHA-256 | EVAL5 mean NLL | Mean loss trace (steps 0, 1, 2 [overflow], 3, 4, 5, 6) |
+| ---: | ---: | --- | --- | ---: | --- |
+| 4 | 1 | f16 | `854fc386b8649f973a6b7bc20f0bf1ea55d8690b39544bf2a9a25802cd6c27bd` | 1.4275769073653362 | `0.061464659860580556`, `0.059514779431172934`, `549755680732.35193`, `0.053208053211523276`, `0.04437040807492873`, `0.042392093233719647`, `0.040075074058767438` |
+| 4 | 2 | f16 | `9affa31d6fe08f7f78683f5adc4815bdcb00741acd11e097c41b8bc245720718` | 1.4271686683453668 | `0.06035334773506891`, `0.05919346214499778`, `274877842237.59589`, `0.052422694912122876`, `0.045646061875262323`, `0.042218853307403263`, `0.03893959780312907` |
+| 4 | 1 | bf16 | `9241b8c0d855bbcef94f0fb0d05a38ad3b0ecb350afb472d53b9c6dcaa492dbd` | 1.4275629870972706 | `0.0614791365266463`, `0.059496673299313629`, `1.4870473904876968e+75`, `0.053182354652998573`, `0.044356920104957148`, `0.042423707149617421`, `0.040076523326464511` |
+| 4 | 2 | bf16 | `12313ed7351686ba1982c450cde64671ef51d9c289e13d8e48e22c794ef9c4f5` | 1.4272053284615787 | `0.060367250553481723`, `0.059175683265812448`, `6.6834752525369673e+74`, `0.052441639304347934`, `0.045622603519746424`, `0.04224381211830034`, `0.038927969205054674` |
+| 8 | 1 | f16 | `f3b5d3640d91a800ba65485a7326349c9d3c9375ffa7a0a1277d66bdf5693ea7` | 1.4489854114338456 | `0.057440145605941476`, `0.050427200880254555`, `549755780052.93298`, `0.038443126741356096`, `0.027421085268270518`, `0.021620204872330812`, `0.0154062052788916` |
+| 8 | 2 | f16 | `5f3a7fdaa9ddd36511e7e8842e66100837f7f77901dfdd28d2f2a84363d1f02c` | 1.4485532355717887 | `0.055886575691219582`, `0.05029873557863776`, `274877875142.8121`, `0.038409482488425836`, `0.028435498062177128`, `0.021994861447981906`, `0.016501393860730733` |
+| 8 | 1 | bf16 | `d8498dc4303d4874d2ac967339544a89554bf2515c23881f821fa2929c22f402` | 1.4488765967096366 | `0.05746330289641402`, `0.050403656425521456`, `6.2917258027465602e+74`, `0.03848812793719289`, `0.027423295784909377`, `0.02167671068428079`, `0.015428636324414689` |
+| 8 | 2 | bf16 | `90596638a12e9e118061bbd804273eabfadf2f7cefa103829a1925ae820ee7f8` | 1.4484569869107804 | `0.055909678033456478`, `0.050311971457582927`, `3.89697314927073e+74`, `0.038462302357515618`, `0.028441488595837637`, `0.022058525906262637`, `0.016524255505990182` |
+
+Run the Eshkol AOT verification suite in `eshkol-r0-debug:20260928`:
+
+```bash
+CC=clang-21 CXX=clang++-21 ESHKOL_SOURCE_DIR=/tc/src ESHKOL_BUILD_DIR=/tc/build \
+  bash scripts/test-wave4-composed-aot.sh
+```
+
+Note: `sock_dir` for `world > 1` must keep `<sock_dir>/rank0.sock` within
+Linux's 108-byte `AF_UNIX` `sun_path` limit; oversized paths are rejected
+explicitly with `ET_WAVE4_COMPOSED_INVALID_ARGUMENT`.
+
 Composition supports L=4 and L=8 for AC4's reviewed CPU shapes. The
 measured matrix covers the single short MQA shape and W=1, 2, and 4. Ranks
 must use an agreed configuration and synchronized call order. MP4
