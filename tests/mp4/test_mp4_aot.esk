@@ -1,0 +1,430 @@
+;;; Compiled Eshkol AOT mixed-precision (f16/bf16) training verification.
+;;; Dispatches all narrow casts and gradient unscaling through the MP4 K1
+;;; provider and drives dynamic loss scaling and momentum SGD in Eshkol.
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 open-mp4 ptr :real et_mp4_aot_open)
+(extern void close-mp4 ptr :real et_mp4_aot_close)
+(extern i64 element-bytes i32 :real et_mp4_aot_element_bytes)
+(extern i64 tensor-bytes i32 i64 :real et_mp4_aot_tensor_bytes)
+(extern i64 scaler-bytes :real et_mp4_aot_scaler_bytes)
+
+(extern i32 cast-f32-to-f16 ptr i64 ptr ptr :real et_mp4_aot_cast_f32_to_f16)
+(extern i32 cast-f16-to-f32 ptr i64 ptr ptr :real et_mp4_aot_cast_f16_to_f32)
+(extern i32 cast-f32-to-bf16 ptr i64 ptr ptr :real et_mp4_aot_cast_f32_to_bf16)
+(extern i32 cast-bf16-to-f32 ptr i64 ptr ptr :real et_mp4_aot_cast_bf16_to_f32)
+
+(extern i32 scaler-init ptr f64 f64 f64 i64 f64 f64 :real et_mp4_aot_scaler_init)
+(extern f64 scaler-scale ptr f64 :real et_mp4_aot_scaler_scale)
+(extern i32 scaler-unscale-f16 ptr ptr i64 ptr ptr ptr
+        :real et_mp4_aot_scaler_unscale_f16)
+(extern i32 scaler-unscale-bf16 ptr ptr i64 ptr ptr ptr
+        :real et_mp4_aot_scaler_unscale_bf16)
+(extern i32 scaler-step ptr i32 :real et_mp4_aot_scaler_step)
+(extern f64 scaler-get-scale ptr :real et_mp4_aot_scaler_get_scale)
+(extern i64 scaler-get-growth-tracker ptr
+        :real et_mp4_aot_scaler_get_growth_tracker)
+(extern i64 scaler-get-overflow-count ptr
+        :real et_mp4_aot_scaler_get_overflow_count)
+
+(extern i32 store-f32 ptr i64 i64 f64 :real et_mp4_aot_store_f32)
+(extern f64 load-f32 ptr i64 i64 :real et_mp4_aot_load_f32)
+(extern i32 store-f32-bits ptr i64 i64 i64 :real et_mp4_aot_store_f32_bits)
+(extern i64 load-f32-bits ptr i64 i64 :real et_mp4_aot_load_f32_bits)
+(extern i32 store-u16 ptr i64 i64 i64 :real et_mp4_aot_store_u16)
+(extern i64 load-u16 ptr i64 i64 :real et_mp4_aot_load_u16)
+(extern i32 store-u8 ptr i64 i64 i64 :real et_mp4_aot_store_u8)
+(extern i64 load-u8 ptr i64 i64 :real et_mp4_aot_load_u8)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define dtype-f32 0)
+(define dtype-f16 1)
+(define dtype-bf16 2)
+
+(define scaler-step-accepted 0)
+(define scaler-overflow-backoff 1)
+(define scaler-underflow-fault 2)
+(define scaler-invalid-argument 3)
+
+(define k1-invalid-argument 1)
+(define k1-unsupported 6)
+
+(define vec-len 8)
+(define momentum 0.25)
+(define learning-rate 0.25)
+
+(define (require-check label ok)
+  (unless ok
+    (display "FAIL: ") (display label) (newline)
+    (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= actual expected)
+    (display "FAIL: ") (display label)
+    (display " expected ") (display expected)
+    (display " got ") (display actual) (newline)
+    (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+;; Open MP4 K1 runtime.
+(define runtime-cell (checked-allocate 8))
+(expect-status "MP4 K1 discovery" 0 (open-mp4 (ffi-pointer runtime-cell)))
+(define runtime (volatile-load ptr runtime-cell))
+(release runtime-cell)
+
+;; Verify 2:1 narrow-to-wide storage ratio across verified 1D shapes.
+(define (check-storage-ratio)
+  (require-check "f32 element bytes" (= (element-bytes dtype-f32) 4))
+  (require-check "f16 element bytes" (= (element-bytes dtype-f16) 2))
+  (require-check "bf16 element bytes" (= (element-bytes dtype-bf16) 2))
+  (let ((n8-f16 (tensor-bytes dtype-f16 8))
+        (n8-bf16 (tensor-bytes dtype-bf16 8))
+        (n8-f32 (tensor-bytes dtype-f32 8))
+        (n256-f16 (tensor-bytes dtype-f16 256))
+        (n256-bf16 (tensor-bytes dtype-bf16 256))
+        (n256-f32 (tensor-bytes dtype-f32 256)))
+    (require-check "8-elem f16 2:1 ratio" (= (* 2 n8-f16) n8-f32))
+    (require-check "8-elem bf16 2:1 ratio" (= (* 2 n8-bf16) n8-f32))
+    (require-check "256-elem f16 2:1 ratio" (= (* 2 n256-f16) n256-f32))
+    (require-check "256-elem bf16 2:1 ratio" (= (* 2 n256-bf16) n256-f32))
+    ;; Exercise 256-element narrow/wide buffers directly through K1.
+    (let ((wide-in (checked-allocate n256-f32))
+          (narrow-buf (checked-allocate n256-f16))
+          (wide-out (checked-allocate n256-f32)))
+      (do ((i 0 (+ i 1)))
+          ((= i 256))
+        (expect-status "seed 256" 0
+                       (store-f32 (ffi-pointer wide-in) 256 i (* 0.25 (- i 128)))))
+      (expect-status "cast 256 f32->f16" 0
+                     (cast-f32-to-f16 (ffi-pointer runtime) 256
+                                      (ffi-pointer wide-in) (ffi-pointer narrow-buf)))
+      (expect-status "cast 256 f16->f32" 0
+                     (cast-f16-to-f32 (ffi-pointer runtime) 256
+                                      (ffi-pointer narrow-buf) (ffi-pointer wide-out)))
+      (require-check "256 f16 exact 0.25 step"
+                     (= (load-f32 (ffi-pointer wide-out) 256 255) (* 0.25 127)))
+      (expect-status "cast 256 f32->bf16" 0
+                     (cast-f32-to-bf16 (ffi-pointer runtime) 256
+                                       (ffi-pointer wide-in) (ffi-pointer narrow-buf)))
+      (expect-status "cast 256 bf16->f32" 0
+                     (cast-bf16-to-f32 (ffi-pointer runtime) 256
+                                       (ffi-pointer narrow-buf) (ffi-pointer wide-out)))
+      (require-check "256 bf16 exact value"
+                     (= (load-f32 (ffi-pointer wide-out) 256 128) 0.0))
+      (release wide-in)
+      (release narrow-buf)
+      (release wide-out))
+    (display "MP4 AOT STORAGE f16=") (display n256-f16)
+    (display " bf16=") (display n256-bf16)
+    (display " f32=") (display n256-f32)
+    (display " ratio=2:1 PASS") (newline)))
+
+;; Verify exact RNE round-trip bit patterns in both f16 and bf16.
+(define (check-rne-round-trips)
+  (let ((f32-in (checked-allocate (tensor-bytes dtype-f32 vec-len)))
+        (narrow (checked-allocate (tensor-bytes dtype-f16 vec-len)))
+        (f32-out (checked-allocate (tensor-bytes dtype-f32 vec-len))))
+    ;; Binary16 RNE: +0, -0, 1.0, tie-to-even-down, tie-to-even-up, 65504, -1.5, min subnormal.
+    (let ((in-bits (vector #x00000000 #x80000000 #x3f800000 #x3f801000
+                           #x3f803000 #x477fe000 #xbfc00000 #x33800000))
+          (exp-u16 (vector #x0000 #x8000 #x3c00 #x3c00
+                           #x3c02 #x7bff #xbe00 #x0001))
+          (exp-f32 (vector #x00000000 #x80000000 #x3f800000 #x3f800000
+                           #x3f804000 #x477fe000 #xbfc00000 #x33800000)))
+      (do ((i 0 (+ i 1)))
+          ((= i vec-len))
+        (expect-status "store f16 rne input" 0
+                       (store-f32-bits (ffi-pointer f32-in) vec-len i (vector-ref in-bits i))))
+      (expect-status "f16 rne narrow" 0
+                     (cast-f32-to-f16 (ffi-pointer runtime) vec-len
+                                      (ffi-pointer f32-in) (ffi-pointer narrow)))
+      (expect-status "f16 rne widen" 0
+                     (cast-f16-to-f32 (ffi-pointer runtime) vec-len
+                                      (ffi-pointer narrow) (ffi-pointer f32-out)))
+      (do ((i 0 (+ i 1)))
+          ((= i vec-len))
+        (expect-status "f16 rne narrow bits" (vector-ref exp-u16 i)
+                       (load-u16 (ffi-pointer narrow) vec-len i))
+        (expect-status "f16 rne widen bits" (vector-ref exp-f32 i)
+                       (load-f32-bits (ffi-pointer f32-out) vec-len i))))
+    ;; Bfloat16 RNE: +0, -0, 1.0, tie-to-even-down, tie-to-even-up, 65504->65536, -1.5, above-half.
+    (let ((in-bits (vector #x00000000 #x80000000 #x3f800000 #x3f808000
+                           #x3f818000 #x477fe000 #xbfc00000 #x3f808001))
+          (exp-u16 (vector #x0000 #x8000 #x3f80 #x3f80
+                           #x3f82 #x4780 #xbfc0 #x3f81))
+          (exp-f32 (vector #x00000000 #x80000000 #x3f800000 #x3f800000
+                           #x3f820000 #x47800000 #xbfc00000 #x3f810000)))
+      (do ((i 0 (+ i 1)))
+          ((= i vec-len))
+        (expect-status "store bf16 rne input" 0
+                       (store-f32-bits (ffi-pointer f32-in) vec-len i (vector-ref in-bits i))))
+      (expect-status "bf16 rne narrow" 0
+                     (cast-f32-to-bf16 (ffi-pointer runtime) vec-len
+                                       (ffi-pointer f32-in) (ffi-pointer narrow)))
+      (expect-status "bf16 rne widen" 0
+                     (cast-bf16-to-f32 (ffi-pointer runtime) vec-len
+                                       (ffi-pointer narrow) (ffi-pointer f32-out)))
+      (do ((i 0 (+ i 1)))
+          ((= i vec-len))
+        (expect-status "bf16 rne narrow bits" (vector-ref exp-u16 i)
+                       (load-u16 (ffi-pointer narrow) vec-len i))
+        (expect-status "bf16 rne widen bits" (vector-ref exp-f32 i)
+                       (load-f32-bits (ffi-pointer f32-out) vec-len i))))
+    (release f32-in)
+    (release narrow)
+    (release f32-out)
+    (display "MP4 AOT RNE f16=8/8 bf16=8/8 PASS") (newline)))
+
+;; Verify negative cases directly from compiled Eshkol.
+(define (check-negative-cases)
+  (let ((f32-in (checked-allocate (tensor-bytes dtype-f32 vec-len)))
+        (narrow (checked-allocate (tensor-bytes dtype-f16 vec-len)))
+        (f32-out (checked-allocate (tensor-bytes dtype-f32 vec-len)))
+        (scaler (checked-allocate (scaler-bytes))))
+    (do ((i 0 (+ i 1)))
+        ((= i vec-len))
+      (expect-status "zero f32-in" 0 (store-f32-bits (ffi-pointer f32-in) vec-len i 0))
+      (expect-status "sentinel narrow" 0 (store-u16 (ffi-pointer narrow) vec-len i #x5a5a))
+      (expect-status "sentinel f32-out" 0 (store-f32-bits (ffi-pointer f32-out) vec-len i #x5a5a5a5a)))
+
+    ;; Non-finite f32 (+Inf, qNaN) and out-of-range f16 (65520.0) rejected.
+    (expect-status "store +Inf" 0 (store-f32-bits (ffi-pointer f32-in) vec-len 7 #x7f800000))
+    (expect-status "f32->f16 rejects +Inf" k1-invalid-argument
+                   (cast-f32-to-f16 (ffi-pointer runtime) vec-len
+                                    (ffi-pointer f32-in) (ffi-pointer narrow)))
+    (expect-status "f32->bf16 rejects +Inf" k1-invalid-argument
+                   (cast-f32-to-bf16 (ffi-pointer runtime) vec-len
+                                     (ffi-pointer f32-in) (ffi-pointer narrow)))
+    (expect-status "store qNaN" 0 (store-f32-bits (ffi-pointer f32-in) vec-len 7 #x7fc00000))
+    (expect-status "f32->f16 rejects qNaN" k1-invalid-argument
+                   (cast-f32-to-f16 (ffi-pointer runtime) vec-len
+                                    (ffi-pointer f32-in) (ffi-pointer narrow)))
+    (expect-status "f32->bf16 rejects qNaN" k1-invalid-argument
+                   (cast-f32-to-bf16 (ffi-pointer runtime) vec-len
+                                     (ffi-pointer f32-in) (ffi-pointer narrow)))
+    (expect-status "store 65520" 0 (store-f32-bits (ffi-pointer f32-in) vec-len 7 #x477ff000))
+    (expect-status "f32->f16 rejects 65520" k1-invalid-argument
+                   (cast-f32-to-f16 (ffi-pointer runtime) vec-len
+                                    (ffi-pointer f32-in) (ffi-pointer narrow)))
+    (expect-status "narrow sentinel preserved" #x5a5a (load-u16 (ffi-pointer narrow) vec-len 0))
+
+    ;; Non-finite narrow widening rejected.
+    (do ((i 0 (+ i 1)))
+        ((= i vec-len))
+      (expect-status "zero narrow" 0 (store-u16 (ffi-pointer narrow) vec-len i 0)))
+    (expect-status "store f16 Inf" 0 (store-u16 (ffi-pointer narrow) vec-len 2 #x7c00))
+    (expect-status "f16->f32 rejects Inf" k1-invalid-argument
+                   (cast-f16-to-f32 (ffi-pointer runtime) vec-len
+                                    (ffi-pointer narrow) (ffi-pointer f32-out)))
+    (expect-status "store bf16 Inf" 0 (store-u16 (ffi-pointer narrow) vec-len 2 #x7f80))
+    (expect-status "bf16->f32 rejects Inf" k1-invalid-argument
+                   (cast-bf16-to-f32 (ffi-pointer runtime) vec-len
+                                     (ffi-pointer narrow) (ffi-pointer f32-out)))
+    (expect-status "f32-out sentinel preserved" #x5a5a5a5a
+                   (load-f32-bits (ffi-pointer f32-out) vec-len 0))
+
+    ;; Unsupported shape rejected without fallback.
+    (expect-status "unsupported shape count=3" k1-unsupported
+                   (cast-f32-to-f16 (ffi-pointer runtime) 3
+                                    (ffi-pointer f32-in) (ffi-pointer narrow)))
+
+    ;; Scaler invalid init and underflow fault.
+    (expect-status "invalid scaler growth=1" scaler-invalid-argument
+                   (scaler-init (ffi-pointer scaler) 32.0 1.0 0.5 2 1.0 256.0))
+    (expect-status "underflow scaler init" scaler-step-accepted
+                   (scaler-init (ffi-pointer scaler) 2.0 2.0 0.5 2 2.0 16.0))
+    (expect-status "underflow fault" scaler-underflow-fault
+                   (scaler-step (ffi-pointer scaler) 1))
+    (require-check "underflow preserves scale" (= (scaler-get-scale (ffi-pointer scaler)) 2.0))
+    (require-check "underflow preserves overflow count"
+                   (= (scaler-get-overflow-count (ffi-pointer scaler)) 0))
+    (require-check "underflow preserves tracker"
+                   (= (scaler-get-growth-tracker (ffi-pointer scaler)) 0))
+
+    (release f32-in)
+    (release narrow)
+    (release f32-out)
+    (release scaler)
+    (display "MP4 AOT NEGATIVE PASS") (newline)))
+
+(define target-vec (vector 0.5 -1.0 1.5 -2.0 0.25 -0.5 0.75 -1.0))
+
+(define (quadratic-loss weights-buf)
+  (let ((acc 0.0))
+    (do ((j 0 (+ j 1)))
+        ((= j vec-len) acc)
+      (let ((d (- (load-f32 (ffi-pointer weights-buf) vec-len j)
+                  (vector-ref target-vec j))))
+        (set! acc (+ acc (* 0.5 d d)))))))
+
+(define (snapshot-bits buf)
+  (let ((snap (make-vector vec-len 0)))
+    (do ((j 0 (+ j 1)))
+        ((= j vec-len) snap)
+      (vector-set! snap j (load-f32-bits (ffi-pointer buf) vec-len j)))))
+
+(define (assert-bits-equal label buf snap)
+  (do ((j 0 (+ j 1)))
+      ((= j vec-len))
+    (expect-status label (vector-ref snap j)
+                   (load-f32-bits (ffi-pointer buf) vec-len j))))
+
+(define (train-mode label is-bf16)
+  (let ((f32-bytes (tensor-bytes dtype-f32 vec-len))
+        (narrow-bytes (tensor-bytes (if is-bf16 dtype-bf16 dtype-f16) vec-len))
+        (nan-bits (if is-bf16 #x7f81 #x7c01)))
+    (require-check "train 2:1 storage" (= (* 2 narrow-bytes) f32-bytes))
+    (let ((weights (checked-allocate f32-bytes))
+          (velocity (checked-allocate f32-bytes))
+          (low-prec (checked-allocate f32-bytes))
+          (scaled (checked-allocate f32-bytes))
+          (grads (checked-allocate f32-bytes))
+          (storage (checked-allocate narrow-bytes))
+          (overflow-buf (checked-allocate 1))
+          (scaler (checked-allocate (scaler-bytes))))
+      ;; Zero master f32 weights and momentum velocity.
+      (do ((j 0 (+ j 1)))
+          ((= j vec-len))
+        (expect-status "zero weights" 0 (store-f32 (ffi-pointer weights) vec-len j 0.0))
+        (expect-status "zero velocity" 0 (store-f32 (ffi-pointer velocity) vec-len j 0.0)))
+      (expect-status "init scaler" scaler-step-accepted
+                     (scaler-init (ffi-pointer scaler) 32.0 2.0 0.5 2 1.0 256.0))
+      (let* ((initial-loss (quadratic-loss weights))
+             (prev-loss initial-loss)
+             (accepted 0))
+        (display "MP4 AOT LOSS ") (display label) (display " 0 ")
+        (display (number->string initial-loss)) (newline)
+        ;; 13 attempts -> 12 accepted updates + 1 injected overflow on attempt 2.
+        (do ((attempt 0 (+ attempt 1)))
+            ((= attempt 13))
+          ;; Cast master f32 weights -> narrow storage -> f32 working weights.
+          (expect-status "cast weights narrow" 0
+                         (if is-bf16
+                             (cast-f32-to-bf16 (ffi-pointer runtime) vec-len
+                                               (ffi-pointer weights) (ffi-pointer storage))
+                             (cast-f32-to-f16 (ffi-pointer runtime) vec-len
+                                              (ffi-pointer weights) (ffi-pointer storage))))
+          (expect-status "cast weights wide" 0
+                         (if is-bf16
+                             (cast-bf16-to-f32 (ffi-pointer runtime) vec-len
+                                               (ffi-pointer storage) (ffi-pointer low-prec))
+                             (cast-f16-to-f32 (ffi-pointer runtime) vec-len
+                                              (ffi-pointer storage) (ffi-pointer low-prec))))
+          ;; Forward/backward scaled gradient in Eshkol, stored into narrow storage.
+          (do ((j 0 (+ j 1)))
+              ((= j vec-len))
+            (let* ((w-lp (load-f32 (ffi-pointer low-prec) vec-len j))
+                   (g-raw (- w-lp (vector-ref target-vec j)))
+                   (g-scaled (scaler-scale (ffi-pointer scaler) g-raw)))
+              (expect-status "store scaled grad" 0
+                             (store-f32 (ffi-pointer scaled) vec-len j g-scaled))))
+          (expect-status "cast grads narrow" 0
+                         (if is-bf16
+                             (cast-f32-to-bf16 (ffi-pointer runtime) vec-len
+                                               (ffi-pointer scaled) (ffi-pointer storage))
+                             (cast-f32-to-f16 (ffi-pointer runtime) vec-len
+                                              (ffi-pointer scaled) (ffi-pointer storage))))
+          ;; Inject gradient overflow on attempt 2 (after growth 32 -> 64).
+          (when (= attempt 2)
+            (require-check "scale before overflow is 64"
+                           (= (scaler-get-scale (ffi-pointer scaler)) 64.0))
+            (expect-status "inject narrow NaN" 0
+                           (store-u16 (ffi-pointer storage) vec-len (- vec-len 1) nan-bits)))
+          ;; Unscale through K1 provider and check overflow flag.
+          (expect-status "seed overflow sentinel" 0
+                         (store-u8 (ffi-pointer overflow-buf) 1 0 255))
+          (expect-status "unscale grads" 0
+                         (if is-bf16
+                             (scaler-unscale-bf16 (ffi-pointer runtime) (ffi-pointer scaler)
+                                                  vec-len (ffi-pointer storage)
+                                                  (ffi-pointer grads) (ffi-pointer overflow-buf))
+                             (scaler-unscale-f16 (ffi-pointer runtime) (ffi-pointer scaler)
+                                                 vec-len (ffi-pointer storage)
+                                                 (ffi-pointer grads) (ffi-pointer overflow-buf))))
+          (let* ((overflow (load-u8 (ffi-pointer overflow-buf) 1 0))
+                 (scale-before (scaler-get-scale (ffi-pointer scaler)))
+                 (w-snap (snapshot-bits weights))
+                 (v-snap (snapshot-bits velocity))
+                 (step-status (scaler-step (ffi-pointer scaler) overflow)))
+            (if (= step-status scaler-step-accepted)
+                (begin
+                  (require-check "accepted attempt not overflow" (and (not (= attempt 2)) (= overflow 0)))
+                  ;; Momentum SGD update on f32 master weights in Eshkol.
+                  (do ((j 0 (+ j 1)))
+                      ((= j vec-len))
+                    (let* ((v-prev (load-f32 (ffi-pointer velocity) vec-len j))
+                           (g-val (load-f32 (ffi-pointer grads) vec-len j))
+                           (v-next (+ (* momentum v-prev) g-val)))
+                      (expect-status "store velocity" 0
+                                     (store-f32 (ffi-pointer velocity) vec-len j v-next))
+                      (let* ((v-f32 (load-f32 (ffi-pointer velocity) vec-len j))
+                             (w-prev (load-f32 (ffi-pointer weights) vec-len j))
+                             (w-next (- w-prev (* learning-rate v-f32))))
+                        (expect-status "store weight" 0
+                                       (store-f32 (ffi-pointer weights) vec-len j w-next)))))
+                  (let ((curr-loss (quadratic-loss weights)))
+                    (require-check "loss strictly decreased" (< curr-loss prev-loss))
+                    (set! prev-loss curr-loss)
+                    (set! accepted (+ accepted 1))
+                    (display "MP4 AOT LOSS ") (display label) (display " ")
+                    (display accepted) (display " ")
+                    (display (number->string curr-loss)) (newline)))
+                (begin
+                  ;; Overflow backoff: verify scale 64 -> 32, grads == +0.0f, weights/velocity unchanged.
+                  (require-check "backoff attempt is 2"
+                                 (and (= attempt 2) (= overflow 1)
+                                      (= step-status scaler-overflow-backoff)))
+                  (let ((scale-after (scaler-get-scale (ffi-pointer scaler))))
+                    (require-check "backoff 64->32"
+                                   (and (= scale-before 64.0) (= scale-after 32.0)))
+                    (require-check "backoff resets growth tracker"
+                                   (= (scaler-get-growth-tracker (ffi-pointer scaler)) 0))
+                    (require-check "backoff increments overflow count"
+                                   (= (scaler-get-overflow-count (ffi-pointer scaler)) 1))
+                    (do ((j 0 (+ j 1)))
+                        ((= j vec-len))
+                      (expect-status "master grad zeroed to +0.0f" 0
+                                     (load-f32-bits (ffi-pointer grads) vec-len j)))
+                    (assert-bits-equal "weights unchanged on backoff" weights w-snap)
+                    (assert-bits-equal "velocity unchanged on backoff" velocity v-snap)
+                    (require-check "loss unchanged on backoff"
+                                   (= (quadratic-loss weights) prev-loss))
+                    (display "MP4 AOT OVERFLOW ") (display label)
+                    (display " scale_before=") (display (number->string scale-before))
+                    (display " scale_after=") (display (number->string scale-after))
+                    (display " overflows=")
+                    (display (scaler-get-overflow-count (ffi-pointer scaler)))
+                    (display " grads_zeroed=8 PASS") (newline))))))
+        (require-check "12 accepted steps" (= accepted 12))
+        (require-check "1 total overflow" (= (scaler-get-overflow-count (ffi-pointer scaler)) 1))
+        (require-check "final loss reduced >1000x" (< prev-loss (* initial-loss 0.001)))
+        (display "MP4 AOT RESULT ") (display label)
+        (display " steps=") (display accepted)
+        (display " overflows=") (display (scaler-get-overflow-count (ffi-pointer scaler)))
+        (display " final_scale=") (display (number->string (scaler-get-scale (ffi-pointer scaler))))
+        (display " initial=") (display (number->string initial-loss))
+        (display " final=") (display (number->string prev-loss)) (newline))
+      (release weights)
+      (release velocity)
+      (release low-prec)
+      (release scaled)
+      (release grads)
+      (release storage)
+      (release overflow-buf)
+      (release scaler))))
+
+(check-storage-ratio)
+(check-rne-round-trips)
+(check-negative-cases)
+(train-mode "F16" #f)
+(train-mode "BF16" #t)
+(close-mp4 (ffi-pointer runtime))
