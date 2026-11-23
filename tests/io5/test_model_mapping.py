@@ -417,9 +417,17 @@ class ModelMappingTests(unittest.TestCase):
             elif case == "missing_block":
                 bad_tensors = [t for t in base_tensors if t.path != ("blocks", "1", "ffn", "gate", "weight")]
             elif case == "extra":
-                bad_tensors = sorted(base_tensors + [tensor("extra.weight", (4,))], key=lambda t: t.path)
+                bad_tensors = sorted(
+                    base_tensors + [safe.Tensor(("extra", "weight"), "parameter", (4,),
+                                                struct.pack("<4f", 1.0, 2.0, 3.0, 4.0))],
+                    key=lambda t: t.path,
+                )
             elif case == "biased":
-                bad_tensors = sorted(base_tensors + [tensor("norm_final.bias", (8,))], key=lambda t: t.path)
+                bad_tensors = sorted(
+                    base_tensors + [safe.Tensor(("norm_final", "bias"), "parameter", (8,),
+                                                struct.pack("<8f", *([0.5] * 8)))],
+                    key=lambda t: t.path,
+                )
             else:
                 bad_tensors = [replace(t, shape=(1, 8)) if t.path == ("norm_final", "weight") else t
                                for t in base_tensors]
