@@ -106,7 +106,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3r-p1-roster.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 INTEROPERABILITY_TOOLS = frozenset({ROOT / "tools" / "io5" / name for name in (
-    "safetensors_interop.py", "gguf_interop.py",
+    "safetensors_interop.py", "gguf_interop.py", "model_mapping.py",
 )})
 
 
@@ -185,7 +185,9 @@ class PythonIsolationTests(unittest.TestCase):
                          "tools/io5/nested/safetensors_interop.py", "tools/safetensors_interop.py",
                          "lib/safetensors_interop.py", "native/safetensors_interop.py",
                          "tools/io5/gguf_interop.py.extra.py", "tools/io5/nested/gguf_interop.py",
-                         "tools/gguf_interop.py", "lib/gguf_interop.py", "native/gguf_interop.py"):
+                         "tools/gguf_interop.py", "lib/gguf_interop.py", "native/gguf_interop.py",
+                         "tools/io5/model_mapping.py.extra.py", "tools/io5/nested/model_mapping.py",
+                         "tools/model_mapping.py", "lib/model_mapping.py", "native/model_mapping.py"):
             with self.subTest(path=relative):
                 self.assertFalse(development_python(ROOT / relative))
 
