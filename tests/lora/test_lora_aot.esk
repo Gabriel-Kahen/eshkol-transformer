@@ -1,0 +1,419 @@
+;;; Compiled Eshkol AOT LoRA fine-tuning, frozen-base immutability,
+;;; finite-difference gradient check, checkpoint save/reload across fresh
+;;; processes, merged-weight parity, and tamper rejection verification.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 lora-create i64 i64 i64 i64 f64 ptr :real et_lora_aot_create)
+(extern void lora-destroy ptr :real et_lora_aot_destroy)
+
+(extern i64 lora-x-count ptr :real et_lora_aot_x_count)
+(extern i64 lora-w-count ptr :real et_lora_aot_w_count)
+(extern i64 lora-a-count ptr :real et_lora_aot_a_count)
+(extern i64 lora-b-count ptr :real et_lora_aot_b_count)
+(extern i64 lora-y-count ptr :real et_lora_aot_y_count)
+
+(extern i32 lora-init-adapter ptr i64 :real et_lora_aot_init_adapter)
+(extern i32 lora-set-x ptr i64 f64 :real et_lora_aot_set_x)
+(extern i32 lora-set-w-base ptr i64 f64 :real et_lora_aot_set_w_base)
+(extern i32 lora-set-target ptr i64 f64 :real et_lora_aot_set_target)
+(extern i32 lora-set-a ptr i64 f64 :real et_lora_aot_set_a)
+(extern i32 lora-set-b ptr i64 f64 :real et_lora_aot_set_b)
+(extern i32 lora-set-dy ptr i64 f64 :real et_lora_aot_set_dy)
+
+(extern f64 lora-get-a ptr i64 :real et_lora_aot_get_a)
+(extern f64 lora-get-b ptr i64 :real et_lora_aot_get_b)
+(extern f64 lora-get-y ptr i64 :real et_lora_aot_get_y)
+(extern f64 lora-get-y-base ptr i64 :real et_lora_aot_get_y_base)
+(extern f64 lora-get-y-merged ptr i64 :real et_lora_aot_get_y_merged)
+(extern f64 lora-get-target ptr i64 :real et_lora_aot_get_target)
+(extern f64 lora-get-da ptr i64 :real et_lora_aot_get_da)
+(extern f64 lora-get-db ptr i64 :real et_lora_aot_get_db)
+(extern f64 lora-get-w-base ptr i64 :real et_lora_aot_get_w_base)
+(extern f64 lora-get-w-restored ptr i64 :real et_lora_aot_get_w_restored)
+
+(extern i64 lora-w-base-bits ptr i64 :real et_lora_aot_w_base_bits)
+(extern i64 lora-y-bits ptr i64 :real et_lora_aot_y_bits)
+(extern i64 lora-y-base-bits ptr i64 :real et_lora_aot_y_base_bits)
+
+(extern i32 lora-base-forward ptr :real et_lora_aot_base_forward)
+(extern i32 lora-forward ptr :real et_lora_aot_forward)
+(extern i32 lora-backward ptr :real et_lora_aot_backward)
+(extern i32 lora-merge-forward ptr :real et_lora_aot_merge_and_forward)
+(extern i32 lora-unmerge ptr :real et_lora_aot_unmerge)
+
+(extern i32 lora-compute-base-sha256 ptr :real et_lora_aot_compute_base_sha256)
+(extern i64 lora-base-sha256-word ptr i64 :real et_lora_aot_base_sha256_word)
+(extern i32 lora-compute-y-sha256 ptr :real et_lora_aot_compute_y_sha256)
+(extern i64 lora-y-sha256-word ptr i64 :real et_lora_aot_y_sha256_word)
+
+(extern i64 lora-env-phase :real et_lora_aot_env_phase)
+(extern i32 lora-save-env-ckpt ptr :real et_lora_aot_save_env_checkpoint)
+(extern i32 lora-load-env-ckpt ptr :real et_lora_aot_load_env_checkpoint)
+(extern i32 lora-check-wrong-base-hash ptr :real et_lora_aot_check_wrong_base_hash)
+(extern i32 lora-check-wrong-rank ptr :real et_lora_aot_check_wrong_rank)
+(extern i32 lora-check-tampered-env ptr i64 :real et_lora_aot_check_tampered_env)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; LoRA shape and hyperparameters.
+(define dim-m 8)
+(define dim-k 16)
+(define dim-n 12)
+(define dim-r 4)
+(define lora-alpha 8.0)
+(define train-steps 12)
+(define learning-rate 0.25)
+(define adapter-seed 4242)
+
+;; Expected error codes from lora_adapter_abi.h.
+(define status-ok 0)
+(define err-shape -2)
+(define err-format -7)
+(define err-version -8)
+(define err-truncated -9)
+(define err-checksum -10)
+(define err-base-hash -11)
+(define err-symlink -12)
+
+(define (require-check label ok)
+  (unless ok
+    (display "LORA AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "LORA AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-ctx)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "lora-create" status-ok
+                   (lora-create dim-m dim-k dim-n dim-r lora-alpha
+                                (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (det-val index salt scale)
+  (let ((bucket (- (modulo (+ (* 31 index) (* 17 salt) (quotient index 3)) 37) 18)))
+    (* scale bucket)))
+
+(define (populate-base-and-inputs ctx)
+  (let ((xn (lora-x-count (ffi-pointer ctx)))
+        (wn (lora-w-count (ffi-pointer ctx)))
+        (yn (lora-y-count (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i xn))
+      (expect-status "set-x" status-ok
+                     (lora-set-x (ffi-pointer ctx) i (det-val i 11 0.0625))))
+    (do ((i 0 (+ i 1)))
+        ((= i wn))
+      (expect-status "set-w-base" status-ok
+                     (lora-set-w-base (ffi-pointer ctx) i (det-val i 23 0.03125))))
+    (expect-status "base-forward-for-target" status-ok
+                   (lora-base-forward (ffi-pointer ctx)))
+    ;; Target = base projection + structured offset.
+    (do ((i 0 (+ i 1)))
+        ((= i yn))
+      (let ((base-val (lora-get-y-base (ffi-pointer ctx) i)))
+        (expect-status "set-target" status-ok
+                       (lora-set-target (ffi-pointer ctx) i
+                                        (+ base-val (det-val i 37 0.0625))))))))
+
+(define (capture-base-sha256 ctx)
+  (expect-status "compute-base-sha256" status-ok
+                 (lora-compute-base-sha256 (ffi-pointer ctx)))
+  (let ((words (make-vector 4 0)))
+    (do ((i 0 (+ i 1)))
+        ((= i 4) words)
+      (vector-set! words i (lora-base-sha256-word (ffi-pointer ctx) i)))))
+
+(define (capture-base-bits ctx)
+  (let* ((wn (lora-w-count (ffi-pointer ctx)))
+         (bits (make-vector wn 0)))
+    (do ((i 0 (+ i 1)))
+        ((= i wn) bits)
+      (vector-set! bits i (lora-w-base-bits (ffi-pointer ctx) i)))))
+
+(define (verify-base-frozen ctx ref-sha ref-bits)
+  (expect-status "recompute-base-sha256" status-ok
+                 (lora-compute-base-sha256 (ffi-pointer ctx)))
+  (do ((i 0 (+ i 1)))
+      ((= i 4))
+    (require-check "base SHA-256 mutated"
+                   (= (vector-ref ref-sha i)
+                      (lora-base-sha256-word (ffi-pointer ctx) i))))
+  (let ((wn (lora-w-count (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i wn))
+      (require-check "base weight bit mutated"
+                     (= (vector-ref ref-bits i)
+                        (lora-w-base-bits (ffi-pointer ctx) i))))))
+
+(define (eval-mse-loss ctx)
+  (expect-status "forward" status-ok (lora-forward (ffi-pointer ctx)))
+  (let* ((yn (lora-y-count (ffi-pointer ctx)))
+         (inv (/ 1.0 yn))
+         (acc 0.0))
+    (do ((i 0 (+ i 1)))
+        ((= i yn) (* 0.5 inv acc))
+      (let ((diff (- (lora-get-y (ffi-pointer ctx) i)
+                     (lora-get-target (ffi-pointer ctx) i))))
+        (set! acc (+ acc (* diff diff)))))))
+
+(define (eval-loss-and-backward ctx)
+  (let* ((loss (eval-mse-loss ctx))
+         (yn (lora-y-count (ffi-pointer ctx)))
+         (inv (/ 1.0 yn)))
+    (do ((i 0 (+ i 1)))
+        ((= i yn))
+      (let ((diff (- (lora-get-y (ffi-pointer ctx) i)
+                     (lora-get-target (ffi-pointer ctx) i))))
+        (expect-status "set-dy" status-ok
+                       (lora-set-dy (ffi-pointer ctx) i (* inv diff)))))
+    (expect-status "backward" status-ok (lora-backward (ffi-pointer ctx)))
+    loss))
+
+(define (check-fd-a ctx idx)
+  (let ((orig (lora-get-a (ffi-pointer ctx) idx))
+        (analytic (lora-get-da (ffi-pointer ctx) idx))
+        (step 0.001953125))
+    (expect-status "fd-a-plus" status-ok
+                   (lora-set-a (ffi-pointer ctx) idx (+ orig step)))
+    (let ((plus (eval-mse-loss ctx)))
+      (expect-status "fd-a-minus" status-ok
+                     (lora-set-a (ffi-pointer ctx) idx (- orig step)))
+      (let* ((minus (eval-mse-loss ctx))
+             (num (/ (- plus minus) (* 2.0 step))))
+        (expect-status "fd-a-restore" status-ok
+                       (lora-set-a (ffi-pointer ctx) idx orig))
+        (require-check "dA central finite-difference failed"
+                       (<= (abs (- analytic num))
+                           (+ 0.00001 (* 0.005 (abs num)))))))))
+
+(define (check-fd-b ctx idx)
+  (let ((orig (lora-get-b (ffi-pointer ctx) idx))
+        (analytic (lora-get-db (ffi-pointer ctx) idx))
+        (step 0.001953125))
+    (expect-status "fd-b-plus" status-ok
+                   (lora-set-b (ffi-pointer ctx) idx (+ orig step)))
+    (let ((plus (eval-mse-loss ctx)))
+      (expect-status "fd-b-minus" status-ok
+                     (lora-set-b (ffi-pointer ctx) idx (- orig step)))
+      (let* ((minus (eval-mse-loss ctx))
+             (num (/ (- plus minus) (* 2.0 step))))
+        (expect-status "fd-b-restore" status-ok
+                       (lora-set-b (ffi-pointer ctx) idx orig))
+        (require-check "dB central finite-difference failed"
+                       (<= (abs (- analytic num))
+                           (+ 0.00001 (* 0.005 (abs num)))))))))
+
+(define (sgd-update-adapter ctx lr)
+  (let ((an (lora-a-count (ffi-pointer ctx)))
+        (bn (lora-b-count (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i an))
+      (let ((next-a (- (lora-get-a (ffi-pointer ctx) i)
+                       (* lr (lora-get-da (ffi-pointer ctx) i)))))
+        (expect-status "update-a" status-ok
+                       (lora-set-a (ffi-pointer ctx) i next-a))))
+    (do ((i 0 (+ i 1)))
+        ((= i bn))
+      (let ((next-b (- (lora-get-b (ffi-pointer ctx) i)
+                       (* lr (lora-get-db (ffi-pointer ctx) i)))))
+        (expect-status "update-b" status-ok
+                       (lora-set-b (ffi-pointer ctx) i next-b))))))
+
+(define (print-digest-line tag w0 w1 w2 w3)
+  (display tag)
+  (display " ") (display w0)
+  (display " ") (display w1)
+  (display " ") (display w2)
+  (display " ") (display w3)
+  (newline))
+
+(define (run-train-phase)
+  (let* ((ctx (create-ctx))
+         (yn (lora-y-count (ffi-pointer ctx)))
+         (an (lora-a-count (ffi-pointer ctx)))
+         (bn (lora-b-count (ffi-pointer ctx))))
+    (populate-base-and-inputs ctx)
+    ;; Rebuild Target explicitly using base_forward y_base after populate.
+    (expect-status "base-forward" status-ok
+                   (lora-base-forward (ffi-pointer ctx)))
+    (do ((i 0 (+ i 1)))
+        ((= i yn))
+      ;; Make target distinctly offset from base_forward output.
+      (let ((seed-offset (det-val i 37 0.08)))
+        (expect-status "set-target-offset" status-ok
+                       (lora-set-target (ffi-pointer ctx) i
+                                        (+ (lora-get-target (ffi-pointer ctx) i)
+                                           seed-offset)))))
+
+    (let ((base-sha (capture-base-sha256 ctx))
+          (base-bits (capture-base-bits ctx)))
+      ;; Init LoRA adapter (B = 0) and verify bitwise parity with base_forward.
+      (expect-status "init-adapter" status-ok
+                     (lora-init-adapter (ffi-pointer ctx) adapter-seed))
+      (expect-status "base-forward-parity" status-ok
+                     (lora-base-forward (ffi-pointer ctx)))
+      (expect-status "init-lora-forward" status-ok
+                     (lora-forward (ffi-pointer ctx)))
+      (do ((i 0 (+ i 1)))
+          ((= i yn))
+        (require-check "zero-init B bitwise parity failed"
+                       (= (lora-y-bits (ffi-pointer ctx) i)
+                          (lora-y-base-bits (ffi-pointer ctx) i))))
+
+      ;; Step 0 forward + backward + dB finite-difference check.
+      (let ((init-loss (eval-loss-and-backward ctx))
+            (prev-loss 0.0))
+        (set! prev-loss init-loss)
+        (check-fd-b ctx 0)
+        (check-fd-b ctx (quotient bn 2))
+        (check-fd-b ctx (- bn 1))
+        (display "LORA AOT LOSS 0 ") (display (number->string init-loss)) (newline)
+
+        (do ((step 1 (+ step 1)))
+            ((> step train-steps))
+          (sgd-update-adapter ctx learning-rate)
+          (let ((curr-loss (eval-loss-and-backward ctx)))
+            (require-check "loss failed to strictly decrease"
+                           (and (>= curr-loss 0.0) (< curr-loss prev-loss)))
+            (verify-base-frozen ctx base-sha base-bits)
+            ;; At step 1 both A and B are non-zero: check dA and dB finite diffs.
+            (when (= step 1)
+              (check-fd-a ctx 0)
+              (check-fd-a ctx (quotient an 2))
+              (check-fd-a ctx (- an 1))
+              (check-fd-b ctx 0)
+              (check-fd-b ctx (quotient bn 2))
+              (check-fd-b ctx (- bn 1)))
+            (display "LORA AOT LOSS ") (display step) (display " ")
+            (display (number->string curr-loss)) (newline)
+            (set! prev-loss curr-loss)))
+
+        (expect-status "final-forward" status-ok
+                       (lora-forward (ffi-pointer ctx)))
+        (verify-base-frozen ctx base-sha base-bits)
+        (expect-status "save-ckpt" status-ok
+                       (lora-save-env-ckpt (ffi-pointer ctx)))
+        (expect-status "compute-y-sha256" status-ok
+                       (lora-compute-y-sha256 (ffi-pointer ctx)))
+        (display "LORA AOT TRAIN steps=12 initial=")
+        (display (number->string init-loss))
+        (display " final=")
+        (display (number->string prev-loss))
+        (display " base_frozen=PASS grad_checks=9") (newline)
+        (print-digest-line
+          "LORA AOT Y_SHA256"
+          (lora-y-sha256-word (ffi-pointer ctx) 0)
+          (lora-y-sha256-word (ffi-pointer ctx) 1)
+          (lora-y-sha256-word (ffi-pointer ctx) 2)
+          (lora-y-sha256-word (ffi-pointer ctx) 3))
+        (print-digest-line
+          "LORA AOT BASE_SHA256"
+          (vector-ref base-sha 0)
+          (vector-ref base-sha 1)
+          (vector-ref base-sha 2)
+          (vector-ref base-sha 3))
+        (lora-destroy (ffi-pointer ctx))))))
+
+(define (run-reload-phase)
+  (let* ((ctx (create-ctx))
+         (yn (lora-y-count (ffi-pointer ctx)))
+         (wn (lora-w-count (ffi-pointer ctx)))
+         (an (lora-a-count (ffi-pointer ctx)))
+         (bn (lora-b-count (ffi-pointer ctx))))
+    (populate-base-and-inputs ctx)
+    ;; Poison A and B with sentinels so reload must populate them.
+    (do ((i 0 (+ i 1)))
+        ((= i an))
+      (expect-status "poison-a" status-ok (lora-set-a (ffi-pointer ctx) i 99.0)))
+    (do ((i 0 (+ i 1)))
+        ((= i bn))
+      (expect-status "poison-b" status-ok (lora-set-b (ffi-pointer ctx) i -99.0)))
+
+    (let ((base-sha (capture-base-sha256 ctx))
+          (base-bits (capture-base-bits ctx)))
+      ;; Reload adapter checkpoint in this fresh process.
+      (expect-status "load-ckpt" status-ok
+                     (lora-load-env-ckpt (ffi-pointer ctx)))
+      (expect-status "reloaded-forward" status-ok
+                     (lora-forward (ffi-pointer ctx)))
+      (expect-status "reloaded-y-sha256" status-ok
+                     (lora-compute-y-sha256 (ffi-pointer ctx)))
+      (print-digest-line
+        "LORA AOT RELOAD_Y_SHA256"
+        (lora-y-sha256-word (ffi-pointer ctx) 0)
+        (lora-y-sha256-word (ffi-pointer ctx) 1)
+        (lora-y-sha256-word (ffi-pointer ctx) 2)
+        (lora-y-sha256-word (ffi-pointer ctx) 3))
+      (print-digest-line
+        "LORA AOT RELOAD_BASE_SHA256"
+        (vector-ref base-sha 0)
+        (vector-ref base-sha 1)
+        (vector-ref base-sha 2)
+        (vector-ref base-sha 3))
+
+      ;; Verify merged-weight forward parity and unmerged weight restoration.
+      (expect-status "merge-and-forward" status-ok
+                     (lora-merge-forward (ffi-pointer ctx)))
+      (expect-status "unmerge" status-ok
+                     (lora-unmerge (ffi-pointer ctx)))
+      (let ((max-merge-diff 0.0)
+            (max-unmerge-diff 0.0))
+        (do ((i 0 (+ i 1)))
+            ((= i yn))
+          (let ((d (abs (- (lora-get-y (ffi-pointer ctx) i)
+                           (lora-get-y-merged (ffi-pointer ctx) i)))))
+            (when (> d max-merge-diff) (set! max-merge-diff d))
+            (require-check "merged forward parity exceeded 1e-6" (<= d 0.000001))))
+        (do ((i 0 (+ i 1)))
+            ((= i wn))
+          (let ((d (abs (- (lora-get-w-base (ffi-pointer ctx) i)
+                           (lora-get-w-restored (ffi-pointer ctx) i)))))
+            (when (> d max-unmerge-diff) (set! max-unmerge-diff d))
+            (require-check "unmerged weight parity exceeded 1e-6" (<= d 0.000001))))
+        (verify-base-frozen ctx base-sha base-bits)
+        (display "LORA AOT RELOAD max_merge_diff=")
+        (display (number->string max-merge-diff))
+        (display " max_unmerge_diff=")
+        (display (number->string max-unmerge-diff))
+        (display " parity=PASS") (newline))
+
+      ;; Negative checks: base-hash mismatch, rank mismatch, tampered ckpts.
+      (expect-status "wrong-base-hash" err-base-hash
+                     (lora-check-wrong-base-hash (ffi-pointer ctx)))
+      (expect-status "wrong-rank" err-shape
+                     (lora-check-wrong-rank (ffi-pointer ctx)))
+      (expect-status "tamper-checksum" err-checksum
+                     (lora-check-tampered-env (ffi-pointer ctx) 1))
+      (expect-status "tamper-truncated" err-truncated
+                     (lora-check-tampered-env (ffi-pointer ctx) 2))
+      (expect-status "tamper-bad-magic" err-format
+                     (lora-check-tampered-env (ffi-pointer ctx) 3))
+      (expect-status "tamper-bad-version" err-version
+                     (lora-check-tampered-env (ffi-pointer ctx) 4))
+      (expect-status "tamper-symlink" err-symlink
+                     (lora-check-tampered-env (ffi-pointer ctx) 5))
+      (display "LORA AOT NEGATIVE PASS") (newline)
+      (lora-destroy (ffi-pointer ctx)))))
+
+(let ((phase (lora-env-phase)))
+  (cond
+    ((= phase 0) (run-train-phase) (run-reload-phase))
+    ((= phase 1) (run-train-phase))
+    ((= phase 2) (run-reload-phase))
+    (else (require-check "invalid LORA_AOT_PHASE" #f))))
