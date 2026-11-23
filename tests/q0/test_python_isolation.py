@@ -107,6 +107,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
 }) | G3C4_DEVELOPMENT_SCRIPTS
 INTEROPERABILITY_TOOLS = frozenset({ROOT / "tools" / "io5" / name for name in (
     "safetensors_interop.py", "gguf_interop.py", "model_mapping.py",
+    "quantized_interchange.py",
 )})
 
 
@@ -187,7 +188,11 @@ class PythonIsolationTests(unittest.TestCase):
                          "tools/io5/gguf_interop.py.extra.py", "tools/io5/nested/gguf_interop.py",
                          "tools/gguf_interop.py", "lib/gguf_interop.py", "native/gguf_interop.py",
                          "tools/io5/model_mapping.py.extra.py", "tools/io5/nested/model_mapping.py",
-                         "tools/model_mapping.py", "lib/model_mapping.py", "native/model_mapping.py"):
+                         "tools/model_mapping.py", "lib/model_mapping.py", "native/model_mapping.py",
+                         "tools/io5/quantized_interchange.py.extra.py",
+                         "tools/io5/nested/quantized_interchange.py",
+                         "tools/quantized_interchange.py", "lib/quantized_interchange.py",
+                         "native/quantized_interchange.py"):
             with self.subTest(path=relative):
                 self.assertFalse(development_python(ROOT / relative))
 
