@@ -376,6 +376,10 @@ test-mod5-e2e:
 test-mp4:
 	/usr/bin/bash scripts/test-mp4.sh
 
+.PHONY: test-mp4-aot
+test-mp4-aot:
+	/usr/bin/bash scripts/test-mp4-aot.sh
+
 .PHONY: test-pa4-wider
 test-pa4-wider:
 	/usr/bin/bash scripts/test-pa4-wider.sh
@@ -388,9 +392,17 @@ test-pa4-wider-aot:
 test-ac4:
 	/usr/bin/bash scripts/test-ac4.sh
 
+.PHONY: test-ac4-aot
+test-ac4-aot:
+	/usr/bin/bash scripts/test-ac4-aot.sh
+
 .PHONY: test-amd4
 test-amd4:
 	/usr/bin/bash scripts/test-amd4.sh
+
+.PHONY: test-amd4-aot
+test-amd4-aot:
+	/usr/bin/bash scripts/test-amd4-aot.sh
 
 .PHONY: test-dist5
 test-dist5:
