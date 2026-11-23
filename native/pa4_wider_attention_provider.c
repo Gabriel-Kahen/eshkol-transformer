@@ -150,13 +150,19 @@ static span shape_span(const uint64_t *extents, size_t rank) {
 
 static int aliases_table(span target, table views, size_t max_count,
                          int include_data) {
-  if (!table_fits(views))
-    return 0;
-  if (overlaps(target, views.storage))
+  if (views.storage.start != NULL && views.storage.bytes != 0u &&
+      overlaps(target, views.storage))
     return 1;
-  if (views.count > max_count)
+  const size_t alignment = _Alignof(et_kernel_tensor_view_v1);
+  if (views.stride < ET_KERNEL_TENSOR_VIEW_V1_0_SIZE ||
+      views.stride % alignment != 0u ||
+      !aligned_span(views.storage.start, alignment, views.storage.bytes))
     return 0;
-  for (size_t i = 0; i < views.count; ++i) {
+  const size_t readable = views.storage.bytes / views.stride;
+  size_t count = views.count < readable ? views.count : readable;
+  if (count > max_count)
+    count = max_count;
+  for (size_t i = 0; i < count; ++i) {
     const et_kernel_tensor_view_v1 *view = view_at(views, i);
     if (view->struct_size < ET_KERNEL_TENSOR_VIEW_V1_0_SIZE ||
         view->struct_size > views.stride)
@@ -178,26 +184,42 @@ static int aliases_call(span target, const et_kernel_call_v1 *call,
     return 1;
   if (!aligned_span(call, _Alignof(et_kernel_call_v1), sizeof(size_t)))
     return 0;
+  if (call->struct_size >= sizeof(size_t) &&
+      aligned_span(call, _Alignof(et_kernel_call_v1), call->struct_size) &&
+      overlaps(target, (span){call, call->struct_size}))
+    return 1;
   if (call->struct_size < ET_KERNEL_CALL_V1_0_SIZE ||
       !aligned_span(call, _Alignof(et_kernel_call_v1), call->struct_size))
     return 0;
-  if (overlaps(target, (span){call, call->struct_size}) ||
-      overlaps_text(target, call->capability) ||
-      aliases_table(target, input_table(call), 7u, include_data) ||
-      aliases_table(target, output_table(call), 3u, include_data))
+  const et_kernel_request_v1 *request = call->request;
+  size_t input_limit = 7u;
+  if (request != NULL &&
+      aligned_span(request, _Alignof(et_kernel_request_v1), sizeof(size_t)) &&
+      request->struct_size >= ET_KERNEL_REQUEST_V1_0_SIZE &&
+      aligned_span(request, _Alignof(et_kernel_request_v1),
+                   request->struct_size) &&
+      exact_text(request->operation, operations[FORWARD]))
+    input_limit = 6u;
+  if (overlaps_text(target, call->capability) ||
+      aliases_table(target, input_table(call), input_limit, include_data) ||
+      aliases_table(target, output_table(call), ET_KERNEL_MAX_TENSORS,
+                    include_data))
     return 1;
 
-  const et_kernel_request_v1 *request = call->request;
   if (overlaps(target, (span){request, sizeof(size_t)}))
     return 1;
   if (!aligned_span(request, _Alignof(et_kernel_request_v1), sizeof(size_t)))
     return 0;
+  if (request->struct_size >= sizeof(size_t) &&
+      aligned_span(request, _Alignof(et_kernel_request_v1),
+                   request->struct_size) &&
+      overlaps(target, (span){request, request->struct_size}))
+    return 1;
   if (request->struct_size < ET_KERNEL_REQUEST_V1_0_SIZE ||
       !aligned_span(request, _Alignof(et_kernel_request_v1),
                     request->struct_size))
     return 0;
-  return overlaps(target, (span){request, request->struct_size}) ||
-         overlaps(target, shape_span(request->shape, request->rank)) ||
+  return overlaps(target, shape_span(request->shape, request->rank)) ||
          overlaps_text(target, request->operation) ||
          overlaps_text(target, request->dtype) ||
          overlaps_text(target, request->device);

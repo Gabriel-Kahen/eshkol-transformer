@@ -396,6 +396,28 @@ static void structural_cases(const et_kernel_provider_v1 *p,
   require(p->validate_call(call, &aliased_error) != 0 &&
               memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
           "direct diagnostic alias rejected without clobbering output");
+  /* Malformed output table byte length must still preserve readable outputs. */
+  call->output_bytes = call->output_stride + 8u;
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "malformed output_bytes preserves aliased output");
+  *call = good_call;
+  /* Excessive output count must still preserve readable outputs. */
+  et_kernel_tensor_view_v1 extra_out[4] = {good_output, good_output,
+                                           good_output, good_output};
+  extra_out[0].data = &aliased_error;
+  call->outputs = extra_out;
+  call->output_count = 4u;
+  call->output_bytes = sizeof(extra_out);
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "excessive output_count preserves aliased output 0");
+  extra_out[0].data = f.result[OUTPUT];
+  extra_out[3].data = &aliased_error;
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "excessive output_count preserves aliased trailing output");
+  *call = good_call;
   *output = good_output;
   require(p->validate_call(call, NULL) == 0,
           "direct validation permits null diagnostic");
