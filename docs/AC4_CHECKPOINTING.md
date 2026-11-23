@@ -172,3 +172,70 @@ windows, masks beyond causality, positional biases, GPU execution, mixed
 precision, optimizer state, and carrier integration are outside this release.
 The callers in the training smoke apply SGD using the gradients returned by
 AC4.
+
+## Eshkol AOT bridge and compiled validation
+
+The private Eshkol AOT bridge in `native/ac4_eshkol_bridge.h` and
+`native/ac4_eshkol_bridge.c` exposes an opaque context handle
+(`et_ac4_aot_context`) that wraps `et_ac4_plan_v1` and `et_ac4_run_v1` for
+compiled Eshkol callers (`--strict-types --optimize 0 --no-stdlib`). Build
+`build/ac4_aot/libeshkol_transformer_ac4_aot.a` with
+`bash scripts/build-ac4-aot.sh` and link it with `build/ac4/libeshkol_ac4.a`,
+`build/mod5/libeshkol_transformer_mod5.a`, `libeshkol_transformer_k1.a`, and
+`-lm`.
+
+- Lifecycle & config: `et_ac4_aot_create`, `et_ac4_aot_destroy`,
+  `et_ac4_aot_set_activation_limit`. Supports `L=1..16`, `FORWARD_ONLY` and
+  `FORWARD_BACKWARD`, and all four checkpointing policies (`NONE`,
+  `EVERY_LAYER`, `SQRT_SEGMENTS`, `EVERY_K`).
+- Execution & updates: `et_ac4_aot_run` (counter-based deterministic dropout
+  replay keyed by `(seed, step, layer, branch)`) and `et_ac4_aot_sgd_step`
+  (failure-atomic binary32 SGD update). Both perform zero heap allocations.
+- Telemetry & bitwise accessors: planned and observed peak live activation
+  bytes, workspace bytes, gradient staging bytes, retained checkpoints/tapes,
+  recomputation count, scalar loss/outputs/parameters/gradients, and exact
+  IEEE-754 bit-pattern accessors (`et_ac4_aot_loss_bits_lo/hi`,
+  `et_ac4_aot_output_bits`, `et_ac4_aot_parameter_bits`,
+  `et_ac4_aot_d_input_bits`, `et_ac4_aot_d_parameter_bits`).
+- Explicit negative error codes: null handles, invalid policies, invalid `k`,
+  out-of-range layer counts, tight activation limits, out-of-bounds indices,
+  non-finite inputs/targets/parameters, and overflowing SGD updates return
+  explicit `et_ac4_status` codes (or `ET_AC4_AOT_OUT_OF_MEMORY = 100` on
+  allocation failure) without mutating prior results or weights.
+
+Compiled Eshkol verification (`tests/ac4/test_ac4_aot.esk` driven by
+`bash scripts/test-ac4-aot.sh` inside `eshkol-r0-debug:20260928`) trains GQA
+`(N,T,Hq,Hkv,Dh) = (2,3,4,2,2)` stacks at `L=4` and `L=8` for 8 SGD steps
+(`lr=0.035`) across all four policies with `dropout=0.0` and `dropout=0.2`:
+
+| Layers | Policy | `k` | Peak activation B | Workspace B | Replays | Activation saved |
+|---:|---|---:|---:|---:|---:|---:|
+| 4 | `NONE` | 0 | 8,832 | 15,232 | 0 | 0.00% |
+| 4 | `EVERY_LAYER` | 0 | 3,648 | 10,048 | 4 | 58.70% |
+| 4 | `SQRT_SEGMENTS` | 0 | 3,456 | 9,856 | 6 | 60.87% |
+| 4 | `EVERY_K` | 4 | 3,264 | 9,664 | 10 | 63.04% |
+| 8 | `NONE` | 0 | 16,512 | 29,312 | 0 | 0.00% |
+| 8 | `EVERY_LAYER` | 0 | 4,416 | 17,216 | 8 | 73.26% |
+| 8 | `SQRT_SEGMENTS` | 0 | 3,840 | 16,640 | 13 | 76.74% |
+| 8 | `EVERY_K` | 8 | 3,264 | 16,064 | 36 | 80.23% |
+
+- Bitwise parity: across all 8 SGD steps at `L=4` and `L=8` (both `dropout=0.0`
+  and `dropout=0.2`), losses, outputs, input gradients, parameter gradients,
+  and post-update weights were bitwise-identical across all four policies.
+- Evaluation loss progression (`FORWARD_ONLY`, `dropout=0.0`):
+  - `L=4`, `dropout=0.0`: `0.11034763208532755` → `0.0676475929119672`
+  - `L=4`, `dropout=0.2`: `0.11034763208532755` → `0.06637458236525277`
+  - `L=8`, `dropout=0.0`: `0.15882713784390876` → `0.054981405134979906`
+  - `L=8`, `dropout=0.2`: `0.15882713784390876` → `0.05598180108321154`
+- Reproducible AOT compilation: two fresh builds from clean cache and build
+  directories produced byte-identical ELFs and identical stdout:
+  - ELF SHA-256: `60348bf8f6aec693732b62dfe7edc3395ac6caa4f3ebcdca1f4ca6fd9d493422`
+- Bridge checks: C11/C++17 header compilation and linkage
+  (`tests/ac4/header_bridge_cpp.cpp`), symbol export/import allowlists, and
+  native bridge tests (`tests/ac4/test_ac4_aot_bridge.c`) under both `-O2` and
+  ASan/UBSan/LSan (`detect_leaks=1:halt_on_error=1`) with allocation-free
+  execution checks and OOM injection all passed.
+
+```bash
+CC=clang-21 CXX=clang++-21 bash scripts/test-ac4-aot.sh
+```
