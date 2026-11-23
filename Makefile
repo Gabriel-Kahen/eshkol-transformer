@@ -408,6 +408,13 @@ test-doc5:
 test-wave4-composed:
 	/usr/bin/bash scripts/test-wave4-composed.sh
 
+.PHONY: test-b0-wave45 benchmark-wave45
+test-b0-wave45:
+	/usr/bin/bash scripts/test-b0-wave45.sh
+
+benchmark-wave45:
+	/usr/bin/bash scripts/benchmark-wave45.sh
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 
