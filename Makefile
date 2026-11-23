@@ -368,6 +368,10 @@ test-mod5:
 test-mod5-aot:
 	/usr/bin/bash scripts/test-mod5-aot.sh
 
+.PHONY: test-mod5-e2e
+test-mod5-e2e:
+	/usr/bin/bash scripts/test-mod5-e2e-io5.sh
+
 .PHONY: test-mp4
 test-mp4:
 	/usr/bin/bash scripts/test-mp4.sh
