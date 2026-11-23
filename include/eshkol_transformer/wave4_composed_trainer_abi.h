@@ -40,6 +40,8 @@ typedef struct {
 } et_wave4_composed_config_v1;
 
 typedef struct {
+  /* Finite, positive bounds matching MP4; 1.0f / min_scale must also be finite
+   * and positive so composed unscaling stays representable in binary32. */
   float scale, growth_factor, backoff_factor, min_scale, max_scale;
   uint32_t growth_interval;
 } et_wave4_composed_scaler_config_v1;
