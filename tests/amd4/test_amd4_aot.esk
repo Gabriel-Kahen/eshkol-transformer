@@ -1,0 +1,396 @@
+;;; AMD4 compiled Eshkol AOT explicit-absence observability and K1 capability
+;;; verification. Exercises live absence, deterministic injected multi-device
+;;; and failure scenarios, exact formatted report verification, and K1 AMD
+;;; capability dispatch rejection with preserved output canary bits.
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i64 amd4-report-size :real et_amd4_aot_report_size)
+(extern i32 amd4-probe-live i32 ptr :real et_amd4_aot_probe_live)
+(extern i32 amd4-probe-scenario i32 i32 ptr :real et_amd4_aot_probe_scenario)
+(extern i32 amd4-report-status ptr :real et_amd4_aot_report_status)
+(extern i32 amd4-report-source ptr :real et_amd4_aot_report_source)
+(extern i32 amd4-report-kfd ptr :real et_amd4_aot_report_kfd)
+(extern i32 amd4-report-hip-library ptr :real et_amd4_aot_report_hip_library)
+(extern i32 amd4-report-rocblas-library ptr :real et_amd4_aot_report_rocblas_library)
+(extern i64 amd4-report-device-count ptr :real et_amd4_aot_report_device_count)
+(extern i64 amd4-report-reported-count ptr :real et_amd4_aot_report_reported_device_count)
+(extern i32 amd4-report-compute-units ptr i32 :real et_amd4_aot_report_device_compute_units)
+(extern i32 amd4-report-wavefront-size ptr i32 :real et_amd4_aot_report_device_wavefront_size)
+(extern i64 amd4-report-total-vram ptr i32 :real et_amd4_aot_report_device_total_vram)
+(extern i64 amd4-report-free-vram ptr i32 :real et_amd4_aot_report_device_free_vram)
+(extern i32 amd4-format-report ptr ptr i64 ptr :real et_amd4_aot_format_report)
+(extern i32 amd4-read-byte ptr i64 :real et_amd4_aot_read_byte)
+
+(extern i32 amd4-k1-open ptr :real et_amd4_aot_k1_open)
+(extern void amd4-k1-close ptr :real et_amd4_aot_k1_close)
+(extern i64 amd4-k1-cap-count ptr :real et_amd4_aot_k1_capability_count)
+(extern i32 amd4-k1-cap-status ptr i32 :real et_amd4_aot_k1_capability_status)
+(extern i32 amd4-k1-dispatch ptr i32 ptr ptr ptr :real et_amd4_aot_k1_dispatch)
+(extern i32 amd4-k1-report-json ptr ptr i64 ptr :real et_amd4_aot_k1_report_json)
+(extern i32 amd4-store-u32 ptr i64 i64 :real et_amd4_aot_store_u32)
+(extern i64 amd4-load-u32 ptr i64 :real et_amd4_aot_load_u32)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; AMD4 ABI constants.
+(define all-devices -1)
+(define status-ok 0)
+(define status-invalid-arg 1)
+(define status-unavailable-runtime 2)
+(define status-rocblas-unavailable 5)
+(define status-driver-failure 6)
+(define status-out-of-range 7)
+(define status-alloc 8)
+
+(define source-live 0)
+(define source-injected 1)
+
+(define kfd-absent 0)
+(define kfd-accessible 2)
+
+(define lib-unavailable 0)
+(define lib-missing-symbols 1)
+(define lib-ready 2)
+
+;; Bridge scenario and capability selectors.
+(define scenario-two-device 1)
+(define scenario-oom 2)
+(define scenario-driver-error 3)
+(define scenario-rocblas-missing 4)
+
+(define cap-gemm 0)
+(define cap-attention 1)
+
+;; K1 ABI constants.
+(define k1-err-none 0)
+(define k1-err-invalid-arg 1)
+(define k1-err-unsupported 6)
+(define k1-code-cap-not-verified 15)
+(define k1-code-aliasing-output 14)
+(define k1-cap-unavailable 2)
+
+(define (require-check label ok)
+  (unless ok
+    (display "AMD4 AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-eq label expected actual)
+  (unless (= actual expected)
+    (display "AMD4 AOT FAIL: ") (display label)
+    (display " expected ") (display expected)
+    (display ", got ") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (buffer-matches-at? buf buf-len offset needle)
+  (let ((nlen (string-length needle)))
+    (if (> (+ offset nlen) buf-len)
+        #f
+        (let loop ((i 0))
+          (if (= i nlen)
+              #t
+              (if (= (amd4-read-byte (ffi-pointer buf) (+ offset i))
+                     (char->integer (string-ref needle i)))
+                  (loop (+ i 1))
+                  #f))))))
+
+(define (buffer-contains? buf buf-len needle)
+  (let ((nlen (string-length needle)))
+    (if (> nlen buf-len)
+        #f
+        (let loop ((pos 0))
+          (if (> (+ pos nlen) buf-len)
+              #f
+              (if (buffer-matches-at? buf buf-len pos needle)
+                  #t
+                  (loop (+ pos 1))))))))
+
+;; Exact LF-delimited line match inside a formatted observability report.
+(define (buffer-contains-line? buf buf-len line)
+  (let ((llen (string-length line)))
+    (let loop ((pos 0))
+      (if (> (+ pos llen 1) buf-len)
+          #f
+          (if (and (or (= pos 0)
+                       (= (amd4-read-byte (ffi-pointer buf) (- pos 1)) 10))
+                   (buffer-matches-at? buf buf-len pos line)
+                   (= (amd4-read-byte (ffi-pointer buf) (+ pos llen)) 10))
+              #t
+              (loop (+ pos 1)))))))
+
+;; Format report into a freshly allocated buffer, returning (vector ptr text-len).
+(define (format-report-buffer report)
+  (let ((req-cell (checked-allocate 8)))
+    (volatile-store! i64 req-cell 0)
+    (expect-eq "measure format report" status-ok
+               (amd4-format-report (ffi-pointer report) (usize->ptr 0) 0
+                                   (ffi-pointer req-cell)))
+    (let* ((required (volatile-load i64 req-cell))
+           (buf (checked-allocate required)))
+      (require-check "required capacity positive" (> required 1))
+      (expect-eq "write format report" status-ok
+                 (amd4-format-report (ffi-pointer report) (ffi-pointer buf)
+                                     required (ffi-pointer req-cell)))
+      (expect-eq "NUL terminator" 0
+                 (amd4-read-byte (ffi-pointer buf) (- required 1)))
+      (release (ffi-pointer req-cell))
+      (vector buf (- required 1)))))
+
+(define report (checked-allocate (amd4-report-size)))
+
+;; 1. Live host explicit-absence verification.
+(define (verify-live-absence)
+  (expect-eq "live probe status" status-unavailable-runtime
+             (amd4-probe-live all-devices (ffi-pointer report)))
+  (expect-eq "live report status" status-unavailable-runtime
+             (amd4-report-status (ffi-pointer report)))
+  (expect-eq "live source" source-live
+             (amd4-report-source (ffi-pointer report)))
+  (expect-eq "live kfd absent" kfd-absent
+             (amd4-report-kfd (ffi-pointer report)))
+  (expect-eq "live hip unavailable" lib-unavailable
+             (amd4-report-hip-library (ffi-pointer report)))
+  (expect-eq "live rocblas unavailable" lib-unavailable
+             (amd4-report-rocblas-library (ffi-pointer report)))
+  (expect-eq "live visible devices" 0
+             (amd4-report-device-count (ffi-pointer report)))
+  (expect-eq "live reported devices" 0
+             (amd4-report-reported-count (ffi-pointer report)))
+  (let* ((res (format-report-buffer report))
+         (buf (vector-ref res 0))
+         (len (vector-ref res 1)))
+    (require-check "live header"
+                   (buffer-matches-at? buf len 0
+                                       "eshkol-transformer-amd4-observability:v1"))
+    (require-check "live source line" (buffer-contains-line? buf len "source=live"))
+    (require-check "live status line"
+                   (buffer-contains-line? buf len "status=unavailable-runtime"))
+    (require-check "live kfd line" (buffer-contains-line? buf len "kfd=absent"))
+    (require-check "live hip line"
+                   (buffer-contains-line? buf len "hip.library=unavailable"))
+    (require-check "live rocblas line"
+                   (buffer-contains-line? buf len "rocblas.library=unavailable"))
+    (require-check "live device count query"
+                   (buffer-contains-line? buf len "hip.device-count-query=not-run,0"))
+    (require-check "live gemm unavailable"
+                   (buffer-contains-line? buf len "kernel.amd-hip.gemm=unavailable"))
+    (require-check "live attention unavailable"
+                   (buffer-contains-line? buf len "kernel.amd-hip.attention=unavailable"))
+    (release (ffi-pointer buf))
+    (display "AMD4 AOT LIVE ABSENCE status=unavailable-runtime kfd=absent hip=unavailable rocblas=unavailable devices=0 bytes=")
+    (display len) (newline)))
+
+;; 2. Injected 2-device MI250X + RX 7900 XTX observability report verification.
+(define (verify-injected-two-device)
+  (expect-eq "2-device scenario status" status-ok
+             (amd4-probe-scenario scenario-two-device all-devices (ffi-pointer report)))
+  (expect-eq "2-device source" source-injected
+             (amd4-report-source (ffi-pointer report)))
+  (expect-eq "2-device kfd" kfd-accessible
+             (amd4-report-kfd (ffi-pointer report)))
+  (expect-eq "2-device hip ready" lib-ready
+             (amd4-report-hip-library (ffi-pointer report)))
+  (expect-eq "2-device rocblas ready" lib-ready
+             (amd4-report-rocblas-library (ffi-pointer report)))
+  (expect-eq "2-device visible count" 2
+             (amd4-report-device-count (ffi-pointer report)))
+  (expect-eq "2-device reported count" 2
+             (amd4-report-reported-count (ffi-pointer report)))
+  (expect-eq "dev0 cu" 110 (amd4-report-compute-units (ffi-pointer report) 0))
+  (expect-eq "dev0 wavefront" 64 (amd4-report-wavefront-size (ffi-pointer report) 0))
+  (expect-eq "dev0 total vram" 68719476736 (amd4-report-total-vram (ffi-pointer report) 0))
+  (expect-eq "dev0 free vram" 64424509440 (amd4-report-free-vram (ffi-pointer report) 0))
+  (expect-eq "dev1 cu" 96 (amd4-report-compute-units (ffi-pointer report) 1))
+  (expect-eq "dev1 wavefront" 32 (amd4-report-wavefront-size (ffi-pointer report) 1))
+  (expect-eq "dev1 total vram" 25769803776 (amd4-report-total-vram (ffi-pointer report) 1))
+  (expect-eq "dev1 free vram" 21474836480 (amd4-report-free-vram (ffi-pointer report) 1))
+  (let* ((res (format-report-buffer report))
+         (buf (vector-ref res 0))
+         (len (vector-ref res 1)))
+    (require-check "2dev header"
+                   (buffer-matches-at? buf len 0
+                                       "eshkol-transformer-amd4-observability:v1"))
+    (require-check "2dev source" (buffer-contains-line? buf len "source=injected"))
+    (require-check "2dev status" (buffer-contains-line? buf len "status=ok"))
+    (require-check "2dev visible" (buffer-contains-line? buf len "devices.visible=2"))
+    (require-check "2dev reported" (buffer-contains-line? buf len "devices.reported=2"))
+    (require-check "2dev restore" (buffer-contains-line? buf len "hip.restore-device=ok,0"))
+    (require-check "2dev d0 header" (buffer-contains-line? buf len "[device.0]"))
+    (require-check "2dev d0 name"
+                   (buffer-contains-line? buf len "name=\"AMD Instinct MI250X\""))
+    (require-check "2dev d0 arch"
+                   (buffer-contains-line? buf len "gcn-arch=\"gfx90a:sramecc+:xnack-\""))
+    (require-check "2dev d0 cu" (buffer-contains-line? buf len "compute-units=110"))
+    (require-check "2dev d0 wf" (buffer-contains-line? buf len "wavefront-size=64"))
+    (require-check "2dev d1 header" (buffer-contains-line? buf len "[device.1]"))
+    (require-check "2dev d1 name"
+                   (buffer-contains-line? buf len "name=\"AMD Radeon RX 7900 XTX\""))
+    (require-check "2dev d1 arch"
+                   (buffer-contains-line? buf len "gcn-arch=\"gfx1100\""))
+    (require-check "2dev d1 cu" (buffer-contains-line? buf len "compute-units=96"))
+    (require-check "2dev d1 wf" (buffer-contains-line? buf len "wavefront-size=32"))
+    (release (ffi-pointer buf))
+    (display "AMD4 AOT INJECTED TWO_DEVICE status=ok devices=2 bytes=")
+    (display len) (newline)))
+
+;; 3. Injected failure scenarios and negative-path checks.
+(define (verify-injected-failures)
+  ;; OOM on memory query.
+  (expect-eq "oom scenario" status-alloc
+             (amd4-probe-scenario scenario-oom all-devices (ffi-pointer report)))
+  (expect-eq "oom free vram unobserved" -1
+             (amd4-report-free-vram (ffi-pointer report) 0))
+  (let* ((res (format-report-buffer report))
+         (buf (vector-ref res 0))
+         (len (vector-ref res 1)))
+    (require-check "oom source" (buffer-contains-line? buf len "source=injected"))
+    (require-check "oom status" (buffer-contains-line? buf len "status=alloc"))
+    (require-check "oom memory line" (buffer-contains-line? buf len "memory=alloc,2"))
+    (require-check "oom no free bytes" (not (buffer-contains? buf len "vram.free-bytes=")))
+    (release (ffi-pointer buf)))
+
+  ;; Driver failure prioritized ahead of rocBLAS handle error.
+  (expect-eq "driver failure scenario" status-driver-failure
+             (amd4-probe-scenario scenario-driver-error all-devices (ffi-pointer report)))
+  (let* ((res (format-report-buffer report))
+         (buf (vector-ref res 0))
+         (len (vector-ref res 1)))
+    (require-check "driver status" (buffer-contains-line? buf len "status=driver-failure"))
+    (require-check "driver query line"
+                   (buffer-contains-line? buf len "hip.driver-version-query=driver-failure,35"))
+    (require-check "driver rocblas line"
+                   (buffer-contains-line? buf len "rocblas.create=rocblas-unavailable,6"))
+    (release (ffi-pointer buf)))
+
+  ;; rocBLAS missing symbols.
+  (expect-eq "rocblas missing scenario" status-rocblas-unavailable
+             (amd4-probe-scenario scenario-rocblas-missing all-devices (ffi-pointer report)))
+  (expect-eq "rocblas missing state" lib-missing-symbols
+             (amd4-report-rocblas-library (ffi-pointer report)))
+  (let* ((res (format-report-buffer report))
+         (buf (vector-ref res 0))
+         (len (vector-ref res 1)))
+    (require-check "rocblas status"
+                   (buffer-contains-line? buf len "status=rocblas-unavailable"))
+    (require-check "rocblas lib line"
+                   (buffer-contains-line? buf len "rocblas.library=missing-symbols"))
+    (require-check "rocblas version not-run"
+                   (buffer-contains-line? buf len "rocblas.version-query=not-run,0"))
+    (release (ffi-pointer buf)))
+
+  ;; Invalid scenario ID, out-of-range ordinal, and short format buffer.
+  (expect-eq "invalid scenario" status-invalid-arg
+             (amd4-probe-scenario 99 all-devices (ffi-pointer report)))
+  (expect-eq "out of range ordinal" status-out-of-range
+             (amd4-probe-scenario scenario-two-device 2 (ffi-pointer report)))
+  (let ((short-buf (checked-allocate 16))
+        (req-cell (checked-allocate 8)))
+    (volatile-store! u8 short-buf 90)
+    (volatile-store! i64 req-cell 0)
+    (expect-eq "short format buffer" status-out-of-range
+               (amd4-format-report (ffi-pointer report) (ffi-pointer short-buf)
+                                   16 (ffi-pointer req-cell)))
+    (require-check "short format required > 16" (> (volatile-load i64 req-cell) 16))
+    (expect-eq "short buffer untouched" 90 (amd4-read-byte (ffi-pointer short-buf) 0))
+    (release (ffi-pointer short-buf))
+    (release (ffi-pointer req-cell)))
+  (display "AMD4 AOT INJECTED FAILURES oom=alloc driver=driver-failure rocblas=missing-symbols PASS")
+  (newline))
+
+;; 4. K1 AMD capability discovery & explicit dispatch rejection.
+(define (verify-k1-rejection)
+  (let ((rt-cell (checked-allocate 8))
+        (in-buf (checked-allocate 4))
+        (out-buf (checked-allocate 4))
+        (err-cell (checked-allocate 4))
+        (req-cell (checked-allocate 8))
+        (input-bits 1065353216)      ;; 0x3f800000 (1.0f)
+        (canary-bits 3735928559))    ;; 0xdeadbeef
+    (expect-eq "k1 open" k1-err-none (amd4-k1-open (ffi-pointer rt-cell)))
+    (let ((runtime (volatile-load ptr rt-cell)))
+      (expect-eq "k1 cap count" 13 (amd4-k1-cap-count (ffi-pointer runtime)))
+      (expect-eq "k1 gemm unavailable" k1-cap-unavailable
+                 (amd4-k1-cap-status (ffi-pointer runtime) cap-gemm))
+      (expect-eq "k1 attention unavailable" k1-cap-unavailable
+                 (amd4-k1-cap-status (ffi-pointer runtime) cap-attention))
+
+      (expect-eq "store input" status-ok
+                 (amd4-store-u32 (ffi-pointer in-buf) 0 input-bits))
+      (expect-eq "store canary" status-ok
+                 (amd4-store-u32 (ffi-pointer out-buf) 0 canary-bits))
+
+      ;; GEMM dispatch must reject with CAPABILITY_NOT_VERIFIED and preserve canary.
+      (volatile-store! i32 err-cell 0)
+      (expect-eq "gemm dispatch category" k1-err-unsupported
+                 (amd4-k1-dispatch (ffi-pointer runtime) cap-gemm
+                                   (ffi-pointer in-buf) (ffi-pointer out-buf)
+                                   (ffi-pointer err-cell)))
+      (expect-eq "gemm dispatch code" k1-code-cap-not-verified
+                 (volatile-load i32 err-cell))
+      (expect-eq "gemm output canary preserved" canary-bits
+                 (amd4-load-u32 (ffi-pointer out-buf) 0))
+      (expect-eq "gemm input preserved" input-bits
+                 (amd4-load-u32 (ffi-pointer in-buf) 0))
+
+      ;; Attention dispatch must reject with CAPABILITY_NOT_VERIFIED and preserve canary.
+      (volatile-store! i32 err-cell 0)
+      (expect-eq "attention dispatch category" k1-err-unsupported
+                 (amd4-k1-dispatch (ffi-pointer runtime) cap-attention
+                                   (ffi-pointer in-buf) (ffi-pointer out-buf)
+                                   (ffi-pointer err-cell)))
+      (expect-eq "attention dispatch code" k1-code-cap-not-verified
+                 (volatile-load i32 err-cell))
+      (expect-eq "attention output canary preserved" canary-bits
+                 (amd4-load-u32 (ffi-pointer out-buf) 0))
+
+      ;; Aliasing input/output rejected cleanly with canary preserved.
+      (volatile-store! i32 err-cell 0)
+      (expect-eq "aliasing dispatch category" k1-err-invalid-arg
+                 (amd4-k1-dispatch (ffi-pointer runtime) cap-gemm
+                                   (ffi-pointer out-buf) (ffi-pointer out-buf)
+                                   (ffi-pointer err-cell)))
+      (expect-eq "aliasing dispatch code" k1-code-aliasing-output
+                 (volatile-load i32 err-cell))
+      (expect-eq "aliasing canary preserved" canary-bits
+                 (amd4-load-u32 (ffi-pointer out-buf) 0))
+
+      ;; Verify K1 JSON report exposes both capabilities as unsupported.
+      (volatile-store! i64 req-cell 0)
+      (expect-eq "k1 json measure" k1-err-none
+                 (amd4-k1-report-json (ffi-pointer runtime) (usize->ptr 0) 0
+                                      (ffi-pointer req-cell)))
+      (let* ((jreq (volatile-load i64 req-cell))
+             (jbuf (checked-allocate jreq)))
+        (expect-eq "k1 json format" k1-err-none
+                   (amd4-k1-report-json (ffi-pointer runtime) (ffi-pointer jbuf)
+                                        jreq (ffi-pointer req-cell)))
+        (require-check "k1 json gemm"
+                       (buffer-contains? jbuf (- jreq 1)
+                                         "\"name\":\"kernel.amd-hip.gemm\",\"status\":\"unsupported\""))
+        (require-check "k1 json attention"
+                       (buffer-contains? jbuf (- jreq 1)
+                                         "\"name\":\"kernel.amd-hip.attention\",\"status\":\"unsupported\""))
+        (release (ffi-pointer jbuf)))
+
+      (amd4-k1-close (ffi-pointer runtime)))
+    (release (ffi-pointer rt-cell))
+    (release (ffi-pointer in-buf))
+    (release (ffi-pointer out-buf))
+    (release (ffi-pointer err-cell))
+    (release (ffi-pointer req-cell)))
+  (display "AMD4 AOT K1 REJECTION gemm=unsupported attention=unsupported code=15 canary=0xdeadbeef PASS")
+  (newline))
+
+(verify-live-absence)
+(verify-injected-two-device)
+(verify-injected-failures)
+(verify-k1-rejection)
+(release (ffi-pointer report))
+(display "AMD4 AOT ALL CHECKS PASS")
+(newline)
