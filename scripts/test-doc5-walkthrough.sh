@@ -119,15 +119,13 @@ awk '
       for (i = 2; i < count; i += 2) make_references(spans[i])
     }
     line = $0
-    while (match(line, /(^|[^[:alnum:]_./$-])(\.\.?\/)?(scripts|docs|include|native|tests|tools)\/[[:alnum:]_./+-]+/)) {
+    while (match(line, /(^|[^[:alnum:]_./$-])(\.\.?\/)?(docs|include|native|scripts|tests|tools|src|internal|benchmarks)\/[[:alnum:]_./+-]+/)) {
       path = substr(line, RSTART, RLENGTH)
       line = substr(line, RSTART + RLENGTH)
       sub(/^[^[:alnum:]_.]/, "", path)
       sub(/^\.\.?\//, "", path)
       sub(/\.$/, "", path)
-      if (path ~ /^(include|native|tests|tools)\// ||
-          path ~ /^scripts\/.*\.sh$/ || path ~ /^docs\/.*\.md$/)
-        print FNR, "path", path
+      print FNR, "path", path
     }
     if (!fence) {
       line = $0
