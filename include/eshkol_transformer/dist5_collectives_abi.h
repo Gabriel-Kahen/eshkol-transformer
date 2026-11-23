@@ -50,7 +50,9 @@ void et_dist5_comm_destroy(et_dist5_comm_t *comm);
  * order. A tag is an application-supplied identifier and may be reused.
  * Timeouts are positive milliseconds. Counts are positive element counts; each
  * full operand/result (including gathered or scattered operands) is
- * byte-capped. Exact in-place allreduce and gradient sync are supported.
+ * byte-capped. Buffers hold packed native little-endian float (binary32) or
+ * int64_t representations. Exact in-place allreduce and gradient sync are
+ * supported.
  * Separate input and output spans for allgather and reduce_scatter must be
  * disjoint.
  *

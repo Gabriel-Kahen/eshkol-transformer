@@ -288,9 +288,11 @@ static et_dist5_status_t check_requests(struct exchange *x) {
     }
     const et_dist5_status_t local =
         (et_dist5_status_t)incoming[REQUEST_WORDS - 1];
-    if (x->local != ET_DIST5_ERR_INVALID_ARG &&
-        local != ET_DIST5_ERR_INVALID_ARG &&
-        memcmp(incoming + 4, expected + 4, 6 * sizeof(uint64_t)) != 0)
+    if (incoming[4] != expected[4] || incoming[5] != expected[5])
+      mismatch = 1;
+    else if (x->local != ET_DIST5_ERR_INVALID_ARG &&
+             local != ET_DIST5_ERR_INVALID_ARG &&
+             memcmp(incoming + 6, expected + 6, 4 * sizeof(uint64_t)) != 0)
       mismatch = 1;
     consensus = merge_status(consensus, local);
   }
@@ -329,39 +331,44 @@ static et_dist5_status_t accumulate(struct exchange *x, const void *data,
       memcpy(x->stage, data, size);
       return ET_DIST5_OK;
     }
-    float *values = (float *)x->stage;
     const unsigned char *input = data;
+    /* The seed may have been copied from a caller's byte array. */
     for (size_t i = 0; i < count; ++i) {
-      float value;
-      memcpy(&value, input + i * sizeof(value), sizeof(value));
+      const size_t offset = i * sizeof(float);
+      float accumulated, value;
+      memcpy(&accumulated, x->stage + offset, sizeof(accumulated));
+      memcpy(&value, input + offset, sizeof(value));
       if (op == ET_DIST5_SUM || op == ET_DIST5_MEAN) {
-        values[i] += value;
-        if (!isfinite(values[i]))
+        accumulated += value;
+        if (!isfinite(accumulated))
           return ET_DIST5_ERR_NONFINITE;
-      } else if ((op == ET_DIST5_MIN && value < values[i]) ||
-                 (op == ET_DIST5_MAX && value > values[i])) {
-        values[i] = value;
+      } else if ((op == ET_DIST5_MIN && value < accumulated) ||
+                 (op == ET_DIST5_MAX && value > accumulated)) {
+        accumulated = value;
       }
+      memcpy(x->stage + offset, &accumulated, sizeof(accumulated));
     }
   } else {
     if (rank == 0) {
       memcpy(x->stage, data, size);
       return ET_DIST5_OK;
     }
-    int64_t *values = (int64_t *)x->stage;
     const unsigned char *input = data;
     for (size_t i = 0; i < size / sizeof(int64_t); ++i) {
-      int64_t value;
-      memcpy(&value, input + i * sizeof(value), sizeof(value));
+      const size_t offset = i * sizeof(int64_t);
+      int64_t accumulated, value;
+      memcpy(&accumulated, x->stage + offset, sizeof(accumulated));
+      memcpy(&value, input + offset, sizeof(value));
       if (op == ET_DIST5_SUM) {
-        if ((value > 0 && values[i] > INT64_MAX - value) ||
-            (value < 0 && values[i] < INT64_MIN - value))
+        if ((value > 0 && accumulated > INT64_MAX - value) ||
+            (value < 0 && accumulated < INT64_MIN - value))
           return ET_DIST5_ERR_INVALID_ARG;
-        values[i] += value;
-      } else if ((op == ET_DIST5_MIN && value < values[i]) ||
-                 (op == ET_DIST5_MAX && value > values[i])) {
-        values[i] = value;
+        accumulated += value;
+      } else if ((op == ET_DIST5_MIN && value < accumulated) ||
+                 (op == ET_DIST5_MAX && value > accumulated)) {
+        accumulated = value;
       }
+      memcpy(x->stage + offset, &accumulated, sizeof(accumulated));
     }
   }
   return ET_DIST5_OK;
@@ -385,9 +392,12 @@ static et_dist5_status_t gather_inputs(struct exchange *x) {
       return status;
   }
   if (x->call->op == ET_DIST5_MEAN) {
-    float *values = (float *)x->stage;
-    for (size_t i = 0; i < x->total / sizeof(*values); ++i)
-      values[i] /= (float)x->comm->world;
+    for (size_t offset = 0; offset < x->total; offset += sizeof(float)) {
+      float value;
+      memcpy(&value, x->stage + offset, sizeof(value));
+      value /= (float)x->comm->world;
+      memcpy(x->stage + offset, &value, sizeof(value));
+    }
   }
   return ET_DIST5_OK;
 }

@@ -2,9 +2,11 @@
 #include "../mod5/mod5_test.h"
 #include "eshkol_transformer/dist5_collectives_abi.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fenv.h>
 #include <float.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -175,7 +177,7 @@ static void collectives(unsigned rank, unsigned world, const int *fds,
   /* An upward-rounded rank-0 sum of 2^24 + 1 would produce different bits. */
   CHECK(fesetround(FE_UPWARD) == 0);
   for (unsigned op = ET_DIST5_SUM; op <= ET_DIST5_MAX; ++op) {
-    float reduced[3];
+    unsigned char reduced[sizeof(local)];
     memcpy(reduced, local, sizeof(reduced));
     STATUS(et_dist5_allreduce(comm, reduced, reduced, 3, ET_DIST5_F32, op, 12,
                               TIMEOUT),
@@ -190,9 +192,11 @@ static void collectives(unsigned rank, unsigned world, const int *fds,
   const int64_t integer_answers[][2] = {
       {triangular, -triangular}, {1, -(int64_t)world}, {(int64_t)world, -1}};
   const unsigned integer_ops[] = {ET_DIST5_SUM, ET_DIST5_MIN, ET_DIST5_MAX};
+  unsigned char packed[sizeof(integers)];
+  memcpy(packed, integers, sizeof(packed));
   for (size_t i = 0; i < ARRAY_COUNT(integer_ops); ++i) {
-    int64_t reduced[2];
-    STATUS(et_dist5_allreduce(comm, integers, reduced, 2, ET_DIST5_I64,
+    unsigned char reduced[sizeof(integers)];
+    STATUS(et_dist5_allreduce(comm, packed, reduced, 2, ET_DIST5_I64,
                               integer_ops[i], 11, TIMEOUT),
            ET_DIST5_OK);
     CHECK(memcmp(reduced, integer_answers[i], sizeof(reduced)) == 0);
@@ -230,31 +234,52 @@ static void collectives(unsigned rank, unsigned world, const int *fds,
   et_dist5_comm_destroy(comm);
 }
 
+static size_t count_open_fds(void) {
+  DIR *dir = opendir("/proc/self/fd");
+  CHECK(dir != NULL);
+  size_t count = 0;
+  struct dirent *entry;
+  errno = 0;
+  while ((entry = readdir(dir)) != NULL) {
+    if (entry->d_name[0] != '.')
+      ++count;
+  }
+  CHECK(errno == 0 && count > 0);
+  CHECK(closedir(dir) == 0);
+  return count - 1; /* Exclude the directory descriptor. */
+}
+
+#define INVALID_BOOTSTRAP(call)                                                \
+  do {                                                                        \
+    const size_t before = count_open_fds();                                    \
+    STATUS(call, ET_DIST5_ERR_INVALID_ARG);                                    \
+    CHECK(count_open_fds() == before);                                         \
+  } while (0)
+
 static void malformed_bootstrap(void) {
   et_dist5_comm_t *comm = NULL;
   int pair[2], dgram[2], other[2];
   CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
   CHECK(socketpair(AF_UNIX, SOCK_DGRAM, 0, dgram) == 0);
   CHECK(pipe(other) == 0);
-  STATUS(make_comm(0, 0, NULL, 0, &comm), ET_DIST5_ERR_INVALID_ARG);
-  STATUS(make_comm(1, 1, NULL, 0, &comm), ET_DIST5_ERR_INVALID_ARG);
-  STATUS(make_comm(0, ET_DIST5_MAX_WORLD_SIZE + 1, NULL, 0, &comm),
-         ET_DIST5_ERR_INVALID_ARG);
-  STATUS(make_comm(0, 2, NULL, 1, &comm), ET_DIST5_ERR_INVALID_ARG);
-  STATUS(make_comm(0, 2, pair, 0, &comm), ET_DIST5_ERR_INVALID_ARG);
-  STATUS(make_comm(0, 1, NULL, 0, NULL), ET_DIST5_ERR_INVALID_ARG);
-  STATUS(et_dist5_comm_create(2, 0, 0, 1, NULL, 0, &comm),
-         ET_DIST5_ERR_INVALID_ARG);
-  STATUS(et_dist5_comm_create(1, 1, 0, 1, NULL, 0, &comm),
-         ET_DIST5_ERR_INVALID_ARG);
-  STATUS(make_comm(0, 2, dgram, 1, &comm), ET_DIST5_ERR_INVALID_ARG);
-  STATUS(make_comm(0, 2, other, 1, &comm), ET_DIST5_ERR_INVALID_ARG);
+  INVALID_BOOTSTRAP(make_comm(0, 0, NULL, 0, &comm));
+  INVALID_BOOTSTRAP(make_comm(1, 1, NULL, 0, &comm));
+  INVALID_BOOTSTRAP(make_comm(0, ET_DIST5_MAX_WORLD_SIZE + 1, NULL, 0, &comm));
+  INVALID_BOOTSTRAP(make_comm(0, 2, NULL, 1, &comm));
+  INVALID_BOOTSTRAP(make_comm(0, 2, pair, 0, &comm));
+  INVALID_BOOTSTRAP(make_comm(0, 1, NULL, 0, NULL));
+  INVALID_BOOTSTRAP(et_dist5_comm_create(2, 0, 0, 1, NULL, 0, &comm));
+  INVALID_BOOTSTRAP(et_dist5_comm_create(1, 1, 0, 1, NULL, 0, &comm));
+  INVALID_BOOTSTRAP(make_comm(0, 2, dgram, 1, &comm));
+  INVALID_BOOTSTRAP(make_comm(0, 2, other, 1, &comm));
   const int dup_fd = dup(pair[0]);
   CHECK(dup_fd >= 0);
   const int dup_fds[] = {pair[0], dup_fd};
-  STATUS(make_comm(0, 3, dup_fds, 2, &comm), ET_DIST5_ERR_INVALID_ARG);
+  INVALID_BOOTSTRAP(make_comm(0, 3, dup_fds, 2, &comm));
   CHECK(close(dup_fd) == 0);
-  STATUS(make_comm(0, 2, &dup_fd, 1, &comm), ET_DIST5_ERR_INVALID_ARG);
+  INVALID_BOOTSTRAP(make_comm(0, 2, &dup_fd, 1, &comm));
+  const int bad_fds[] = {pair[0], -1};
+  INVALID_BOOTSTRAP(make_comm(0, 3, bad_fds, 2, &comm));
   CHECK(comm == NULL);
   STATUS(et_dist5_barrier(NULL, 0, TIMEOUT), ET_DIST5_ERR_INVALID_ARG);
   et_dist5_comm_destroy(NULL);
@@ -264,6 +289,7 @@ static void malformed_bootstrap(void) {
     CHECK(close(other[i]) == 0);
   }
 }
+#undef INVALID_BOOTSTRAP
 
 static void malformed_calls(unsigned rank, unsigned world, const int *fds,
                             size_t count, unsigned variant, int report_fd) {
@@ -329,12 +355,15 @@ enum fault {
   OP_MISMATCH,
   KIND_MISMATCH,
   ROOT_MISMATCH,
+  INVALID_KIND_MISMATCH,
+  INVALID_TAG_MISMATCH,
   CRASH_INPUT,
   CRASH_READY,
   CRASH_COORDINATOR,
   STALL_METADATA,
   STALL_INPUT,
-  STALL_READY
+  STALL_READY,
+  TRICKLE_INPUT
 };
 
 static void mismatch(unsigned rank, unsigned world, const int *fds,
@@ -342,20 +371,25 @@ static void mismatch(unsigned rank, unsigned world, const int *fds,
   (void)report_fd;
   et_dist5_comm_t *comm = open_rank(rank, world, fds, count);
   const int bad = rank == world - 1;
-  const uint64_t tag = bad && variant == TAG_MISMATCH ? 9 : 8;
+  const uint64_t tag =
+      bad && (variant == TAG_MISMATCH || variant == INVALID_TAG_MISMATCH) ? 9 : 8;
   const size_t n = bad && variant == COUNT_MISMATCH ? 2 : 1;
   const unsigned dtype =
       bad && variant == DTYPE_MISMATCH ? ET_DIST5_F32 : ET_DIST5_I64;
   const unsigned op =
       bad && variant == OP_MISMATCH ? ET_DIST5_MIN : ET_DIST5_SUM;
   int64_t in[] = {7, 8}, out[] = {14, 15}, sentinel[] = {14, 15};
-  if (bad && variant == KIND_MISMATCH) {
+  if ((bad && variant == KIND_MISMATCH) ||
+      (rank == 0 && variant == INVALID_KIND_MISMATCH)) {
     STATUS(et_dist5_barrier(comm, tag, TIMEOUT), ET_DIST5_ERR_MISMATCH);
   } else if (variant == ROOT_MISMATCH) {
     STATUS(et_dist5_broadcast(comm, out, n, dtype, (unsigned)bad, tag, TIMEOUT),
            ET_DIST5_ERR_MISMATCH);
   } else {
-    STATUS(et_dist5_allreduce(comm, in, out, n, dtype, op, tag, TIMEOUT),
+    const int invalid = (bad && variant == INVALID_KIND_MISMATCH) ||
+                        (rank == 0 && variant == INVALID_TAG_MISMATCH);
+    STATUS(et_dist5_allreduce(comm, in, invalid ? NULL : out, n, dtype, op, tag,
+                              TIMEOUT),
            ET_DIST5_ERR_MISMATCH);
   }
   CHECK(memcmp(out, sentinel, sizeof(out)) == 0);
@@ -389,6 +423,27 @@ static void fault_worker(unsigned rank, unsigned world, int fd,
       sleep_ms(650);
     _exit(0);
   }
+  if (variant == TRICKLE_INPUT) {
+    /* Wait for the coordinator's reply between one-byte writes. */
+    const unsigned char *payload = (const unsigned char *)data;
+    size_t sent = 0;
+    struct pollfd response = {fd, POLLIN, 0};
+    while (sent < sizeof(data)) {
+      const ssize_t n = send(fd, payload + sent, 1, MSG_NOSIGNAL);
+      if (n < 0 && (errno == EPIPE || errno == ECONNRESET))
+        break;
+      CHECK(n == 1);
+      ++sent;
+      const int ready = poll(&response, 1, 35);
+      CHECK(ready >= 0);
+      if (ready != 0)
+        break;
+    }
+    move_bytes(fd, reply, sizeof(reply), 0);
+    CHECK(reply[0] == 0 && reply[1] == 4 && reply[2] == ET_DIST5_ERR_TIMEOUT);
+    CHECK(sent >= 2 && sent < sizeof(data));
+    _exit(0);
+  }
   move_bytes(fd, data, sizeof(data), 1);
   move_bytes(fd, reply, sizeof(reply), 0);
   CHECK(reply[0] == 0 && reply[1] == 2 && reply[2] == ET_DIST5_OK);
@@ -403,8 +458,10 @@ static void fault_worker(unsigned rank, unsigned world, int fd,
 static void transfer_fault(unsigned rank, unsigned world, const int *fds,
                            size_t count, unsigned variant, int report_fd) {
   (void)report_fd;
-  if (rank == 2 && (variant == CRASH_INPUT || variant == CRASH_READY ||
-                    variant == STALL_INPUT || variant == STALL_READY))
+  if (rank == 2 &&
+      (variant == CRASH_INPUT || variant == CRASH_READY ||
+       variant == STALL_INPUT || variant == STALL_READY ||
+       variant == TRICKLE_INPUT))
     fault_worker(rank, world, fds[0], variant);
   if (rank == 0 && variant == CRASH_COORDINATOR) {
     uint64_t request[11];
@@ -787,12 +844,14 @@ int main(void) {
   run_group(MAX_RANKS, malformed_calls, 0, NULL, 0, MAX_RANKS);
   for (unsigned variant = TAG_MISMATCH; variant <= ROOT_MISMATCH; ++variant)
     run_group(MAX_RANKS, mismatch, variant, NULL, 0, MAX_RANKS);
+  run_group(2, mismatch, INVALID_KIND_MISMATCH, NULL, 0, MAX_RANKS);
+  run_group(2, mismatch, INVALID_TAG_MISMATCH, NULL, 0, MAX_RANKS);
   run_group(MAX_RANKS, transfer_fault, CRASH_INPUT, NULL, 0, MAX_RANKS);
   run_group(MAX_RANKS, transfer_fault, CRASH_READY, NULL, 0, 2);
   run_group(MAX_RANKS, transfer_fault, CRASH_COORDINATOR, NULL, 0, 0);
-  for (unsigned variant = STALL_METADATA; variant <= STALL_READY; ++variant)
+  for (unsigned variant = STALL_METADATA; variant <= TRICKLE_INPUT; ++variant)
     run_group(MAX_RANKS, transfer_fault, variant, NULL, 0, MAX_RANKS);
-  puts("DIST5 failures: PASS (bootstrap checks and 13 process groups)");
+  puts("DIST5 failures: PASS (bootstrap checks and 16 process groups)");
 
   struct training_trace single;
   for (unsigned world = 1; world <= MAX_RANKS; world *= 2) {

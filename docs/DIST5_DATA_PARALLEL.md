@@ -18,8 +18,8 @@ application controls process startup and shutdown.
 
 Use one caller per communicator and call matching collectives in the same
 order. Tags may repeat because the protocol also checks a sequence counter.
-Payloads are native binary32 and signed 64-bit integers. The operation tables
-below use `W` for the world size and `r` for the local rank.
+Payloads are packed native little-endian binary32 and signed 64-bit integers.
+The operation tables below use `W` for the world size and `r` for the local rank.
 
 | API | Caller buffer contract |
 |---|---|
@@ -75,10 +75,11 @@ a control frame there.
   coordinated rejection when all peers are participating. Destinations remain
   unchanged, and the communicator can be reused. A null communicator or
   nonpositive timeout is rejected locally before protocol entry.
-- Mismatched call metadata returns `ET_DIST5_ERR_MISMATCH`. The communicator
-  becomes unusable, as it does for IO, timeout, or peer disconnection. Future
-  calls with a valid timeout return the stored failure. Destroy and bootstrap
-  again.
+- A kind or tag mismatch returns `ET_DIST5_ERR_MISMATCH` even when an operand
+  is invalid. Other call parameters are compared when both ranks pass argument
+  validation. Metadata mismatches, IO errors, timeouts, and peer disconnections
+  make the communicator unusable. Future calls with a valid timeout return the
+  stored failure. Destroy and bootstrap again.
 - Transport waits share one monotonic deadline per call. Nonblocking stream
   I/O handles partial transfers and interruption. Rank 0 monitors all active
   peer sockets while waiting. It sends the failure status where a reply frame
@@ -107,11 +108,13 @@ not been measured.
 
 `CC=clang-21 CXX=clang++-21 DIST5_ASAN_DETECT_LEAKS=1 bash scripts/test-dist5.sh`
 runs the archive and C++17 linkage checks, then runs the C suite twice, in an
-optimized build and under ASan/UBSan/LSan. The suite runs 25 independent fork
+optimized build and under ASan/UBSan/LSan. The suite runs 28 independent fork
 groups per build, covering bitwise collective outputs under reversed rank
-start order, 128 KiB broadcasts through constrained socket buffers, malformed
-inputs and mismatched calls, and process exits or stalls during metadata,
-payload, or result acknowledgment.
+start order, 128 KiB broadcasts through constrained socket buffers, packed-byte
+reductions, malformed inputs and mismatched calls, and process exits or stalls
+during metadata, payload, or result acknowledgment. It checks descriptor counts
+after rejected bootstrap calls and the call-wide timeout during a slow payload
+transfer.
 
 Training uses MOD5 K1 RMSNorm, causal multi-query attention, and SwiGLU
 forward/backward on eight deterministic microbatches and checks 36 block
