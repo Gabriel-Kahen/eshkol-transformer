@@ -4,6 +4,11 @@
 #include <math.h>
 #include <string.h>
 
+#if !defined(__x86_64__)
+#error "AC4 v1 requires the reviewed x86-64 floating-point lane"
+#endif
+#include <xmmintrin.h>
+
 #pragma STDC FENV_ACCESS ON
 #pragma STDC FP_CONTRACT OFF
 
@@ -55,9 +60,35 @@ static int overlaps(span a, span b) {
   return x <= y ? y - x < a.bytes : x - y < b.bytes;
 }
 
+static uint32_t f32_bits(float value) {
+  uint32_t bits;
+  memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+static int is_finite_f32(float value) {
+  return (f32_bits(value) & UINT32_C(0x7f800000)) != UINT32_C(0x7f800000);
+}
+
+static int is_positive_finite_f32(float value) {
+  const uint32_t bits = f32_bits(value);
+  return bits > 0u && bits < UINT32_C(0x7f800000);
+}
+
+static int is_valid_dropout_rate(float value) {
+  const uint32_t bits = f32_bits(value);
+  return bits == UINT32_C(0x80000000) || bits < UINT32_C(0x3f800000);
+}
+
+static int supported_fenv(void) {
+  uint16_t x87;
+  __asm__ volatile("fnstcw %0" : "=m"(x87));
+  return (x87 & 0x0c3fu) == 0x003fu && (_mm_getcsr() & 0xffc0u) == 0x1f80u;
+}
+
 static int finite_values(const float *values, size_t count) {
   for (size_t i = 0; i < count; ++i)
-    if (!isfinite(values[i]))
+    if (!is_finite_f32(values[i]))
       return 0;
   return 1;
 }
@@ -67,9 +98,9 @@ static et_ac4_status make_layout(const et_ac4_config_v1 *config, layout *dims) {
   const uint32_t layers = shape->layers;
   if (layers == 0 || layers > ET_AC4_MAX_LAYERS ||
       config->mode > ET_AC4_FORWARD_BACKWARD ||
-      config->policy > ET_AC4_POLICY_EVERY_K || !isfinite(config->epsilon) ||
-      config->epsilon <= 0.0f || !isfinite(config->dropout_rate) ||
-      config->dropout_rate < 0.0f || config->dropout_rate >= 1.0f)
+      config->policy > ET_AC4_POLICY_EVERY_K ||
+      !is_positive_finite_f32(config->epsilon) ||
+      !is_valid_dropout_rate(config->dropout_rate))
     return ET_AC4_INVALID_ARGUMENT;
 
   uint32_t stride = 1;
@@ -722,6 +753,8 @@ et_ac4_status et_ac4_run_v1(const et_ac4_config_v1 *config,
   status = validate_io(config, io, result, &dims.memory);
   if (status != ET_AC4_OK)
     return status;
+  if (!supported_fenv())
+    return ET_AC4_UNSUPPORTED;
 
   /* The plan's upper bound caps the activation arena even when the caller
    * supplies a larger buffer. The staging region begins after that bound. */
