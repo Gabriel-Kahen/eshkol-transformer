@@ -380,6 +380,10 @@ test-mp4:
 test-pa4-wider:
 	/usr/bin/bash scripts/test-pa4-wider.sh
 
+.PHONY: test-pa4-wider-aot
+test-pa4-wider-aot:
+	/usr/bin/bash scripts/test-pa4-wider-aot.sh
+
 .PHONY: test-ac4
 test-ac4:
 	/usr/bin/bash scripts/test-ac4.sh
