@@ -39,15 +39,19 @@ _Static_assert(ET_MOD5_MAX_EXACT_POSITION < (INT64_C(1) << FLT_MANT_DIG),
 #define EVIDENCE "MOD5:cpu-f32-variants-v1"
 
 enum primitive { RMSNORM, SWIGLU, ATTENTION };
-enum { MAX_KEYS = 3, MAX_OUTPUT_ELEMENTS = 64, MAX_OUTPUTS = 3 };
+enum { MAX_KEYS = 16, MAX_DIM = 64, MAX_HEAD_DIM = 8, MAX_OUTPUTS = 3 };
 
 static const et_kernel_shape_range_v1 rmsnorm_rows[] = {
-    ROW3(1, 1, 1), ROW3(1, 1, 4), ROW3(1, 2, 4), ROW3(2, 3, 4), ROW3(2, 3, 8)};
+    ROW3(1, 1, 1), ROW3(1, 1, 4), ROW3(1, 2, 4), ROW3(2, 3, 4), ROW3(2, 3, 8),
+    ROW3(1, 8, 16), ROW3(2, 8, 16), ROW3(1, 16, 32)};
 static const et_kernel_shape_range_v1 swiglu_rows[] = {
-    ROW3(1, 1, 1), ROW3(1, 1, 8), ROW3(1, 2, 4), ROW3(2, 3, 4), ROW3(2, 3, 8)};
+    ROW3(1, 1, 1), ROW3(1, 1, 8), ROW3(1, 2, 4), ROW3(2, 3, 4), ROW3(2, 3, 8),
+    ROW3(1, 8, 16), ROW3(1, 8, 32), ROW3(2, 8, 32), ROW3(1, 16, 64)};
 static const et_kernel_shape_range_v1 attention_rows[] = {
     ROW6(1, 2, 1, 2, 2, 2), ROW6(1, 4, 1, 3, 3, 2), ROW6(2, 4, 1, 2, 3, 4),
-    ROW6(1, 4, 2, 3, 3, 2), ROW6(2, 4, 2, 2, 3, 4), ROW6(1, 2, 2, 3, 3, 2)};
+    ROW6(1, 4, 2, 3, 3, 2), ROW6(2, 4, 2, 2, 3, 4), ROW6(1, 2, 2, 3, 3, 2),
+    ROW6(1, 4, 1, 8, 8, 4), ROW6(1, 4, 2, 8, 8, 4), ROW6(2, 4, 2, 8, 8, 4),
+    ROW6(1, 4, 1, 16, 16, 8), ROW6(1, 4, 2, 16, 16, 8)};
 
 static const char *const rmsnorm_operations[] = {"rmsnorm.forward",
                                                  "rmsnorm.backward"};
@@ -96,8 +100,6 @@ typedef struct tensor_schema {
   const uint64_t *shape;
 } tensor_schema;
 
-typedef float result_buffers[MAX_OUTPUTS][MAX_OUTPUT_ELEMENTS];
-
 static int exact_text(const char *actual, const char *expected) {
   return actual != NULL && strcmp(actual, expected) == 0;
 }
@@ -127,11 +129,13 @@ static int32_t fail(et_kernel_error *error, et_kernel_error_category category,
                     et_kernel_error_code code, const char *operation,
                     const char *message) {
   if (error != NULL) {
+    const int saved_errno = errno;
     et_kernel_error_clear(error);
     error->category = category;
     error->code = code;
     (void)snprintf(error->operation, sizeof(error->operation), "%s", operation);
     (void)snprintf(error->message, sizeof(error->message), "%s", message);
+    errno = saved_errno;
   }
   return (int32_t)category;
 }
@@ -422,12 +426,14 @@ static int finite_inputs(tensor_table in) {
 }
 
 static int rmsnorm(tensor_table in, const uint64_t *s, int backward,
-                   result_buffers result) {
+                   float *const *result) {
   const float *x = view_at(in, 0u)->data;
   const float *gamma = view_at(in, 1u)->data;
   const float epsilon = *(const float *)view_at(in, 2u)->data;
   const float *upstream = backward ? view_at(in, 3u)->data : NULL;
   const size_t width = s[2];
+  float gamma_scratch[MAX_DIM] = {0.0f};
+  float *dgamma = result != NULL && backward ? result[1] : gamma_scratch;
   if (!(epsilon > 0.0f))
     return 0;
   for (size_t row = 0; row < s[0] * s[1]; ++row) {
@@ -453,8 +459,8 @@ static int rmsnorm(tensor_table in, const uint64_t *s, int backward,
         const float norm = x[i] * rstd;
         const float h = upstream[i] * gamma[d];
         dot = dot + h * norm;
-        result[1][d] = result[1][d] + upstream[i] * norm;
-        if (!isfinite(dot) || !isfinite(result[1][d]))
+        dgamma[d] = dgamma[d] + upstream[i] * norm;
+        if (!isfinite(dot) || !isfinite(dgamma[d]))
           return 0;
       }
     }
@@ -462,17 +468,20 @@ static int rmsnorm(tensor_table in, const uint64_t *s, int backward,
     for (size_t d = 0; d < width; ++d) {
       const size_t i = start + d;
       const float norm = x[i] * rstd;
-      result[0][i] = backward ? (upstream[i] * gamma[d] - norm * mean) * rstd
+      const float value = backward
+                              ? (upstream[i] * gamma[d] - norm * mean) * rstd
                               : norm * gamma[d];
-      if (!isfinite(result[0][i]))
+      if (!isfinite(value))
         return 0;
+      if (result != NULL)
+        result[0][i] = value;
     }
   }
   return 1;
 }
 
 static int swiglu(tensor_table in, const uint64_t *s, int backward,
-                  result_buffers result) {
+                  float *const *result) {
   const float *gate = view_at(in, 0u)->data;
   const float *up = view_at(in, 1u)->data;
   const float *upstream = backward ? view_at(in, 2u)->data : NULL;
@@ -485,6 +494,7 @@ static int swiglu(tensor_table in, const uint64_t *s, int backward,
     const float silu = gate[i] * sig;
     if (!isfinite(sig) || !isfinite(silu))
       return 0;
+    float value;
     if (backward) {
       const float complement = 1.0f - sig;
       const float scaled_gate = gate[i] * complement;
@@ -494,15 +504,19 @@ static int swiglu(tensor_table in, const uint64_t *s, int backward,
       if (!isfinite(complement) || !isfinite(scaled_gate) ||
           !isfinite(correction) || !isfinite(slope) || !isfinite(weighted))
         return 0;
-      result[0][i] = weighted * slope;
-      result[1][i] = upstream[i] * silu;
-      if (!isfinite(result[1][i]))
+      value = weighted * slope;
+      const float dup = upstream[i] * silu;
+      if (!isfinite(dup))
         return 0;
+      if (result != NULL)
+        result[1][i] = dup;
     } else {
-      result[0][i] = silu * up[i];
+      value = silu * up[i];
     }
-    if (!isfinite(result[0][i]))
+    if (!isfinite(value))
       return 0;
+    if (result != NULL)
+      result[0][i] = value;
   }
   return 1;
 }
@@ -542,8 +556,8 @@ static int finite_dot(const float *a, const float *b, size_t count,
 }
 
 static int attention_row(const attention *a, size_t n, size_t h, size_t q,
-                         result_buffers result) {
-  const size_t head = h / (a->hq / a->hkv);
+                         const float *key, const float *value, float *out,
+                         float *dk, float *dv) {
   const size_t qi = ((n * a->hq + h) * a->tq + q) * a->dh;
   const int64_t query_pos = a->query_pos[n * a->tq + q];
   size_t indices[MAX_KEYS];
@@ -562,9 +576,9 @@ static int attention_row(const attention *a, size_t n, size_t h, size_t q,
         -delta >= a->window)
       continue;
 
-    const size_t ki = ((n * a->hkv + head) * a->tk + k) * a->dh;
+    const size_t ki = k * a->dh;
     float dot;
-    if (!finite_dot(a->q + qi, a->k + ki, a->dh, &dot))
+    if (!finite_dot(a->q + qi, key + ki, a->dh, &dot))
       return 0;
     const float scaled = dot * a->scale;
     const float bias = a->slopes[h] * (float)delta;
@@ -596,15 +610,15 @@ static int attention_row(const attention *a, size_t n, size_t h, size_t q,
       return 0;
     probabilities[k] = probability;
     if (a->upstream != NULL) {
-      if (!finite_dot(a->upstream + qi, a->v + ki, a->dh, &dp[k]))
+      if (!finite_dot(a->upstream + qi, value + ki, a->dh, &dp[k]))
         return 0;
       mean_dp = mean_dp + probability * dp[k];
       if (!isfinite(mean_dp))
         return 0;
     } else {
       for (size_t d = 0; d < a->dh; ++d) {
-        result[0][qi + d] = result[0][qi + d] + probability * a->v[ki + d];
-        if (!isfinite(result[0][qi + d]))
+        out[d] = out[d] + probability * value[ki + d];
+        if (!isfinite(out[d]))
           return 0;
       }
     }
@@ -619,12 +633,10 @@ static int attention_row(const attention *a, size_t n, size_t h, size_t q,
       if (!isfinite(scaled_ds))
         return 0;
       for (size_t d = 0; d < a->dh; ++d) {
-        result[0][qi + d] = result[0][qi + d] + scaled_ds * a->k[ki + d];
-        result[1][ki + d] = result[1][ki + d] + scaled_ds * a->q[qi + d];
-        result[2][ki + d] =
-            result[2][ki + d] + probabilities[k] * a->upstream[qi + d];
-        if (!isfinite(result[0][qi + d]) || !isfinite(result[1][ki + d]) ||
-            !isfinite(result[2][ki + d]))
+        out[d] = out[d] + scaled_ds * key[ki + d];
+        dk[ki + d] = dk[ki + d] + scaled_ds * a->q[qi + d];
+        dv[ki + d] = dv[ki + d] + probabilities[k] * a->upstream[qi + d];
+        if (!isfinite(out[d]) || !isfinite(dk[ki + d]) || !isfinite(dv[ki + d]))
           return 0;
       }
     }
@@ -633,7 +645,7 @@ static int attention_row(const attention *a, size_t n, size_t h, size_t q,
 }
 
 static int variant_attention(tensor_table in, const uint64_t *s, int backward,
-                             result_buffers result) {
+                             float *const *result) {
   const attention a = {.n = s[0],
                        .hq = s[1],
                        .hkv = s[2],
@@ -657,11 +669,25 @@ static int variant_attention(tensor_table in, const uint64_t *s, int backward,
     if (a.mask[i] > 1u)
       return 0;
   }
+  /* Each KV head owns all its shared accumulators. Traversing its contiguous
+     query-head group preserves the original batch/head/token order. */
+  const size_t group_size = a.hq / a.hkv;
   for (size_t n = 0; n < a.n; ++n) {
-    for (size_t h = 0; h < a.hq; ++h) {
-      for (size_t q = 0; q < a.tq; ++q) {
-        if (!attention_row(&a, n, h, q, result))
-          return 0;
+    for (size_t head = 0; head < a.hkv; ++head) {
+      const size_t offset = (n * a.hkv + head) * a.tk * a.dh;
+      float dk_scratch[MAX_KEYS * MAX_HEAD_DIM] = {0.0f};
+      float dv_scratch[MAX_KEYS * MAX_HEAD_DIM] = {0.0f};
+      float *dk = result != NULL && backward ? result[1] + offset : dk_scratch;
+      float *dv = result != NULL && backward ? result[2] + offset : dv_scratch;
+      for (size_t h = head * group_size; h < (head + 1u) * group_size; ++h) {
+        for (size_t q = 0; q < a.tq; ++q) {
+          const size_t qi = ((n * a.hq + h) * a.tq + q) * a.dh;
+          float row_scratch[MAX_HEAD_DIM] = {0.0f};
+          float *row = result != NULL ? result[0] + qi : row_scratch;
+          if (!attention_row(&a, n, h, q, a.k + offset, a.v + offset, row,
+                             dk, dv))
+            return 0;
+        }
       }
     }
   }
@@ -705,10 +731,10 @@ static int request_admitted(const et_kernel_request_v1 *request,
 }
 
 static int evaluate(const et_kernel_call_v1 *call, enum primitive op,
-                    int backward, result_buffers result) {
+                    int backward, float *const *result) {
   const tensor_table in = inputs(call);
   const uint64_t *shape = call->request->shape;
-  if (!finite_inputs(in))
+  if (result == NULL && !finite_inputs(in))
     return 0;
   switch (op) {
   case RMSNORM:
@@ -768,46 +794,53 @@ static int32_t validate_call(const et_kernel_call_v1 *call,
   if (status != 0)
     return status;
 
+  const int saved_errno = errno;
   fenv_t environment;
-  if (!fp_environment_supported() || fegetenv(&environment) != 0)
+  if (!fp_environment_supported() || fegetenv(&environment) != 0) {
+    errno = saved_errno;
     return fail(error, ET_KERNEL_ERROR_UNSUPPORTED,
                 ET_KERNEL_CODE_PROVIDER_REJECTED, operation,
                 "unsupported or unreadable floating-point environment");
+  }
 
-  result_buffers result = {{0.0f}};
-  const int saved_errno = errno;
-  const int valid = evaluate(call, op, backward, result);
+  const int valid = evaluate(call, op, backward, NULL);
   const int restored = fesetenv(&environment);
-  errno = saved_errno;
+  int32_t numeric_status = 0;
   if (restored != 0)
-    return fail(error, ET_KERNEL_ERROR_INTERNAL,
-                ET_KERNEL_CODE_PROVIDER_REJECTED, operation,
-                "floating-point environment could not be restored");
-  if (!valid)
-    return rejected(error, operation,
-                    "invalid numeric input or nonfinite evaluation");
-  et_kernel_error_clear(error);
-  return 0;
+    numeric_status = fail(error, ET_KERNEL_ERROR_INTERNAL,
+                          ET_KERNEL_CODE_PROVIDER_REJECTED, operation,
+                          "floating-point environment could not be restored");
+  else if (!valid)
+    numeric_status = rejected(error, operation,
+                              "invalid numeric input or nonfinite evaluation");
+  else
+    et_kernel_error_clear(error);
+  errno = saved_errno;
+  return numeric_status;
 }
 
 static void invoke_call(const et_kernel_call_v1 *call) {
   enum primitive op;
   int backward;
-  result_buffers result = {{0.0f}};
-  /* K1 keeps descriptors, data and FP controls stable between both phases. */
-  if (!find_operation(call, &op, &backward) ||
-      !evaluate(call, op, backward, result))
+  if (!find_operation(call, &op, &backward))
     return;
   const tensor_table out = outputs(call);
-  void *destinations[MAX_OUTPUTS];
+  float *destinations[MAX_OUTPUTS];
   size_t lengths[MAX_OUTPUTS];
   for (size_t i = 0; i < out.count; ++i) {
     const et_kernel_tensor_view_v1 *view = view_at(out, i);
     destinations[i] = view->data;
     lengths[i] = view->byte_length;
   }
-  for (size_t i = 0; i < out.count; ++i)
-    memcpy(destinations[i], result[i], lengths[i]);
+  /* K1 keeps descriptors, inputs and FP controls stable after preflight.
+     Only reduction outputs need initialization before the direct write. */
+  if (op == ATTENTION) {
+    for (size_t i = 0; i < out.count; ++i)
+      memset(destinations[i], 0, lengths[i]);
+  } else if (op == RMSNORM && backward) {
+    memset(destinations[1], 0, lengths[1]);
+  }
+  (void)evaluate(call, op, backward, destinations);
 }
 
 static const et_kernel_provider_v1 provider = {
