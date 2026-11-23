@@ -14,6 +14,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#if defined(__x86_64__)
+#include <xmmintrin.h>
+#endif
+
 #define CHECK(condition) do { \
   if (!(condition)) { \
     fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #condition); \
@@ -298,6 +302,21 @@ static void test_invalid_metrics(void) {
   }
   logits[1] = FLT_MAX;
   CHECK(et_eval5_score_lm(&sequence, 1, &lm) == ET_EVAL5_ERR_OVERFLOW);
+  logits[1] = 1000.0f;
+  CHECK(feclearexcept(FE_OVERFLOW) == 0);
+  CHECK(et_eval5_score_lm(&sequence, 1, &lm) == ET_EVAL5_ERR_OVERFLOW);
+  CHECK(fetestexcept(FE_OVERFLOW) == 0);
+#if defined(__x86_64__)
+  const unsigned saved_mxcsr = _mm_getcsr();
+  const unsigned unmasked = saved_mxcsr & ~(_MM_MASK_OVERFLOW | _MM_EXCEPT_OVERFLOW);
+  _mm_setcsr(unmasked);
+  et_eval5_status lm_status = et_eval5_score_lm(&sequence, 1, &lm);
+  et_eval5_status mc_status = et_eval5_score_mc(&choice, 1, 0, &mc);
+  const unsigned after_mxcsr = _mm_getcsr();
+  _mm_setcsr(saved_mxcsr);
+  CHECK(lm_status == ET_EVAL5_ERR_FP_ENV && mc_status == ET_EVAL5_ERR_FP_ENV);
+  CHECK(after_mxcsr == unmasked);
+#endif
   logits[1] = 1.0f;
 
   choice.choice_count = 0;
@@ -323,6 +342,63 @@ static void make_path(char *out, size_t capacity, const char *directory,
                       const char *name) {
   int length = snprintf(out, capacity, "%s/%s", directory, name);
   CHECK(length > 0 && (size_t)length < capacity);
+}
+
+static void replace_float_field(char *record, const char *key, double value) {
+  char *field = strstr(record, key);
+  CHECK(field != NULL);
+  uint64_t bits;
+  memcpy(&bits, &value, sizeof(bits));
+  char hex[17];
+  CHECK(snprintf(hex, sizeof(hex), "%016" PRIx64, bits) == 16);
+  memcpy(field + strlen(key), hex, 16);
+}
+
+static void test_invalid_lm_manifest(const et_eval5_manifest *manifest,
+                                    const char *path) {
+  const double ln2 = 0x1.62e42fefa39efp-1;
+  const struct {
+    et_eval5_lm_metrics lm;
+    const char *checksum;
+  } cases[] = {
+      /* Digests independently computed with Python hashlib.sha256. */
+      {{1, 1, 0, 0, 2, 1},
+       "03333a702c729b18176ad580bcb2e6a77a12e8d7ca8dad0ad5ed783fa9264480"},
+      {{1, 1, ln2, ln2, 2, 1.25},
+       "cf3047503a5b0d5c585e90c71801421c81422b3042e961ddc0dd9abc7126342d"},
+      {{1, 1, ln2, ln2, 3, 1},
+       "1727079365b786559dde1e7052ee9850549fb1b62c08b55a65eb0989c6e68ec7"},
+      {{1, 1, 1000, 1000, DBL_MAX, 0x1.68ac7b8cc7decp+10},
+       "d2d17bfcc7f598ab232f2c1702c88563c442c232132373e4f668ba257579a12a"},
+  };
+  et_eval5_manifest record = *manifest;
+  record.lm = (et_eval5_lm_metrics){1, 1, 0, 0, 1, 0};
+  char canonical[ET_EVAL5_MANIFEST_MAX_BYTES + 1u];
+  char changed[sizeof(canonical)];
+  size_t size;
+  et_eval5_manifest parsed;
+  CHECK(et_eval5_manifest_format(&record, canonical, sizeof(canonical), &size) == ET_EVAL5_OK);
+  CHECK(et_eval5_manifest_parse(canonical, size, &parsed) == ET_EVAL5_OK);
+
+  for (size_t i = 0; i < COUNT(cases); ++i) {
+    record.lm = cases[i].lm;
+    size_t rejected_size = 0;
+    CHECK(et_eval5_manifest_format(&record, changed, sizeof(changed),
+                                  &rejected_size) == ET_EVAL5_ERR_FORMAT);
+    CHECK(et_eval5_manifest_write_atomic(path, &record) == ET_EVAL5_ERR_FORMAT);
+
+    memcpy(changed, canonical, size + 1);
+    replace_float_field(changed, "lm.total_nll=", record.lm.total_nll);
+    replace_float_field(changed, "lm.mean_nll=", record.lm.mean_nll);
+    replace_float_field(changed, "lm.perplexity=", record.lm.perplexity);
+    replace_float_field(changed, "lm.bits_per_byte=", record.lm.bits_per_byte);
+    CHECK(et_eval5_manifest_parse(changed, size, &parsed) == ET_EVAL5_ERR_CHECKSUM);
+    const char key[] = "manifest_sha256=";
+    char *checksum = strstr(changed, key);
+    CHECK(checksum != NULL);
+    memcpy(checksum + sizeof(key) - 1, cases[i].checksum, 2 * ET_EVAL5_SHA256_BYTES);
+    CHECK(et_eval5_manifest_parse(changed, size, &parsed) == ET_EVAL5_ERR_FORMAT);
+  }
 }
 
 static void test_manifest(et_eval5_manifest *manifest, const char *directory) {
@@ -432,6 +508,7 @@ static void test_manifest(et_eval5_manifest *manifest, const char *directory) {
   invalid = *manifest;
   invalid.context_length = 0;
   CHECK(et_eval5_manifest_write_atomic(path, &invalid) == ET_EVAL5_ERR_FORMAT);
+  test_invalid_lm_manifest(manifest, path);
   CHECK(et_eval5_manifest_read_file(path, &parsed) == ET_EVAL5_OK);
   CHECK(et_eval5_manifest_format(&parsed, changed, sizeof(changed), &other_size) == ET_EVAL5_OK);
   CHECK(size == other_size && memcmp(canonical, changed, size + 1) == 0);

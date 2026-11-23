@@ -6,7 +6,11 @@ and a checksummed provenance record. The public header also compiles as C++17.
 Build the archive with `bash scripts/build-eval5.sh` and link
 `build/eval5/libeshkol_eval5.a` with `-lm`. The library requires POSIX.1-2008
 file operations, IEEE binary32 and binary64, and round-to-nearest arithmetic
-with gradual underflow. The build disables fast math and contraction.
+with masked floating-point exceptions and gradual underflow. On x86-64 the
+library checks the x87 and MXCSR controls and returns `ET_EVAL5_ERR_FP_ENV`
+for unsupported settings without changing them. On other architectures it
+checks the rounding mode, and callers must ensure the remaining settings.
+The build disables fast math and contraction.
 
 ## Audit and scoring
 
@@ -98,10 +102,15 @@ digit first order. Metric fields for disabled adapters use positive zero.
 The SHA-256 covers the entire prefix through the LF immediately preceding the
 checksum line. There are no trailing bytes or NUL terminators in the file.
 The decoder checks the fixed schema, length, digest, value ranges, and count
-relationships. The record is data only. The runner supplies trusted input
-digests and is responsible for associating them with the data it actually
-scored. The manifest stores the audit summary. The audit API returns the
-individual contaminated indices.
+relationships. Enabled LM metrics require positive token and byte counts.
+If either NLL is zero, both NLLs and bits per byte must be zero and perplexity
+must be one. Otherwise the mean must equal total NLL divided by token count.
+Perplexity and bits per byte must match their derived values within
+`1e-9 * max(1, expected)`. Validation rejects a positive subnormal total NLL
+whose mean rounds to zero. The record is data only. The runner supplies
+trusted input digests and is responsible for associating them with the data
+it actually scored. The manifest stores the audit summary. The audit API
+returns the individual contaminated indices.
 
 `et_eval5_manifest_format` supports a size query, then emits the complete
 record and a convenience NUL outside the record length.
