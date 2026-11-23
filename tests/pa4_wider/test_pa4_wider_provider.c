@@ -402,6 +402,14 @@ static void structural_cases(const et_kernel_provider_v1 *p,
               memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
           "malformed output_bytes preserves aliased output");
   *call = good_call;
+  /* Truncated stride padding with a complete v1.0 descriptor prefix must still
+   * preserve the aliased output. */
+  call->output_stride = sizeof(et_kernel_tensor_view_v1) + 8u;
+  call->output_bytes = sizeof(et_kernel_tensor_view_v1);
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "truncated stride padding preserves aliased output");
+  *call = good_call;
   /* Excessive output count must still preserve readable outputs. */
   et_kernel_tensor_view_v1 extra_out[4] = {good_output, good_output,
                                            good_output, good_output};
