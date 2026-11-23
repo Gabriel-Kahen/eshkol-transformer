@@ -3,7 +3,6 @@
 #include "eshkol_transformer/eval5_benchmark_abi.h"
 
 #include <errno.h>
-#include <fenv.h>
 #include <fcntl.h>
 #include <float.h>
 #include <inttypes.h>
@@ -14,6 +13,12 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#if defined(__x86_64__)
+#include <xmmintrin.h>
+#else
+#include <fenv.h>
+#endif
 
 _Static_assert(CHAR_BIT == 8 && sizeof(size_t) <= sizeof(uint64_t),
                "EVAL5 requires 8-bit bytes and at most 64-bit size_t");
@@ -147,6 +152,21 @@ static int valid_policy(const et_eval5_contamination_config *config) {
 static double fraction(uint64_t numerator, uint64_t denominator) {
   return (double)numerator / (double)denominator;
 }
+
+static int fp_environment_supported(void) {
+#if defined(__x86_64__)
+  uint16_t x87;
+  __asm__ volatile("fnstcw %0" : "=m"(x87));
+  /* Round to nearest, mask exceptions, and preserve subnormals. */
+  return (x87 & 0x0c3fu) == 0x003fu && (_mm_getcsr() & 0xffc0u) == 0x1f80u;
+#else
+  return fegetround() == FE_TONEAREST;
+#endif
+}
+
+static const double ln2 = 0x1.62e42fefa39efp-1;
+/* Binary64 input limit for exp before it overflows under round to nearest. */
+static const double max_perplexity_exponent = 709.782712893384;
 
 typedef struct {
   uint8_t digest[ET_EVAL5_SHA256_BYTES];
@@ -291,10 +311,10 @@ et_eval5_status et_eval5_audit_contamination(
     uint64_t *contaminated_indices, size_t index_capacity,
     et_eval5_contamination_summary *out) {
   if (config == NULL || out == NULL || eval == NULL || eval_count == 0 ||
-      contaminated_indices == NULL || (train == NULL && train_count != 0) ||
-      !valid_policy(config))
+      contaminated_indices == NULL || (train == NULL && train_count != 0))
     return ET_EVAL5_ERR_ARGUMENT;
-  if (fegetround() != FE_TONEAREST) return ET_EVAL5_ERR_FP_ENV;
+  if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
+  if (!valid_policy(config)) return ET_EVAL5_ERR_ARGUMENT;
   if (train_count > PTRDIFF_MAX / sizeof(*train) ||
       train_count > PTRDIFF_MAX / sizeof(document_key) ||
       eval_count > PTRDIFF_MAX / sizeof(*eval) ||
@@ -403,16 +423,15 @@ static et_eval5_status sequence_nll(const et_eval5_sequence *sequence,
 et_eval5_status et_eval5_score_lm(const et_eval5_sequence *sequence,
                                  uint64_t byte_count, et_eval5_lm_metrics *out) {
   if (out == NULL || byte_count == 0) return ET_EVAL5_ERR_ARGUMENT;
-  if (fegetround() != FE_TONEAREST) return ET_EVAL5_ERR_FP_ENV;
+  if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
   double total;
   et_eval5_status status = sequence_nll(sequence, &total);
   if (status != ET_EVAL5_OK) return status;
 
   double mean = total / (double)sequence->token_count;
+  if (mean > max_perplexity_exponent) return ET_EVAL5_ERR_OVERFLOW;
   double perplexity = exp(mean);
   if (!isfinite(perplexity)) return ET_EVAL5_ERR_OVERFLOW;
-  /* Correctly rounded binary64 ln(2). */
-  const double ln2 = 0x1.62e42fefa39efp-1;
   double bytes_per_token = fraction(byte_count, sequence->token_count);
   *out = (et_eval5_lm_metrics){
       .token_count = sequence->token_count,
@@ -430,7 +449,7 @@ et_eval5_status et_eval5_score_mc(const et_eval5_choice_item *items,
                                  et_eval5_mc_metrics *out) {
   if (items == NULL || item_count == 0 || normalize_by_length > 1 || out == NULL)
     return ET_EVAL5_ERR_ARGUMENT;
-  if (fegetround() != FE_TONEAREST) return ET_EVAL5_ERR_FP_ENV;
+  if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
   if (item_count > PTRDIFF_MAX / sizeof(*items)) return ET_EVAL5_ERR_OVERFLOW;
 
   uint64_t correct = 0;
@@ -536,8 +555,21 @@ static int valid_lm(const et_eval5_lm_metrics *lm, int enabled) {
   if (!enabled)
     return lm->token_count == 0 && lm->byte_count == 0 && lm->total_nll == 0.0 &&
            lm->mean_nll == 0.0 && lm->perplexity == 0.0 && lm->bits_per_byte == 0.0;
-  return lm->token_count != 0 && lm->byte_count != 0 && lm->perplexity >= 1.0 &&
-         lm->mean_nll == lm->total_nll / (double)lm->token_count;
+  if (lm->token_count == 0 || lm->byte_count == 0 || lm->perplexity < 1.0)
+    return 0;
+  if (lm->total_nll == 0.0 || lm->mean_nll == 0.0)
+    return lm->total_nll == 0.0 && lm->mean_nll == 0.0 &&
+           lm->perplexity == 1.0 && lm->bits_per_byte == 0.0;
+  if (lm->mean_nll > max_perplexity_exponent ||
+      lm->mean_nll != lm->total_nll / (double)lm->token_count)
+    return 0;
+
+  double perplexity = exp(lm->mean_nll);
+  double bits_per_byte = lm->total_nll / (ln2 * (double)lm->byte_count);
+  return isfinite(perplexity) &&
+         fabs(lm->perplexity - perplexity) <= 1e-9 * perplexity &&
+         fabs(lm->bits_per_byte - bits_per_byte) <=
+             1e-9 * (bits_per_byte > 1.0 ? bits_per_byte : 1.0);
 }
 
 static int valid_mc(const et_eval5_manifest *manifest) {
@@ -569,7 +601,7 @@ static et_eval5_status validate_manifest(const et_eval5_manifest *manifest) {
   if (manifest->version_major != ET_EVAL5_VERSION_MAJOR ||
       manifest->version_minor != ET_EVAL5_VERSION_MINOR)
     return ET_EVAL5_ERR_VERSION;
-  if (fegetround() != FE_TONEAREST) return ET_EVAL5_ERR_FP_ENV;
+  if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
   if (!valid_name(manifest->suite) || !valid_name(manifest->task) ||
       !valid_name(manifest->split) || manifest->context_length == 0 ||
       !valid_policy(&manifest->contamination) || manifest->metric_mask == 0 ||
