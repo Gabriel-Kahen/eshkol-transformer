@@ -158,7 +158,11 @@ static int aliases_table(span target, table views, size_t max_count,
       views.stride % alignment != 0u ||
       !aligned_span(views.storage.start, alignment, views.storage.bytes))
     return 0;
-  const size_t readable = views.storage.bytes / views.stride;
+  const size_t readable =
+      views.storage.bytes >= ET_KERNEL_TENSOR_VIEW_V1_0_SIZE
+          ? 1u + (views.storage.bytes - ET_KERNEL_TENSOR_VIEW_V1_0_SIZE) /
+                     views.stride
+          : 0u;
   size_t count = views.count < readable ? views.count : readable;
   if (count > max_count)
     count = max_count;

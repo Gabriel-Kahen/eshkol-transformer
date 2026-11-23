@@ -202,9 +202,9 @@ log SHA-256
 `cdb442ea7a39cbe15d07b7f7f55a81be3ace2a462f4a6642a1c446e01db15d76`. A subsequent
 direct-validation alias-hardening commit updated `aliases_table`/`aliases_call`
 only (provider source SHA-256
-`291afecd59a7ea439f378f3ade7e0213ac3e85d51796f149ac51ca640d581079`, reproducible
+`f3685936bd208bb4696868a6f26b5eb1486a2e0ff6c95afe725784c4293e594e`, reproducible
 archive SHA-256
-`d0d564fd90f656d691556415e3e87611015a097882e12aca1d55ab78e9bb68fe`) and
+`4c59b935e99b84b3401538d43f17c15675c62f5fee286c4149c3b0a97e1eaa91`) and
 re-verified the full conformance, sanitizer, and 864-sample benchmark suite in
 `eshkol-r0-debug:20260928`.
 
