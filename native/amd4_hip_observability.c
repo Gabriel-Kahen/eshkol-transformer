@@ -30,7 +30,9 @@ static int overlaps(const void *a, size_t a_size, const void *b,
                     size_t b_size) {
   const uintptr_t a_start = (uintptr_t)a;
   const uintptr_t b_start = (uintptr_t)b;
-  return a_start < b_start + b_size && b_start < a_start + a_size;
+  return a != NULL && b != NULL && a_size != 0 && b_size != 0 &&
+         (a_start <= b_start ? b_start - a_start < a_size
+                             : a_start - b_start < b_size);
 }
 
 static int valid_target(int32_t ordinal, const et_amd4_report_v1 *report) {
@@ -161,15 +163,12 @@ static void probe_rocblas_handle(const et_amd4_ops_v1 *ops,
   void *handle = NULL;
   device->rocblas_create_result =
       rocblas_result(ops->rocblas_create_handle(ops->context, &handle));
-  if (device->rocblas_create_result.status != ET_AMD4_OK) {
-    return;
-  }
-  if (handle == NULL) {
+  if (handle != NULL) {
+    device->rocblas_destroy_result =
+        rocblas_result(ops->rocblas_destroy_handle(ops->context, handle));
+  } else if (device->rocblas_create_result.status == ET_AMD4_OK) {
     device->rocblas_create_result.status = ET_AMD4_ERR_ROCBLAS_UNAVAILABLE;
-    return;
   }
-  device->rocblas_destroy_result =
-      rocblas_result(ops->rocblas_destroy_handle(ops->context, handle));
 }
 
 static et_amd4_result_v1 probe_version(void *context,
@@ -413,12 +412,10 @@ static int32_t live_blas_version(void *context, char *version,
   return ((live_api *)context)->blas_version(version, capacity);
 }
 
-static int32_t live_blas_create(void *context, void **out) {
+static int32_t live_blas_create(void *context, void **out_handle) {
   rocblas_handle handle = NULL;
   const int32_t code = ((live_api *)context)->blas_create(&handle);
-  if (code == 0) {
-    *out = handle;
-  }
+  *out_handle = handle;
   return code;
 }
 
@@ -476,8 +473,8 @@ et_amd4_status et_amd4_probe_v1(int32_t ordinal, et_amd4_report_v1 *report) {
     return ET_AMD4_ERR_INVALID_ARG;
   }
   const et_amd4_kfd_state kfd = kfd_state();
-  void *hip = dlopen("libamdhip64.so", RTLD_LAZY | RTLD_LOCAL);
-  void *rocblas = dlopen("librocblas.so", RTLD_LAZY | RTLD_LOCAL);
+  void *hip = dlopen("libamdhip64.so", RTLD_NOW | RTLD_LOCAL);
+  void *rocblas = dlopen("librocblas.so", RTLD_NOW | RTLD_LOCAL);
   live_api api = {0};
   const et_amd4_ops_v1 ops = {
       .struct_size = sizeof(ops),
@@ -735,9 +732,107 @@ et_amd4_status et_amd4_format_report_v1(const et_amd4_report_v1 *report,
   return write.failed ? ET_AMD4_ERR_DRIVER_FAILURE : ET_AMD4_OK;
 }
 
+typedef struct {
+  const void *start;
+  size_t bytes;
+} span;
+
+static int overlaps_span(span target, const void *start, size_t bytes) {
+  return overlaps(target.start, target.bytes, start, bytes);
+}
+
+static int overlaps_text(span target, const char *text) {
+  const size_t capacity = ET_KERNEL_MAX_SYMBOL_BYTES + 1u;
+  if (!overlaps_span(target, text, capacity) ||
+      !valid_storage(text, capacity, _Alignof(char))) {
+    return 0;
+  }
+  for (size_t i = 0; i < capacity; ++i) {
+    if (text[i] == '\0') {
+      return overlaps_span(target, text, i + 1u);
+    }
+  }
+  return 1;
+}
+
+static int overlaps_shape(span target, const uint64_t *shape, size_t rank) {
+  return rank <= SIZE_MAX / sizeof(*shape) &&
+         overlaps_span(target, shape, rank * sizeof(*shape));
+}
+
+static int aliases_table(span target, const void *base, size_t bytes,
+                         size_t count, size_t stride) {
+  if (overlaps_span(target, base, bytes)) {
+    return 1;
+  }
+  const size_t prefix = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE;
+  const size_t alignment = _Alignof(et_kernel_tensor_view_v1);
+  if (bytes < prefix || stride < prefix || stride % alignment != 0 ||
+      !valid_storage(base, bytes, alignment)) {
+    return 0;
+  }
+  /* Even a truncated final stride can contain an entire v1.0 descriptor. */
+  const size_t readable = 1u + (bytes - prefix) / stride;
+  for (size_t i = 0; i < count && i < readable; ++i) {
+    const et_kernel_tensor_view_v1 *view =
+        (const void *)((const unsigned char *)base + i * stride);
+    if (view->struct_size >= prefix &&
+        (overlaps_span(target, view->data, view->byte_length) ||
+         overlaps_shape(target, view->shape, view->rank) ||
+         overlaps_text(target, view->dtype) ||
+         overlaps_text(target, view->device))) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int aliases_request(span target, const et_kernel_request_v1 *request) {
+  if (overlaps_span(target, request, sizeof(size_t))) {
+    return 1;
+  }
+  const size_t alignment = _Alignof(et_kernel_request_v1);
+  if (!valid_storage(request, sizeof(size_t), alignment)) {
+    return 0;
+  }
+  if (overlaps_span(target, request, request->struct_size)) {
+    return 1;
+  }
+  const size_t prefix = ET_KERNEL_REQUEST_V1_0_SIZE;
+  return request->struct_size >= prefix &&
+         valid_storage(request, prefix, alignment) &&
+         (overlaps_shape(target, request->shape, request->rank) ||
+          overlaps_text(target, request->operation) ||
+          overlaps_text(target, request->dtype) ||
+          overlaps_text(target, request->device));
+}
+
+static int aliases_call(span target, const et_kernel_call_v1 *call) {
+  if (overlaps_span(target, call, sizeof(size_t))) {
+    return 1;
+  }
+  const size_t alignment = _Alignof(et_kernel_call_v1);
+  if (!valid_storage(call, sizeof(size_t), alignment)) {
+    return 0;
+  }
+  if (overlaps_span(target, call, call->struct_size)) {
+    return 1;
+  }
+  const size_t prefix = ET_KERNEL_CALL_V1_0_SIZE;
+  return call->struct_size >= prefix && valid_storage(call, prefix, alignment) &&
+         (aliases_request(target, call->request) ||
+          aliases_table(target, call->outputs, call->output_bytes,
+                        call->output_count, call->output_stride) ||
+          aliases_table(target, call->inputs, call->input_bytes,
+                        call->input_count, call->input_stride) ||
+          overlaps_text(target, call->capability));
+}
+
 static int32_t reject_call(const et_kernel_call_v1 *call,
                            et_kernel_error *error) {
-  (void)call;
+  if (error != NULL && aliases_call((span){error, sizeof(*error)}, call)) {
+    return ET_KERNEL_ERROR_UNSUPPORTED;
+  }
   if (error != NULL) {
     *error = (et_kernel_error){
         .category = ET_KERNEL_ERROR_UNSUPPORTED,

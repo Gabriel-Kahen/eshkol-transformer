@@ -32,6 +32,7 @@ typedef struct fixture {
   unsigned bad_memory;
   unsigned bad_version;
   unsigned null_handle;
+  unsigned handle_on_create_error;
   unsigned properties_calls;
   unsigned get_calls;
   unsigned set_calls;
@@ -42,6 +43,7 @@ typedef struct fixture {
   unsigned create_calls;
   int32_t create_devices[ET_AMD4_MAX_DEVICES];
   unsigned destroy_calls;
+  unsigned live_handles;
   int32_t handle_device;
 } fixture;
 
@@ -131,10 +133,12 @@ static int32_t fake_create(void *context, void **handle) {
   fixture *f = context;
   CHECK(f->create_calls <
         sizeof(f->create_devices) / sizeof(f->create_devices[0]));
+  CHECK(f->live_handles == 0 && *handle == NULL);
   f->create_devices[f->create_calls++] = f->active;
-  if (f->create_code == 0 && !f->null_handle) {
+  if (!f->null_handle && (f->create_code == 0 || f->handle_on_create_error)) {
     f->handle_device = f->active;
     *handle = &f->handle_device;
+    ++f->live_handles;
   }
   return f->create_code;
 }
@@ -142,6 +146,8 @@ static int32_t fake_create(void *context, void **handle) {
 static int32_t fake_destroy(void *context, void *handle) {
   fixture *f = context;
   CHECK(handle == &f->handle_device && f->handle_device == f->active);
+  CHECK(f->live_handles == 1);
+  --f->live_handles;
   ++f->destroy_calls;
   return f->destroy_code;
 }
@@ -409,6 +415,22 @@ static void test_library_failures(void) {
   CHECK(report.devices[0].rocblas_create_result.native_code == 6);
   CHECK(report.devices[0].rocblas_destroy_result.status == ET_AMD4_NOT_RUN);
   CHECK(f.create_calls == 1 && f.destroy_calls == 0);
+  f = (fixture){.count = 1, .create_code = 6, .handle_on_create_error = 1};
+  CHECK(et_amd4_probe_with_ops_v1(&ops, 0, &report) ==
+        ET_AMD4_ERR_ROCBLAS_UNAVAILABLE);
+  CHECK(report.devices[0].rocblas_create_result.native_code == 6);
+  CHECK(report.devices[0].rocblas_destroy_result.status == ET_AMD4_OK);
+  CHECK(f.create_calls == 1 && f.destroy_calls == 1 && f.live_handles == 0);
+  f = (fixture){.count = 1,
+                .create_code = 5,
+                .handle_on_create_error = 1,
+                .destroy_code = 6};
+  CHECK(et_amd4_probe_with_ops_v1(&ops, 0, &report) == ET_AMD4_ERR_ALLOC);
+  CHECK(report.devices[0].rocblas_create_result.native_code == 5);
+  CHECK(report.devices[0].rocblas_destroy_result.status ==
+        ET_AMD4_ERR_ROCBLAS_UNAVAILABLE);
+  CHECK(report.devices[0].rocblas_destroy_result.native_code == 6);
+  CHECK(f.create_calls == 1 && f.destroy_calls == 1 && f.live_handles == 0);
   f = (fixture){.count = 1, .create_code = 5};
   CHECK(et_amd4_probe_with_ops_v1(&ops, 0, &report) == ET_AMD4_ERR_ALLOC);
   CHECK(f.create_calls == 1 && f.destroy_calls == 0);
@@ -419,8 +441,12 @@ static void test_library_failures(void) {
   f = (fixture){.count = 2, .destroy_code = 6};
   CHECK(et_amd4_probe_with_ops_v1(&ops, 1, &report) ==
         ET_AMD4_ERR_ROCBLAS_UNAVAILABLE);
+  CHECK(report.devices[0].rocblas_create_result.status == ET_AMD4_OK);
+  CHECK(report.devices[0].rocblas_destroy_result.status ==
+        ET_AMD4_ERR_ROCBLAS_UNAVAILABLE);
   CHECK(report.devices[0].rocblas_destroy_result.native_code == 6);
-  CHECK(f.create_calls == 1 && f.destroy_calls == 1 && f.active == 0);
+  CHECK(f.create_calls == 1 && f.destroy_calls == 1 && f.live_handles == 0 &&
+        f.active == 0);
 }
 
 static void test_format(void) {
@@ -559,6 +585,93 @@ static const et_kernel_provider_v1 *resolve_provider(void *context,
   (void)context;
   CHECK(strcmp(symbol, ET_KERNEL_PROVIDER_SYMBOL_V1) == 0);
   return et_amd4_kernel_provider_v1();
+}
+
+static void check_direct_alias(const et_kernel_call_v1 *call,
+                               et_kernel_error *error) {
+  unsigned char before[sizeof(*error)];
+  memcpy(before, error, sizeof(before));
+  CHECK(et_amd4_kernel_provider_v1()->validate_call(call, error) ==
+        ET_KERNEL_ERROR_UNSUPPORTED);
+  CHECK(memcmp(error, before, sizeof(before)) == 0);
+}
+
+static void test_k1_direct_aliases(void) {
+  union {
+    et_kernel_error error;
+    et_kernel_call_v1 call;
+  } call_storage;
+  union {
+    et_kernel_error error;
+    et_kernel_request_v1 request;
+  } request_storage;
+  union {
+    et_kernel_error error;
+    et_kernel_tensor_view_v1 view;
+  } table_storage;
+  union {
+    et_kernel_error error;
+    uint64_t shape[2];
+    char text[sizeof(et_kernel_error)];
+  } buffer;
+  memset(&call_storage, 0xa5, sizeof(call_storage));
+  memset(&request_storage, 0xa5, sizeof(request_storage));
+  memset(&table_storage, 0xa5, sizeof(table_storage));
+  memset(&buffer, 0xa5, sizeof(buffer));
+  request_storage.request =
+      (et_kernel_request_v1){.struct_size = sizeof(request_storage.request)};
+  table_storage.view =
+      (et_kernel_tensor_view_v1){.struct_size = sizeof(table_storage.view)};
+  call_storage.call = (et_kernel_call_v1){
+      .struct_size = sizeof(call_storage.call),
+      .request = &request_storage.request,
+      .output_count = 1,
+      .output_stride = sizeof(table_storage.view),
+      .output_bytes = sizeof(table_storage.view),
+      .outputs = &table_storage.view,
+  };
+  et_kernel_call_v1 *call = &call_storage.call;
+  check_direct_alias(call, &call_storage.error);
+  check_direct_alias(call, &request_storage.error);
+  check_direct_alias(call, &table_storage.error);
+
+  table_storage.view.data = buffer.text + 16;
+  table_storage.view.byte_length = sizeof(buffer.text) - 16;
+  check_direct_alias(call, &buffer.error);
+
+  struct partial_output_table {
+    et_kernel_tensor_view_v1 first;
+    uint64_t padding;
+    et_kernel_tensor_view_v1 last;
+  } partial_table = {.first = {.struct_size = sizeof(table_storage.view)},
+                     .last = table_storage.view};
+  call->outputs = &partial_table;
+  call->output_count = SIZE_MAX;
+  call->output_stride = offsetof(struct partial_output_table, last);
+  call->output_bytes = sizeof(partial_table);
+  check_direct_alias(call, &buffer.error);
+
+  call->output_count = call->output_stride = call->output_bytes = 0;
+  call->outputs = NULL;
+  call->input_count = 1;
+  call->input_stride = call->input_bytes = sizeof(table_storage.view);
+  call->inputs = &table_storage.view;
+  check_direct_alias(call, &table_storage.error);
+  table_storage.view.data = NULL;
+  table_storage.view.byte_length = 0;
+  buffer.shape[0] = buffer.shape[1] = 1;
+  table_storage.view.shape = buffer.shape;
+  table_storage.view.rank = 2;
+  check_direct_alias(call, &buffer.error);
+  table_storage.view.shape = NULL;
+  table_storage.view.rank = 0;
+  memcpy(buffer.text + 16, "f32", sizeof("f32"));
+  table_storage.view.dtype = buffer.text + 16;
+  check_direct_alias(call, &buffer.error);
+  table_storage.view.dtype = NULL;
+  memcpy(buffer.text + 16, "amd", sizeof("amd"));
+  table_storage.view.device = buffer.text + 16;
+  check_direct_alias(call, &buffer.error);
 }
 
 static void test_k1(void) {
@@ -705,6 +818,7 @@ int main(void) {
   test_format();
   test_invalid_arguments();
   test_k1();
+  test_k1_direct_aliases();
   test_live();
   printf("AMD4 PASS: %u checks\n", checks);
   return EXIT_SUCCESS;

@@ -15,10 +15,11 @@ check. This check uses the caller's real IDs and cannot establish whether the
 driver will open the device in the current container.
 
 The probe opens `libamdhip64.so` and `librocblas.so` independently using
-`RTLD_LAZY | RTLD_LOCAL` and closes each acquired handle. Library state is
-`unavailable` when the named library fails to open, `missing-symbols` when
-an open library lacks a required export, or `ready` when all required exports
-resolve. The LP64 HIP adapter uses the versioned
+`RTLD_NOW | RTLD_LOCAL` and closes each acquired handle. Library state is
+`unavailable` when the named library fails to open, including due to
+unresolved dependencies, `missing-symbols` when an open library lacks a
+required export, or `ready` when all required exports resolve. The LP64 HIP
+adapter uses the versioned
 `hipGetDevicePropertiesR0600` entry point. The byte layout was checked against
 the AMD HIP 6.0.0, 6.4.3, and 7.2.0 declarations. Older runtimes without the
 R0600 export report an unavailable runtime. [HIP 6.0.0 ABI](https://github.com/ROCm/hip/blob/rocm-6.0.0/include/hip/hip_runtime_api.h), [HIP 6.4.3 ABI](https://github.com/ROCm/hip/blob/rocm-6.4.3/include/hip/hip_runtime_api.h), [HIP 7.2.0 ABI](https://github.com/ROCm/hip/blob/rocm-7.2.0/include/hip/hip_runtime_api.h)
@@ -82,9 +83,11 @@ marks the report `injected` so fixture data is identifiable. Initialize
 `ops->struct_size` to `sizeof(et_amd4_ops_v1)`. Supply all callbacks for each
 `READY` library, using zero for native success and native error codes
 otherwise. The table and callback context must stay valid for the call and use
-separate storage from the report. A successful create transfers a non-null
-handle into the probe, which calls destroy once before changing devices.
-Report fields and ABI layout are fixed for 1.0.
+separate storage from the report. The probe calls destroy once for every
+non-null handle returned by create before changing devices, including when
+create reports an error. The report records both raw statuses and prioritizes
+a create error over a destroy error for the same handle. Report fields and ABI
+layout are fixed for 1.0.
 
 `et_amd4_format_report_v1` emits LF-terminated ASCII beginning with
 `eshkol-transformer-amd4-observability:v1`. It uses a fixed field and row order,
@@ -106,7 +109,8 @@ an alias of the pinned K1 value `ET_KERNEL_CAPABILITY_UNSUPPORTED`
 including after a successful host probe. K1 dispatch rejects these entries
 with `ET_KERNEL_CODE_CAPABILITY_NOT_VERIFIED`. Direct provider validation
 always returns `ET_KERNEL_ERROR_UNSUPPORTED` and records
-`ET_KERNEL_CODE_PROVIDER_REJECTED` when an error output is supplied. Direct
+`ET_KERNEL_CODE_PROVIDER_REJECTED` when the supplied error output is disjoint
+from call, request, tensor table, and readable tensor storage. Direct
 invocation has no effect. Both paths preserve tensor data and have zero CPU
 fallback.
 

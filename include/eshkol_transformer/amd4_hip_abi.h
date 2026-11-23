@@ -100,9 +100,9 @@ typedef struct et_amd4_report_v1 {
 } et_amd4_report_v1;
 
 /* Callbacks return raw HIP or rocBLAS status codes and write outputs on
-   success. Supply every callback for each READY library. A successfully created
-   handle must be non-null and remains owned by the probe until destroy is
-   called. */
+   success. Supply every callback for each READY library. A successful handle
+   create must return a non-null handle. Any non-null handle written by create
+   is passed to destroy once, including when create reports an error. */
 typedef struct et_amd4_ops_v1 {
   size_t struct_size;
   void *context;
