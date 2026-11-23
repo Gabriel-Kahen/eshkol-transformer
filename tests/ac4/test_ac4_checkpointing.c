@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <xmmintrin.h>
 
 #pragma STDC FENV_ACCESS ON
 #pragma STDC FP_CONTRACT OFF
@@ -608,6 +609,26 @@ static void errors(void) {
                   1);
   CHECK(fegetround() == FE_DOWNWARD);
   CHECK(fesetround(FE_TONEAREST) == 0);
+
+  /* Subnormal epsilon must validate via integer bits without trapping when
+   * denormals are unmasked or being flushed to zero when DAZ is enabled. */
+  et_ac4_config_v1 subnormal_cfg = valid;
+  subnormal_cfg.epsilon = FLT_TRUE_MIN;
+  const unsigned int orig_mxcsr = _mm_getcsr();
+  /* Unmask denormal exception (clear bit 8 = 0x0100). */
+  _mm_setcsr(orig_mxcsr & ~0x0100u);
+  et_ac4_memory_v1 subnormal_plan;
+  CHECK(et_ac4_plan_v1(&subnormal_cfg, &subnormal_plan) == ET_AC4_OK);
+  expect_rejected(&trial, &subnormal_cfg, &trial.io, &trial.result,
+                  ET_AC4_UNSUPPORTED, 1);
+  CHECK(_mm_getcsr() == (orig_mxcsr & ~0x0100u));
+  /* Enable DAZ (set bit 6 = 0x0040). */
+  _mm_setcsr(orig_mxcsr | 0x0040u);
+  CHECK(et_ac4_plan_v1(&subnormal_cfg, &subnormal_plan) == ET_AC4_OK);
+  expect_rejected(&trial, &subnormal_cfg, &trial.io, &trial.result,
+                  ET_AC4_UNSUPPORTED, 1);
+  CHECK(_mm_getcsr() == (orig_mxcsr | 0x0040u));
+  _mm_setcsr(orig_mxcsr);
 
   /* Start with identity layers, then overflow a late forward projection. */
   for (size_t i = 0; i < data.x; ++i) {
