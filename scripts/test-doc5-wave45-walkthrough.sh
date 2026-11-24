@@ -162,38 +162,77 @@ for doc in \
   verify_doc_references "${doc}"
 done
 
-# 3. Verify complete coverage of all 28 integrated Wave 4/5 public ABI headers
-#    in both DOC5_API_REFERENCE.md and DOC5_WAVE45_GUIDE.md.
+# 3. Verify complete inventory coverage of all 57 public ABI headers in
+#    include/eshkol_transformer/ (13 Wave 0–3 + 44 Wave 4/5), ensuring every
+#    Wave 4/5 header appears in both DOC5_API_REFERENCE.md and
+#    DOC5_WAVE45_GUIDE.md and every native/*_eshkol_bridge.h bridge appears in
+#    DOC5_WAVE45_GUIDE.md.
+wave03_headers=(
+  include/eshkol_transformer/a2_attention_abi.h
+  include/eshkol_transformer/a2_kv_cache.h
+  include/eshkol_transformer/e3_evaluation_metrics_abi.h
+  include/eshkol_transformer/f32_tensor.h
+  include/eshkol_transformer/g3c4_primitives_abi.h
+  include/eshkol_transformer/g3n_primitives_abi.h
+  include/eshkol_transformer/g3s_sampling_abi.h
+  include/eshkol_transformer/i64_tensor.h
+  include/eshkol_transformer/indexed_cross_entropy.h
+  include/eshkol_transformer/kernel_abi.h
+  include/eshkol_transformer/l3s_masked_objective_abi.h
+  include/eshkol_transformer/n2_primitives_abi.h
+  include/eshkol_transformer/n3k_primitives_abi.h
+)
+
 wave45_headers=(
-  include/eshkol_transformer/mp4_mixed_precision_abi.h
   include/eshkol_transformer/ac4_checkpointing_abi.h
   include/eshkol_transformer/amd4_hip_abi.h
-  include/eshkol_transformer/pa4_wider_attention_abi.h
-  include/eshkol_transformer/dist5_collectives_abi.h
-  include/eshkol_transformer/eval5_benchmark_abi.h
-  include/eshkol_transformer/io5_quant_abi.h
+  include/eshkol_transformer/beam_search_abi.h
+  include/eshkol_transformer/constrained_decode_abi.h
+  include/eshkol_transformer/continuous_batch_abi.h
   include/eshkol_transformer/data4_pipeline_abi.h
-  include/eshkol_transformer/t2_bpe_trainer_abi.h
-  include/eshkol_transformer/mod5_rope_abi.h
-  include/eshkol_transformer/mod5_moe_abi.h
-  include/eshkol_transformer/mod5_mla_abi.h
+  include/eshkol_transformer/dist5_collectives_abi.h
+  include/eshkol_transformer/dpo_alignment_abi.h
+  include/eshkol_transformer/e2e_lifecycle_abi.h
+  include/eshkol_transformer/eval5_benchmark_abi.h
+  include/eshkol_transformer/flash_attn2_abi.h
+  include/eshkol_transformer/fp8_gemm_abi.h
+  include/eshkol_transformer/fsdp_zero_abi.h
+  include/eshkol_transformer/grpo_abi.h
+  include/eshkol_transformer/hybrid_mesh_abi.h
+  include/eshkol_transformer/io5_quant_abi.h
+  include/eshkol_transformer/kv_cache_quant_abi.h
+  include/eshkol_transformer/lora_adapter_abi.h
+  include/eshkol_transformer/mamba_ssm_abi.h
   include/eshkol_transformer/mod5_adamw_abi.h
   include/eshkol_transformer/mod5_generate_abi.h
+  include/eshkol_transformer/mod5_mla_abi.h
+  include/eshkol_transformer/mod5_moe_abi.h
+  include/eshkol_transformer/mod5_primitives_abi.h
+  include/eshkol_transformer/mod5_rope_abi.h
+  include/eshkol_transformer/mp4_mixed_precision_abi.h
+  include/eshkol_transformer/mtp_head_abi.h
+  include/eshkol_transformer/multi_lora_sgmv_abi.h
   include/eshkol_transformer/o2_muon_abi.h
-  include/eshkol_transformer/lora_adapter_abi.h
-  include/eshkol_transformer/dpo_alignment_abi.h
-  include/eshkol_transformer/grpo_abi.h
-  include/eshkol_transformer/spec_decode_abi.h
+  include/eshkol_transformer/pa4_attention_candidate.h
+  include/eshkol_transformer/pa4_wider_attention_abi.h
   include/eshkol_transformer/paged_kv_abi.h
-  include/eshkol_transformer/continuous_batch_abi.h
-  include/eshkol_transformer/constrained_decode_abi.h
-  include/eshkol_transformer/w4a32_quant_abi.h
-  include/eshkol_transformer/fp8_gemm_abi.h
-  include/eshkol_transformer/rope_yarn_abi.h
+  include/eshkol_transformer/pipeline_1f1b_abi.h
+  include/eshkol_transformer/ppo_rlhf_abi.h
+  include/eshkol_transformer/qlora_nf4_abi.h
+  include/eshkol_transformer/radix_kv_abi.h
   include/eshkol_transformer/ring_attn_abi.h
+  include/eshkol_transformer/rope_yarn_abi.h
+  include/eshkol_transformer/spec_decode_abi.h
+  include/eshkol_transformer/t2_bpe_trainer_abi.h
+  include/eshkol_transformer/tensor_parallel_abi.h
+  include/eshkol_transformer/unigram_tok_abi.h
+  include/eshkol_transformer/w4a32_quant_abi.h
   include/eshkol_transformer/wave4_composed_trainer_abi.h
-  include/eshkol_transformer/e2e_lifecycle_abi.h
 )
+
+for hdr in "${wave03_headers[@]}"; do
+  [[ -f "${hdr}" ]] || die "missing Wave 0-3 header on disk: ${hdr}"
+done
 
 for hdr in "${wave45_headers[@]}"; do
   [[ -f "${hdr}" ]] || die "missing Wave 4/5 header on disk: ${hdr}"
@@ -202,8 +241,34 @@ for hdr in "${wave45_headers[@]}"; do
   grep -Fq "${hdr}" docs/DOC5_WAVE45_GUIDE.md ||
     die "docs/DOC5_WAVE45_GUIDE.md missing Wave 4/5 header: ${hdr}"
 done
-printf 'DOC5 Wave 4/5 header inventory: verified %s/%s public ABI headers\n' \
-  "${#wave45_headers[@]}" "${#wave45_headers[@]}"
+
+declared_raw="${scratch}/declared-headers.raw"
+declared_sorted="${scratch}/declared-headers.sorted"
+disk_sorted="${scratch}/disk-headers.sorted"
+printf '%s\n' "${wave03_headers[@]}" "${wave45_headers[@]}" > "${declared_raw}"
+sort -u "${declared_raw}" > "${declared_sorted}"
+(( $(wc -l < "${declared_raw}") == $(wc -l < "${declared_sorted}") )) ||
+  die 'duplicate or overlapping entry between wave03_headers and wave45_headers'
+ls -1 include/eshkol_transformer/*.h | sort > "${disk_sorted}"
+if ! diff -u "${declared_sorted}" "${disk_sorted}" >&2; then
+  die 'include/eshkol_transformer/*.h inventory drift: every public ABI header must be classified in wave03_headers or wave45_headers'
+fi
+
+bridge_count=0
+for bridge in native/*_eshkol_bridge.h; do
+  [[ -f "${bridge}" ]] || die "missing bridge header: ${bridge}"
+  grep -Fq "${bridge}" docs/DOC5_WAVE45_GUIDE.md ||
+    die "docs/DOC5_WAVE45_GUIDE.md missing Eshkol AOT bridge: ${bridge}"
+  bridge_count=$((bridge_count + 1))
+done
+(( bridge_count > 0 )) || die 'no native/*_eshkol_bridge.h files found'
+
+total_headers=$(( ${#wave03_headers[@]} + ${#wave45_headers[@]} ))
+printf 'DOC5 header & bridge inventory: verified %s/%s Wave 4/5 headers, %s/%s total public ABI headers (%s Wave 0-3 + %s Wave 4/5), and %s Eshkol AOT bridges\n' \
+  "${#wave45_headers[@]}" "${#wave45_headers[@]}" \
+  "${total_headers}" "${total_headers}" \
+  "${#wave03_headers[@]}" "${#wave45_headers[@]}" \
+  "${bridge_count}"
 
 # 4. Live end-to-end verification pass on the documented walkthrough targets.
 run_make_gate() {
@@ -215,7 +280,7 @@ run_make_gate() {
 
 printf '\n== E2E 8-stage compiled Eshkol AOT LLM lifecycle ==\n'
 run_make_gate test-e2e-lifecycle \
-  'E2E_LIFECYCLE dual fresh AOT ELF \+ 5-process stdout byte-identical: PASS'
+  '^E2E_LIFECYCLE dual fresh AOT ELF \+ 5-process stdout byte-identical: PASS \(ELF SHA-256 [0-9a-f]{64}\)$'
 
 printf '\n== B0 Wave 5 11-engine native benchmark suite ==\n'
 run_make_gate test-b0-wave5 \

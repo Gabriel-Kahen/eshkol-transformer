@@ -223,13 +223,15 @@ bash scripts/test-doc5-wave45-walkthrough.sh
   two-run and sanitizer numerical checksum invariance. See
   [B0_WAVE5_BENCHMARKS.md](B0_WAVE5_BENCHMARKS.md).
 - **`bash scripts/test-doc5-wave45-walkthrough.sh`** programmatically verifies
-  every header path, doc link, script path, and `make` target referenced across
-  [DOC5_API_REFERENCE.md](DOC5_API_REFERENCE.md), this tutorial, and the
-  [Wave 4/5 operator guide](DOC5_WAVE45_GUIDE.md), then executes
+  every API row, header path, doc link, script path, and `make` target
+  referenced across [DOC5_API_REFERENCE.md](DOC5_API_REFERENCE.md), this
+  tutorial, and the [Wave 4/5 operator guide](DOC5_WAVE45_GUIDE.md), enforces
+  complete inventory coverage of all 57 public ABI headers (13 Wave 0–3 + 44
+  Wave 4/5) and all 40 compiled Eshkol AOT bridges, and then executes
   `make test-e2e-lifecycle`, `make test-b0-wave5`, `make test-python-isolation`,
   and `make test-ci-topology` in a fresh disposable checkout.
 
-For the full category-indexed directory of Wave 4/5 subsystems (Data &
-Tokenizer, Architecture, Optimizers, Alignment, Quantization, Distributed,
-Serving, Benchmarks, and Lifecycle), see
+For the full category-indexed directory of all 44 Wave 4/5 public ABI headers
+and 40 compiled Eshkol AOT bridges (Data & Tokenizer, Architecture, Optimizers,
+Alignment, Quantization, Distributed, Serving, Benchmarks, and Lifecycle), see
 [docs/DOC5_WAVE45_GUIDE.md](DOC5_WAVE45_GUIDE.md).

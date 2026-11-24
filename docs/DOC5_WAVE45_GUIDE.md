@@ -1,14 +1,17 @@
 # Wave 4/5 Operator Guide & Subsystem Index
 
-Source baseline `319c8822a78a5ce4811893a773681055f7a3b37e`. This guide indexes
-every Wave 4/5 native C11/C++17 subsystem, compiled Eshkol AOT bridge,
-benchmark suite, and end-to-end lifecycle test integrated on `HEAD`, with exact
-`Makefile` targets and links to each subsystem's specification.
+Source baseline `cd353fb5ade9587f77137b4e7099cdbd8fd34676`. This guide indexes
+all 44 Wave 4/5 public C11/C++17 ABI headers (across the 57 public ABI headers
+in `include/eshkol_transformer`), all 40 compiled Eshkol AOT bridges,
+benchmark suites, and the end-to-end lifecycle test integrated on `HEAD`, with
+exact `Makefile` targets and links to each subsystem's specification.
 
 All runtime execution described here runs on the pinned `x86_64` CPU lane
 (`eshkol-r0-debug:20260928`, Ubuntu 22.04, LLVM/Clang 21.1.8, Eshkol commit
-`fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`). No GPU execution, multi-node
-networking, or production-scale throughput claims are made.
+`fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`), using serial CPU-f32/CPU-f64
+execution or single-host multi-process `AF_UNIX` IPC where explicitly noted. No
+GPU execution, RDMA, multi-node networking, or production-scale throughput
+claims are made.
 
 ## Pinned Container Quick Start
 
@@ -35,9 +38,11 @@ make test-doc5
 | DATA4 Corpus Slice & Installed Report | `internal/data4/lib/data4_corpus.esk`, `internal/data4/lib/data4_report_reader.esk` | `make test-ci-data4-after-build`, `bash scripts/test-data4-source.sh`, `bash scripts/test-data4-native.sh` | [DATA4_CORPUS_SLICE.md](DATA4_CORPUS_SLICE.md), [DATA4_INSTALLED_REPORT.md](DATA4_INSTALLED_REPORT.md) |
 | DATA4 Quality, Dedup & Provenance Pipeline | `include/eshkol_transformer/data4_pipeline_abi.h`, `native/data4_pipeline_eshkol_bridge.h` | `make test-data4-pipeline` | [DATA4_CORPUS_PIPELINE.md](DATA4_CORPUS_PIPELINE.md) |
 | T2 Deterministic Byte-Level BPE Trainer | `include/eshkol_transformer/t2_bpe_trainer_abi.h`, `native/t2_bpe_trainer_eshkol_bridge.h` | `make test-t2-trainer` | [T2_BPE_TRAINER.md](T2_BPE_TRAINER.md) |
+| Unigram LM / Viterbi Lattice Tokenizer & EM Trainer (`ETUG1000`) | `include/eshkol_transformer/unigram_tok_abi.h`, `native/unigram_tok_eshkol_bridge.h` | `make test-unigram-tok` | [UNIGRAM_VITERBI_TOKENIZER.md](UNIGRAM_VITERBI_TOKENIZER.md) |
 
 - **DATA4-Pipeline** validates UTF-8, filters by byte length and quality metrics, removes exact SHA-256 and MinHash LSH near-duplicates, and writes/verifies checksummed provenance reports.
 - **T2-Trainer** deterministically trains byte-level BPE merges, encodes/decodes losslessly, and serializes SHA-256 checksummed `ETBPE100` v1.0 artifacts.
+- **Unigram-Tok** trains byte-complete Unigram LM vocabularies via Forward-Backward EM + per-piece pruning loss, performs exact Viterbi encode/lossless decode and Kudo FFBS subword regularization on serial CPU-f64, and persists SHA-256 checksummed `ETUG1000` v1.0 artifacts.
 
 ## 2. Model Architecture & Attention
 
@@ -47,8 +52,11 @@ make test-doc5
 | MOD5 RoPE & 2-Layer Llama-Style Decoder | `include/eshkol_transformer/mod5_rope_abi.h`, `native/mod5_rope_eshkol_bridge.h` | `make test-mod5-rope` | [MOD5_ROPE_MULTILAYER.md](MOD5_ROPE_MULTILAYER.md) |
 | MOD5 Sparse Top-K MoE Router & SwiGLU | `include/eshkol_transformer/mod5_moe_abi.h`, `native/mod5_moe_eshkol_bridge.h` | `make test-mod5-moe` | [MOD5_MOE_ROUTER.md](MOD5_MOE_ROUTER.md) |
 | MOD5 Multi-Head Latent Attention (MLA) | `include/eshkol_transformer/mod5_mla_abi.h`, `native/mod5_mla_eshkol_bridge.h` | `make test-mod5-mla` | [MOD5_MLA_ATTENTION.md](MOD5_MLA_ATTENTION.md) |
+| Mamba / S6 Selective State-Space Model (Conv1D + S6 + `O(1)` Cache) | `include/eshkol_transformer/mamba_ssm_abi.h`, `native/mamba_ssm_eshkol_bridge.h` | `make test-mamba-ssm` | [MAMBA_SSM_S6.md](MAMBA_SSM_S6.md) |
 | PA4 & PA4-Wider Causal Attention | `include/eshkol_transformer/pa4_attention_candidate.h`, `include/eshkol_transformer/pa4_wider_attention_abi.h`, `native/pa4_wider_eshkol_bridge.h` | `bash scripts/test-pa4.sh`, `make test-pa4-wider`, `make test-pa4-wider-aot` | [PA4_ATTENTION.md](PA4_ATTENTION.md), [PA4_WIDER_ATTENTION.md](PA4_WIDER_ATTENTION.md), [PA4_WIDER_ESHKOL_AOT.md](PA4_WIDER_ESHKOL_AOT.md) |
+| FlashAttention-2 Exact Tiled Online-Softmax Attention | `include/eshkol_transformer/flash_attn2_abi.h`, `native/flash_attn2_eshkol_bridge.h` | `make test-flash-attn2` | [FLASH_ATTN2_TILED.md](FLASH_ATTN2_TILED.md) |
 | RoPE Long-Context Extension (PI / NTK / YaRN) | `include/eshkol_transformer/rope_yarn_abi.h`, `native/rope_yarn_eshkol_bridge.h` | `make test-rope-yarn` | [ROPE_YARN_LONGCTX.md](ROPE_YARN_LONGCTX.md) |
+| DeepSeek-V3 Sequential Multi-Token Prediction (MTP, `ETMT1000`) | `include/eshkol_transformer/mtp_head_abi.h`, `native/mtp_head_eshkol_bridge.h` | `make test-mtp-head` | [MTP_MULTI_TOKEN_PREDICTION.md](MTP_MULTI_TOKEN_PREDICTION.md) |
 | AC4 Activation Checkpointing | `include/eshkol_transformer/ac4_checkpointing_abi.h`, `native/ac4_eshkol_bridge.h` | `make test-ac4`, `make test-ac4-aot` | [AC4_CHECKPOINTING.md](AC4_CHECKPOINTING.md) |
 
 ## 3. Optimizers & Composed Training
@@ -64,8 +72,11 @@ make test-doc5
 | Subsystem | Public ABI / Bridge Header | Verification Targets | Specification |
 | --- | --- | --- | --- |
 | LoRA Adapter Fine-Tuning (`ETLR1000`) | `include/eshkol_transformer/lora_adapter_abi.h`, `native/lora_eshkol_bridge.h` | `make test-lora` | [LORA_ADAPTER_FINETUNE.md](LORA_ADAPTER_FINETUNE.md) |
+| QLoRA NF4 Double-Quantized Fine-Tuning (`ETQL1000`) | `include/eshkol_transformer/qlora_nf4_abi.h`, `native/qlora_nf4_eshkol_bridge.h` | `make test-qlora-nf4` | [QLORA_NF4_FINETUNE.md](QLORA_NF4_FINETUNE.md) |
+| Multi-LoRA Batched Serving & Training (S-LoRA / Punica SGMV, `ETML1000`) | `include/eshkol_transformer/multi_lora_sgmv_abi.h`, `native/multi_lora_sgmv_eshkol_bridge.h` | `make test-multi-lora-sgmv` | [MULTI_LORA_SGMV.md](MULTI_LORA_SGMV.md) |
 | Direct Preference Optimization (DPO / cDPO) | `include/eshkol_transformer/dpo_alignment_abi.h`, `native/dpo_eshkol_bridge.h` | `make test-dpo` | [DPO_ALIGNMENT.md](DPO_ALIGNMENT.md) |
 | GRPO / RLVR Alignment Engine | `include/eshkol_transformer/grpo_abi.h`, `native/grpo_eshkol_bridge.h` | `make test-grpo` | [GRPO_RLVR_ALIGNMENT.md](GRPO_RLVR_ALIGNMENT.md) |
+| RLHF PPO-Clip + GAE + Value Critic Alignment (`ETPP1000`) | `include/eshkol_transformer/ppo_rlhf_abi.h`, `native/ppo_rlhf_eshkol_bridge.h` | `make test-ppo-rlhf` | [PPO_RLHF_ALIGNMENT.md](PPO_RLHF_ALIGNMENT.md) |
 | EVAL5 Contamination-Gated Benchmarks | `include/eshkol_transformer/eval5_benchmark_abi.h`, `native/eval5_eshkol_bridge.h` | `make test-eval5`, `make test-eval5-aot` | [EVAL5_BENCHMARKS_CONTAMINATION.md](EVAL5_BENCHMARKS_CONTAMINATION.md) |
 
 ## 5. Quantization, Mixed Precision & Weight Interchange
@@ -77,13 +88,18 @@ make test-doc5
 | IO5 Native `F16`/`BF16`/`Q8_0` Quantized Interchange | `include/eshkol_transformer/io5_quant_abi.h`, `tools/io5/quantized_interchange.py` | `make test-io5-quant` | [IO5_QUANTIZED_INTERCHANGE.md](IO5_QUANTIZED_INTERCHANGE.md) |
 | W4A32 INT4 Group-Wise Quantization & Fused GEMM | `include/eshkol_transformer/w4a32_quant_abi.h`, `native/w4a32_quant_eshkol_bridge.h` | `make test-w4a32-quant` | [W4A32_INT4_QUANTIZATION.md](W4A32_INT4_QUANTIZATION.md) |
 | OCP FP8 (`E4M3FN`/`E5M2`) & Block-Scaled `W8A8` GEMM | `include/eshkol_transformer/fp8_gemm_abi.h`, `native/fp8_gemm_eshkol_bridge.h` | `make test-fp8-gemm` | [FP8_E4M3_E5M2_GEMM.md](FP8_E4M3_E5M2_GEMM.md) |
+| Quantized KV-Cache (`FP32` / `INT8_SYM` / `FP8_E4M3FN`, `ETKQ1000`) | `include/eshkol_transformer/kv_cache_quant_abi.h`, `native/kv_cache_quant_eshkol_bridge.h` | `make test-kv-cache-quant` | [KV_CACHE_QUANTIZATION.md](KV_CACHE_QUANTIZATION.md) |
 
 ## 6. Distributed & Hardware Observability
 
 | Subsystem | Public ABI / Bridge Header | Verification Targets | Specification |
 | --- | --- | --- | --- |
-| DIST5 Multi-Process Data-Parallel Collectives | `include/eshkol_transformer/dist5_collectives_abi.h`, `native/dist5_eshkol_bridge.h` | `make test-dist5`, `make test-dist5-aot` | [DIST5_DATA_PARALLEL.md](DIST5_DATA_PARALLEL.md) |
-| Ring Attention (Sequence-Parallel Causal Attention) | `include/eshkol_transformer/ring_attn_abi.h`, `native/ring_attn_eshkol_bridge.h` | `make test-ring-attn` | [RING_ATTENTION.md](RING_ATTENTION.md) |
+| DIST5 Multi-Process Data-Parallel Collectives (`AF_UNIX`) | `include/eshkol_transformer/dist5_collectives_abi.h`, `native/dist5_eshkol_bridge.h` | `make test-dist5`, `make test-dist5-aot` | [DIST5_DATA_PARALLEL.md](DIST5_DATA_PARALLEL.md) |
+| 1F1B Pipeline Parallelism (`P = 2, 4` Multi-Process `AF_UNIX` Stages) | `include/eshkol_transformer/pipeline_1f1b_abi.h`, `native/pipeline_1f1b_eshkol_bridge.h` | `make test-pipeline-1f1b` | [PIPELINE_PARALLEL_1F1B.md](PIPELINE_PARALLEL_1F1B.md) |
+| Megatron-Style 1D Tensor Parallelism (`W in {1, 2, 4}`, `AF_UNIX`) | `include/eshkol_transformer/tensor_parallel_abi.h`, `native/tensor_parallel_eshkol_bridge.h` | `make test-tensor-parallel` | [TENSOR_PARALLELISM.md](TENSOR_PARALLELISM.md) |
+| FSDP / ZeRO-1, ZeRO-2 & ZeRO-3 Sharded Training (`ETFS1000`, `AF_UNIX`) | `include/eshkol_transformer/fsdp_zero_abi.h`, `native/fsdp_zero_eshkol_bridge.h` | `make test-fsdp-zero` | [FSDP_ZERO_SHARDING.md](FSDP_ZERO_SHARDING.md) |
+| 2D Hybrid Parallelism (`DP x TP` Mesh, `ET2D1000`, `AF_UNIX`) | `include/eshkol_transformer/hybrid_mesh_abi.h`, `native/hybrid_mesh_eshkol_bridge.h` | `make test-hybrid-mesh` | [HYBRID_2D_TP_DP_MESH.md](HYBRID_2D_TP_DP_MESH.md) |
+| Ring Attention (Sequence-Parallel Causal Attention, `AF_UNIX`) | `include/eshkol_transformer/ring_attn_abi.h`, `native/ring_attn_eshkol_bridge.h` | `make test-ring-attn` | [RING_ATTENTION.md](RING_ATTENTION.md) |
 | AMD4 HIP / `/dev/kfd` Observability Probe | `include/eshkol_transformer/amd4_hip_abi.h`, `native/amd4_eshkol_bridge.h` | `make test-amd4`, `make test-amd4-aot` | [AMD4_HIP_OBSERVABILITY.md](AMD4_HIP_OBSERVABILITY.md) |
 
 ## 7. Serving & Decoding
@@ -91,8 +107,10 @@ make test-doc5
 | Subsystem | Public ABI / Bridge Header | Verification Targets | Specification |
 | --- | --- | --- | --- |
 | MOD5 Autoregressive Generation & KV-Cache | `include/eshkol_transformer/mod5_generate_abi.h` | `make test-mod5-generate` | [MOD5_GENERATION.md](MOD5_GENERATION.md) |
+| Deterministic Beam Search & Composable Logit Processors | `include/eshkol_transformer/beam_search_abi.h`, `native/beam_search_eshkol_bridge.h` | `make test-beam-search` | [BEAM_SEARCH_DECODING.md](BEAM_SEARCH_DECODING.md) |
 | Exact Lossless Speculative Decoding | `include/eshkol_transformer/spec_decode_abi.h`, `native/spec_decode_eshkol_bridge.h` | `make test-spec-decode` | [SPECULATIVE_DECODING.md](SPECULATIVE_DECODING.md) |
 | PagedAttention / Block-Table KV-Cache & CoW Sharing | `include/eshkol_transformer/paged_kv_abi.h`, `native/paged_kv_eshkol_bridge.h` | `make test-paged-kv` | [PAGED_KV_CACHE.md](PAGED_KV_CACHE.md) |
+| RadixAttention Prefix KV-Cache Tree (`ETRX1000`) | `include/eshkol_transformer/radix_kv_abi.h`, `native/radix_kv_eshkol_bridge.h` | `make test-radix-kv` | [RADIX_KV_CACHE_TREE.md](RADIX_KV_CACHE_TREE.md) |
 | Continuous Batching & Chunked-Prefill Scheduler | `include/eshkol_transformer/continuous_batch_abi.h`, `native/continuous_batch_eshkol_bridge.h` | `make test-continuous-batch` | [CONTINUOUS_BATCHING.md](CONTINUOUS_BATCHING.md) |
 | Constrained Decoding (DFA + JSON-Object Schema FSA) | `include/eshkol_transformer/constrained_decode_abi.h`, `native/constrained_decode_eshkol_bridge.h` | `make test-constrained-decode` | [CONSTRAINED_DECODING_FSA.md](CONSTRAINED_DECODING_FSA.md) |
 
