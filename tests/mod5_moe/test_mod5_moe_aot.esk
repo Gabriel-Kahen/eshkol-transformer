@@ -1,0 +1,410 @@
+;;; Compiled Eshkol AOT driver for Sparse Top-K Mixture-of-Experts (MoE):
+;;; 4-expert Top-2 SwiGLU MoE layer trained for 12 SGD steps minimizing
+;;; total_loss = task_loss (MSE) + aux_loss (Switch load-balancing loss).
+;;; Compiled with: eshkol-run --strict-types --optimize 0 --no-stdlib
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+;; MOD5 MoE K1 provider bridge
+(extern i32 open-moe ptr :real et_mod5_moe_aot_open)
+(extern void close-moe ptr :real et_mod5_moe_aot_close)
+(extern void moe-store-f32 ptr i64 f64 :real et_mod5_moe_aot_store_f32)
+(extern f64 moe-load-f32 ptr i64 :real et_mod5_moe_aot_load_f32)
+(extern void moe-store-i64 ptr i64 i64 :real et_mod5_moe_aot_store_i64)
+(extern i64 moe-load-i64 ptr i64 :real et_mod5_moe_aot_load_i64)
+(extern i32 moe-forward ptr i64 i64 i64 i64 i64 i64
+        ptr ptr ptr ptr ptr f64 ptr ptr ptr ptr
+        :real et_mod5_moe_aot_forward)
+(extern i32 moe-backward ptr i64 i64 i64 i64 i64 i64
+        ptr ptr ptr ptr ptr f64 ptr ptr ptr ptr ptr ptr
+        :real et_mod5_moe_aot_backward)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define batch 1)
+(define tokens 8)
+(define model-dim 8)
+(define ffn-dim 16)
+(define num-experts 4)
+(define top-k 2)
+(define alpha-aux 0.0625)
+(define sgd-steps 12)
+(define learning-rate 0.25)
+
+(define x-elems (* batch tokens model-dim))
+(define wg-elems (* num-experts model-dim))
+(define exp-elems (* num-experts ffn-dim model-dim))
+(define inv-x-elems (/ 1.0 x-elems))
+
+(define (expect-status operation expected actual)
+  (unless (= actual expected)
+    (display operation) (display " expected status ") (display expected)
+    (display ", received ") (display actual) (newline) (exit 1)))
+
+(define (require-check label ok)
+  (unless ok (display label) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "MOD5 MoE AOT workspace allocation failed"
+                   (not (= (ptr->usize p) 0)))
+    p))
+
+;; Disjoint aligned binary32 & int64 FFI transport buffers.
+(define buf-x (checked-allocate (* 4 x-elems)))
+(define buf-wg (checked-allocate (* 4 wg-elems)))
+(define buf-wge (checked-allocate (* 4 exp-elems)))
+(define buf-wue (checked-allocate (* 4 exp-elems)))
+(define buf-wde (checked-allocate (* 4 exp-elems)))
+(define buf-dy (checked-allocate (* 4 x-elems)))
+
+(define buf-y (checked-allocate (* 4 x-elems)))
+(define buf-aux (checked-allocate 4))
+(define buf-counts (checked-allocate (* 8 num-experts)))
+(define buf-evals (checked-allocate 8))
+
+(define buf-dx (checked-allocate (* 4 x-elems)))
+(define buf-dwg (checked-allocate (* 4 wg-elems)))
+(define buf-dwge (checked-allocate (* 4 exp-elems)))
+(define buf-dwue (checked-allocate (* 4 exp-elems)))
+(define buf-dwde (checked-allocate (* 4 exp-elems)))
+
+(define moe-runtime
+  (let ((cell (checked-allocate 8)))
+    (expect-status "MOD5 MoE discovery" 0 (open-moe (ffi-pointer cell)))
+    (let ((rt (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      rt)))
+
+;; Pack/unpack between Eshkol f64 2D tensors and borrowed binary32 spans.
+(define (pack tensor buffer)
+  (let* ((count (tensor-length tensor))
+         (flat (reshape tensor (list count))))
+    (do ((i 0 (+ i 1)))
+        ((= i count))
+      (moe-store-f32 (ffi-pointer buffer) i (tensor-ref flat i)))))
+
+(define (unpack buffer rows cols)
+  (let* ((count (* rows cols))
+         (flat (zeros (list count))))
+    (do ((i 0 (+ i 1)))
+        ((= i count) (reshape flat (list rows cols)))
+      (tensor-set! flat i (moe-load-f32 (ffi-pointer buffer) i)))))
+
+;; Parameter vector indices:
+;; 0: W_gate [E, D]
+;; 1: W_gate_exp [E*F, D]
+;; 2: W_up_exp [E*F, D]
+;; 3: W_down_exp [E*D, F]
+(define idx-wg 0)
+(define idx-wge 1)
+(define idx-wue 2)
+(define idx-wde 3)
+(define param-count 4)
+(define idx-x-grad param-count)
+
+;; Forward + optional backward for total_loss = task_loss(MSE) + aux_loss.
+;; Returns vector: #(total_loss task_loss aux_loss active_evals c0 c1 c2 c3)
+(define (moe-step-eval weights x target gradients)
+  (let ((wg (vector-ref weights idx-wg))
+        (wge (vector-ref weights idx-wge))
+        (wue (vector-ref weights idx-wue))
+        (wde (vector-ref weights idx-wde)))
+    (pack x buf-x)
+    (pack wg buf-wg)
+    (pack wge buf-wge)
+    (pack wue buf-wue)
+    (pack wde buf-wde)
+    (expect-status "MoE forward" 0
+                   (moe-forward (ffi-pointer moe-runtime)
+                                batch tokens model-dim ffn-dim num-experts top-k
+                                (ffi-pointer buf-x) (ffi-pointer buf-wg)
+                                (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                                (ffi-pointer buf-wde) alpha-aux
+                                (ffi-pointer buf-y) (ffi-pointer buf-aux)
+                                (ffi-pointer buf-counts) (ffi-pointer buf-evals)))
+    (let* ((y (unpack buf-y tokens model-dim))
+           (aux-loss (moe-load-f32 (ffi-pointer buf-aux) 0))
+           (evals (moe-load-i64 (ffi-pointer buf-evals) 0))
+           (c0 (moe-load-i64 (ffi-pointer buf-counts) 0))
+           (c1 (moe-load-i64 (ffi-pointer buf-counts) 1))
+           (c2 (moe-load-i64 (ffi-pointer buf-counts) 2))
+           (c3 (moe-load-i64 (ffi-pointer buf-counts) 3))
+           (delta (tensor-sub y target))
+           (task-loss (* 0.5 inv-x-elems (tensor-sum (tensor-mul delta delta))))
+           (total-loss (+ task-loss aux-loss)))
+      (require-check "MoE sparse active evals mismatch"
+                     (= evals (* batch tokens top-k)))
+      (require-check "MoE expert counts sum mismatch"
+                     (= (+ c0 c1 c2 c3) evals))
+      (when gradients
+        (let ((dy (tensor-scale delta inv-x-elems)))
+          (pack dy buf-dy)
+          (expect-status "MoE backward" 0
+                         (moe-backward (ffi-pointer moe-runtime)
+                                       batch tokens model-dim ffn-dim
+                                       num-experts top-k
+                                       (ffi-pointer buf-x) (ffi-pointer buf-wg)
+                                       (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                                       (ffi-pointer buf-wde) alpha-aux
+                                       (ffi-pointer buf-dy)
+                                       (ffi-pointer buf-dx) (ffi-pointer buf-dwg)
+                                       (ffi-pointer buf-dwge) (ffi-pointer buf-dwue)
+                                       (ffi-pointer buf-dwde)))
+          (vector-set! gradients idx-wg (unpack buf-dwg num-experts model-dim))
+          (vector-set! gradients idx-wge
+                       (unpack buf-dwge (* num-experts ffn-dim) model-dim))
+          (vector-set! gradients idx-wue
+                       (unpack buf-dwue (* num-experts ffn-dim) model-dim))
+          (vector-set! gradients idx-wde
+                       (unpack buf-dwde (* num-experts model-dim) ffn-dim))
+          (vector-set! gradients idx-x-grad (unpack buf-dx tokens model-dim))))
+      (vector total-loss task-loss aux-loss evals c0 c1 c2 c3))))
+
+(define (seed-tensor rows cols salt scale)
+  (let ((tensor (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) tensor)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (let* ((i (+ (* r cols) c))
+               (seed (- (modulo (+ (* 37 salt) (* 19 i) (* 7 (quotient i 3))) 43) 21)))
+          (tensor-set! tensor r c (* scale seed)))))))
+
+;; Construct well-conditioned initial input & router weights with crisp margins
+;; so all 4 experts participate actively and central FD stays off tie walls.
+(define (initial-x)
+  (let ((x (seed-tensor tokens model-dim 11 0.0625)))
+    (do ((t 0 (+ t 1)))
+        ((= t tokens) x)
+      (tensor-set! x t 0 (if (< t 4) 0.875 -0.875))
+      (tensor-set! x t 1 (if (= (modulo t 2) 0) 0.75 -0.75))
+      (tensor-set! x t 2 (+ 0.25 (* 0.0625 t))))))
+
+(define (initial-w-gate)
+  (let ((wg (seed-tensor num-experts model-dim 13 0.03125)))
+    (tensor-set! wg 0 0 1.25)  (tensor-set! wg 0 1 0.75)
+    (tensor-set! wg 1 0 0.75)  (tensor-set! wg 1 1 -1.25)
+    (tensor-set! wg 2 0 -1.25) (tensor-set! wg 2 1 0.75)
+    (tensor-set! wg 3 0 -0.75) (tensor-set! wg 3 1 -1.25)
+    wg))
+
+(define (initial-weights)
+  (vector
+   (initial-w-gate)
+   (seed-tensor (* num-experts ffn-dim) model-dim 17 0.015625)
+   (seed-tensor (* num-experts ffn-dim) model-dim 19 0.015625)
+   (seed-tensor (* num-experts model-dim) ffn-dim 23 0.015625)))
+
+;; Negative / malformed FFI call rejections with full output sentinel checks.
+(define (check-malformed-calls weights x)
+  (pack x buf-x)
+  (pack (vector-ref weights idx-wg) buf-wg)
+  (pack (vector-ref weights idx-wge) buf-wge)
+  (pack (vector-ref weights idx-wue) buf-wue)
+  (pack (vector-ref weights idx-wde) buf-wde)
+  (moe-store-f32 (ffi-pointer buf-y) 0 19.25)
+  (moe-store-f32 (ffi-pointer buf-aux) 0 -7.5)
+  (moe-store-i64 (ffi-pointer buf-counts) 0 4242)
+  (moe-store-i64 (ffi-pointer buf-evals) 0 9999)
+
+  ;; 1. top_k > E -> UNSUPPORTED (6)
+  (expect-status "MoE top_k > E" 6
+                 (moe-forward (ffi-pointer moe-runtime)
+                              batch tokens model-dim ffn-dim 2 3
+                              (ffi-pointer buf-x) (ffi-pointer buf-wg)
+                              (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                              (ffi-pointer buf-wde) alpha-aux
+                              (ffi-pointer buf-y) (ffi-pointer buf-aux)
+                              (ffi-pointer buf-counts) (ffi-pointer buf-evals)))
+
+  ;; 2. Out-of-range E=9 -> UNSUPPORTED (6)
+  (expect-status "MoE E=9" 6
+                 (moe-forward (ffi-pointer moe-runtime)
+                              batch tokens model-dim ffn-dim 9 top-k
+                              (ffi-pointer buf-x) (ffi-pointer buf-wg)
+                              (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                              (ffi-pointer buf-wde) alpha-aux
+                              (ffi-pointer buf-y) (ffi-pointer buf-aux)
+                              (ffi-pointer buf-counts) (ffi-pointer buf-evals)))
+
+  ;; 3. Misaligned raw pointers via ptr-add -> INVALID_ARGUMENT (1)
+  (expect-status "MoE misaligned input" 1
+                 (moe-forward (ffi-pointer moe-runtime)
+                              batch tokens model-dim ffn-dim num-experts top-k
+                              (ptr-add buf-x 1) (ffi-pointer buf-wg)
+                              (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                              (ffi-pointer buf-wde) alpha-aux
+                              (ffi-pointer buf-y) (ffi-pointer buf-aux)
+                              (ffi-pointer buf-counts) (ffi-pointer buf-evals)))
+  (expect-status "MoE misaligned output" 1
+                 (moe-forward (ffi-pointer moe-runtime)
+                              batch tokens model-dim ffn-dim num-experts top-k
+                              (ffi-pointer buf-x) (ffi-pointer buf-wg)
+                              (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                              (ffi-pointer buf-wde) alpha-aux
+                              (ptr-add buf-y 2) (ffi-pointer buf-aux)
+                              (ffi-pointer buf-counts) (ffi-pointer buf-evals)))
+
+  ;; 4. Negative alpha_aux -> INVALID_ARGUMENT (1)
+  (expect-status "MoE negative alpha_aux" 1
+                 (moe-forward (ffi-pointer moe-runtime)
+                              batch tokens model-dim ffn-dim num-experts top-k
+                              (ffi-pointer buf-x) (ffi-pointer buf-wg)
+                              (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                              (ffi-pointer buf-wde) -0.0625
+                              (ffi-pointer buf-y) (ffi-pointer buf-aux)
+                              (ffi-pointer buf-counts) (ffi-pointer buf-evals)))
+
+  ;; 5. Output aliasing input -> INVALID_ARGUMENT (1)
+  (expect-status "MoE aliased output" 1
+                 (moe-forward (ffi-pointer moe-runtime)
+                              batch tokens model-dim ffn-dim num-experts top-k
+                              (ffi-pointer buf-x) (ffi-pointer buf-wg)
+                              (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                              (ffi-pointer buf-wde) alpha-aux
+                              (ffi-pointer buf-x) (ffi-pointer buf-aux)
+                              (ffi-pointer buf-counts) (ffi-pointer buf-evals)))
+
+  ;; 6. Non-finite input (+Inf via f32 overflow) -> INVALID_ARGUMENT (1)
+  (moe-store-f32 (ffi-pointer buf-x) 3 1.0e308)
+  (expect-status "MoE non-finite input" 1
+                 (moe-forward (ffi-pointer moe-runtime)
+                              batch tokens model-dim ffn-dim num-experts top-k
+                              (ffi-pointer buf-x) (ffi-pointer buf-wg)
+                              (ffi-pointer buf-wge) (ffi-pointer buf-wue)
+                              (ffi-pointer buf-wde) alpha-aux
+                              (ffi-pointer buf-y) (ffi-pointer buf-aux)
+                              (ffi-pointer buf-counts) (ffi-pointer buf-evals)))
+
+  ;; Verify all output sentinels completely untouched.
+  (require-check "MoE AOT sentinel y changed"
+                 (= (moe-load-f32 (ffi-pointer buf-y) 0) 19.25))
+  (require-check "MoE AOT sentinel aux changed"
+                 (= (moe-load-f32 (ffi-pointer buf-aux) 0) -7.5))
+  (require-check "MoE AOT sentinel counts changed"
+                 (= (moe-load-i64 (ffi-pointer buf-counts) 0) 4242))
+  (require-check "MoE AOT sentinel evals changed"
+                 (= (moe-load-i64 (ffi-pointer buf-evals) 0) 9999))
+  (display "MOD5 MOE AOT malformed statuses PASS") (newline))
+
+(define (check-one-grad p weights x target operand derivative row col)
+  (let* ((original (tensor-get operand row col))
+         (step 0.001953125))
+    (tensor-set! operand row col (+ original step))
+    (let ((plus (vector-ref (moe-step-eval weights x target #f) 0)))
+      (tensor-set! operand row col (- original step))
+      (let* ((minus (vector-ref (moe-step-eval weights x target #f) 0))
+             (numerical (/ (- plus minus) (* 2.0 step)))
+             (analytic (tensor-get derivative row col))
+             (diff (abs (- analytic numerical))))
+        (tensor-set! operand row col original)
+        (unless (<= diff (+ 0.0001 (* 0.01 (abs numerical))))
+          (display "FD mismatch p=") (display p)
+          (display " row=") (display row) (display " col=") (display col)
+          (display " analytic=") (display (number->string analytic))
+          (display " numerical=") (display (number->string numerical))
+          (display " diff=") (display (number->string diff)) (newline)
+          (exit 1))
+        diff))))
+
+(define (check-all-gradients weights x target gradients)
+  (let ((checked 0)
+        (max-err 0.0))
+    (do ((p 0 (+ p 1)))
+        ((> p param-count)
+         (display "MOD5 MOE AOT FD_GRADIENTS checked=") (display checked)
+         (display " max_abs_err=") (display (number->string max-err))
+         (display " PASS") (newline))
+      (let* ((operand (if (= p idx-x-grad) x (vector-ref weights p)))
+             (derivative (vector-ref gradients p))
+             (shape (tensor-shape operand))
+             (rows (car shape))
+             (cols (car (cdr shape))))
+        (require-check "MOD5 MOE AOT inactive gradient"
+                       (> (tensor-sum (tensor-abs derivative)) 0.00001))
+        ;; Sample 4 well-spread coordinates across experts/tokens per tensor.
+        (do ((s 0 (+ s 1)))
+            ((= s 4))
+          (let* ((r (quotient (* s rows) 4))
+                 (c (modulo (* s 3) cols))
+                 (err (check-one-grad p weights x target operand derivative r c)))
+            (when (> err max-err) (set! max-err err))
+            (set! checked (+ checked 1))))))))
+
+(define (parameter-checksum weights)
+  (do ((p 0 (+ p 1))
+       (total 0.0 (+ total (* (+ p 1) (tensor-sum (vector-ref weights p))))))
+      ((= p param-count) total)))
+
+(define (print-step step stats)
+  (display "MOD5 MOE AOT STEP ") (display step)
+  (display " total=") (display (number->string (vector-ref stats 0)))
+  (display " task=") (display (number->string (vector-ref stats 1)))
+  (display " aux=") (display (number->string (vector-ref stats 2)))
+  (display " evals=") (display (vector-ref stats 3))
+  (display " counts=") (display (vector-ref stats 4))
+  (display ",") (display (vector-ref stats 5))
+  (display ",") (display (vector-ref stats 6))
+  (display ",") (display (vector-ref stats 7))
+  (newline))
+
+(define (train-moe)
+  (let* ((weights (initial-weights))
+         (x (initial-x))
+         (target (seed-tensor tokens model-dim 29 0.0625))
+         (gradients (make-vector (+ param-count 1) #f)))
+    (check-malformed-calls weights x)
+    (let* ((stats0 (moe-step-eval weights x target gradients))
+           (initial (vector-ref stats0 0))
+           (initial-checksum (parameter-checksum weights)))
+      (check-all-gradients weights x target gradients)
+      (print-step 0 stats0)
+      (do ((step 1 (+ step 1))
+           (previous initial))
+          ((> step sgd-steps)
+           (let ((checksum (parameter-checksum weights)))
+             (require-check "MOD5 MOE AOT parameters did not update"
+                            (not (= checksum initial-checksum)))
+             (display "MOD5 MOE AOT RESULT experts=4 top_k=2 steps=12 initial=")
+             (display (number->string initial))
+             (display " final=") (display (number->string previous))
+             (display " checksum=") (display (number->string checksum))
+             (newline)))
+        (do ((p 0 (+ p 1)))
+            ((= p param-count))
+          (let ((derivative (vector-ref gradients p)))
+            (require-check "MOD5 MOE AOT nonfinite gradient"
+                           (< (tensor-sum (tensor-abs derivative)) 1.0e300))
+            (vector-set! weights p
+                         (tensor-sub (vector-ref weights p)
+                                     (tensor-scale derivative learning-rate)))))
+        (let* ((stats (moe-step-eval weights x target gradients))
+               (current (vector-ref stats 0)))
+          (require-check "MOD5 MOE AOT total loss failed to decrease"
+                         (and (>= current 0.0) (< current previous)))
+          (print-step step stats)
+          (set! previous current))))))
+
+(train-moe)
+
+(close-moe (ffi-pointer moe-runtime))
+(release (ffi-pointer buf-x))
+(release (ffi-pointer buf-wg))
+(release (ffi-pointer buf-wge))
+(release (ffi-pointer buf-wue))
+(release (ffi-pointer buf-wde))
+(release (ffi-pointer buf-dy))
+(release (ffi-pointer buf-y))
+(release (ffi-pointer buf-aux))
+(release (ffi-pointer buf-counts))
+(release (ffi-pointer buf-evals))
+(release (ffi-pointer buf-dx))
+(release (ffi-pointer buf-dwg))
+(release (ffi-pointer buf-dwge))
+(release (ffi-pointer buf-dwue))
+(release (ffi-pointer buf-dwde))
