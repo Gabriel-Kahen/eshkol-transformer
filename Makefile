@@ -451,6 +451,22 @@ test-b0-wave45:
 benchmark-wave45:
 	/usr/bin/bash scripts/benchmark-wave45.sh
 
+.PHONY: test-io5-quant test-t2-trainer test-dpo test-spec-decode test-mod5-moe
+test-io5-quant:
+	/usr/bin/bash scripts/test-io5-quant.sh
+
+test-t2-trainer:
+	/usr/bin/bash scripts/test-t2-trainer.sh
+
+test-dpo:
+	/usr/bin/bash scripts/test-dpo.sh
+
+test-spec-decode:
+	/usr/bin/bash scripts/test-spec-decode.sh
+
+test-mod5-moe:
+	/usr/bin/bash scripts/test-mod5-moe.sh
+
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
 
