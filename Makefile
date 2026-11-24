@@ -468,7 +468,7 @@ benchmark-wave5:
 	test-pipeline-1f1b test-tensor-parallel test-mamba-ssm \
 	test-fsdp-zero test-beam-search test-qlora-nf4 test-flash-attn2 \
 	test-radix-kv test-hybrid-mesh test-mtp-head test-ppo-rlhf test-unigram-tok \
-	test-multi-lora-sgmv
+	test-multi-lora-sgmv test-kv-cache-quant
 test-io5-quant:
 	/usr/bin/bash scripts/test-io5-quant.sh
 
@@ -561,6 +561,9 @@ test-unigram-tok:
 
 test-multi-lora-sgmv:
 	/usr/bin/bash scripts/test-multi-lora-sgmv.sh
+
+test-kv-cache-quant:
+	/usr/bin/bash scripts/test-kv-cache-quant.sh
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
