@@ -1,0 +1,581 @@
+;;; Compiled Eshkol AOT Multi-LoRA Batched SGMV Serving & Training Driver.
+;;; Exercises:
+;;;  1. 3 heterogeneous adapters (r=2, r=4, r=8) + idle adapter (r=4) +
+;;;     base-only rows (-1) in an unsorted M=12 batch with bitwise 0.0 SGMV
+;;;     parity vs per-row single-adapter reference,
+;;;  2. Central FD checks on dX, dA, dB across all 3 ranks (max_err < 1e-5) +
+;;;     exact zero cross-adapter gradient bleed onto idle adapter 404,
+;;;  3. 12-step heterogeneous multi-adapter AdamW fine-tuning (all 3 adapter
+;;;     losses strictly decrease; frozen W_base+bias SHA-256 invariant),
+;;;  4. Hot-swap lifecycle (pin -> unregister BUSY -> unpin -> unregister OK ->
+;;;     hot-load adapter 505 with generation++),
+;;;  5. ETML1000 bundle save & reload into a fresh registry (and fresh OS
+;;;     process) reproducing bitwise identical batched outputs + 6 tamper checks,
+;;;  6. Negative boundary checks (invalid ranks, unknown adapter, double-unpin,
+;;;     non-finite X, FP-env trap).
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 mlora-create i64 i64 i64 i64 i64 i64 ptr :real et_mlora_aot_create)
+(extern void mlora-destroy ptr :real et_mlora_aot_destroy)
+
+(extern i32 mlora-set-w-base ptr i64 f64 :real et_mlora_aot_set_w_base)
+(extern i32 mlora-set-bias ptr i64 f64 :real et_mlora_aot_set_bias)
+(extern i32 mlora-finalize-base ptr :real et_mlora_aot_finalize_base)
+
+(extern i64 mlora-x-count ptr :real et_mlora_aot_x_count)
+(extern i64 mlora-w-count ptr :real et_mlora_aot_w_count)
+(extern i64 mlora-y-count ptr :real et_mlora_aot_y_count)
+
+(extern i32 mlora-set-x ptr i64 f64 :real et_mlora_aot_set_x)
+(extern f64 mlora-get-x ptr i64 :real et_mlora_aot_get_x)
+(extern i32 mlora-set-dy ptr i64 f64 :real et_mlora_aot_set_dy)
+(extern i32 mlora-set-target ptr i64 f64 :real et_mlora_aot_set_target)
+(extern f64 mlora-get-target ptr i64 :real et_mlora_aot_get_target)
+(extern i32 mlora-set-row-adapter ptr i64 i64 :real et_mlora_aot_set_row_adapter)
+(extern i64 mlora-get-row-adapter ptr i64 :real et_mlora_aot_get_row_adapter)
+
+(extern f64 mlora-get-y ptr i64 :real et_mlora_aot_get_y)
+(extern f64 mlora-get-dx ptr i64 :real et_mlora_aot_get_dx)
+(extern i64 mlora-y-bits ptr i64 :real et_mlora_aot_y_bits)
+(extern i64 mlora-y-ref-bits ptr i64 :real et_mlora_aot_y_ref_bits)
+
+(extern i32 mlora-register-seeded ptr i64 i64 f64 i64 :real et_mlora_aot_register_seeded)
+(extern i32 mlora-unregister ptr i64 :real et_mlora_aot_unregister)
+(extern i32 mlora-pin ptr i64 :real et_mlora_aot_pin)
+(extern i32 mlora-unpin ptr i64 :real et_mlora_aot_unpin)
+
+(extern i64 mlora-adapter-rank ptr i64 :real et_mlora_aot_adapter_rank)
+(extern i64 mlora-adapter-gen ptr i64 :real et_mlora_aot_adapter_generation)
+(extern i64 mlora-adapter-pins ptr i64 :real et_mlora_aot_adapter_pin_count)
+(extern i64 mlora-adapter-step ptr i64 :real et_mlora_aot_adapter_step)
+
+(extern i32 mlora-set-a ptr i64 i64 f64 :real et_mlora_aot_set_a)
+(extern i32 mlora-set-b ptr i64 i64 f64 :real et_mlora_aot_set_b)
+(extern f64 mlora-get-a ptr i64 i64 :real et_mlora_aot_get_a)
+(extern f64 mlora-get-b ptr i64 i64 :real et_mlora_aot_get_b)
+(extern f64 mlora-get-da ptr i64 i64 :real et_mlora_aot_get_da)
+(extern f64 mlora-get-db ptr i64 i64 :real et_mlora_aot_get_db)
+(extern i64 mlora-da-bits ptr i64 i64 :real et_mlora_aot_da_bits)
+(extern i64 mlora-db-bits ptr i64 i64 :real et_mlora_aot_db_bits)
+
+(extern i32 mlora-sgmv-forward ptr :real et_mlora_aot_sgmv_forward)
+(extern i32 mlora-single-ref-forward ptr :real et_mlora_aot_single_row_ref_forward)
+(extern i32 mlora-sgmv-backward ptr :real et_mlora_aot_sgmv_backward)
+(extern i32 mlora-adamw-step ptr i64 f64 f64 f64 f64 f64 :real et_mlora_aot_adamw_step)
+
+(extern i64 mlora-last-base-rows ptr :real et_mlora_aot_last_base_rows)
+(extern i64 mlora-last-adapted-rows ptr :real et_mlora_aot_last_adapted_rows)
+(extern i64 mlora-last-active-segments ptr :real et_mlora_aot_last_active_segments)
+
+(extern i32 mlora-compute-base-sha256 ptr :real et_mlora_aot_compute_base_sha256)
+(extern i64 mlora-base-sha256-word ptr i64 :real et_mlora_aot_base_sha256_word)
+(extern i32 mlora-compute-y-sha256 ptr :real et_mlora_aot_compute_y_sha256)
+(extern i64 mlora-y-sha256-word ptr i64 :real et_mlora_aot_y_sha256_word)
+
+(extern i64 mlora-env-phase :real et_mlora_aot_env_phase)
+(extern i32 mlora-save-env-bundle ptr i64 :real et_mlora_aot_save_env_bundle)
+(extern i32 mlora-load-env-bundle ptr :real et_mlora_aot_load_env_bundle)
+(extern i32 mlora-check-tampered-env ptr i64 :real et_mlora_aot_check_tampered_env)
+(extern i32 mlora-check-nonfinite-x ptr :real et_mlora_aot_check_nonfinite_x)
+(extern i32 mlora-check-fp-env-trap ptr :real et_mlora_aot_check_fp_env_trap)
+
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Problem geometry & hyperparameters.
+(define dim-m 12)
+(define dim-in 16)
+(define dim-out 12)
+(define max-adapters 8)
+(define max-rank 8)
+(define has-bias 1)
+
+(define id-base -1)
+(define id-a1 101)
+(define id-a2 202)
+(define id-a3 303)
+(define id-idle 404)
+(define id-hot 505)
+
+(define train-steps 12)
+(define adamw-lr 0.01)
+(define adamw-beta1 0.9)
+(define adamw-beta2 0.999)
+(define adamw-eps 0.00000001)
+(define adamw-wd 0.001)
+
+;; Status codes from multi_lora_sgmv_abi.h.
+(define status-ok 0)
+(define err-shape -2)
+(define err-nonfinite -5)
+(define err-fp-env -6)
+(define err-format -7)
+(define err-version -8)
+(define err-truncated -9)
+(define err-checksum -10)
+(define err-base-hash -11)
+(define err-symlink -12)
+(define err-not-found -16)
+(define err-busy -18)
+(define err-underflow -20)
+
+(define (require-check label ok)
+  (unless ok
+    (display "MLORA AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "MLORA AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (det-val index salt scale)
+  (let ((bucket (- (modulo (+ (* 31 index) (* 17 salt) (quotient index 3)) 37) 18)))
+    (* scale bucket)))
+
+(define (create-initialized-ctx)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "mlora-create" status-ok
+                   (mlora-create dim-m dim-in dim-out max-adapters max-rank has-bias
+                                 (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null ctx" (not (= (ptr->usize ctx) 0)))
+      (let ((wn (mlora-w-count (ffi-pointer ctx)))
+            (xn (mlora-x-count (ffi-pointer ctx))))
+        (do ((i 0 (+ i 1)))
+            ((= i wn))
+          (expect-status "set-w-base" status-ok
+                         (mlora-set-w-base (ffi-pointer ctx) i (det-val i 7 0.03125))))
+        (do ((o 0 (+ o 1)))
+            ((= o dim-out))
+          (expect-status "set-bias" status-ok
+                         (mlora-set-bias (ffi-pointer ctx) o (det-val o 13 0.0625))))
+        (expect-status "finalize-base" status-ok
+                       (mlora-finalize-base (ffi-pointer ctx)))
+        (do ((i 0 (+ i 1)))
+            ((= i xn))
+          (expect-status "set-x" status-ok
+                         (mlora-set-x (ffi-pointer ctx) i (det-val i 23 0.0625)))))
+      ;; Set unsorted heterogeneous routing:
+      ;; [303, -1, 101, 202, 303, -1, 202, 101, -1, 303, 101, 202]
+      (expect-status "row0" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 0 id-a3))
+      (expect-status "row1" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 1 id-base))
+      (expect-status "row2" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 2 id-a1))
+      (expect-status "row3" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 3 id-a2))
+      (expect-status "row4" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 4 id-a3))
+      (expect-status "row5" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 5 id-base))
+      (expect-status "row6" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 6 id-a2))
+      (expect-status "row7" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 7 id-a1))
+      (expect-status "row8" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 8 id-base))
+      (expect-status "row9" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 9 id-a3))
+      (expect-status "row10" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 10 id-a1))
+      (expect-status "row11" status-ok (mlora-set-row-adapter (ffi-pointer ctx) 11 id-a2))
+      ctx)))
+
+(define (populate-targets ctx)
+  ;; Compute base-only outputs temporarily by evaluating single-row ref with all
+  ;; adapters zero-B (or before registering adapters? Here adapters are zero-B so
+  ;; initial sgmv_forward equals exact base output!).
+  (expect-status "sgmv-for-targets" status-ok
+                 (mlora-sgmv-forward (ffi-pointer ctx)))
+  (do ((row 0 (+ row 1)))
+      ((= row dim-m))
+    (let* ((aid (mlora-get-row-adapter (ffi-pointer ctx) row))
+           (salt (cond ((= aid id-a1) 83)
+                       ((= aid id-a2) 97)
+                       ((= aid id-a3) 109)
+                       (else 71)))
+           (scale (cond ((= aid id-a1) 0.05)
+                        ((= aid id-a2) -0.06)
+                        ((= aid id-a3) 0.07)
+                        (else 0.0))))
+      (do ((o 0 (+ o 1)))
+          ((= o dim-out))
+        (let* ((idx (+ (* row dim-out) o))
+               (base-y (mlora-get-y (ffi-pointer ctx) idx))
+               (bucket (- (modulo (+ (* 29 idx) (* 13 salt)) 31) 15)))
+          (expect-status "set-target" status-ok
+                         (mlora-set-target (ffi-pointer ctx) idx
+                                           (+ base-y (* scale bucket)))))))))
+
+(define (capture-base-sha256 ctx)
+  (expect-status "compute-base-sha256" status-ok
+                 (mlora-compute-base-sha256 (ffi-pointer ctx)))
+  (let ((words (make-vector 4 0)))
+    (do ((i 0 (+ i 1)))
+        ((= i 4) words)
+      (vector-set! words i (mlora-base-sha256-word (ffi-pointer ctx) i)))))
+
+(define (verify-base-frozen ctx ref-sha)
+  (expect-status "recompute-base-sha256" status-ok
+                 (mlora-compute-base-sha256 (ffi-pointer ctx)))
+  (do ((i 0 (+ i 1)))
+      ((= i 4))
+    (require-check "base SHA-256 mutated"
+                   (= (vector-ref ref-sha i)
+                      (mlora-base-sha256-word (ffi-pointer ctx) i)))))
+
+(define (verify-sgmv-bitwise-parity ctx)
+  (expect-status "sgmv-forward-parity" status-ok
+                 (mlora-sgmv-forward (ffi-pointer ctx)))
+  (expect-status "single-ref-forward-parity" status-ok
+                 (mlora-single-ref-forward (ffi-pointer ctx)))
+  (let ((yn (mlora-y-count (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i yn))
+      (require-check "SGMV vs single-row reference bitwise mismatch"
+                     (= (mlora-y-bits (ffi-pointer ctx) i)
+                        (mlora-y-ref-bits (ffi-pointer ctx) i))))))
+
+(define (verify-idle-zero-bleed ctx aid)
+  (let* ((rank (mlora-adapter-rank (ffi-pointer ctx) aid))
+         (an (* rank dim-in))
+         (bn (* dim-out rank)))
+    (do ((i 0 (+ i 1)))
+        ((= i an))
+      (require-check "idle adapter dA non-zero bleed"
+                     (= (mlora-da-bits (ffi-pointer ctx) aid i) 0)))
+    (do ((i 0 (+ i 1)))
+        ((= i bn))
+      (require-check "idle adapter dB non-zero bleed"
+                     (= (mlora-db-bits (ffi-pointer ctx) aid i) 0)))))
+
+(define (eval-task-loss ctx target-aid)
+  (let ((acc 0.0)
+        (inv (/ 1.0 (* 3.0 dim-out))))
+    (do ((row 0 (+ row 1)))
+        ((= row dim-m) (* 0.5 inv acc))
+      (when (= (mlora-get-row-adapter (ffi-pointer ctx) row) target-aid)
+        (do ((o 0 (+ o 1)))
+            ((= o dim-out))
+          (let* ((idx (+ (* row dim-out) o))
+                 (diff (- (mlora-get-y (ffi-pointer ctx) idx)
+                          (mlora-get-target (ffi-pointer ctx) idx))))
+            (set! acc (+ acc (* diff diff)))))))))
+
+(define (eval-total-loss ctx)
+  (expect-status "fwd-total-loss" status-ok
+                 (mlora-sgmv-forward (ffi-pointer ctx)))
+  (+ (eval-task-loss ctx id-a1)
+     (eval-task-loss ctx id-a2)
+     (eval-task-loss ctx id-a3)))
+
+(define (set-training-dy ctx)
+  (let ((inv (/ 1.0 (* 3.0 dim-out))))
+    (do ((row 0 (+ row 1)))
+        ((= row dim-m))
+      (let ((aid (mlora-get-row-adapter (ffi-pointer ctx) row)))
+        (do ((o 0 (+ o 1)))
+            ((= o dim-out))
+          (let ((idx (+ (* row dim-out) o)))
+            (if (= aid id-base)
+                (expect-status "set-dy-base" status-ok
+                               (mlora-set-dy (ffi-pointer ctx) idx 0.0))
+                (let ((diff (- (mlora-get-y (ffi-pointer ctx) idx)
+                               (mlora-get-target (ffi-pointer ctx) idx))))
+                  (expect-status "set-dy-task" status-ok
+                                 (mlora-set-dy (ffi-pointer ctx) idx
+                                               (* inv diff)))))))))))
+
+(define (fd-check-x ctx idx)
+  (let ((orig (mlora-get-x (ffi-pointer ctx) idx))
+        (analytic (mlora-get-dx (ffi-pointer ctx) idx))
+        (eps 0.001953125))
+    (expect-status "fd-x+" status-ok
+                   (mlora-set-x (ffi-pointer ctx) idx (+ orig eps)))
+    (let ((lp (eval-total-loss ctx)))
+      (expect-status "fd-x-" status-ok
+                     (mlora-set-x (ffi-pointer ctx) idx (- orig eps)))
+      (let* ((lm (eval-total-loss ctx))
+             (num (/ (- lp lm) (* 2.0 eps)))
+             (err (abs (- analytic num))))
+        (expect-status "fd-x-restore" status-ok
+                       (mlora-set-x (ffi-pointer ctx) idx orig))
+        (require-check "dX central FD failed" (< err 0.00001))
+        err))))
+
+(define (fd-check-a ctx aid idx)
+  (let ((orig (mlora-get-a (ffi-pointer ctx) aid idx))
+        (analytic (mlora-get-da (ffi-pointer ctx) aid idx))
+        (eps 0.001953125))
+    (expect-status "fd-a+" status-ok
+                   (mlora-set-a (ffi-pointer ctx) aid idx (+ orig eps)))
+    (let ((lp (eval-total-loss ctx)))
+      (expect-status "fd-a-" status-ok
+                     (mlora-set-a (ffi-pointer ctx) aid idx (- orig eps)))
+      (let* ((lm (eval-total-loss ctx))
+             (num (/ (- lp lm) (* 2.0 eps)))
+             (err (abs (- analytic num))))
+        (expect-status "fd-a-restore" status-ok
+                       (mlora-set-a (ffi-pointer ctx) aid idx orig))
+        (require-check "dA central FD failed" (< err 0.00001))
+        err))))
+
+(define (fd-check-b ctx aid idx)
+  (let ((orig (mlora-get-b (ffi-pointer ctx) aid idx))
+        (analytic (mlora-get-db (ffi-pointer ctx) aid idx))
+        (eps 0.001953125))
+    (expect-status "fd-b+" status-ok
+                   (mlora-set-b (ffi-pointer ctx) aid idx (+ orig eps)))
+    (let ((lp (eval-total-loss ctx)))
+      (expect-status "fd-b-" status-ok
+                     (mlora-set-b (ffi-pointer ctx) aid idx (- orig eps)))
+      (let* ((lm (eval-total-loss ctx))
+             (num (/ (- lp lm) (* 2.0 eps)))
+             (err (abs (- analytic num))))
+        (expect-status "fd-b-restore" status-ok
+                       (mlora-set-b (ffi-pointer ctx) aid idx orig))
+        (require-check "dB central FD failed" (< err 0.00001))
+        err))))
+
+(define (print-digest-line tag w0 w1 w2 w3)
+  (display tag)
+  (display " ") (display w0)
+  (display " ") (display w1)
+  (display " ") (display w2)
+  (display " ") (display w3)
+  (newline))
+
+(define (run-train-phase)
+  (let ((ctx (create-initialized-ctx)))
+    (let ((base-sha (capture-base-sha256 ctx)))
+      ;; Register 3 heterogeneous adapters (r=2, r=4, r=8) + idle 4th (r=4).
+      (expect-status "reg-101" status-ok
+                     (mlora-register-seeded (ffi-pointer ctx) id-a1 2 4.0 1000))
+      (expect-status "reg-202" status-ok
+                     (mlora-register-seeded (ffi-pointer ctx) id-a2 4 8.0 1001))
+      (expect-status "reg-303" status-ok
+                     (mlora-register-seeded (ffi-pointer ctx) id-a3 8 16.0 1002))
+      (expect-status "reg-idle" status-ok
+                     (mlora-register-seeded (ffi-pointer ctx) id-idle 4 8.0 9999))
+
+      (populate-targets ctx)
+
+      ;; 1. Verify initial SGMV dispatch stats & bitwise 0.0 parity.
+      (verify-sgmv-bitwise-parity ctx)
+      (require-check "base rows == 3"
+                     (= (mlora-last-base-rows (ffi-pointer ctx)) 3))
+      (require-check "adapted rows == 9"
+                     (= (mlora-last-adapted-rows (ffi-pointer ctx)) 9))
+      (require-check "active segments == 3"
+                     (= (mlora-last-active-segments (ffi-pointer ctx)) 3))
+      (display "MLORA AOT PARITY m=12 base_rows=3 adapted_rows=9 segments=3 bitwise_diff=0 PASS")
+      (newline)
+
+      ;; 2. 12-step heterogeneous multi-adapter AdamW fine-tuning + step-1 FD checks.
+      (let ((prev1 1000000.0)
+            (prev2 1000000.0)
+            (prev3 1000000.0)
+            (init1 0.0) (init2 0.0) (init3 0.0)
+            (max-fd-err 0.0)
+            (fd-checks 0))
+        (do ((step 0 (+ step 1)))
+            ((> step train-steps))
+          (expect-status "train-fwd" status-ok
+                         (mlora-sgmv-forward (ffi-pointer ctx)))
+          (let ((l1 (eval-task-loss ctx id-a1))
+                (l2 (eval-task-loss ctx id-a2))
+                (l3 (eval-task-loss ctx id-a3)))
+            (if (= step 0)
+                (begin (set! init1 l1) (set! init2 l2) (set! init3 l3))
+                (begin
+                  (require-check "adapter 101 loss did not decrease" (< l1 prev1))
+                  (require-check "adapter 202 loss did not decrease" (< l2 prev2))
+                  (require-check "adapter 303 loss did not decrease" (< l3 prev3))))
+            (set! prev1 l1) (set! prev2 l2) (set! prev3 l3)
+            (display "MLORA AOT LOSS ") (display step)
+            (display " ") (display (number->string l1))
+            (display " ") (display (number->string l2))
+            (display " ") (display (number->string l3))
+            (newline)
+            (when (< step train-steps)
+              (set-training-dy ctx)
+              (expect-status "train-bwd" status-ok
+                             (mlora-sgmv-backward (ffi-pointer ctx)))
+              (verify-idle-zero-bleed ctx id-idle)
+              ;; At step 1 all 3 adapters have non-zero A and B: run central FD
+              ;; on dX, dA, dB across all 3 ranks (r=2, r=4, r=8)!
+              (when (= step 1)
+                (let ((e1 (fd-check-x ctx 0))
+                      (e2 (fd-check-x ctx 35))
+                      (e3 (fd-check-x ctx 120))
+                      (e4 (fd-check-a ctx id-a1 0))
+                      (e5 (fd-check-a ctx id-a1 17))
+                      (e6 (fd-check-b ctx id-a1 5))
+                      (e7 (fd-check-a ctx id-a2 11))
+                      (e8 (fd-check-b ctx id-a2 23))
+                      (e9 (fd-check-a ctx id-a3 63))
+                      (e10 (fd-check-b ctx id-a3 47)))
+                  (set! fd-checks 10)
+                  (when (> e1 max-fd-err) (set! max-fd-err e1))
+                  (when (> e2 max-fd-err) (set! max-fd-err e2))
+                  (when (> e3 max-fd-err) (set! max-fd-err e3))
+                  (when (> e4 max-fd-err) (set! max-fd-err e4))
+                  (when (> e5 max-fd-err) (set! max-fd-err e5))
+                  (when (> e6 max-fd-err) (set! max-fd-err e6))
+                  (when (> e7 max-fd-err) (set! max-fd-err e7))
+                  (when (> e8 max-fd-err) (set! max-fd-err e8))
+                  (when (> e9 max-fd-err) (set! max-fd-err e9))
+                  (when (> e10 max-fd-err) (set! max-fd-err e10)))
+                ;; Re-run forward + backward to restore exact step-1 grads after FD.
+                (expect-status "post-fd-fwd" status-ok
+                               (mlora-sgmv-forward (ffi-pointer ctx)))
+                (set-training-dy ctx)
+                (expect-status "post-fd-bwd" status-ok
+                               (mlora-sgmv-backward (ffi-pointer ctx)))
+                (verify-idle-zero-bleed ctx id-idle))
+              (expect-status "adamw-101" status-ok
+                             (mlora-adamw-step (ffi-pointer ctx) id-a1
+                                               adamw-lr adamw-beta1 adamw-beta2
+                                               adamw-eps adamw-wd))
+              (expect-status "adamw-202" status-ok
+                             (mlora-adamw-step (ffi-pointer ctx) id-a2
+                                               adamw-lr adamw-beta1 adamw-beta2
+                                               adamw-eps adamw-wd))
+              (expect-status "adamw-303" status-ok
+                             (mlora-adamw-step (ffi-pointer ctx) id-a3
+                                               adamw-lr adamw-beta1 adamw-beta2
+                                               adamw-eps adamw-wd)))
+            (verify-base-frozen ctx base-sha)))
+
+        ;; Post-training bitwise SGMV parity check with non-zero trained A and B!
+        (verify-sgmv-bitwise-parity ctx)
+        (require-check "idle adapter step stayed 0"
+                       (= (mlora-adapter-step (ffi-pointer ctx) id-idle) 0))
+        (require-check "adapter 101 step == 12"
+                       (= (mlora-adapter-step (ffi-pointer ctx) id-a1) 12))
+
+        (display "MLORA AOT FD checks=") (display fd-checks)
+        (display " max_err=") (display (number->string max-fd-err))
+        (display " idle_bleed=0 PASS") (newline)
+
+        (display "MLORA AOT TRAIN steps=12 a101=")
+        (display (number->string init1)) (display "->") (display (number->string prev1))
+        (display " a202=")
+        (display (number->string init2)) (display "->") (display (number->string prev2))
+        (display " a303=")
+        (display (number->string init3)) (display "->") (display (number->string prev3))
+        (display " base_frozen=PASS") (newline))
+
+      ;; 3. Hot-swap lifecycle on idle adapter 404:
+      ;;    pin -> unregister BUSY -> unpin -> unregister OK -> hot-load 505.
+      (let ((old-gen (mlora-adapter-gen (ffi-pointer ctx) id-idle)))
+        (expect-status "pin-404" status-ok (mlora-pin (ffi-pointer ctx) id-idle))
+        (require-check "pin count == 1"
+                       (= (mlora-adapter-pins (ffi-pointer ctx) id-idle) 1))
+        (expect-status "unreg-busy" err-busy
+                       (mlora-unregister (ffi-pointer ctx) id-idle))
+        (expect-status "unpin-404" status-ok (mlora-unpin (ffi-pointer ctx) id-idle))
+        (require-check "pin count == 0"
+                       (= (mlora-adapter-pins (ffi-pointer ctx) id-idle) 0))
+        (expect-status "double-unpin" err-underflow
+                       (mlora-unpin (ffi-pointer ctx) id-idle))
+        (expect-status "unreg-404" status-ok
+                       (mlora-unregister (ffi-pointer ctx) id-idle))
+        (expect-status "hot-load-505" status-ok
+                       (mlora-register-seeded (ffi-pointer ctx) id-hot 4 8.0 5050))
+        (let ((new-gen (mlora-adapter-gen (ffi-pointer ctx) id-hot)))
+          (require-check "hot-swap generation incremented"
+                         (= new-gen (+ old-gen 1)))
+          (display "MLORA AOT HOTSWAP old_gen=") (display old-gen)
+          (display " new_gen=") (display new-gen)
+          (display " busy_reject=PASS") (newline)))
+
+      ;; Re-verify SGMV forward + capture Y digest + save ETML1000 bundle.
+      (verify-sgmv-bitwise-parity ctx)
+      (expect-status "compute-y-sha256" status-ok
+                     (mlora-compute-y-sha256 (ffi-pointer ctx)))
+      (expect-status "save-bundle" status-ok
+                     (mlora-save-env-bundle (ffi-pointer ctx) 1))
+      (print-digest-line
+        "MLORA AOT Y_SHA256"
+        (mlora-y-sha256-word (ffi-pointer ctx) 0)
+        (mlora-y-sha256-word (ffi-pointer ctx) 1)
+        (mlora-y-sha256-word (ffi-pointer ctx) 2)
+        (mlora-y-sha256-word (ffi-pointer ctx) 3))
+      (print-digest-line
+        "MLORA AOT BASE_SHA256"
+        (vector-ref base-sha 0)
+        (vector-ref base-sha 1)
+        (vector-ref base-sha 2)
+        (vector-ref base-sha 3))
+      (mlora-destroy (ffi-pointer ctx)))))
+
+(define (run-reload-phase)
+  (let ((ctx (create-initialized-ctx)))
+    (let ((base-sha (capture-base-sha256 ctx)))
+      ;; Load ETML1000 bundle into this completely fresh registry / OS process.
+      (expect-status "load-bundle" status-ok
+                     (mlora-load-env-bundle (ffi-pointer ctx)))
+      (require-check "reloaded 101 rank == 2"
+                     (= (mlora-adapter-rank (ffi-pointer ctx) id-a1) 2))
+      (require-check "reloaded 202 rank == 4"
+                     (= (mlora-adapter-rank (ffi-pointer ctx) id-a2) 4))
+      (require-check "reloaded 303 rank == 8"
+                     (= (mlora-adapter-rank (ffi-pointer ctx) id-a3) 8))
+      (require-check "reloaded 505 rank == 4"
+                     (= (mlora-adapter-rank (ffi-pointer ctx) id-hot) 4))
+      (require-check "reloaded 101 adamw_step == 12"
+                     (= (mlora-adapter-step (ffi-pointer ctx) id-a1) 12))
+
+      (verify-sgmv-bitwise-parity ctx)
+      (expect-status "reload-y-sha256" status-ok
+                     (mlora-compute-y-sha256 (ffi-pointer ctx)))
+      (print-digest-line
+        "MLORA AOT RELOAD_Y_SHA256"
+        (mlora-y-sha256-word (ffi-pointer ctx) 0)
+        (mlora-y-sha256-word (ffi-pointer ctx) 1)
+        (mlora-y-sha256-word (ffi-pointer ctx) 2)
+        (mlora-y-sha256-word (ffi-pointer ctx) 3))
+      (print-digest-line
+        "MLORA AOT RELOAD_BASE_SHA256"
+        (vector-ref base-sha 0)
+        (vector-ref base-sha 1)
+        (vector-ref base-sha 2)
+        (vector-ref base-sha 3))
+      (display "MLORA AOT RELOAD adapters=4 bitwise_parity=PASS") (newline)
+
+      ;; Negative boundary & tamper checks.
+      (expect-status "tamper-checksum" err-checksum
+                     (mlora-check-tampered-env (ffi-pointer ctx) 1))
+      (expect-status "tamper-truncated" err-truncated
+                     (mlora-check-tampered-env (ffi-pointer ctx) 2))
+      (expect-status "tamper-magic" err-format
+                     (mlora-check-tampered-env (ffi-pointer ctx) 3))
+      (expect-status "tamper-version" err-version
+                     (mlora-check-tampered-env (ffi-pointer ctx) 4))
+      (expect-status "tamper-symlink" err-symlink
+                     (mlora-check-tampered-env (ffi-pointer ctx) 5))
+      (expect-status "tamper-base-hash" err-base-hash
+                     (mlora-check-tampered-env (ffi-pointer ctx) 6))
+
+      (expect-status "invalid-rank-0" err-shape
+                     (mlora-register-seeded (ffi-pointer ctx) 777 0 4.0 1))
+      (expect-status "invalid-rank-9" err-shape
+                     (mlora-register-seeded (ffi-pointer ctx) 777 9 4.0 1))
+      (expect-status "unknown-adapter-unreg" err-not-found
+                     (mlora-unregister (ffi-pointer ctx) 999))
+      (expect-status "double-unpin-101" err-underflow
+                     (mlora-unpin (ffi-pointer ctx) id-a1))
+      (expect-status "nonfinite-x" err-nonfinite
+                     (mlora-check-nonfinite-x (ffi-pointer ctx)))
+      (expect-status "fp-env-trap" err-fp-env
+                     (mlora-check-fp-env-trap (ffi-pointer ctx)))
+      (display "MLORA AOT NEGATIVE PASS") (newline)
+      (mlora-destroy (ffi-pointer ctx)))))
+
+(let ((phase (mlora-env-phase)))
+  (cond
+    ((= phase 0) (run-train-phase) (run-reload-phase))
+    ((= phase 1) (run-train-phase))
+    ((= phase 2) (run-reload-phase))
+    (else (require-check "invalid MLORA_AOT_PHASE" #f))))
