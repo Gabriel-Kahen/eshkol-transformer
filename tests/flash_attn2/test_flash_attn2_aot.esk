@@ -1,0 +1,658 @@
+;;; FlashAttention-2 Exact Tiled Online-Softmax Attention compiled Eshkol AOT driver:
+;;;   1. Negative boundary & failure-atomicity checks (non-finite Q/dO,
+;;;      H_q % H_kv != 0, invalid tile size, negative softcap, empty window,
+;;;      misaligned ptr, aliasing O==Q / dK==dV, bad FP-env) with untouched sentinels
+;;;   2. Tile-size invariance across (8,8), (16,16), (32,16) for GQA + Causal +
+;;;      Sliding Window + Gemma-2 Logit Softcap (O, LSE, dQ, dK, dV)
+;;;   3. Constant O(B_r * B_c) tile scratch bytes verified across T = 32, 64, 128, 256
+;;;      plus causal + sliding-window tile skipping (skipped_tiles > 0)
+;;;   4. Central finite-difference gradient checks on dQ, dK, dV for GQA + Causal +
+;;;      Sliding Window + Softcap (max_abs_err < 1e-5)
+;;;   5. 12-step monotonic SGD training of a GQA + Sliding-Window + Softcap QKV
+;;;      attention block (trainable W_q, W_k, W_v projections) in compiled Eshkol AOT
+;;; Compiled with: eshkol-run --strict-types --optimize 0 --no-stdlib
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+;; FlashAttention-2 Eshkol AOT bridge
+(extern i64 fa2-config-bytes :real et_fa2_aot_config_bytes)
+(extern i64 fa2-stats-bytes :real et_fa2_aot_stats_bytes)
+(extern i64 fa2-tile-scratch-bytes i64 i64 :real et_fa2_aot_tile_scratch_bytes)
+(extern i32 fa2-set-config ptr i64 i64 i64 i64 i64 i64 i64 i64 i64 i64 f64 f64
+        :real et_fa2_aot_set_config)
+(extern i32 fa2-forward ptr ptr ptr ptr ptr ptr ptr
+        :real et_fa2_aot_forward)
+(extern i32 fa2-backward ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_fa2_aot_backward)
+(extern i32 fa2-check-bad-fpenv ptr ptr ptr ptr ptr ptr ptr
+        :real et_fa2_aot_check_bad_fpenv_forward)
+(extern i64 fa2-stats-total ptr :real et_fa2_aot_stats_total_tiles)
+(extern i64 fa2-stats-eval ptr :real et_fa2_aot_stats_evaluated_tiles)
+(extern i64 fa2-stats-skip ptr :real et_fa2_aot_stats_skipped_tiles)
+(extern i64 fa2-stats-scratch ptr :real et_fa2_aot_stats_tile_scratch_bytes)
+(extern void fa2-store-f32 ptr i64 f64 :real et_fa2_aot_store_f32)
+(extern f64 fa2-load-f32 ptr i64 :real et_fa2_aot_load_f32)
+(extern void fa2-store-f64 ptr i64 f64 :real et_fa2_aot_store_f64)
+(extern f64 fa2-load-f64 ptr i64 :real et_fa2_aot_load_f64)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define (expect-status label expected actual)
+  (unless (= actual expected)
+    (display label) (display " expected status ") (display expected)
+    (display ", got ") (display actual) (newline) (exit 1)))
+
+(define (require-check label ok)
+  (unless ok (display label) (newline) (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "FLASH_ATTN2 AOT allocation failed"
+                   (not (= (ptr->usize p) 0)))
+    p))
+
+(define (seed-f32-buf buf count salt scale)
+  (do ((i 0 (+ i 1)))
+      ((= i count))
+    (let ((v (- (modulo (+ (* 31 salt) (* 17 i) (* 7 (quotient i 4))) 33) 16)))
+      (fa2-store-f32 (ffi-pointer buf) i (* (exact->inexact v) scale)))))
+
+(define (max-diff-f32 a b count)
+  (do ((i 0 (+ i 1))
+       (best 0.0))
+      ((= i count) best)
+    (let ((d (abs (- (fa2-load-f32 (ffi-pointer a) i)
+                     (fa2-load-f32 (ffi-pointer b) i)))))
+      (when (> d best) (set! best d)))))
+
+(define (max-diff-f64 a b count)
+  (do ((i 0 (+ i 1))
+       (best 0.0))
+      ((= i count) best)
+    (let ((d (abs (- (fa2-load-f64 (ffi-pointer a) i)
+                     (fa2-load-f64 (ffi-pointer b) i)))))
+      (when (> d best) (set! best d)))))
+
+;; Shared config & stats descriptors
+(define cfg-buf (checked-allocate (fa2-config-bytes)))
+(define bad-cfg-buf (checked-allocate (fa2-config-bytes)))
+(define fstats-buf (checked-allocate (fa2-stats-bytes)))
+(define bstats-buf (checked-allocate (fa2-stats-bytes)))
+
+;; ============================================================================
+;; 1. Negative Boundary Checks (with untouched output sentinels)
+;; ============================================================================
+(define (run-negative-checks)
+  (let* ((q-elems (* 1 4 16 4))
+         (kv-elems (* 1 2 16 4))
+         (lse-elems (* 1 4 16))
+         (q (checked-allocate (* 4 q-elems)))
+         (k (checked-allocate (* 4 kv-elems)))
+         (v (checked-allocate (* 4 kv-elems)))
+         (o-ref (checked-allocate (* 4 q-elems)))
+         (lse-ref (checked-allocate (* 8 lse-elems)))
+         (do-b (checked-allocate (* 4 q-elems)))
+         (o-out (checked-allocate (* 4 q-elems)))
+         (lse-out (checked-allocate (* 8 lse-elems)))
+         (dq-out (checked-allocate (* 4 q-elems)))
+         (dk-out (checked-allocate (* 4 kv-elems)))
+         (dv-out (checked-allocate (* 4 kv-elems))))
+
+    (seed-f32-buf q q-elems 1 0.0625)
+    (seed-f32-buf k kv-elems 2 0.0625)
+    (seed-f32-buf v kv-elems 3 0.0625)
+    (seed-f32-buf do-b q-elems 4 0.0625)
+
+    (expect-status "set valid neg base cfg" 0
+                   (fa2-set-config (ffi-pointer cfg-buf)
+                                   1 4 2 16 16 4 8 8 1 6 0.0 15.0))
+    (expect-status "seed valid O/LSE" 0
+                   (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o-ref) (ffi-pointer lse-ref)
+                                (ffi-pointer fstats-buf)))
+
+    ;; Plant sentinels in output buffers
+    (fa2-store-f32 (ffi-pointer o-out) 0 13.25)
+    (fa2-store-f64 (ffi-pointer lse-out) 0 -19.5)
+    (fa2-store-f32 (ffi-pointer dq-out) 0 7.75)
+    (fa2-store-f32 (ffi-pointer dk-out) 0 -5.125)
+    (fa2-store-f32 (ffi-pointer dv-out) 0 11.5)
+
+    ;; Invalid H_q % H_kv != 0 -> SHAPE_MISMATCH (2)
+    (expect-status "set bad GQA" 0
+                   (fa2-set-config (ffi-pointer bad-cfg-buf)
+                                   1 4 3 16 16 4 8 8 1 6 0.0 15.0))
+    (expect-status "reject H_q%H_kv!=0" 2
+                   (fa2-forward (ffi-pointer bad-cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o-out) (ffi-pointer lse-out)
+                                (ffi-pointer fstats-buf)))
+
+    ;; Invalid tile size B_r=12 -> UNSUPPORTED (3)
+    (expect-status "set bad tile" 0
+                   (fa2-set-config (ffi-pointer bad-cfg-buf)
+                                   1 4 2 16 16 4 12 8 1 6 0.0 15.0))
+    (expect-status "reject invalid tile" 3
+                   (fa2-forward (ffi-pointer bad-cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o-out) (ffi-pointer lse-out)
+                                (ffi-pointer fstats-buf)))
+
+    ;; Negative softcap -> INVALID_ARG (1)
+    (expect-status "set neg softcap" 0
+                   (fa2-set-config (ffi-pointer bad-cfg-buf)
+                                   1 4 2 16 16 4 8 8 1 6 0.0 -2.5))
+    (expect-status "reject neg softcap" 1
+                   (fa2-forward (ffi-pointer bad-cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o-out) (ffi-pointer lse-out)
+                                (ffi-pointer fstats-buf)))
+
+    ;; Empty sliding window (T_q=24, T_k=12, W=8) -> SHAPE_MISMATCH (2)
+    (expect-status "set empty win" 0
+                   (fa2-set-config (ffi-pointer bad-cfg-buf)
+                                   1 4 2 24 12 4 8 8 1 8 0.0 15.0))
+    (expect-status "reject empty win" 2
+                   (fa2-forward (ffi-pointer bad-cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o-out) (ffi-pointer lse-out)
+                                (ffi-pointer fstats-buf)))
+
+    ;; Misaligned pointer -> INVALID_ARG (1)
+    (expect-status "reject misaligned Q" 1
+                   (fa2-forward (ffi-pointer cfg-buf) (ptr-add q 1)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o-out) (ffi-pointer lse-out)
+                                (ffi-pointer fstats-buf)))
+
+    ;; Aliasing O == Q and dK == dV -> INVALID_ARG (1)
+    (expect-status "reject alias O==Q" 1
+                   (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer q) (ffi-pointer lse-out)
+                                (ffi-pointer fstats-buf)))
+    (expect-status "reject alias dK==dV" 1
+                   (fa2-backward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                 (ffi-pointer k) (ffi-pointer v)
+                                 (ffi-pointer o-ref) (ffi-pointer lse-ref)
+                                 (ffi-pointer do-b) (ffi-pointer dq-out)
+                                 (ffi-pointer dk-out) (ffi-pointer dk-out)
+                                 (ffi-pointer bstats-buf)))
+
+    ;; Non-finite Q and dO -> NONFINITE (4)
+    (fa2-store-f32 (ffi-pointer q) 5 1.0e308)
+    (expect-status "reject non-finite Q" 4
+                   (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o-out) (ffi-pointer lse-out)
+                                (ffi-pointer fstats-buf)))
+    (seed-f32-buf q q-elems 1 0.0625)
+
+    (fa2-store-f32 (ffi-pointer do-b) 3 -1.0e308)
+    (expect-status "reject non-finite dO" 4
+                   (fa2-backward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                 (ffi-pointer k) (ffi-pointer v)
+                                 (ffi-pointer o-ref) (ffi-pointer lse-ref)
+                                 (ffi-pointer do-b) (ffi-pointer dq-out)
+                                 (ffi-pointer dk-out) (ffi-pointer dv-out)
+                                 (ffi-pointer bstats-buf)))
+    (seed-f32-buf do-b q-elems 4 0.0625)
+
+    ;; Bad FP environment (FE_TOWARDZERO) -> FP_ENV (5)
+    (expect-status "reject bad FP-env" 5
+                   (fa2-check-bad-fpenv (ffi-pointer cfg-buf) (ffi-pointer q)
+                                        (ffi-pointer k) (ffi-pointer v)
+                                        (ffi-pointer o-out)
+                                        (ffi-pointer lse-out)
+                                        (ffi-pointer fstats-buf)))
+
+    ;; Verify all sentinels untouched
+    (require-check "O sentinel modified"
+                   (= (fa2-load-f32 (ffi-pointer o-out) 0) 13.25))
+    (require-check "LSE sentinel modified"
+                   (= (fa2-load-f64 (ffi-pointer lse-out) 0) -19.5))
+    (require-check "dQ sentinel modified"
+                   (= (fa2-load-f32 (ffi-pointer dq-out) 0) 7.75))
+    (require-check "dK sentinel modified"
+                   (= (fa2-load-f32 (ffi-pointer dk-out) 0) -5.125))
+    (require-check "dV sentinel modified"
+                   (= (fa2-load-f32 (ffi-pointer dv-out) 0) 11.5))
+
+    (release (ffi-pointer q)) (release (ffi-pointer k))
+    (release (ffi-pointer v)) (release (ffi-pointer o-ref))
+    (release (ffi-pointer lse-ref)) (release (ffi-pointer do-b))
+    (release (ffi-pointer o-out)) (release (ffi-pointer lse-out))
+    (release (ffi-pointer dq-out)) (release (ffi-pointer dk-out))
+    (release (ffi-pointer dv-out))
+    (display "FLASH_ATTN2 AOT NEGATIVE PASS") (newline)))
+
+;; ============================================================================
+;; 2. Tile-Size Invariance (8,8) vs (16,16) vs (32,16) + Tile Skipping
+;; ============================================================================
+(define (run-tile-invariance-and-skipping)
+  (let* ((b 1) (hq 4) (hkv 2) (tq 32) (tk 32) (dh 8)
+         (q-elems (* b hq tq dh))
+         (kv-elems (* b hkv tk dh))
+         (lse-elems (* b hq tq))
+         (q (checked-allocate (* 4 q-elems)))
+         (k (checked-allocate (* 4 kv-elems)))
+         (v (checked-allocate (* 4 kv-elems)))
+         (do-b (checked-allocate (* 4 q-elems)))
+         (o8 (checked-allocate (* 4 q-elems)))
+         (lse8 (checked-allocate (* 8 lse-elems)))
+         (dq8 (checked-allocate (* 4 q-elems)))
+         (dk8 (checked-allocate (* 4 kv-elems)))
+         (dv8 (checked-allocate (* 4 kv-elems)))
+         (o16 (checked-allocate (* 4 q-elems)))
+         (lse16 (checked-allocate (* 8 lse-elems)))
+         (dq16 (checked-allocate (* 4 q-elems)))
+         (dk16 (checked-allocate (* 4 kv-elems)))
+         (dv16 (checked-allocate (* 4 kv-elems)))
+         (o32 (checked-allocate (* 4 q-elems)))
+         (lse32 (checked-allocate (* 8 lse-elems)))
+         (dq32 (checked-allocate (* 4 q-elems)))
+         (dk32 (checked-allocate (* 4 kv-elems)))
+         (dv32 (checked-allocate (* 4 kv-elems))))
+
+    (seed-f32-buf q q-elems 11 0.0625)
+    (seed-f32-buf k kv-elems 12 0.0625)
+    (seed-f32-buf v kv-elems 13 0.0625)
+    (seed-f32-buf do-b q-elems 14 0.0625)
+
+    ;; (8,8) tiles
+    (expect-status "cfg (8,8)" 0
+                   (fa2-set-config (ffi-pointer cfg-buf)
+                                   b hq hkv tq tk dh 8 8 1 12 0.0 20.0))
+    (expect-status "fwd (8,8)" 0
+                   (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o8) (ffi-pointer lse8)
+                                (ffi-pointer fstats-buf)))
+    (expect-status "bwd (8,8)" 0
+                   (fa2-backward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                 (ffi-pointer k) (ffi-pointer v)
+                                 (ffi-pointer o8) (ffi-pointer lse8)
+                                 (ffi-pointer do-b) (ffi-pointer dq8)
+                                 (ffi-pointer dk8) (ffi-pointer dv8)
+                                 (ffi-pointer bstats-buf)))
+    (let ((f-tot (fa2-stats-total (ffi-pointer fstats-buf)))
+          (f-ev (fa2-stats-eval (ffi-pointer fstats-buf)))
+          (f-sk (fa2-stats-skip (ffi-pointer fstats-buf)))
+          (b-sk (fa2-stats-skip (ffi-pointer bstats-buf))))
+      (require-check "tile skip > 0" (> f-sk 0))
+      (require-check "fwd skip == bwd skip" (= f-sk b-sk))
+      (require-check "eval + skip == total" (= (+ f-ev f-sk) f-tot))
+
+      ;; (16,16) tiles
+      (expect-status "cfg (16,16)" 0
+                     (fa2-set-config (ffi-pointer cfg-buf)
+                                     b hq hkv tq tk dh 16 16 1 12 0.0 20.0))
+      (expect-status "fwd (16,16)" 0
+                     (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                  (ffi-pointer k) (ffi-pointer v)
+                                  (ffi-pointer o16) (ffi-pointer lse16)
+                                  (ffi-pointer fstats-buf)))
+      (expect-status "bwd (16,16)" 0
+                     (fa2-backward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                   (ffi-pointer k) (ffi-pointer v)
+                                   (ffi-pointer o16) (ffi-pointer lse16)
+                                   (ffi-pointer do-b) (ffi-pointer dq16)
+                                   (ffi-pointer dk16) (ffi-pointer dv16)
+                                   (ffi-pointer bstats-buf)))
+
+      ;; (32,16) tiles
+      (expect-status "cfg (32,16)" 0
+                     (fa2-set-config (ffi-pointer cfg-buf)
+                                     b hq hkv tq tk dh 32 16 1 12 0.0 20.0))
+      (expect-status "fwd (32,16)" 0
+                     (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                  (ffi-pointer k) (ffi-pointer v)
+                                  (ffi-pointer o32) (ffi-pointer lse32)
+                                  (ffi-pointer fstats-buf)))
+      (expect-status "bwd (32,16)" 0
+                     (fa2-backward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                   (ffi-pointer k) (ffi-pointer v)
+                                   (ffi-pointer o32) (ffi-pointer lse32)
+                                   (ffi-pointer do-b) (ffi-pointer dq32)
+                                   (ffi-pointer dk32) (ffi-pointer dv32)
+                                   (ffi-pointer bstats-buf)))
+
+      (let ((eo16 (max-diff-f32 o8 o16 q-elems))
+            (el16 (max-diff-f64 lse8 lse16 lse-elems))
+            (edq16 (max-diff-f32 dq8 dq16 q-elems))
+            (edk16 (max-diff-f32 dk8 dk16 kv-elems))
+            (edv16 (max-diff-f32 dv8 dv16 kv-elems))
+            (eo32 (max-diff-f32 o8 o32 q-elems))
+            (el32 (max-diff-f64 lse8 lse32 lse-elems))
+            (edq32 (max-diff-f32 dq8 dq32 q-elems))
+            (edk32 (max-diff-f32 dk8 dk32 kv-elems))
+            (edv32 (max-diff-f32 dv8 dv32 kv-elems)))
+        (require-check "inv (16,16) O" (<= eo16 1.0e-6))
+        (require-check "inv (16,16) LSE" (<= el16 1.0e-12))
+        (require-check "inv (16,16) dQ" (<= edq16 1.0e-6))
+        (require-check "inv (16,16) dK" (<= edk16 1.0e-6))
+        (require-check "inv (16,16) dV" (<= edv16 1.0e-6))
+        (require-check "inv (32,16) O" (<= eo32 1.0e-6))
+        (require-check "inv (32,16) LSE" (<= el32 1.0e-12))
+        (require-check "inv (32,16) dQ" (<= edq32 1.0e-6))
+        (require-check "inv (32,16) dK" (<= edk32 1.0e-6))
+        (require-check "inv (32,16) dV" (<= edv32 1.0e-6))
+
+        (display "FLASH_ATTN2 AOT TILE_INVARIANCE tiles=(8,8),(16,16),(32,16) skip8=")
+        (display f-sk) (display "/") (display f-tot)
+        (display " err_o16=") (display (number->string eo16))
+        (display " err_o32=") (display (number->string eo32))
+        (display " err_lse32=") (display (number->string el32))
+        (display " PASS") (newline)))
+
+    (release (ffi-pointer q)) (release (ffi-pointer k))
+    (release (ffi-pointer v)) (release (ffi-pointer do-b))
+    (release (ffi-pointer o8)) (release (ffi-pointer lse8))
+    (release (ffi-pointer dq8)) (release (ffi-pointer dk8))
+    (release (ffi-pointer dv8)) (release (ffi-pointer o16))
+    (release (ffi-pointer lse16)) (release (ffi-pointer dq16))
+    (release (ffi-pointer dk16)) (release (ffi-pointer dv16))
+    (release (ffi-pointer o32)) (release (ffi-pointer lse32))
+    (release (ffi-pointer dq32)) (release (ffi-pointer dk32))
+    (release (ffi-pointer dv32))))
+
+;; ============================================================================
+;; 3. Constant O(B_r * B_c) Scratch Across T = 32, 64, 128, 256
+;; ============================================================================
+(define (measure-scratch-at-t t-len)
+  (let* ((q-elems (* 1 2 t-len 8))
+         (kv-elems (* 1 1 t-len 8))
+         (lse-elems (* 1 2 t-len))
+         (q (checked-allocate (* 4 q-elems)))
+         (k (checked-allocate (* 4 kv-elems)))
+         (v (checked-allocate (* 4 kv-elems)))
+         (o (checked-allocate (* 4 q-elems)))
+         (lse (checked-allocate (* 8 lse-elems))))
+    (seed-f32-buf q q-elems 21 0.0625)
+    (seed-f32-buf k kv-elems 22 0.0625)
+    (seed-f32-buf v kv-elems 23 0.0625)
+    (expect-status "cfg scratch T" 0
+                   (fa2-set-config (ffi-pointer cfg-buf)
+                                   1 2 1 t-len t-len 8 16 16 1 32 0.0 25.0))
+    (expect-status "fwd scratch T" 0
+                   (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o) (ffi-pointer lse)
+                                (ffi-pointer fstats-buf)))
+    (let ((sb (fa2-stats-scratch (ffi-pointer fstats-buf)))
+          (sk (fa2-stats-skip (ffi-pointer fstats-buf))))
+      (require-check "scratch bytes == 4096" (= sb 4096))
+      (require-check "skip > 0 at T" (> sk 0))
+      (release (ffi-pointer q)) (release (ffi-pointer k))
+      (release (ffi-pointer v)) (release (ffi-pointer o))
+      (release (ffi-pointer lse))
+      sb)))
+
+(define (run-constant-scratch-check)
+  (let ((s32 (measure-scratch-at-t 32))
+        (s64 (measure-scratch-at-t 64))
+        (s128 (measure-scratch-at-t 128))
+        (s256 (measure-scratch-at-t 256))
+        (api-sb (fa2-tile-scratch-bytes 16 16)))
+    (require-check "api scratch == 4096" (= api-sb 4096))
+    (require-check "scratch invariant T"
+                   (and (= s32 api-sb) (= s64 api-sb)
+                        (= s128 api-sb) (= s256 api-sb)))
+    (display "FLASH_ATTN2 AOT CONSTANT_SCRATCH br=16 bc=16 t32=") (display s32)
+    (display " t64=") (display s64)
+    (display " t128=") (display s128)
+    (display " t256=") (display s256)
+    (display " PASS") (newline)))
+
+;; ============================================================================
+;; 4. Central Finite-Difference Gradient Check (GQA + Causal + Win + Softcap)
+;; ============================================================================
+(define (run-fd-checks)
+  (let* ((b 1) (hq 4) (hkv 2) (tq 16) (tk 16) (dh 4)
+         (q-elems (* b hq tq dh))
+         (kv-elems (* b hkv tk dh))
+         (lse-elems (* b hq tq))
+         (q (checked-allocate (* 4 q-elems)))
+         (k (checked-allocate (* 4 kv-elems)))
+         (v (checked-allocate (* 4 kv-elems)))
+         (do-b (checked-allocate (* 4 q-elems)))
+         (o (checked-allocate (* 4 q-elems)))
+         (op (checked-allocate (* 4 q-elems)))
+         (om (checked-allocate (* 4 q-elems)))
+         (lse (checked-allocate (* 8 lse-elems)))
+         (lse-tmp (checked-allocate (* 8 lse-elems)))
+         (dq (checked-allocate (* 4 q-elems)))
+         (dk (checked-allocate (* 4 kv-elems)))
+         (dv (checked-allocate (* 4 kv-elems))))
+
+    (seed-f32-buf q q-elems 31 0.03125)
+    (seed-f32-buf k kv-elems 32 0.03125)
+    (seed-f32-buf v kv-elems 33 0.03125)
+    (seed-f32-buf do-b q-elems 34 0.03125)
+
+    (expect-status "set fd cfg" 0
+                   (fa2-set-config (ffi-pointer cfg-buf)
+                                   b hq hkv tq tk dh 8 8 1 6 0.0 15.0))
+    (expect-status "fd fwd" 0
+                   (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                (ffi-pointer k) (ffi-pointer v)
+                                (ffi-pointer o) (ffi-pointer lse)
+                                (ffi-pointer fstats-buf)))
+    (expect-status "fd bwd" 0
+                   (fa2-backward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                 (ffi-pointer k) (ffi-pointer v)
+                                 (ffi-pointer o) (ffi-pointer lse)
+                                 (ffi-pointer do-b) (ffi-pointer dq)
+                                 (ffi-pointer dk) (ffi-pointer dv)
+                                 (ffi-pointer bstats-buf)))
+
+    (let ((eps 0.001953125)
+          (checked 0)
+          (max-err 0.0))
+      (define (check-one buf grad idx)
+        (let ((orig (fa2-load-f32 (ffi-pointer buf) idx)))
+          (fa2-store-f32 (ffi-pointer buf) idx (+ orig eps))
+          (expect-status "fd fwd +" 0
+                         (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                      (ffi-pointer k) (ffi-pointer v)
+                                      (ffi-pointer op) (ffi-pointer lse-tmp)
+                                      (ffi-pointer fstats-buf)))
+          (fa2-store-f32 (ffi-pointer buf) idx (- orig eps))
+          (expect-status "fd fwd -" 0
+                         (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                      (ffi-pointer k) (ffi-pointer v)
+                                      (ffi-pointer om) (ffi-pointer lse-tmp)
+                                      (ffi-pointer fstats-buf)))
+          (fa2-store-f32 (ffi-pointer buf) idx orig)
+          (let ((diff-loss 0.0))
+            (do ((i 0 (+ i 1)))
+                ((= i q-elems))
+              (set! diff-loss
+                    (+ diff-loss
+                       (* (- (fa2-load-f32 (ffi-pointer op) i)
+                             (fa2-load-f32 (ffi-pointer om) i))
+                          (fa2-load-f32 (ffi-pointer do-b) i)))))
+            (let* ((fd (/ diff-loss (* 2.0 eps)))
+                   (an (fa2-load-f32 (ffi-pointer grad) idx))
+                   (err (abs (- an fd))))
+              (unless (< err 1.0e-5)
+                (display "FLASH_ATTN2 AOT FD mismatch idx=") (display idx)
+                (display " an=") (display (number->string an))
+                (display " fd=") (display (number->string fd))
+                (display " err=") (display (number->string err)) (newline)
+                (exit 1))
+              (when (> err max-err) (set! max-err err))
+              (set! checked (+ checked 1))))))
+
+      ;; Sample 8 elements each from Q, K, V (24 total)
+      (do ((s 0 (+ s 1))) ((= s 8)) (check-one q dq (* s 31)))
+      (do ((s 0 (+ s 1))) ((= s 8)) (check-one k dk (* s 15)))
+      (do ((s 0 (+ s 1))) ((= s 8)) (check-one v dv (* s 15)))
+
+      (display "FLASH_ATTN2 AOT FD_GRADIENTS checked=") (display checked)
+      (display " max_abs_err=") (display (number->string max-err))
+      (display " PASS") (newline))
+
+    (release (ffi-pointer q)) (release (ffi-pointer k))
+    (release (ffi-pointer v)) (release (ffi-pointer do-b))
+    (release (ffi-pointer o)) (release (ffi-pointer op))
+    (release (ffi-pointer om)) (release (ffi-pointer lse))
+    (release (ffi-pointer lse-tmp)) (release (ffi-pointer dq))
+    (release (ffi-pointer dk)) (release (ffi-pointer dv))))
+
+;; ============================================================================
+;; 5. 12-Step Monotonic SGD Training of GQA + Sliding-Window + Softcap QKV Block
+;; ============================================================================
+(define (run-sgd-training)
+  (let* ((t-len 16) (d-model 8) (hq 4) (hkv 2) (dh 4) (steps 12) (lr 2.0)
+         (x-elems (* t-len d-model))
+         (wq-elems (* hq dh d-model))
+         (wkv-elems (* hkv dh d-model))
+         (q-elems (* hq t-len dh))
+         (kv-elems (* hkv t-len dh))
+         (lse-elems (* hq t-len))
+         (x (checked-allocate (* 4 x-elems)))
+         (target (checked-allocate (* 4 q-elems)))
+         (wq (checked-allocate (* 4 wq-elems)))
+         (wk (checked-allocate (* 4 wkv-elems)))
+         (wv (checked-allocate (* 4 wkv-elems)))
+         (dwq (checked-allocate (* 4 wq-elems)))
+         (dwk (checked-allocate (* 4 wkv-elems)))
+         (dwv (checked-allocate (* 4 wkv-elems)))
+         (q (checked-allocate (* 4 q-elems)))
+         (k (checked-allocate (* 4 kv-elems)))
+         (v (checked-allocate (* 4 kv-elems)))
+         (o (checked-allocate (* 4 q-elems)))
+         (lse (checked-allocate (* 8 lse-elems)))
+         (do-b (checked-allocate (* 4 q-elems)))
+         (dq (checked-allocate (* 4 q-elems)))
+         (dk (checked-allocate (* 4 kv-elems)))
+         (dv (checked-allocate (* 4 kv-elems))))
+
+    (seed-f32-buf x x-elems 41 0.0625)
+    (seed-f32-buf target q-elems 42 0.0625)
+    (seed-f32-buf wq wq-elems 43 0.0625)
+    (seed-f32-buf wk wkv-elems 44 0.0625)
+    (seed-f32-buf wv wkv-elems 45 0.0625)
+
+    (expect-status "set sgd cfg" 0
+                   (fa2-set-config (ffi-pointer cfg-buf)
+                                   1 hq hkv t-len t-len dh 8 8 1 6 0.0 15.0))
+
+    ;; Project Y[h, t, d] = sum_m X[t, m] * W[h, d, m]
+    (define (project-forward w-buf out-buf n-heads)
+      (do ((h 0 (+ h 1))) ((= h n-heads))
+        (do ((t 0 (+ t 1))) ((= t t-len))
+          (do ((d 0 (+ d 1))) ((= d dh))
+            (let ((acc 0.0))
+              (do ((m 0 (+ m 1))) ((= m d-model))
+                (set! acc (+ acc (* (fa2-load-f32 (ffi-pointer x) (+ (* t d-model) m))
+                                    (fa2-load-f32 (ffi-pointer w-buf)
+                                                  (+ (* (+ (* h dh) d) d-model) m))))))
+              (fa2-store-f32 (ffi-pointer out-buf)
+                             (+ (* (+ (* h t-len) t) dh) d)
+                             acc))))))
+
+    ;; Backprop dW[h, d, m] = sum_t dOut[h, t, d] * X[t, m]
+    (define (project-backward dout-buf dw-buf n-heads)
+      (do ((h 0 (+ h 1))) ((= h n-heads))
+        (do ((d 0 (+ d 1))) ((= d dh))
+          (do ((m 0 (+ m 1))) ((= m d-model))
+            (let ((acc 0.0))
+              (do ((t 0 (+ t 1))) ((= t t-len))
+                (set! acc (+ acc (* (fa2-load-f32 (ffi-pointer dout-buf)
+                                                  (+ (* (+ (* h t-len) t) dh) d))
+                                    (fa2-load-f32 (ffi-pointer x)
+                                                  (+ (* t d-model) m))))))
+              (fa2-store-f32 (ffi-pointer dw-buf)
+                             (+ (* (+ (* h dh) d) d-model) m)
+                             acc))))))
+
+    (define (sgd-update w-buf dw-buf count)
+      (do ((i 0 (+ i 1))) ((= i count))
+        (let ((nv (- (fa2-load-f32 (ffi-pointer w-buf) i)
+                     (* lr (fa2-load-f32 (ffi-pointer dw-buf) i)))))
+          (fa2-store-f32 (ffi-pointer w-buf) i nv))))
+
+    (define (eval-loss-and-do)
+      (project-forward wq q hq)
+      (project-forward wk k hkv)
+      (project-forward wv v hkv)
+      (expect-status "sgd fa2 fwd" 0
+                     (fa2-forward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                  (ffi-pointer k) (ffi-pointer v)
+                                  (ffi-pointer o) (ffi-pointer lse)
+                                  (ffi-pointer fstats-buf)))
+      (let ((sum-sq 0.0)
+            (inv-n (/ 1.0 (exact->inexact q-elems))))
+        (do ((i 0 (+ i 1))) ((= i q-elems))
+          (let ((diff (- (fa2-load-f32 (ffi-pointer o) i)
+                         (fa2-load-f32 (ffi-pointer target) i))))
+            (set! sum-sq (+ sum-sq (* diff diff)))
+            (fa2-store-f32 (ffi-pointer do-b) i (* diff inv-n))))
+        (* 0.5 inv-n sum-sq)))
+
+    (let ((init-loss (eval-loss-and-do))
+          (prev-loss 0.0)
+          (final-loss 0.0))
+      (set! prev-loss init-loss)
+      (display "FLASH_ATTN2 AOT LOSS 0 ") (display (number->string init-loss))
+      (newline)
+
+      (do ((step 1 (+ step 1))) ((> step steps))
+        (expect-status "sgd fa2 bwd" 0
+                       (fa2-backward (ffi-pointer cfg-buf) (ffi-pointer q)
+                                     (ffi-pointer k) (ffi-pointer v)
+                                     (ffi-pointer o) (ffi-pointer lse)
+                                     (ffi-pointer do-b) (ffi-pointer dq)
+                                     (ffi-pointer dk) (ffi-pointer dv)
+                                     (ffi-pointer bstats-buf)))
+        (project-backward dq dwq hq)
+        (project-backward dk dwk hkv)
+        (project-backward dv dwv hkv)
+        (sgd-update wq dwq wq-elems)
+        (sgd-update wk dwk wkv-elems)
+        (sgd-update wv dwv wkv-elems)
+        (let ((cur-loss (eval-loss-and-do)))
+          (require-check "SGD loss not strictly decreasing" (< cur-loss prev-loss))
+          (display "FLASH_ATTN2 AOT LOSS ") (display step) (display " ")
+          (display (number->string cur-loss)) (newline)
+          (set! prev-loss cur-loss)
+          (set! final-loss cur-loss)))
+
+      (let ((checksum 0.0))
+        (do ((i 0 (+ i 1))) ((= i q-elems))
+          (set! checksum (+ checksum (* (exact->inexact (+ i 1))
+                                        (fa2-load-f32 (ffi-pointer o) i)))))
+        (display "FLASH_ATTN2 AOT RESULT b=1 hq=4 hkv=2 t=16 dh=4 br=8 bc=8 win=6 cap=15 steps=12 initial=")
+        (display (number->string init-loss))
+        (display " final=") (display (number->string final-loss))
+        (display " checksum=") (display (number->string checksum))
+        (newline)))
+
+    (release (ffi-pointer x)) (release (ffi-pointer target))
+    (release (ffi-pointer wq)) (release (ffi-pointer wk))
+    (release (ffi-pointer wv)) (release (ffi-pointer dwq))
+    (release (ffi-pointer dwk)) (release (ffi-pointer dwv))
+    (release (ffi-pointer q)) (release (ffi-pointer k))
+    (release (ffi-pointer v)) (release (ffi-pointer o))
+    (release (ffi-pointer lse)) (release (ffi-pointer do-b))
+    (release (ffi-pointer dq)) (release (ffi-pointer dk))
+    (release (ffi-pointer dv))))
+
+;; Run complete FlashAttention-2 compiled Eshkol AOT suite
+(run-negative-checks)
+(run-tile-invariance-and-skipping)
+(run-constant-scratch-check)
+(run-fd-checks)
+(run-sgd-training)
+
+(release (ffi-pointer cfg-buf))
+(release (ffi-pointer bad-cfg-buf))
+(release (ffi-pointer fstats-buf))
+(release (ffi-pointer bstats-buf))
