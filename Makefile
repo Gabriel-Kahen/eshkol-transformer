@@ -467,7 +467,7 @@ benchmark-wave5:
 	test-fp8-gemm test-ring-attn test-e2e-lifecycle \
 	test-pipeline-1f1b test-tensor-parallel test-mamba-ssm \
 	test-fsdp-zero test-beam-search test-qlora-nf4 test-flash-attn2 \
-	test-radix-kv test-hybrid-mesh test-mtp-head
+	test-radix-kv test-hybrid-mesh test-mtp-head test-ppo-rlhf
 test-io5-quant:
 	/usr/bin/bash scripts/test-io5-quant.sh
 
@@ -551,6 +551,9 @@ test-hybrid-mesh:
 
 test-mtp-head:
 	/usr/bin/bash scripts/test-mtp-head.sh
+
+test-ppo-rlhf:
+	/usr/bin/bash scripts/test-ppo-rlhf.sh
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
