@@ -693,6 +693,33 @@ static void test_all_stages_and_worlds(const char *oracle_dump_dir) {
     REQUIRE(rmdir(ckpt_dir) == 0);
     printf("FSDP NATIVE RESUME 6+6 Stage=3 W=%u: bitwise_exact=PASS\n", W);
   }
+
+  /* Verify Stage 2 W=2 6+6 fresh-process checkpoint resume (exercises
+   * params_full serialization/deserialization alongside m_shard/v_shard). */
+  {
+    const uint32_t W = 2u;
+    char ckpt_dir[128] = "/tmp/fsdp_ckpt_s2_XXXXXX";
+    REQUIRE(mkdtemp(ckpt_dir) != NULL);
+
+    fork_result_t part1;
+    fork_result_t part2;
+    run_training_group(ET_ZERO_STAGE_2, W, 1, ckpt_dir, 0u, 6u, &part1);
+    run_training_group(ET_ZERO_STAGE_2, W, 1, ckpt_dir, 6u, TRAIN_STEPS, &part2);
+
+    REQUIRE(memcmp(part2.final_sha256, results[2][1].final_sha256, 32u) == 0);
+    REQUIRE(memcmp(part2.final_params, results[2][1].final_params,
+                   NUM_PARAMS * sizeof(float)) == 0);
+    for (uint32_t s = 6u; s < TRAIN_STEPS; ++s) {
+      REQUIRE(part2.losses[s] == results[2][1].losses[s]);
+    }
+    for (uint32_t r = 0u; r < W; ++r) {
+      char p[256];
+      snprintf(p, sizeof(p), "%s/rank-%u.etfs", ckpt_dir, r);
+      REQUIRE(unlink(p) == 0);
+    }
+    REQUIRE(rmdir(ckpt_dir) == 0);
+    printf("FSDP NATIVE RESUME 6+6 Stage=2 W=2: bitwise_exact=PASS\n");
+  }
 }
 
 static void test_atomic_nonfinite_abort_w4(void) {
@@ -828,6 +855,134 @@ static void test_atomic_nonfinite_abort_w4(void) {
   printf("FSDP NATIVE ATOMIC_NONFINITE_ABORT W=4 (NaN + Inf + recovery): PASS\n");
 }
 
+static void test_atomic_adamw_shard_overflow_w4(et_zero_stage_t stage) {
+  const int fds_before = count_open_fds();
+  const uint32_t W = 4u;
+  int sv[4][2];
+  for (uint32_t r = 1u; r < W; ++r) {
+    REQUIRE(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv[r]) == 0);
+  }
+
+  pid_t pids[4];
+  for (uint32_t r = 0u; r < W; ++r) {
+    const pid_t pid = fork();
+    REQUIRE(pid >= 0);
+    if (pid == 0) {
+      int my_fds[3];
+      size_t n_fds = 0u;
+      if (r == 0u) {
+        for (uint32_t k = 1u; k < W; ++k) {
+          close(sv[k][1]);
+          my_fds[n_fds++] = sv[k][0];
+        }
+      } else {
+        for (uint32_t k = 1u; k < W; ++k) {
+          close(sv[k][0]);
+          if (k != r) {
+            close(sv[k][1]);
+          }
+        }
+        my_fds[n_fds++] = sv[r][1];
+      }
+
+      et_fsdp_comm_t *comm = NULL;
+      if (et_fsdp_comm_create_fds(ET_FSDP_ABI_MAJOR, ET_FSDP_ABI_MINOR, r, W,
+                                  my_fds, n_fds, &comm) != ET_FSDP_OK) {
+        _exit(70);
+      }
+      for (size_t i = 0u; i < n_fds; ++i) {
+        close(my_fds[i]);
+      }
+
+      /* Disable global clipping (max_grad_norm = 0.0, explicitly supported) so
+       * a finite gradient 1.0e21f inside rank 1's shard passes gradient sync
+       * and binary64 norm reduction, yet overflows binary32 v_new = 1e39 > FLT_MAX
+       * ONLY on rank 1's AdamW shard update. */
+      et_fsdp_config_v1 cfg = make_cfg(stage);
+      cfg.max_grad_norm = 0.0;
+      et_fsdp_engine_t *eng = NULL;
+      float init_p[NUM_PARAMS];
+      if (et_fsdp_engine_create(comm, &cfg, &eng) != ET_FSDP_OK ||
+          et_fsdp_mlp_init_params(IN_DIM, HIDDEN_DIM, NUM_CLASSES, MODEL_SEED,
+                                  init_p, NUM_PARAMS) != ET_FSDP_OK ||
+          et_fsdp_engine_load_initial_params(eng, init_p, NUM_PARAMS) !=
+              ET_FSDP_OK) {
+        _exit(71);
+      }
+
+      float grads[NUM_PARAMS];
+      for (size_t i = 0u; i < NUM_PARAMS; ++i) {
+        grads[i] = 0.01f * (float)((i % 7u) + 1u);
+      }
+      et_fsdp_step_info_v1 info;
+      if (et_fsdp_engine_step(eng, grads, NUM_PARAMS, 10u, 5000, &info) !=
+          ET_FSDP_OK) {
+        _exit(72);
+      }
+
+      const size_t slen = 61u;
+      float p0[61], m0[61], v0[61];
+      float p1[61], m1[61], v1[61];
+      float full0[NUM_PARAMS], full1[NUM_PARAMS];
+      if (et_fsdp_engine_get_param_shard(eng, p0, slen) != ET_FSDP_OK ||
+          et_fsdp_engine_get_moments_shard(eng, m0, v0, slen) != ET_FSDP_OK ||
+          et_fsdp_engine_gather_params(eng, full0, NUM_PARAMS, 11u, 5000) !=
+              ET_FSDP_OK) {
+        _exit(73);
+      }
+
+      /* Index 61 belongs exclusively to rank 1 (shard_len = 61). All ranks
+       * supply finite 1.0e21f at index 61 so ReduceScatterAvg/AllReduceAvg
+       * yields finite 1.0e21f and binary64 norm is finite (~1e21), while
+       * rank 1's binary32 AdamW v_new overflows FLT_MAX. */
+      grads[61] = 1.0e21f;
+      if (et_fsdp_engine_step(eng, grads, NUM_PARAMS, 12u, 5000, &info) !=
+          ET_FSDP_ERR_NONFINITE) {
+        _exit(74);
+      }
+
+      /* Every rank must preserve step, shard state, and gathered full params
+       * bitwise (no Stage 3 split-brain commit, no Stage 1/2 hang/teardown). */
+      if (et_fsdp_engine_get_step(eng) != 1u ||
+          et_fsdp_engine_get_param_shard(eng, p1, slen) != ET_FSDP_OK ||
+          et_fsdp_engine_get_moments_shard(eng, m1, v1, slen) != ET_FSDP_OK ||
+          et_fsdp_engine_gather_params(eng, full1, NUM_PARAMS, 13u, 5000) !=
+              ET_FSDP_OK ||
+          memcmp(p0, p1, sizeof(p0)) != 0 || memcmp(m0, m1, sizeof(m0)) != 0 ||
+          memcmp(v0, v1, sizeof(v0)) != 0 ||
+          memcmp(full0, full1, sizeof(full0)) != 0) {
+        _exit(75);
+      }
+
+      /* Communicator and engine must recover cleanly on the next valid step. */
+      grads[61] = 0.01f * (float)((61u % 7u) + 1u);
+      if (et_fsdp_engine_step(eng, grads, NUM_PARAMS, 14u, 5000, &info) !=
+              ET_FSDP_OK ||
+          et_fsdp_engine_get_step(eng) != 2u) {
+        _exit(76);
+      }
+
+      et_fsdp_engine_destroy(eng);
+      et_fsdp_comm_destroy(comm);
+      _exit(0);
+    }
+    pids[r] = pid;
+  }
+
+  for (uint32_t r = 1u; r < W; ++r) {
+    close(sv[r][0]);
+    close(sv[r][1]);
+  }
+  for (uint32_t r = 0u; r < W; ++r) {
+    int st = 0;
+    REQUIRE(waitpid(pids[r], &st, 0) == pids[r]);
+    REQUIRE(WIFEXITED(st) && WEXITSTATUS(st) == 0);
+  }
+  REQUIRE(count_open_fds() == fds_before);
+  printf("FSDP NATIVE ATOMIC_ADAMW_SHARD_OVERFLOW Stage=%u W=4 (abort + recovery): PASS\n",
+         (unsigned)stage);
+}
+
 static void test_negative_and_faults(void) {
   const int fds_before = count_open_fds();
 
@@ -848,6 +1003,22 @@ static void test_negative_and_faults(void) {
   et_fsdp_comm_t *c1 = NULL;
   REQUIRE(et_fsdp_comm_create_fds(ET_FSDP_ABI_MAJOR, ET_FSDP_ABI_MINOR, 0u, 1u,
                                   NULL, 0u, &c1) == ET_FSDP_OK);
+
+  /* Overflow-guarded batch_size * in_dim check in MLP forward/backward. */
+  {
+    float dummy_p[NUM_PARAMS] = {0.0f};
+    float dummy_x[IN_DIM] = {0.0f};
+    int32_t dummy_t[1] = {0};
+    double dummy_loss = 0.0;
+    REQUIRE(et_fsdp_mlp_forward_backward(IN_DIM, HIDDEN_DIM, NUM_CLASSES,
+                                         ((size_t)ET_FSDP_MAX_PARAMS / IN_DIM) + 1u,
+                                         dummy_p, dummy_x, dummy_t, &dummy_loss,
+                                         NULL) == ET_FSDP_ERR_INVALID_ARG);
+    REQUIRE(et_fsdp_mlp_forward_backward(IN_DIM, HIDDEN_DIM, NUM_CLASSES,
+                                         SIZE_MAX / 2u, dummy_p, dummy_x,
+                                         dummy_t, &dummy_loss,
+                                         NULL) == ET_FSDP_ERR_INVALID_ARG);
+  }
 
   et_fsdp_config_v1 cfg = make_cfg(ET_ZERO_STAGE_3_FSDP);
   et_fsdp_engine_t *eng = NULL;
@@ -1126,6 +1297,8 @@ int main(int argc, char **argv) {
   test_collectives_w4();
   test_all_stages_and_worlds(oracle_dump_dir);
   test_atomic_nonfinite_abort_w4();
+  test_atomic_adamw_shard_overflow_w4(ET_ZERO_STAGE_2);
+  test_atomic_adamw_shard_overflow_w4(ET_ZERO_STAGE_3_FSDP);
   test_negative_and_faults();
 
   printf("FSDP NATIVE ALL TESTS PASS\n");

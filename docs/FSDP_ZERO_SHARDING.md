@@ -72,27 +72,31 @@ Per-step communication volume per worker rank (star coordinator rank 0 exchanges
 
 | Stage | Collectives per Training Step | Worker Payload Sent / Step | Worker Payload Recv / Step |
 |---|---|---:|---:|
-| ZeRO-1 | `AllReduceAvg(P_pad)` + `AllReduceSum64(1)` + `AllGather(S)` | `4 * P_pad + 4 * S + 8` B | `8 * P_pad + 8` B |
-| ZeRO-2 | `ReduceScatterAvg(P_pad -> S)` + `AllReduceSum64(1)` + `AllGather(S)` | `4 * P_pad + 4 * S + 8` B | `4 * P_pad + 4 * S + 8` B |
-| ZeRO-3 FSDP | `AllGather(S -> P_pad)` + `ReduceScatterAvg(P_pad -> S)` + `AllReduceSum64(1)` | `4 * P_pad + 4 * S + 8` B | `4 * P_pad + 4 * S + 8` B |
+| ZeRO-1 | `AllReduceAvg(P_pad)` + `2 * AllReduceSum64(1)` + `AllGather(S)` | `4 * P_pad + 4 * S + 16` B | `8 * P_pad + 16` B |
+| ZeRO-2 | `ReduceScatterAvg(P_pad -> S)` + `2 * AllReduceSum64(1)` + `AllGather(S)` | `4 * P_pad + 4 * S + 16` B | `4 * P_pad + 4 * S + 16` B |
+| ZeRO-3 FSDP | `AllGather(S -> P_pad)` + `ReduceScatterAvg(P_pad -> S)` + `2 * AllReduceSum64(1)` | `4 * P_pad + 4 * S + 16` B | `4 * P_pad + 4 * S + 16` B |
 
 Measured rank-0 cumulative coordinator payload over 12 Stage-3 FSDP steps plus
 final parameter gather (`P = 243`, `P_pad = 244`, including 12 `AllReduceSum64`
-loss reductions):
+loss reductions and 12 `AllReduceSum64` AdamW finiteness consensus votes):
 
 - `W = 1`: `0 B` sent, `0 B` recv (zero sockets opened)
-- `W = 2`: `18,736 B` sent, `18,248 B` recv
-- `W = 4`: `47,424 B` sent, `45,228 B` recv
+- `W = 2`: `18,832 B` sent, `18,344 B` recv
+- `W = 4`: `47,712 B` sent, `45,516 B` recv
 
 ## Stage-3 FSDP Step Lifecycle & Sharded Checkpoint Format (`ETFS1000` v1.0)
 
 1. `et_fsdp_engine_gather_params`: `AllGather(params_shard)` into an ephemeral
    full parameter buffer; after forward+backward, the ephemeral buffer is
-   explicitly poisoned with quiet-NaN bit pattern `0x7fc0dead` and released.
-2. `et_fsdp_engine_step`: zero-pads trailing slots to `0.0f`, runs
-   `ReduceScatterAvg` into `grad_shard[S]`, computes exact global L2 norm via
-   `AllReduceSum_f64`, applies global clipping (`max_grad_norm = 0.5`), and runs
-   an atomic shard-local decoupled AdamW update on `(params_shard, m_shard, v_shard)`.
+   explicitly poisoned with quiet-NaN bit pattern `0x7fc0dead` (via volatile
+   stores) and released.
+2. `et_fsdp_engine_step`: pre-allocates all staging buffers before entering any
+   collective, zero-pads trailing slots to `0.0f`, runs `ReduceScatterAvg` into
+   `grad_shard[S]`, computes exact global L2 norm via `AllReduceSum_f64`,
+   applies global clipping (`max_grad_norm = 0.5`), stages shard-local decoupled
+   AdamW updates, and runs a coordinated 1-`double` `AllReduceSum_f64` AdamW
+   finiteness consensus vote before Stage 1/2 `AllGather` and live-state commit
+   so any single-shard `binary32` overflow aborts atomically on all ranks.
 3. **Sharded Checkpoint (`ETFS1000` v1.0)**:
    - Fixed 128-byte little-endian header + per-rank binary32 payload + 32-byte
      SHA-256 checksum over header + payload.
@@ -111,12 +115,12 @@ Verified inside `eshkol-r0-debug:20260928` (`x86_64`, Ubuntu 22.04, `clang-21` /
 
 - **Deterministic Archives & Symbol Audit**:
   - `build/fsdp_zero/libeshkol_transformer_fsdp_zero.a`:
-    `8151276ce4b78f6987830987f89163662a4a4da1121d894a8bdc7514a784854c`
+    `132f9ab1d8fef75b862a480eb937f31c3f672150b7ee971b29418a4799c9235f`
   - `build/fsdp_zero/libeshkol_transformer_fsdp_zero_aot.a`:
-    `cd4291db9763924cc83ef6d2c3c1213b634eff0af571f2c48f328cdb55d33148`
+    `50bf1842e5d93699c6b507473d95e36e0b0466fed168205fd723c1340466b0e7`
 - **Dual Fresh Eshkol AOT Compilations (`--strict-types --optimize 0 --no-stdlib`)**:
   - Byte-identical ELF SHA-256:
-    `f75ca17fa36f7552e42fc876bad51223bcd39e23e4b89e59f1c634d762eeea2b`
+    `a187632458a45ac0c473410ba35b9e84e7986ea30afe971de1f47822159ed660`
 - **C++17 Header & Linkage + Normal `-O2` + ASan/UBSan/LSan (`detect_leaks=1:halt_on_error=1`)**: PASS
 - **Central Finite-Difference Gradient Check (all 243 MLP parameters)**:
   `max |analytical - fd| = 1.773e-08` (threshold `< 1e-4`).
@@ -136,11 +140,15 @@ Loss decreased strictly on every step from `1.58441094` (step 0) to
 
 ### Fault, Non-Finite Abort, and Negative Verification
 
-- **Atomic Non-Finite Abort (`W=4`, Stage 3 FSDP)**: injecting `qNaN`
-  (`0x7fc00000`) or `+Inf` (`0x7f800000`) on a single rank returns
-  `ET_FSDP_ERR_NONFINITE` (`-5`) on all 4 ranks, preserves every rank's
-  `params_shard`, `m_shard`, `v_shard`, and `step` bitwise, and recovers
-  cleanly on the next valid step.
+- **Atomic Non-Finite & Single-Shard AdamW Overflow Abort (`W=4`, Stages 2 & 3)**:
+  injecting `qNaN` (`0x7fc00000`) or `+Inf` (`0x7f800000`) on a single rank, or
+  triggering a single-shard `binary32` AdamW `v_new` overflow with
+  `max_grad_norm = 0.0` (`g[61] = 1.0e21f` owned by rank 1 only), returns
+  `ET_FSDP_ERR_NONFINITE` (`-5`) atomically on all 4 ranks, preserves every
+  rank's `params_shard`, `params_full`, `m_shard`, `v_shard`, and `step`
+  bitwise, and recovers cleanly on the next valid step.
+- **Stage 2 & Stage 3 Fresh-Process 6+6 Resume**: verified bitwise identical
+  for Stage 3 (`W=1, 2, 4`) and Stage 2 (`W=2`).
 - **Negative & Fault Tests (zero FD leaks via `/proc/self/fd`)**: bad magic,
   version mismatch, tampered payload checksum mismatch, truncated/trailing
   checkpoint bytes, symlink refusal on both load and save, stage/world/config

@@ -81,8 +81,10 @@ ET_FSDP_API int32_t et_fsdp_aot_open(
   if (rank < 0 || world_size <= 0 || world_size > (int64_t)ET_FSDP_MAX_WORLD_SIZE ||
       rank >= world_size || stage < 1 || stage > 3 || in_dim <= 0 ||
       hidden_dim <= 0 || num_classes < 2 || global_batch <= 0 ||
-      (global_batch % world_size) != 0 || timeout_ms <= 0 ||
-      timeout_ms > 600000) {
+      (global_batch % world_size) != 0 ||
+      (uint64_t)(global_batch / world_size) >
+          (uint64_t)ET_FSDP_MAX_PARAMS / (uint64_t)in_dim ||
+      timeout_ms <= 0 || timeout_ms > 600000) {
     return ET_FSDP_ERR_INVALID_ARG;
   }
 

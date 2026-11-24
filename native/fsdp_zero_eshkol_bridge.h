@@ -52,8 +52,8 @@ ET_FSDP_API int32_t et_fsdp_aot_probe_tag_mismatch(
     et_fsdp_aot_session_t *session, int64_t tag, int64_t alt_delta,
     int64_t timeout_ms);
 
-/* Run central finite-difference gradient check (W=1) over sample_count
- * parameters spanning W1, b1, W2, b2. Returns max absolute error via
+/* Run central finite-difference gradient check (W=1) exhaustively over all
+ * num_params parameters spanning W1, b1, W2, b2. Returns max absolute error via
  * et_fsdp_aot_last_fd_max_err(). */
 ET_FSDP_API int32_t et_fsdp_aot_fd_grad_check(et_fsdp_aot_session_t *session,
                                               int64_t step_idx, double fd_eps);

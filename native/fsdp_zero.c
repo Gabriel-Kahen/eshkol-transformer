@@ -1174,13 +1174,24 @@ static et_fsdp_status_t run_collective(et_fsdp_comm_t *comm,
     }
   }
 
-  /* Fast-path for W == 1: exact same semantics, zero sockets. */
+  /* Fast-path for W == 1: exact same semantics (including -0.0 -> +0.0
+   * canonicalization), zero sockets. */
   if (W == 1u) {
     if (local_st != ET_FSDP_OK) {
       return local_st;
     }
-    if (sendbuf != recvbuf) {
-      memcpy(recvbuf, sendbuf, recv_bytes);
+    if (kind == KIND_ALLREDUCE_SUM_F64) {
+      const double *src = (const double *)sendbuf;
+      double *dst = (double *)recvbuf;
+      for (size_t i = 0u; i < count; ++i) {
+        dst[i] = (src[i] == 0.0) ? 0.0 : src[i];
+      }
+    } else {
+      const float *src = (const float *)sendbuf;
+      float *dst = (float *)recvbuf;
+      for (size_t i = 0u; i < count; ++i) {
+        dst[i] = canonical_f32(src[i]);
+      }
     }
     comm->sequence += 1u;
     if (kind == KIND_ALLGATHER_F32) {
@@ -1758,9 +1769,9 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_poison_ephemeral(float *buf,
   if (buf == NULL || count == 0u) {
     return ET_FSDP_ERR_INVALID_ARG;
   }
-  const float poison = bits_to_f32(ET_FSDP_POISON_F32_BITS);
+  volatile uint32_t *vbuf = (volatile uint32_t *)buf;
   for (size_t i = 0u; i < count; ++i) {
-    buf[i] = poison;
+    vbuf[i] = ET_FSDP_POISON_F32_BITS;
   }
   return ET_FSDP_OK;
 }
@@ -1816,11 +1827,36 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_step(
   const uint64_t shard = engine->shard_len;
   const uint64_t base = (uint64_t)engine->comm->rank * shard;
 
-  /* Prepare padded gradient buffer with trailing pad slots strictly 0.0f. */
+  /* Pre-allocate ALL step staging buffers BEFORE entering any collective so no
+   * rank can diverge on mid-step OOM after collectives begin. */
   float *padded_grads = (float *)malloc((size_t)padded * sizeof(float));
-  if (padded_grads == NULL) {
+  float *staged_grad_shard = (float *)malloc((size_t)shard * sizeof(float));
+  float *staged_grad_full =
+      (engine->cfg.stage == ET_ZERO_STAGE_1)
+          ? (float *)malloc((size_t)padded * sizeof(float))
+          : NULL;
+  float *next_p = (float *)malloc((size_t)shard * sizeof(float));
+  float *next_m = (float *)malloc((size_t)shard * sizeof(float));
+  float *next_v = (float *)malloc((size_t)shard * sizeof(float));
+  float *next_full =
+      (engine->cfg.stage != ET_ZERO_STAGE_3_FSDP)
+          ? (float *)malloc((size_t)padded * sizeof(float))
+          : NULL;
+  if (padded_grads == NULL || staged_grad_shard == NULL ||
+      (engine->cfg.stage == ET_ZERO_STAGE_1 && staged_grad_full == NULL) ||
+      next_p == NULL || next_m == NULL || next_v == NULL ||
+      (engine->cfg.stage != ET_ZERO_STAGE_3_FSDP && next_full == NULL)) {
+    free(padded_grads);
+    free(staged_grad_shard);
+    free(staged_grad_full);
+    free(next_p);
+    free(next_m);
+    free(next_v);
+    free(next_full);
     return ET_FSDP_ERR_ALLOC;
   }
+
+  /* Prepare padded gradient buffer with trailing pad slots strictly 0.0f. */
   memcpy(padded_grads, raw_full_grads, num_params * sizeof(float));
   for (uint64_t i = (uint64_t)num_params; i < padded; ++i) {
     padded_grads[i] = 0.0f;
@@ -1828,21 +1864,8 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_step(
 
   /* Stage-specific gradient synchronization into staging buffer (atomic on
    * coordinated non-finite abort: live grad/param/m/v untouched on error!). */
-  float *staged_grad_full = NULL;
-  float *staged_grad_shard = (float *)malloc((size_t)shard * sizeof(float));
-  if (staged_grad_shard == NULL) {
-    free(padded_grads);
-    return ET_FSDP_ERR_ALLOC;
-  }
-
   et_fsdp_status_t st = ET_FSDP_OK;
   if (engine->cfg.stage == ET_ZERO_STAGE_1) {
-    staged_grad_full = (float *)malloc((size_t)padded * sizeof(float));
-    if (staged_grad_full == NULL) {
-      free(padded_grads);
-      free(staged_grad_shard);
-      return ET_FSDP_ERR_ALLOC;
-    }
     st = et_fsdp_allreduce_avg_f32(engine->comm, padded_grads, staged_grad_full,
                                    (size_t)padded, tag, timeout_ms);
     if (st == ET_FSDP_OK) {
@@ -1860,6 +1883,10 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_step(
   if (st != ET_FSDP_OK) {
     free(staged_grad_full);
     free(staged_grad_shard);
+    free(next_p);
+    free(next_m);
+    free(next_v);
+    free(next_full);
     return st;
   }
 
@@ -1882,6 +1909,10 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_step(
   if (st != ET_FSDP_OK) {
     free(staged_grad_full);
     free(staged_grad_shard);
+    free(next_p);
+    free(next_m);
+    free(next_v);
+    free(next_full);
     return st;
   }
 
@@ -1895,18 +1926,6 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_step(
   }
 
   /* Stage shard-local decoupled AdamW update before committing live state. */
-  float *next_p = (float *)malloc((size_t)shard * sizeof(float));
-  float *next_m = (float *)malloc((size_t)shard * sizeof(float));
-  float *next_v = (float *)malloc((size_t)shard * sizeof(float));
-  if (next_p == NULL || next_m == NULL || next_v == NULL) {
-    free(staged_grad_full);
-    free(staged_grad_shard);
-    free(next_p);
-    free(next_m);
-    free(next_v);
-    return ET_FSDP_ERR_ALLOC;
-  }
-
   const float *cur_p_shard = (engine->cfg.stage == ET_ZERO_STAGE_3_FSDP)
                                  ? engine->params_shard
                                  : (engine->params_full + base);
@@ -1953,27 +1972,27 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_step(
     }
   }
 
-  if (adam_st != ET_FSDP_OK) {
+  /* Coordinate per-rank AdamW finiteness across ALL ranks before Stage 1/2
+   * AllGather or Stage 3 commit so a shard-local binary32 overflow on any
+   * subset of ranks aborts atomically on every rank with zero partial commit
+   * and zero communicator deadlock/teardown. */
+  const double adam_vote = (adam_st == ET_FSDP_OK) ? 0.0 : (double)NAN;
+  double adam_consensus = 0.0;
+  st = et_fsdp_allreduce_sum_f64(engine->comm, &adam_vote, &adam_consensus, 1u,
+                                 tag + UINT64_C(0x18000000), timeout_ms);
+  if (st != ET_FSDP_OK) {
     free(staged_grad_full);
     free(staged_grad_shard);
     free(next_p);
     free(next_m);
     free(next_v);
-    return adam_st;
+    free(next_full);
+    return st;
   }
 
   /* For Stage 1 & 2, synchronize updated parameter shards back into persistent
    * params_full via AllGather BEFORE committing live state! */
   if (engine->cfg.stage != ET_ZERO_STAGE_3_FSDP) {
-    float *next_full = (float *)malloc((size_t)padded * sizeof(float));
-    if (next_full == NULL) {
-      free(staged_grad_full);
-      free(staged_grad_shard);
-      free(next_p);
-      free(next_m);
-      free(next_v);
-      return ET_FSDP_ERR_ALLOC;
-    }
     st = et_fsdp_allgather_f32(engine->comm, next_p, (size_t)shard, next_full,
                                tag + UINT64_C(0x20000000), timeout_ms);
     if (st != ET_FSDP_OK) {
@@ -1986,7 +2005,6 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_step(
       return st;
     }
     memcpy(engine->params_full, next_full, (size_t)padded * sizeof(float));
-    free(next_full);
     if (engine->grads_full != NULL) {
       memcpy(engine->grads_full, staged_grad_full,
              (size_t)padded * sizeof(float));
@@ -2006,6 +2024,7 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_engine_step(
   memcpy(engine->v_shard, next_v, (size_t)shard * sizeof(float));
   engine->step = next_step;
 
+  free(next_full);
   free(staged_grad_full);
   free(staged_grad_shard);
   free(next_p);
@@ -2693,8 +2712,8 @@ ET_FSDP_API et_fsdp_status_t et_fsdp_mlp_forward_backward(
   if (st != ET_FSDP_OK) {
     return st;
   }
-  if (batch_size == 0u || params == NULL || x == NULL || targets == NULL ||
-      out_loss == NULL) {
+  if (batch_size == 0u || batch_size > (size_t)ET_FSDP_MAX_PARAMS / in_dim ||
+      params == NULL || x == NULL || targets == NULL || out_loss == NULL) {
     return ET_FSDP_ERR_INVALID_ARG;
   }
 
