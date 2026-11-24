@@ -134,3 +134,62 @@ The tested lane is x86-64 Ubuntu 22.04.5 with Clang 21.1.8 in
 `eshkol-r0-debug:20260928`. The training harness uses a test-only block with
 diagonal projections. TR3 integration and hosted CI admission are separate
 gates.
+
+## Eshkol AOT bridge and multi-process training
+
+The Eshkol AOT bridge (`native/dist5_eshkol_bridge.h`,
+`native/dist5_eshkol_bridge.c`) builds as deterministic static archive
+`build/dist5_aot/libeshkol_transformer_dist5_aot.a` via
+`bash scripts/build-dist5-aot.sh` (27 `et_dist5_aot_*` C11/C++17 symbols) and
+links against `libeshkol_dist5.a`, `libeshkol_transformer_mod5.a`, and
+`libeshkol_transformer_k1.a`.
+
+`et_dist5_aot_open` bootstraps independent OS rank processes over an `AF_UNIX`
+`SOCK_STREAM` rendezvous socket (`<sock_dir>/dist5_r0.sock`) with a shared
+monotonic deadline, validates rank/world/ABI handshake frames, rejects duplicate
+ranks and overlong paths, unlinks the listener socket after rendezvous, closes
+all temporary descriptors after `et_dist5_comm_create` duplicates them, and
+discovers the MOD5 K1 runtime on the same handle. Every collective wrapper
+accepts `void *` pointers, checks 4-byte binary32 alignment without undefined
+typed casts, and routes invalid operands through the DIST5 protocol so peers
+reject cleanly without deadlock.
+
+`bash scripts/test-dist5-aot.sh` verifies:
+
+- deterministic byte-identical archive build, symbol allowlists, and C++17
+  header/linkage (`tests/dist5/header_bridge_cpp.cpp`);
+- native C11 bridge unit and multi-process tests
+  (`tests/dist5/test_dist5_aot_bridge.c`) in both `-O2` and ASan/UBSan/LSan
+  (`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1`)
+  modes, covering FD-leak invariance, misaligned pointers, all six collectives,
+  canonical rank-order accumulation, atomic non-finite abort, kind/tag
+  mismatches, and duplicate-rank handshake rejection;
+- two fresh `--strict-types --optimize 0 --no-stdlib` compilations of
+  `tests/dist5/test_dist5_aot.esk` producing byte-identical ELFs (SHA-256
+  `61bfe598e88b2d70f671ab011ff359fc99923702e16a742e9ee291988bf5c7b4`);
+- live multi-process Eshkol AOT data-parallel training of a full pre-norm MQA
+  decoder block (`tokens=8`, `width=16`, `hidden=32`, `H_q=4`, `H_kv=1`, 2,208
+  binary32 parameters = 8,832 bytes) using Eshkol `matmul`/tensor ops, MOD5 K1
+  RMSNorm/attention/SwiGLU kernels, central finite-difference gradient checks on
+  `W=1`, and 10 SGD steps over 4 deterministic microbatches launched in reversed
+  rank order.
+
+| Configuration | Initial mean loss (step 0) | Final mean loss (step 10) | Final weights SHA-256 (8,832 bytes) | Bitwise parity |
+|---|---:|---:|---|---|
+| `W=1` (`accum=4`) | `0.007994377054274082` | `0.005709689110517502` | `e27fb42634d84f1bc53282959b167034e3ff0e53d9a798d919d937eb81de4ac0` | Reference for `W=4` |
+| `W=4` (4 OS processes) | `0.007994377054274082` | `0.005709689110517502` | `e27fb42634d84f1bc53282959b167034e3ff0e53d9a798d919d937eb81de4ac0` | All 4 ranks & `W=1 (accum=4)` bitwise identical |
+| `W=1` (`accum=2`) | `0.007994377054274082` | `0.005709689110517502` | `83191052e60bb42abc5ef8b2056b650bf2ea37149906699e9d7f63615963fad5` | Reference for `W=2` |
+| `W=2` (2 OS processes) | `0.007994377054274082` | `0.005709689110517502` | `83191052e60bb42abc5ef8b2056b650bf2ea37149906699e9d7f63615963fad5` | Both ranks & `W=1 (accum=2)` bitwise identical |
+
+Loss decreases strictly at every step (`0.007994377054274082` ->
+`0.007644729223102331` -> `0.007338153198361397` -> `0.007065237034112215` ->
+`0.006819297093898058` -> `0.006595486309379339` -> `0.006390227936208248` ->
+`0.006200840231031179` -> `0.0060252845287323` -> `0.005861981306225061` ->
+`0.005709689110517502` for `W=1 (accum=4)` and `W=4`). In `--mode nonfinite`
+with `W=4`, injecting qNaN (`0x7fc00000`) and `+Inf` (`0x7f800000`) on rank 3
+returns `ET_DIST5_ERR_NONFINITE` (`5`) on all four ranks, leaves all 8,832
+weight bytes untouched (SHA-256
+`28d8283acf4207882601d5f0619bd0f333a453ca1779ff87dd97b5a04004e484`), and recovers
+cleanly on the subsequent finite `sync_gradients_f32`. In `--mode mismatch` with
+`W=2`, a tag mismatch on rank 1 returns `ET_DIST5_ERR_MISMATCH` (`2`) on both
+ranks and leaves the communicator permanently failed on subsequent calls.
