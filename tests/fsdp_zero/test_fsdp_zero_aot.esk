@@ -1,0 +1,443 @@
+;;; Compiled Eshkol AOT Multi-Process ZeRO-1/2/3 (FSDP) Sharded Training Driver.
+;;; Runs as an independent OS rank process over AF_UNIX sockets:
+;;;   --sock-dir DIR --rank R --world W --stage S --mode MODE
+;;;   [--ckpt-dir DIR] [--dump-weights PATH]
+;;; Modes:
+;;;   train12      : 12-step FSDP/ZeRO AdamW training (+ FD check on W=1)
+;;;   resume6      : 6-step training + atomic 0600 ETFS1000 shard checkpoint save
+;;;   resume6-cont : fresh-process O_NOFOLLOW checkpoint load + steps 7..12
+;;;   nonfinite    : 2 valid steps + single-rank NaN/Inf atomic abort + recovery
+;;;   negative     : fail-closed config/checkpoint/symlink/mismatch checks
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 fsdp-open char* i64 i64 i64 i64 i64 i64 i64 f64 f64 f64 f64 f64 f64 i64 ptr
+        :real et_fsdp_aot_open)
+(extern void fsdp-close ptr :real et_fsdp_aot_close)
+(extern i32 fsdp-init-params ptr i64 :real et_fsdp_aot_init_params)
+(extern i32 fsdp-train-step ptr i64 i64 i64 :real et_fsdp_aot_train_step)
+(extern i32 fsdp-step-inject-nf ptr i64 i64 i64 i64 i64 i64
+        :real et_fsdp_aot_step_inject_nonfinite)
+(extern i32 fsdp-probe-mismatch ptr i64 i64 i64
+        :real et_fsdp_aot_probe_tag_mismatch)
+(extern i32 fsdp-fd-grad-check ptr i64 f64 :real et_fsdp_aot_fd_grad_check)
+(extern i32 fsdp-save-ckpt ptr char* :real et_fsdp_aot_save_checkpoint)
+(extern i32 fsdp-load-ckpt ptr char* :real et_fsdp_aot_load_checkpoint)
+(extern i32 fsdp-gather-digest ptr i64 i64 char* :real et_fsdp_aot_gather_digest)
+(extern i32 fsdp-hash-local-shard ptr :real et_fsdp_aot_hash_local_shard)
+(extern i32 fsdp-save-shard-mark ptr :real et_fsdp_aot_save_shard_digest_mark)
+(extern i32 fsdp-shard-matches-mark ptr :real et_fsdp_aot_shard_digest_matches_mark)
+(extern i32 fsdp-full-digest-byte ptr i64 :real et_fsdp_aot_full_digest_byte)
+(extern i32 fsdp-corrupt-byte char* i64 :real et_fsdp_aot_corrupt_file_byte)
+(extern i32 fsdp-truncate-file char* i64 :real et_fsdp_aot_truncate_file)
+(extern i32 fsdp-make-symlink char* char* :real et_fsdp_aot_make_symlink)
+
+(extern i64 fsdp-step ptr :real et_fsdp_aot_step)
+(extern i64 fsdp-num-params ptr :real et_fsdp_aot_num_params)
+(extern i64 fsdp-padded-params ptr :real et_fsdp_aot_padded_params)
+(extern i64 fsdp-shard-len ptr :real et_fsdp_aot_shard_len)
+(extern i64 fsdp-param-bytes ptr :real et_fsdp_aot_persistent_param_bytes)
+(extern i64 fsdp-grad-bytes ptr :real et_fsdp_aot_persistent_grad_bytes)
+(extern i64 fsdp-opt-bytes ptr :real et_fsdp_aot_persistent_opt_bytes)
+(extern i64 fsdp-total-bytes ptr :real et_fsdp_aot_persistent_total_bytes)
+(extern i64 fsdp-unsharded-bytes ptr :real et_fsdp_aot_unsharded_baseline_bytes)
+(extern f64 fsdp-opt-ratio ptr :real et_fsdp_aot_opt_reduction_ratio)
+(extern f64 fsdp-total-ratio ptr :real et_fsdp_aot_total_reduction_ratio)
+(extern f64 fsdp-last-loss ptr :real et_fsdp_aot_last_loss)
+(extern f64 fsdp-last-grad-norm ptr :real et_fsdp_aot_last_grad_norm)
+(extern i64 fsdp-last-clipped ptr :real et_fsdp_aot_last_clipped)
+(extern f64 fsdp-last-fd-err ptr :real et_fsdp_aot_last_fd_max_err)
+(extern i64 fsdp-poison-ok ptr :real et_fsdp_aot_ephemeral_poison_verified)
+(extern i64 fsdp-bytes-sent ptr :real et_fsdp_aot_comm_bytes_sent)
+(extern i64 fsdp-bytes-recv ptr :real et_fsdp_aot_comm_bytes_recv)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Status constants from fsdp_zero_abi.h.
+(define st-ok 0)
+(define st-err-invalid -1)
+(define st-err-mismatch -2)
+(define st-err-nonfinite -5)
+(define st-err-io -6)
+(define st-err-bad-magic -8)
+(define st-err-checksum -10)
+(define st-err-truncated -11)
+(define st-err-config -12)
+
+;; MLP + AdamW constants matching native & Python oracle.
+(define in-dim 8)
+(define hidden-dim 17)
+(define num-classes 5)
+(define global-batch 8)
+(define model-seed 20261124)
+(define lr-val 0.05)
+(define beta1-val 0.9)
+(define beta2-val 0.999)
+(define eps-val 1e-8)
+(define wd-val 0.01)
+(define max-gn-val 0.5)
+(define timeout-ms 15000)
+
+(define (require-check label ok)
+  (unless ok
+    (display "FSDP AOT FAIL: ") (display label) (newline)
+    (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "FSDP AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline)
+    (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "malloc failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (char->digit ch)
+  (cond
+    ((char=? ch #\0) 0) ((char=? ch #\1) 1) ((char=? ch #\2) 2)
+    ((char=? ch #\3) 3) ((char=? ch #\4) 4) ((char=? ch #\5) 5)
+    ((char=? ch #\6) 6) ((char=? ch #\7) 7) ((char=? ch #\8) 8)
+    ((char=? ch #\9) 9)
+    (else -1)))
+
+(define (parse-nonneg-int s)
+  (let ((len (string-length s)))
+    (require-check "empty integer argument" (> len 0))
+    (do ((i 0 (+ i 1))
+         (acc 0 (+ (* acc 10) (let ((d (char->digit (string-ref s i))))
+                                (require-check "invalid integer digit" (>= d 0))
+                                d))))
+        ((= i len) acc))))
+
+(define hex-digits "0123456789abcdef")
+
+(define (display-full-digest sess)
+  (do ((i 0 (+ i 1)))
+      ((= i 64))
+    (let ((b (fsdp-full-digest-byte (ffi-pointer sess) i)))
+      (require-check "digest byte valid" (>= b 0))
+      (cond
+        ((and (>= b 48) (<= b 57))
+         (display (string-ref hex-digits (- b 48))))
+        ((and (>= b 97) (<= b 102))
+         (display (string-ref hex-digits (+ 10 (- b 97)))))
+        (else
+         (require-check "non-hex digest byte" #f))))))
+
+(define (open-session sock-dir rank world stage)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "fsdp-open" st-ok
+                   (fsdp-open sock-dir rank world stage in-dim hidden-dim
+                              num-classes global-batch lr-val beta1-val
+                              beta2-val eps-val wd-val max-gn-val timeout-ms
+                              (ffi-pointer cell)))
+    (let ((sess (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "non-null session" (not (= (ptr->usize sess) 0)))
+      sess)))
+
+;; CLI state.
+(define cli-sock-dir "")
+(define cli-rank -1)
+(define cli-world -1)
+(define cli-stage 3)
+(define cli-mode "")
+(define cli-ckpt-dir "")
+(define cli-dump-weights "")
+
+(define (parse-args args)
+  (let loop ((rest args))
+    (unless (null? rest)
+      (require-check "flag missing value" (pair? (cdr rest)))
+      (let ((flag (car rest))
+            (val (car (cdr rest))))
+        (cond
+          ((string=? flag "--sock-dir") (set! cli-sock-dir val))
+          ((string=? flag "--rank") (set! cli-rank (parse-nonneg-int val)))
+          ((string=? flag "--world") (set! cli-world (parse-nonneg-int val)))
+          ((string=? flag "--stage") (set! cli-stage (parse-nonneg-int val)))
+          ((string=? flag "--mode") (set! cli-mode val))
+          ((string=? flag "--ckpt-dir") (set! cli-ckpt-dir val))
+          ((string=? flag "--dump-weights") (set! cli-dump-weights val))
+          (else (require-check "unknown CLI flag" #f)))
+        (loop (cdr (cdr rest)))))))
+
+(let ((argv (command-line)))
+  (require-check "missing argv" (pair? argv))
+  (parse-args (cdr argv)))
+
+(require-check "invalid --rank" (>= cli-rank 0))
+(require-check "invalid --world" (or (= cli-world 1) (= cli-world 2) (= cli-world 4)))
+(require-check "rank >= world" (< cli-rank cli-world))
+(require-check "invalid --stage" (and (>= cli-stage 1) (<= cli-stage 3)))
+
+(define (rank-ckpt-path dir r)
+  (string-append dir "/rank-"
+                 (cond ((= r 0) "0") ((= r 1) "1") ((= r 2) "2") (else "3"))
+                 ".etfs"))
+
+(define (run-train12)
+  (let ((sess (open-session cli-sock-dir cli-rank cli-world cli-stage)))
+    (expect-status "init-params" st-ok
+                   (fsdp-init-params (ffi-pointer sess) model-seed))
+    ;; Central finite-difference check on W=1 before training.
+    (when (= cli-world 1)
+      (expect-status "fd-grad-check" st-ok
+                     (fsdp-fd-grad-check (ffi-pointer sess) 0 0.001))
+      (let ((ferr (fsdp-last-fd-err (ffi-pointer sess))))
+        (require-check "fd grad error < 1e-4" (< ferr 0.0001))
+        (display "FSDP AOT FD_CHECK params=")
+        (display (fsdp-num-params (ffi-pointer sess)))
+        (display " max_err=") (display ferr)
+        (display " PASS") (newline)))
+
+    ;; Verify exact persistent memory accounting.
+    (let ((pbytes (fsdp-param-bytes (ffi-pointer sess)))
+          (gbytes (fsdp-grad-bytes (ffi-pointer sess)))
+          (obytes (fsdp-opt-bytes (ffi-pointer sess)))
+          (tbytes (fsdp-total-bytes (ffi-pointer sess)))
+          (ubytes (fsdp-unsharded-bytes (ffi-pointer sess)))
+          (oratio (fsdp-opt-ratio (ffi-pointer sess)))
+          (tratio (fsdp-total-ratio (ffi-pointer sess))))
+      (require-check "exact 1/W opt ratio" (< (abs (- oratio cli-world)) 1e-9))
+      (when (= cli-stage 3)
+        (require-check "exact 1/W FSDP total ratio"
+                       (< (abs (- tratio cli-world)) 1e-9))
+        (require-check "FSDP total*W == unsharded"
+                       (= (* tbytes cli-world) ubytes)))
+      (display "FSDP AOT MEM stage=") (display cli-stage)
+      (display " world=") (display cli-world)
+      (display " rank=") (display cli-rank)
+      (display " shard=") (display (fsdp-shard-len (ffi-pointer sess)))
+      (display " param_b=") (display pbytes)
+      (display " grad_b=") (display gbytes)
+      (display " opt_b=") (display obytes)
+      (display " total_b=") (display tbytes)
+      (display " unsharded_b=") (display ubytes)
+      (display " opt_ratio=") (display oratio)
+      (display " total_ratio=") (display tratio)
+      (newline))
+
+    (let ((prev-loss 1e9)
+          (init-loss 0.0)
+          (final-loss 0.0)
+          (any-clip 0))
+      (do ((s 0 (+ s 1)))
+          ((= s 12))
+        (expect-status "train-step" st-ok
+                       (fsdp-train-step (ffi-pointer sess) s (+ 1000 (* s 10))
+                                        timeout-ms))
+        (require-check "ephemeral buffer poisoned"
+                       (= (fsdp-poison-ok (ffi-pointer sess)) 1))
+        (let ((loss (fsdp-last-loss (ffi-pointer sess)))
+              (gn (fsdp-last-grad-norm (ffi-pointer sess)))
+              (cl (fsdp-last-clipped (ffi-pointer sess))))
+          (require-check "strictly decreasing loss" (< loss prev-loss))
+          (when (= s 0) (set! init-loss loss))
+          (set! final-loss loss)
+          (set! prev-loss loss)
+          (when (= cl 1) (set! any-clip 1))
+          (display "FSDP AOT LOSS stage=") (display cli-stage)
+          (display " world=") (display cli-world)
+          (display " rank=") (display cli-rank)
+          (display " step=") (display s)
+          (display " loss=") (display loss)
+          (display " grad_norm=") (display gn)
+          (display " clipped=") (display cl)
+          (newline)))
+
+      (require-check "step == 12" (= (fsdp-step (ffi-pointer sess)) 12))
+      (require-check "clipping exercised" (= any-clip 1))
+      (expect-status "gather-digest" st-ok
+                     (fsdp-gather-digest (ffi-pointer sess) 88001 timeout-ms
+                                         cli-dump-weights))
+      (display "FSDP AOT RESULT stage=") (display cli-stage)
+      (display " world=") (display cli-world)
+      (display " rank=") (display cli-rank)
+      (display " steps=12 initial=") (display init-loss)
+      (display " final=") (display final-loss)
+      (display " sent_b=") (display (fsdp-bytes-sent (ffi-pointer sess)))
+      (display " recv_b=") (display (fsdp-bytes-recv (ffi-pointer sess)))
+      (display " weights_sha256=") (display-full-digest sess)
+      (display " PASS") (newline))
+    (fsdp-close (ffi-pointer sess))))
+
+(define (run-resume6)
+  (require-check "missing --ckpt-dir" (> (string-length cli-ckpt-dir) 0))
+  (let ((sess (open-session cli-sock-dir cli-rank cli-world cli-stage))
+        (cpath (rank-ckpt-path cli-ckpt-dir cli-rank)))
+    (expect-status "init-params" st-ok
+                   (fsdp-init-params (ffi-pointer sess) model-seed))
+    (do ((s 0 (+ s 1)))
+        ((= s 6))
+      (expect-status "resume6-step" st-ok
+                     (fsdp-train-step (ffi-pointer sess) s (+ 1000 (* s 10))
+                                      timeout-ms)))
+    (require-check "step == 6" (= (fsdp-step (ffi-pointer sess)) 6))
+    (expect-status "save-ckpt" st-ok
+                   (fsdp-save-ckpt (ffi-pointer sess) cpath))
+    (display "FSDP AOT RESUME6_SAVED stage=") (display cli-stage)
+    (display " world=") (display cli-world)
+    (display " rank=") (display cli-rank)
+    (display " step=6 PASS") (newline)
+    (fsdp-close (ffi-pointer sess))))
+
+(define (run-resume6-cont)
+  (require-check "missing --ckpt-dir" (> (string-length cli-ckpt-dir) 0))
+  (let ((sess (open-session cli-sock-dir cli-rank cli-world cli-stage))
+        (cpath (rank-ckpt-path cli-ckpt-dir cli-rank)))
+    (expect-status "load-ckpt" st-ok
+                   (fsdp-load-ckpt (ffi-pointer sess) cpath))
+    (require-check "loaded step == 6" (= (fsdp-step (ffi-pointer sess)) 6))
+    (let ((final-loss 0.0))
+      (do ((s 6 (+ s 1)))
+          ((= s 12))
+        (expect-status "resume6-cont-step" st-ok
+                       (fsdp-train-step (ffi-pointer sess) s (+ 1000 (* s 10))
+                                        timeout-ms))
+        (set! final-loss (fsdp-last-loss (ffi-pointer sess))))
+      (require-check "final step == 12" (= (fsdp-step (ffi-pointer sess)) 12))
+      (expect-status "gather-digest" st-ok
+                     (fsdp-gather-digest (ffi-pointer sess) 88001 timeout-ms
+                                         ""))
+      (display "FSDP AOT RESUME_RESULT stage=") (display cli-stage)
+      (display " world=") (display cli-world)
+      (display " rank=") (display cli-rank)
+      (display " steps=12 final=") (display final-loss)
+      (display " weights_sha256=") (display-full-digest sess)
+      (display " PASS") (newline))
+    (fsdp-close (ffi-pointer sess))))
+
+(define (run-nonfinite)
+  (let ((sess (open-session cli-sock-dir cli-rank cli-world cli-stage)))
+    (expect-status "init-params" st-ok
+                   (fsdp-init-params (ffi-pointer sess) model-seed))
+    (expect-status "nf-step-0" st-ok
+                   (fsdp-train-step (ffi-pointer sess) 0 100 timeout-ms))
+    (expect-status "nf-step-1" st-ok
+                   (fsdp-train-step (ffi-pointer sess) 1 200 timeout-ms))
+    (expect-status "save-mark" st-ok
+                   (fsdp-save-shard-mark (ffi-pointer sess)))
+
+    ;; Inject qNaN (0x7fc00000 = 2143289344) on last rank only.
+    (let ((st-nan (fsdp-step-inject-nf (ffi-pointer sess) 2 (- cli-world 1)
+                                       17 2143289344 300 timeout-ms)))
+      (expect-status "nan-abort" st-err-nonfinite st-nan)
+      (expect-status "hash-after-nan" st-ok
+                     (fsdp-hash-local-shard (ffi-pointer sess)))
+      (require-check "shard bitwise preserved after NaN"
+                     (= (fsdp-shard-matches-mark (ffi-pointer sess)) 1))
+      (require-check "step preserved after NaN"
+                     (= (fsdp-step (ffi-pointer sess)) 2))
+
+      ;; Inject +Inf (0x7f800000 = 2139095040) on last rank only.
+      (let ((st-inf (fsdp-step-inject-nf (ffi-pointer sess) 2 (- cli-world 1)
+                                         120 2139095040 400 timeout-ms)))
+        (expect-status "inf-abort" st-err-nonfinite st-inf)
+        (expect-status "hash-after-inf" st-ok
+                       (fsdp-hash-local-shard (ffi-pointer sess)))
+        (require-check "shard bitwise preserved after Inf"
+                       (= (fsdp-shard-matches-mark (ffi-pointer sess)) 1))
+
+        ;; Clean recovery step!
+        (expect-status "nf-recover" st-ok
+                       (fsdp-train-step (ffi-pointer sess) 2 500 timeout-ms))
+        (require-check "recovered step == 3"
+                       (= (fsdp-step (ffi-pointer sess)) 3))
+        (display "FSDP AOT NONFINITE world=") (display cli-world)
+        (display " rank=") (display cli-rank)
+        (display " nan_status=") (display st-nan)
+        (display " inf_status=") (display st-inf)
+        (display " shard_preserved=1 recovered=1 PASS") (newline)))
+    (fsdp-close (ffi-pointer sess))))
+
+(define (run-negative)
+  (if (= cli-world 1)
+      (begin
+        (require-check "missing --ckpt-dir for negative" (> (string-length cli-ckpt-dir) 0))
+        ;; 1. Invalid stage and world_size rejected.
+        (let ((cell (checked-allocate 8)))
+          (expect-status "invalid-stage-0" st-err-invalid
+                         (fsdp-open "" 0 1 0 in-dim hidden-dim num-classes
+                                    global-batch lr-val beta1-val beta2-val
+                                    eps-val wd-val max-gn-val 1000
+                                    (ffi-pointer cell)))
+          (expect-status "invalid-world-3" st-err-invalid
+                         (fsdp-open "" 0 3 3 in-dim hidden-dim num-classes
+                                    global-batch lr-val beta1-val beta2-val
+                                    eps-val wd-val max-gn-val 1000
+                                    (ffi-pointer cell)))
+          (release (ffi-pointer cell)))
+
+        ;; 2. Checkpoint negative suite (magic, checksum, truncate, symlink, stage mismatch).
+        (let ((sess (open-session "" 0 1 3))
+              (s2 (open-session "" 0 1 2))
+              (good-p (string-append cli-ckpt-dir "/neg_good.etfs"))
+              (bad-magic-p (string-append cli-ckpt-dir "/neg_magic.etfs"))
+              (bad-sum-p (string-append cli-ckpt-dir "/neg_sum.etfs"))
+              (trunc-p (string-append cli-ckpt-dir "/neg_trunc.etfs"))
+              (sym-p (string-append cli-ckpt-dir "/neg_sym.etfs")))
+          (expect-status "neg-init" st-ok (fsdp-init-params (ffi-pointer sess) model-seed))
+          (expect-status "neg-step" st-ok (fsdp-train-step (ffi-pointer sess) 0 10 timeout-ms))
+          (expect-status "neg-mark" st-ok (fsdp-save-shard-mark (ffi-pointer sess)))
+
+          (expect-status "save-good" st-ok (fsdp-save-ckpt (ffi-pointer sess) good-p))
+          (expect-status "save-magic" st-ok (fsdp-save-ckpt (ffi-pointer sess) bad-magic-p))
+          (expect-status "save-sum" st-ok (fsdp-save-ckpt (ffi-pointer sess) bad-sum-p))
+          (expect-status "save-trunc" st-ok (fsdp-save-ckpt (ffi-pointer sess) trunc-p))
+
+          (expect-status "corrupt-magic" st-ok (fsdp-corrupt-byte bad-magic-p 0))
+          (expect-status "load-bad-magic" st-err-bad-magic
+                         (fsdp-load-ckpt (ffi-pointer sess) bad-magic-p))
+
+          (expect-status "corrupt-payload" st-ok (fsdp-corrupt-byte bad-sum-p 140))
+          (expect-status "load-bad-sum" st-err-checksum
+                         (fsdp-load-ckpt (ffi-pointer sess) bad-sum-p))
+
+          (expect-status "truncate" st-ok (fsdp-truncate-file trunc-p 200))
+          (expect-status "load-trunc" st-err-truncated
+                         (fsdp-load-ckpt (ffi-pointer sess) trunc-p))
+
+          (expect-status "make-sym" st-ok (fsdp-make-symlink good-p sym-p))
+          (expect-status "load-sym" st-err-io
+                         (fsdp-load-ckpt (ffi-pointer sess) sym-p))
+          (expect-status "save-sym" st-err-io
+                         (fsdp-save-ckpt (ffi-pointer sess) sym-p))
+
+          (expect-status "load-stage-mismatch" st-err-config
+                         (fsdp-load-ckpt (ffi-pointer s2) good-p))
+
+          (expect-status "neg-rehash" st-ok (fsdp-hash-local-shard (ffi-pointer sess)))
+          (require-check "shard untouched after negative loads"
+                         (= (fsdp-shard-matches-mark (ffi-pointer sess)) 1))
+
+          (fsdp-close (ffi-pointer s2))
+          (fsdp-close (ffi-pointer sess))
+          (display "FSDP AOT NEGATIVE_LOCAL PASS") (newline)))
+      ;; W=2: test sticky tag mismatch across real AF_UNIX processes.
+      (let ((sess (open-session cli-sock-dir cli-rank cli-world cli-stage)))
+        (let ((st1 (fsdp-probe-mismatch (ffi-pointer sess) 777 1 timeout-ms))
+              (st2 (fsdp-probe-mismatch (ffi-pointer sess) 777 0 timeout-ms)))
+          (expect-status "tag-mismatch-1" st-err-mismatch st1)
+          (expect-status "tag-mismatch-sticky" st-err-mismatch st2)
+          (display "FSDP AOT NEGATIVE_MISMATCH world=") (display cli-world)
+          (display " rank=") (display cli-rank)
+          (display " status=") (display st1)
+          (display " sticky=") (display st2)
+          (display " PASS") (newline))
+        (fsdp-close (ffi-pointer sess)))))
+
+(cond
+  ((string=? cli-mode "train12") (run-train12))
+  ((string=? cli-mode "resume6") (run-resume6))
+  ((string=? cli-mode "resume6-cont") (run-resume6-cont))
+  ((string=? cli-mode "nonfinite") (run-nonfinite))
+  ((string=? cli-mode "negative") (run-negative))
+  (else (require-check "unknown --mode" #f)))
