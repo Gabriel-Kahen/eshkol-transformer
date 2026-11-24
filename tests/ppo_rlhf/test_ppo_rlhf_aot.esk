@@ -1,0 +1,320 @@
+;;; Compiled Eshkol AOT RLHF PPO-Clip + GAE + Value Critic Alignment Driver:
+;;; - Phase 0 (train):
+;;;   1. Central FD checks on d_policy_logits and d_values (max_err < 1e-5)
+;;;   2. 16 PPO alignment iterations (multi-epoch updates, GAE, clipped
+;;;      surrogate + clipped value critic + entropy + KL shaping) proving
+;;;      strictly increasing mean environment reward while frozen reference
+;;;      policy SHA-256 remains invariant
+;;;   3. Saves ETPP1000 v1.0 checkpoint at iteration 8 (mid-trajectory) and
+;;;      continues through iteration 16, emitting final_param_sha256 & ref_sha256
+;;;   4. Verifies target_kl early stopping triggers on tight target_kl
+;;; - Phase 1 (reload, fresh OS process):
+;;;   1. Reloads ETPP1000 checkpoint saved at iteration 8
+;;;   2. Resumes iterations 8..15 and emits final_param_sha256 & ref_sha256
+;;;      for bit-exact fresh-process resume parity
+;;;   3. Verifies ETPP1000 tamper, truncation, symlink, and ref-mismatch
+;;;      rejection plus core fail-closed negative boundary checks (non-finite,
+;;;      invalid gamma/lam/eps, all-zero mask, OOB actions, FP-env trap).
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 ppo-create i64 i64 i64 i64 ptr :real et_ppo_aot_create)
+(extern void ppo-destroy ptr :real et_ppo_aot_destroy)
+(extern i32 ppo-configure ptr i64 i64 i64 f64 f64 f64 f64 f64 f64 f64 f64 f64 f64 f64 f64 f64 :real et_ppo_aot_configure)
+(extern i32 ppo-init-task ptr :real et_ppo_aot_init_task)
+
+(extern i32 ppo-setup-fd ptr :real et_ppo_aot_setup_fd_case)
+(extern i32 ppo-fd-forward ptr :real et_ppo_aot_fd_loss_forward)
+(extern i32 ppo-fd-backward ptr :real et_ppo_aot_fd_loss_backward)
+(extern f64 ppo-fd-total-loss ptr :real et_ppo_aot_fd_total_loss)
+(extern f64 ppo-fd-get-logit ptr i64 i64 :real et_ppo_aot_fd_get_logit)
+(extern i32 ppo-fd-set-logit ptr i64 i64 f64 :real et_ppo_aot_fd_set_logit)
+(extern f64 ppo-fd-get-d-logit ptr i64 i64 :real et_ppo_aot_fd_get_d_logit)
+(extern f64 ppo-fd-get-value ptr i64 :real et_ppo_aot_fd_get_value)
+(extern i32 ppo-fd-set-value ptr i64 f64 :real et_ppo_aot_fd_set_value)
+(extern f64 ppo-fd-get-d-value ptr i64 :real et_ppo_aot_fd_get_d_value)
+(extern i64 ppo-fd-bt ptr :real et_ppo_aot_fd_bt)
+(extern i64 ppo-fd-vocab ptr :real et_ppo_aot_fd_vocab)
+
+(extern i32 ppo-sample-rollout ptr i64 :real et_ppo_aot_sample_rollout)
+(extern i32 ppo-train-rollout ptr :real et_ppo_aot_train_rollout)
+(extern i32 ppo-set-target-kl ptr f64 :real et_ppo_aot_set_target_kl)
+
+(extern f64 ppo-expected-reward ptr :real et_ppo_aot_expected_env_reward)
+(extern f64 ppo-report-env-reward ptr :real et_ppo_aot_report_mean_env_reward)
+(extern f64 ppo-report-loss ptr :real et_ppo_aot_report_total_loss)
+(extern f64 ppo-report-approx-kl ptr :real et_ppo_aot_report_approx_kl)
+(extern f64 ppo-report-clip-frac ptr :real et_ppo_aot_report_clip_fraction)
+(extern f64 ppo-report-ev ptr :real et_ppo_aot_report_explained_variance)
+(extern i64 ppo-report-epochs ptr :real et_ppo_aot_report_epochs_completed)
+(extern i64 ppo-report-early-stopped ptr :real et_ppo_aot_report_early_stopped)
+(extern i64 ppo-step ptr :real et_ppo_aot_step)
+
+(extern i32 ppo-refresh-digests ptr :real et_ppo_aot_refresh_digests)
+(extern i64 ppo-ref-sha-word ptr i64 :real et_ppo_aot_ref_sha256_word)
+(extern i64 ppo-param-sha-word ptr i64 :real et_ppo_aot_param_sha256_word)
+
+(extern i64 ppo-env-phase :real et_ppo_aot_env_phase)
+(extern i32 ppo-save-ckpt ptr :real et_ppo_aot_save_env_ckpt)
+(extern i32 ppo-load-ckpt ptr :real et_ppo_aot_load_env_ckpt)
+(extern i32 ppo-check-ckpt-neg ptr i64 :real et_ppo_aot_check_ckpt_negative)
+(extern i32 ppo-check-neg ptr i64 :real et_ppo_aot_check_negative_case)
+
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define batch-size 16)
+(define seq-len 4)
+(define feat-dim 8)
+(define vocab-size 6)
+(define total-iters 16)
+(define ckpt-iter 8)
+
+(define status-ok 0)
+(define err-argument -1)
+(define err-alias -4)
+(define err-nonfinite -5)
+(define err-fp-env -6)
+(define err-overflow -7)
+(define err-index -8)
+(define err-empty-mask -9)
+(define err-symlink -11)
+(define err-checksum -13)
+(define err-truncated -14)
+(define err-ref-mismatch -15)
+
+(define (require-check label ok)
+  (unless ok
+    (display "PPO AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "PPO AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (create-ctx)
+  (let ((cell (allocate 8)))
+    (require-check "allocate failed" (not (= (ptr->usize cell) 0)))
+    (expect-status "ppo-create" status-ok
+                   (ppo-create batch-size seq-len feat-dim vocab-size
+                               (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null ctx" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (configure-default ctx)
+  (expect-status "ppo-configure" status-ok
+                 (ppo-configure (ffi-pointer ctx)
+                                4 1 1
+                                0.2 0.2 0.2
+                                0.5 0.01
+                                0.95 0.90 0.02 0.000001 0.25
+                                0.06 0.01 1.0))
+  (expect-status "ppo-init-task" status-ok
+                 (ppo-init-task (ffi-pointer ctx))))
+
+(define (emit-digest-words tag ctx is-ref)
+  (display tag)
+  (do ((w 0 (+ w 1)))
+      ((= w 4))
+    (display " ")
+    (display (if (= is-ref 1)
+                 (ppo-ref-sha-word (ffi-pointer ctx) w)
+                 (ppo-param-sha-word (ffi-pointer ctx) w))))
+  (newline))
+
+(define (run-fd-checks ctx)
+  (expect-status "setup-fd" status-ok (ppo-setup-fd (ffi-pointer ctx)))
+  (expect-status "fd-backward" status-ok (ppo-fd-backward (ffi-pointer ctx)))
+  (let ((bt (ppo-fd-bt (ffi-pointer ctx)))
+        (vv (ppo-fd-vocab (ffi-pointer ctx)))
+        (h-logit 0.00390625)
+        (h-val 0.03125)
+        (max-logit-err 0.0)
+        (max-val-err 0.0))
+    ;; Central finite differences on all 24 d_policy_logits entries
+    (do ((idx 0 (+ idx 1)))
+        ((= idx bt))
+      (do ((v 0 (+ v 1)))
+          ((= v vv))
+        (let ((orig (ppo-fd-get-logit (ffi-pointer ctx) idx v))
+              (analytic (ppo-fd-get-d-logit (ffi-pointer ctx) idx v)))
+          (expect-status "set-l+" status-ok
+                         (ppo-fd-set-logit (ffi-pointer ctx) idx v (+ orig h-logit)))
+          (expect-status "fwd-l+" status-ok (ppo-fd-forward (ffi-pointer ctx)))
+          (let ((lp (ppo-fd-total-loss (ffi-pointer ctx))))
+            (expect-status "set-l-" status-ok
+                           (ppo-fd-set-logit (ffi-pointer ctx) idx v (- orig h-logit)))
+            (expect-status "fwd-l-" status-ok (ppo-fd-forward (ffi-pointer ctx)))
+            (let* ((lm (ppo-fd-total-loss (ffi-pointer ctx)))
+                   (num (/ (- lp lm) (* 2.0 h-logit)))
+                   (err (abs (- analytic num))))
+              (expect-status "restore-l" status-ok
+                             (ppo-fd-set-logit (ffi-pointer ctx) idx v orig))
+              (if (> err max-logit-err) (set! max-logit-err err))
+              (require-check "logit FD err < 1e-5" (< err 0.00001)))))))
+    ;; Central finite differences on all 6 d_values entries
+    (do ((idx 0 (+ idx 1)))
+        ((= idx bt))
+      (let ((orig (ppo-fd-get-value (ffi-pointer ctx) idx))
+            (analytic (ppo-fd-get-d-value (ffi-pointer ctx) idx)))
+        (expect-status "set-v+" status-ok
+                       (ppo-fd-set-value (ffi-pointer ctx) idx (+ orig h-val)))
+        (expect-status "fwd-v+" status-ok (ppo-fd-forward (ffi-pointer ctx)))
+        (let ((lp (ppo-fd-total-loss (ffi-pointer ctx))))
+          (expect-status "set-v-" status-ok
+                         (ppo-fd-set-value (ffi-pointer ctx) idx (- orig h-val)))
+          (expect-status "fwd-v-" status-ok (ppo-fd-forward (ffi-pointer ctx)))
+          (let* ((lm (ppo-fd-total-loss (ffi-pointer ctx)))
+                 (num (/ (- lp lm) (* 2.0 h-val)))
+                 (err (abs (- analytic num))))
+            (expect-status "restore-v" status-ok
+                           (ppo-fd-set-value (ffi-pointer ctx) idx orig))
+            (if (> err max-val-err) (set! max-val-err err))
+            (require-check "value FD err < 1e-5" (< err 0.00001))))))
+    (display "PPO AOT FD max_logit_err=") (display max-logit-err)
+    (display " max_value_err=") (display max-val-err)
+    (display " checks=30") (newline)))
+
+(define (run-early-stop-probe)
+  (let ((ctx (create-ctx)))
+    (configure-default ctx)
+    (expect-status "tight-kl" status-ok
+                   (ppo-set-target-kl (ffi-pointer ctx) 0.0001))
+    (expect-status "es-rollout" status-ok
+                   (ppo-sample-rollout (ffi-pointer ctx) 0))
+    (expect-status "es-train" status-ok
+                   (ppo-train-rollout (ffi-pointer ctx)))
+    (let ((es (ppo-report-early-stopped (ffi-pointer ctx)))
+          (ep (ppo-report-epochs (ffi-pointer ctx)))
+          (kl (ppo-report-approx-kl (ffi-pointer ctx))))
+      (require-check "early_stopped == 1" (= es 1))
+      (require-check "epochs_completed < 4" (< ep 4))
+      (require-check "approx_kl > target_kl" (> kl 0.0001))
+      (display "PPO AOT EARLY_STOP triggered=") (display es)
+      (display " epochs=") (display ep)
+      (display " approx_kl=") (display kl) (newline))
+    (ppo-destroy (ffi-pointer ctx))))
+
+(define (run-train-phase)
+  (let ((ctx (create-ctx)))
+    (configure-default ctx)
+    (run-fd-checks ctx)
+    (let ((r0 (ppo-ref-sha-word (ffi-pointer ctx) 0))
+          (r1 (ppo-ref-sha-word (ffi-pointer ctx) 1))
+          (r2 (ppo-ref-sha-word (ffi-pointer ctx) 2))
+          (r3 (ppo-ref-sha-word (ffi-pointer ctx) 3))
+          (init-r (ppo-expected-reward (ffi-pointer ctx)))
+          (prev-r (ppo-expected-reward (ffi-pointer ctx))))
+      (display "PPO AOT ITER 0 exp_reward=") (display init-r)
+      (display " step=0") (newline)
+      (do ((iter 0 (+ iter 1)))
+          ((= iter total-iters))
+        (expect-status "sample-rollout" status-ok
+                       (ppo-sample-rollout (ffi-pointer ctx) iter))
+        (expect-status "train-rollout" status-ok
+                       (ppo-train-rollout (ffi-pointer ctx)))
+        (let ((cur-r (ppo-expected-reward (ffi-pointer ctx)))
+              (kl (ppo-report-approx-kl (ffi-pointer ctx)))
+              (cf (ppo-report-clip-frac (ffi-pointer ctx)))
+              (st (ppo-step (ffi-pointer ctx))))
+          (require-check "exp_reward strictly increasing" (> cur-r prev-r))
+          (set! prev-r cur-r)
+          (display "PPO AOT ITER ") (display (+ iter 1))
+          (display " exp_reward=") (display cur-r)
+          (display " approx_kl=") (display kl)
+          (display " clip_frac=") (display cf)
+          (display " step=") (display st) (newline))
+        (if (= (+ iter 1) ckpt-iter)
+            (expect-status "save-ckpt" status-ok
+                           (ppo-save-ckpt (ffi-pointer ctx)))))
+      ;; Verify frozen reference policy SHA-256 invariance
+      (expect-status "refresh-digests" status-ok
+                     (ppo-refresh-digests (ffi-pointer ctx)))
+      (require-check "ref sha word 0 invariant"
+                     (= r0 (ppo-ref-sha-word (ffi-pointer ctx) 0)))
+      (require-check "ref sha word 1 invariant"
+                     (= r1 (ppo-ref-sha-word (ffi-pointer ctx) 1)))
+      (require-check "ref sha word 2 invariant"
+                     (= r2 (ppo-ref-sha-word (ffi-pointer ctx) 2)))
+      (require-check "ref sha word 3 invariant"
+                     (= r3 (ppo-ref-sha-word (ffi-pointer ctx) 3)))
+      (require-check "final_reward > initial_reward + 0.5"
+                     (> prev-r (+ init-r 0.5)))
+      (display "PPO AOT TRAIN iters=") (display total-iters)
+      (display " init_reward=") (display init-r)
+      (display " final_reward=") (display prev-r)
+      (display " final_step=") (display (ppo-step (ffi-pointer ctx)))
+      (display " ref_frozen=PASS") (newline)
+      (emit-digest-words "PPO AOT TRAIN_REF_SHA256" ctx 1)
+      (emit-digest-words "PPO AOT TRAIN_PARAM_SHA256" ctx 0))
+    (ppo-destroy (ffi-pointer ctx)))
+  (run-early-stop-probe))
+
+(define (run-reload-phase)
+  (let ((ctx (create-ctx)))
+    (configure-default ctx)
+    (expect-status "load-ckpt" status-ok
+                   (ppo-load-ckpt (ffi-pointer ctx)))
+    (require-check "reloaded step > 0" (> (ppo-step (ffi-pointer ctx)) 0))
+    (do ((iter ckpt-iter (+ iter 1)))
+        ((= iter total-iters))
+      (expect-status "reload-sample" status-ok
+                     (ppo-sample-rollout (ffi-pointer ctx) iter))
+      (expect-status "reload-train" status-ok
+                     (ppo-train-rollout (ffi-pointer ctx))))
+    (expect-status "reload-refresh" status-ok
+                   (ppo-refresh-digests (ffi-pointer ctx)))
+    (display "PPO AOT RELOAD final_reward=")
+    (display (ppo-expected-reward (ffi-pointer ctx)))
+    (display " final_step=") (display (ppo-step (ffi-pointer ctx))) (newline)
+    (emit-digest-words "PPO AOT RELOAD_REF_SHA256" ctx 1)
+    (emit-digest-words "PPO AOT RELOAD_PARAM_SHA256" ctx 0)
+
+    ;; Checkpoint negative integrity checks
+    (expect-status "ckpt-tamper" err-checksum
+                   (ppo-check-ckpt-neg (ffi-pointer ctx) 0))
+    (expect-status "ckpt-trunc" err-truncated
+                   (ppo-check-ckpt-neg (ffi-pointer ctx) 1))
+    (expect-status "ckpt-symlink" err-symlink
+                   (ppo-check-ckpt-neg (ffi-pointer ctx) 2))
+    (expect-status "ckpt-ref-mismatch" err-ref-mismatch
+                   (ppo-check-ckpt-neg (ffi-pointer ctx) 3))
+
+    ;; Core negative boundary checks
+    (expect-status "neg-nan-logits" err-nonfinite
+                   (ppo-check-neg (ffi-pointer ctx) 0))
+    (expect-status "neg-inf-values" err-nonfinite
+                   (ppo-check-neg (ffi-pointer ctx) 1))
+    (expect-status "neg-bad-gamma" err-argument
+                   (ppo-check-neg (ffi-pointer ctx) 2))
+    (expect-status "neg-bad-lambda" err-argument
+                   (ppo-check-neg (ffi-pointer ctx) 3))
+    (expect-status "neg-zero-eps" err-argument
+                   (ppo-check-neg (ffi-pointer ctx) 4))
+    (expect-status "neg-zero-clip" err-argument
+                   (ppo-check-neg (ffi-pointer ctx) 5))
+    (expect-status "neg-empty-mask-loss" err-empty-mask
+                   (ppo-check-neg (ffi-pointer ctx) 6))
+    (expect-status "neg-empty-mask-gae" err-empty-mask
+                   (ppo-check-neg (ffi-pointer ctx) 7))
+    (expect-status "neg-oob-action-hi" err-index
+                   (ppo-check-neg (ffi-pointer ctx) 8))
+    (expect-status "neg-oob-action-lo" err-index
+                   (ppo-check-neg (ffi-pointer ctx) 9))
+    (expect-status "neg-fp-env" err-fp-env
+                   (ppo-check-neg (ffi-pointer ctx) 10))
+    (expect-status "neg-log-overflow" err-overflow
+                   (ppo-check-neg (ffi-pointer ctx) 11))
+    (expect-status "neg-alias" err-alias
+                   (ppo-check-neg (ffi-pointer ctx) 12))
+    (display "PPO AOT NEGATIVE PASS checks=17") (newline)
+    (ppo-destroy (ffi-pointer ctx))))
+
+(if (= (ppo-env-phase) 0)
+    (run-train-phase)
+    (run-reload-phase))
