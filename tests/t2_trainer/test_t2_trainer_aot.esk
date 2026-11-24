@@ -1,0 +1,351 @@
+;;; Compiled Eshkol AOT deterministic byte-level BPE trainer & lossless round-trip
+;;; verification executable (--strict-types --optimize 0 --no-stdlib).
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 bpe-corpus-create ptr :real et_t2_bpe_aot_corpus_create)
+(extern void bpe-corpus-destroy ptr :real et_t2_bpe_aot_corpus_destroy)
+(extern i32 bpe-corpus-add-bytes ptr ptr i64 :real et_t2_bpe_aot_corpus_add_bytes)
+(extern i32 bpe-corpus-add-cstr ptr char* :real et_t2_bpe_aot_corpus_add_cstr)
+(extern i32 bpe-corpus-doc-count ptr ptr :real et_t2_bpe_aot_corpus_doc_count)
+
+(extern i32 bpe-train ptr i64 i64 i64 ptr :real et_t2_bpe_aot_train)
+(extern void bpe-destroy ptr :real et_t2_bpe_aot_destroy)
+(extern i32 bpe-save ptr char* ptr :real et_t2_bpe_aot_save)
+(extern i32 bpe-load char* ptr ptr :real et_t2_bpe_aot_load)
+
+(extern i32 bpe-vocab-size ptr ptr :real et_t2_bpe_aot_vocab_size)
+(extern i32 bpe-merge-count ptr ptr :real et_t2_bpe_aot_merge_count)
+(extern i32 bpe-special-ids ptr ptr :real et_t2_bpe_aot_special_ids)
+(extern i32 bpe-get-merge ptr i64 ptr :real et_t2_bpe_aot_get_merge)
+
+(extern i32 bpe-encode-bytes ptr ptr i64 ptr i64 ptr :real et_t2_bpe_aot_encode_bytes)
+(extern i32 bpe-encode-cstr ptr char* ptr i64 ptr :real et_t2_bpe_aot_encode_cstr)
+(extern i32 bpe-count-tokens-cstr ptr char* ptr :real et_t2_bpe_aot_count_tokens_cstr)
+(extern i32 bpe-decode-bytes ptr ptr i64 ptr i64 ptr :real et_t2_bpe_aot_decode_bytes)
+
+(extern i32 bpe-store-u8 ptr i64 i64 i64 :real et_t2_bpe_aot_store_u8)
+(extern i64 bpe-load-u8 ptr i64 i64 :real et_t2_bpe_aot_load_u8)
+(extern i64 bpe-load-u32 ptr i64 i64 :real et_t2_bpe_aot_load_u32)
+(extern i64 bpe-load-i64 ptr i64 i64 :real et_t2_bpe_aot_load_i64)
+(extern i32 bpe-bytes-equal ptr ptr i64 ptr :real et_t2_bpe_aot_bytes_equal)
+(extern i32 bpe-cstr-bytes-equal char* ptr i64 ptr :real et_t2_bpe_aot_cstr_bytes_equal)
+(extern i32 bpe-cstr-len char* ptr :real et_t2_bpe_aot_cstr_len)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define special-all 15)
+(define target-vocab 320)
+(define min-freq 2)
+
+(define (require-check label ok)
+  (unless ok
+    (display "T2_BPE_AOT_FAIL ")
+    (display label)
+    (newline)
+    (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "T2_BPE_AOT_FAIL ")
+    (display label)
+    (display " expected=")
+    (display expected)
+    (display " actual=")
+    (display actual)
+    (newline)
+    (exit 1)))
+
+(define (checked-alloc bytes)
+  (let ((p (allocate bytes)))
+    (require-check "malloc" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (display-hex-nibble n)
+  (display
+    (cond ((= n 0) "0") ((= n 1) "1") ((= n 2) "2") ((= n 3) "3")
+          ((= n 4) "4") ((= n 5) "5") ((= n 6) "6") ((= n 7) "7")
+          ((= n 8) "8") ((= n 9) "9") ((= n 10) "a") ((= n 11) "b")
+          ((= n 12) "c") ((= n 13) "d") ((= n 14) "e") (else "f"))))
+
+(define (display-sha256 buf)
+  (do ((i 0 (+ i 1)))
+      ((= i 32))
+    (let ((b (bpe-load-u8 (ffi-pointer buf) 32 i)))
+      (display-hex-nibble (quotient b 16))
+      (display-hex-nibble (modulo b 16)))))
+
+(define probe-ascii
+  "eshkol transformer deterministic byte pair encoding tokenizer checkpoint artifact")
+
+(define probe-utf8
+  "eshkol transformer deterministic byte-level BPE: cafe alpha beta delta")
+
+(define (verify-cstr-roundtrip model text expect-compress)
+  (let ((len-buf (checked-alloc 8))
+        (cnt-buf (checked-alloc 8))
+        (tok-buf (checked-alloc (* 4 512)))
+        (dec-buf (checked-alloc 512))
+        (dec-len-buf (checked-alloc 8))
+        (eq-buf (checked-alloc 4)))
+    (expect-status "cstr-len" 0 (bpe-cstr-len text (ffi-pointer len-buf)))
+    (let ((raw-len (bpe-load-i64 (ffi-pointer len-buf) 1 0)))
+      (expect-status "count-tokens" 0
+                     (bpe-count-tokens-cstr (ffi-pointer model) text (ffi-pointer cnt-buf)))
+      (let ((q-count (bpe-load-i64 (ffi-pointer cnt-buf) 1 0)))
+        (expect-status "encode-cstr" 0
+                       (bpe-encode-cstr (ffi-pointer model) text
+                                        (ffi-pointer tok-buf) 512
+                                        (ffi-pointer cnt-buf)))
+        (let ((tok-count (bpe-load-i64 (ffi-pointer cnt-buf) 1 0)))
+          (require-check "count-query-parity" (= q-count tok-count))
+          (when expect-compress
+            (require-check "compression" (< tok-count raw-len)))
+          (expect-status "decode-bytes" 0
+                         (bpe-decode-bytes (ffi-pointer model)
+                                           (ffi-pointer tok-buf) tok-count
+                                           (ffi-pointer dec-buf) 512
+                                           (ffi-pointer dec-len-buf)))
+          (let ((dec-len (bpe-load-i64 (ffi-pointer dec-len-buf) 1 0)))
+            (require-check "decoded-len-exact" (= dec-len raw-len))
+            (expect-status "cstr-bytes-equal" 0
+                           (bpe-cstr-bytes-equal text (ffi-pointer dec-buf)
+                                                 dec-len (ffi-pointer eq-buf)))
+            (require-check "cstr-lossless-exact" (= 1 (volatile-load i32 eq-buf)))
+            (release eq-buf)
+            (release dec-len-buf)
+            (release dec-buf)
+            (release tok-buf)
+            (release cnt-buf)
+            (release len-buf)
+            tok-count))))))
+
+(define (verify-all256-and-nul-roundtrip model)
+  ;; Build a 264-byte payload containing NULs + all 256 byte values 0x00..0xFF + NULs.
+  (let* ((total 264)
+         (raw-buf (checked-alloc total))
+         (tok-buf (checked-alloc (* 4 512)))
+         (cnt-buf (checked-alloc 8))
+         (dec-buf (checked-alloc 512))
+         (dec-len-buf (checked-alloc 8))
+         (eq-buf (checked-alloc 4)))
+    (expect-status "store-nul-0" 0 (bpe-store-u8 (ffi-pointer raw-buf) total 0 0))
+    (expect-status "store-nul-1" 0 (bpe-store-u8 (ffi-pointer raw-buf) total 1 0))
+    (expect-status "store-ff-2" 0 (bpe-store-u8 (ffi-pointer raw-buf) total 2 255))
+    (expect-status "store-fe-3" 0 (bpe-store-u8 (ffi-pointer raw-buf) total 3 254))
+    (do ((b 0 (+ b 1)))
+        ((= b 256))
+      (expect-status "store-ramp" 0
+                     (bpe-store-u8 (ffi-pointer raw-buf) total (+ 4 b) b)))
+    (expect-status "store-tail-0" 0 (bpe-store-u8 (ffi-pointer raw-buf) total 260 0))
+    (expect-status "store-tail-1" 0 (bpe-store-u8 (ffi-pointer raw-buf) total 261 128))
+    (expect-status "store-tail-2" 0 (bpe-store-u8 (ffi-pointer raw-buf) total 262 255))
+    (expect-status "store-tail-3" 0 (bpe-store-u8 (ffi-pointer raw-buf) total 263 0))
+
+    (expect-status "encode-all256" 0
+                   (bpe-encode-bytes (ffi-pointer model) (ffi-pointer raw-buf) total
+                                     (ffi-pointer tok-buf) 512 (ffi-pointer cnt-buf)))
+    (let ((tok-count (bpe-load-i64 (ffi-pointer cnt-buf) 1 0)))
+      (require-check "all256-tok-positive" (> tok-count 0))
+      (expect-status "decode-all256" 0
+                     (bpe-decode-bytes (ffi-pointer model) (ffi-pointer tok-buf) tok-count
+                                       (ffi-pointer dec-buf) 512 (ffi-pointer dec-len-buf)))
+      (let ((dec-len (bpe-load-i64 (ffi-pointer dec-len-buf) 1 0)))
+        (require-check "all256-len-exact" (= dec-len total))
+        (expect-status "all256-bytes-equal" 0
+                       (bpe-bytes-equal (ffi-pointer raw-buf) (ffi-pointer dec-buf)
+                                        total (ffi-pointer eq-buf)))
+        (require-check "all256-lossless-exact" (= 1 (volatile-load i32 eq-buf)))))
+
+    (release eq-buf)
+    (release dec-len-buf)
+    (release dec-buf)
+    (release cnt-buf)
+    (release tok-buf)
+    (release raw-buf)))
+
+(define (cmd-train artifact-path)
+  (let ((corpus-cell (checked-alloc 8))
+        (model-cell (checked-alloc 8))
+        (docs-buf (checked-alloc 8))
+        (vocab-buf (checked-alloc 8))
+        (merges-buf (checked-alloc 8))
+        (specials-buf (checked-alloc (* 8 4)))
+        (merge0-buf (checked-alloc (* 8 3)))
+        (sha-buf (checked-alloc 32))
+        (raw-len-buf (checked-alloc 8))
+        (bin-doc (checked-alloc 8)))
+    (expect-status "corpus-create" 0 (bpe-corpus-create (ffi-pointer corpus-cell)))
+    (let ((corpus (volatile-load ptr corpus-cell)))
+      (release corpus-cell)
+      (expect-status "add-doc-1" 0
+                     (bpe-corpus-add-cstr
+                       (ffi-pointer corpus)
+                       "eshkol transformer deterministic byte pair encoding tokenizer checkpoint artifact eshkol transformer deterministic byte pair encoding tokenizer checkpoint artifact"))
+      (expect-status "add-doc-2" 0
+                     (bpe-corpus-add-cstr
+                       (ffi-pointer corpus)
+                       "deterministic byte-level BPE trainer attention normalization checkpoint artifact deterministic byte-level BPE trainer attention normalization checkpoint artifact"))
+      (expect-status "add-doc-3" 0
+                     (bpe-corpus-add-cstr
+                       (ffi-pointer corpus)
+                       "eshkol transformer tokenizer checkpoint verified sha256 artifact reload parity eshkol transformer tokenizer checkpoint verified sha256 artifact reload parity"))
+      ;; Add a binary NUL-embedded document too.
+      (expect-status "bin-0" 0 (bpe-store-u8 (ffi-pointer bin-doc) 8 0 0))
+      (expect-status "bin-1" 0 (bpe-store-u8 (ffi-pointer bin-doc) 8 1 255))
+      (expect-status "bin-2" 0 (bpe-store-u8 (ffi-pointer bin-doc) 8 2 0))
+      (expect-status "bin-3" 0 (bpe-store-u8 (ffi-pointer bin-doc) 8 3 255))
+      (expect-status "bin-4" 0 (bpe-store-u8 (ffi-pointer bin-doc) 8 4 0))
+      (expect-status "bin-5" 0 (bpe-store-u8 (ffi-pointer bin-doc) 8 5 255))
+      (expect-status "bin-6" 0 (bpe-store-u8 (ffi-pointer bin-doc) 8 6 1))
+      (expect-status "bin-7" 0 (bpe-store-u8 (ffi-pointer bin-doc) 8 7 2))
+      (expect-status "add-doc-bin" 0
+                     (bpe-corpus-add-bytes (ffi-pointer corpus) (ffi-pointer bin-doc) 8))
+
+      (expect-status "doc-count" 0
+                     (bpe-corpus-doc-count (ffi-pointer corpus) (ffi-pointer docs-buf)))
+      (require-check "docs==4" (= 4 (bpe-load-i64 (ffi-pointer docs-buf) 1 0)))
+
+      (expect-status "train" 0
+                     (bpe-train (ffi-pointer corpus) target-vocab min-freq
+                                special-all (ffi-pointer model-cell)))
+      (let ((model (volatile-load ptr model-cell)))
+        (release model-cell)
+        (expect-status "vocab-size" 0
+                       (bpe-vocab-size (ffi-pointer model) (ffi-pointer vocab-buf)))
+        (expect-status "merge-count" 0
+                       (bpe-merge-count (ffi-pointer model) (ffi-pointer merges-buf)))
+        (expect-status "special-ids" 0
+                       (bpe-special-ids (ffi-pointer model) (ffi-pointer specials-buf)))
+        (expect-status "get-merge-0" 0
+                       (bpe-get-merge (ffi-pointer model) 0 (ffi-pointer merge0-buf)))
+        (let ((vocab (bpe-load-i64 (ffi-pointer vocab-buf) 1 0))
+              (merges (bpe-load-i64 (ffi-pointer merges-buf) 1 0))
+              (bos-id (bpe-load-i64 (ffi-pointer specials-buf) 4 0))
+              (unk-id (bpe-load-i64 (ffi-pointer specials-buf) 4 3)))
+          (require-check "vocab==256+merges+4" (= vocab (+ 256 merges 4)))
+          (require-check "merges>0" (> merges 0))
+          (require-check "bos-id" (= bos-id (+ 256 merges)))
+          (require-check "unk-id" (= unk-id (+ 256 merges 3)))
+
+          (expect-status "save" 0
+                         (bpe-save (ffi-pointer model) artifact-path (ffi-pointer sha-buf)))
+          (expect-status "probe-len" 0 (bpe-cstr-len probe-ascii (ffi-pointer raw-len-buf)))
+          (let ((raw-bytes (bpe-load-i64 (ffi-pointer raw-len-buf) 1 0))
+                (tok-count (verify-cstr-roundtrip model probe-ascii #t))
+                (utf8-toks (verify-cstr-roundtrip model probe-utf8 #t)))
+            (require-check "utf8-toks>0" (> utf8-toks 0))
+            (display "T2_BPE_AOT_TRAIN vocab=") (display vocab)
+            (display " merges=") (display merges)
+            (display " raw_bytes=") (display raw-bytes)
+            (display " encoded_tokens=") (display tok-count)
+            (display " sha256=") (display-sha256 sha-buf)
+            (newline)))
+
+        (bpe-destroy (ffi-pointer model)))
+      (bpe-corpus-destroy (ffi-pointer corpus)))
+
+    (release bin-doc)
+    (release raw-len-buf)
+    (release sha-buf)
+    (release merge0-buf)
+    (release specials-buf)
+    (release merges-buf)
+    (release vocab-buf)
+    (release docs-buf)
+    0))
+
+(define (cmd-reload artifact-path)
+  (let ((model-cell (checked-alloc 8))
+        (vocab-buf (checked-alloc 8))
+        (merges-buf (checked-alloc 8))
+        (sha-buf (checked-alloc 32))
+        (raw-len-buf (checked-alloc 8)))
+    (expect-status "load" 0
+                   (bpe-load artifact-path (ffi-pointer model-cell) (ffi-pointer sha-buf)))
+    (let ((model (volatile-load ptr model-cell)))
+      (release model-cell)
+      (expect-status "reload-vocab" 0
+                     (bpe-vocab-size (ffi-pointer model) (ffi-pointer vocab-buf)))
+      (expect-status "reload-merges" 0
+                     (bpe-merge-count (ffi-pointer model) (ffi-pointer merges-buf)))
+      (expect-status "probe-len" 0 (bpe-cstr-len probe-ascii (ffi-pointer raw-len-buf)))
+      (let ((vocab (bpe-load-i64 (ffi-pointer vocab-buf) 1 0))
+            (merges (bpe-load-i64 (ffi-pointer merges-buf) 1 0))
+            (raw-bytes (bpe-load-i64 (ffi-pointer raw-len-buf) 1 0))
+            (tok-count (verify-cstr-roundtrip model probe-ascii #t))
+            (utf8-toks (verify-cstr-roundtrip model probe-utf8 #t)))
+        (require-check "reload-utf8-toks>0" (> utf8-toks 0))
+        (verify-all256-and-nul-roundtrip model)
+        (display "T2_BPE_AOT_RELOAD vocab=") (display vocab)
+        (display " merges=") (display merges)
+        (display " raw_bytes=") (display raw-bytes)
+        (display " encoded_tokens=") (display tok-count)
+        (display " lossless_all256=PASS sha256=") (display-sha256 sha-buf)
+        (newline))
+      (bpe-destroy (ffi-pointer model)))
+    (release raw-len-buf)
+    (release sha-buf)
+    (release merges-buf)
+    (release vocab-buf)
+    0))
+
+(define (parse-expected-status text)
+  (cond
+    ((string=? text "-5") -5)
+    ((string=? text "-6") -6)
+    ((string=? text "-7") -7)
+    ((string=? text "-8") -8)
+    ((string=? text "-9") -9)
+    ((string=? text "-11") -11)
+    (else
+     (display "Unknown expected status: ") (display text) (newline)
+     (exit 2))))
+
+(define (cmd-reject artifact-path expected-str)
+  (let ((expected (parse-expected-status expected-str))
+        (model-cell (checked-alloc 8))
+        (sha-buf (checked-alloc 32)))
+    (volatile-store! i64 model-cell 0)
+    (let ((actual (bpe-load artifact-path (ffi-pointer model-cell) (ffi-pointer sha-buf))))
+      (expect-status "reject-status" expected actual)
+      (require-check "reject-null-model" (= 0 (volatile-load i64 model-cell)))
+      (display "T2_BPE_AOT_REJECT expected=") (display expected)
+      (display " actual=") (display actual)
+      (display " PASS") (newline))
+    (release sha-buf)
+    (release model-cell)
+    0))
+
+(define (list-len xs)
+  (if (null? xs) 0 (+ 1 (list-len (cdr xs)))))
+
+(define (arg-at xs n)
+  (if (= n 0) (car xs) (arg-at (cdr xs) (- n 1))))
+
+(let* ((args (command-line))
+       (argc (list-len args)))
+  (cond
+    ((and (= argc 4)
+          (string=? (arg-at args 1) "--mode")
+          (string=? (arg-at args 2) "train"))
+     (cmd-train (arg-at args 3))
+     (exit 0))
+    ((and (= argc 4)
+          (string=? (arg-at args 1) "--mode")
+          (string=? (arg-at args 2) "reload"))
+     (cmd-reload (arg-at args 3))
+     (exit 0))
+    ((and (= argc 5)
+          (string=? (arg-at args 1) "--mode")
+          (string=? (arg-at args 2) "reject"))
+     (cmd-reject (arg-at args 3) (arg-at args 4))
+     (exit 0))
+    (else
+     (display "Usage: test_t2_trainer_aot --mode train <art> | reload <art> | reject <art> <status>")
+     (newline)
+     (exit 2))))
