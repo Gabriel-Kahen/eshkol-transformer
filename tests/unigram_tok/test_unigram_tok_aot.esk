@@ -1,0 +1,553 @@
+;;; Compiled Eshkol AOT deterministic Unigram LM / SentencePiece-style Viterbi
+;;; Lattice Tokenizer & Forward-Backward EM Trainer verification executable
+;;; (--strict-types --optimize 0 --no-stdlib).
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 ug-corpus-create ptr :real et_unigram_aot_corpus_create)
+(extern void ug-corpus-destroy ptr :real et_unigram_aot_corpus_destroy)
+(extern i32 ug-corpus-add-bytes ptr ptr i64 :real et_unigram_aot_corpus_add_bytes)
+(extern i32 ug-corpus-add-cstr ptr char* :real et_unigram_aot_corpus_add_cstr)
+(extern i32 ug-corpus-doc-count ptr ptr :real et_unigram_aot_corpus_doc_count)
+
+(extern i32 ug-train ptr i64 i64 i64 i64 i64 i64 i64 i64 f64 f64 ptr ptr ptr
+        :real et_unigram_aot_train)
+(extern void ug-destroy ptr :real et_unigram_aot_destroy)
+(extern i32 ug-save ptr char* ptr :real et_unigram_aot_save)
+(extern i32 ug-load char* ptr ptr :real et_unigram_aot_load)
+
+(extern i32 ug-vocab-size ptr ptr :real et_unigram_aot_vocab_size)
+(extern i32 ug-active-count ptr ptr :real et_unigram_aot_active_count)
+(extern i32 ug-learned-count ptr ptr :real et_unigram_aot_learned_count)
+(extern i32 ug-special-ids ptr ptr :real et_unigram_aot_special_ids)
+
+(extern i32 ug-encode-bytes ptr ptr i64 ptr i64 ptr ptr :real et_unigram_aot_encode_bytes)
+(extern i32 ug-encode-cstr ptr char* ptr i64 ptr ptr :real et_unigram_aot_encode_cstr)
+(extern i32 ug-decode-bytes ptr ptr i64 ptr i64 ptr :real et_unigram_aot_decode_bytes)
+(extern i32 ug-fb-cstr ptr char* ptr ptr i64 :real et_unigram_aot_forward_backward_cstr)
+(extern i32 ug-sample-cstr ptr char* f64 i64 ptr i64 ptr ptr :real et_unigram_aot_sample_cstr)
+(extern i32 ug-perturbed-log-z ptr char* i64 f64 ptr :real et_unigram_aot_perturbed_log_z_cstr)
+
+(extern i32 ug-probe-nonfinite :real et_unigram_aot_probe_nonfinite_create)
+(extern i32 ug-probe-fp-env ptr :real et_unigram_aot_probe_fp_env_trap)
+
+(extern i32 ug-store-u8 ptr i64 i64 i64 :real et_unigram_aot_store_u8)
+(extern i64 ug-load-u8 ptr i64 i64 :real et_unigram_aot_load_u8)
+(extern i32 ug-store-u32 ptr i64 i64 i64 :real et_unigram_aot_store_u32)
+(extern i64 ug-load-u32 ptr i64 i64 :real et_unigram_aot_load_u32)
+(extern i64 ug-load-i64 ptr i64 i64 :real et_unigram_aot_load_i64)
+(extern f64 ug-load-f64 ptr i64 i64 :real et_unigram_aot_load_f64)
+(extern i32 ug-f64-bits-equal f64 f64 :real et_unigram_aot_f64_bits_equal)
+(extern i32 ug-bytes-equal ptr ptr i64 ptr :real et_unigram_aot_bytes_equal)
+(extern i32 ug-u32-equal ptr ptr i64 ptr :real et_unigram_aot_u32_equal)
+(extern i32 ug-cstr-bytes-equal char* ptr i64 ptr :real et_unigram_aot_cstr_bytes_equal)
+(extern i32 ug-cstr-len char* ptr :real et_unigram_aot_cstr_len)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define target-vocab 320)
+(define seed-vocab 1024)
+(define max-piece 16)
+(define min-freq 2)
+(define sub-iters 2)
+(define final-iters 5)
+(define mstep-mle 0)
+(define special-none 0)
+
+(define (require-check label ok)
+  (unless ok
+    (display "UNIGRAM_AOT_FAIL ")
+    (display label)
+    (newline)
+    (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "UNIGRAM_AOT_FAIL ")
+    (display label)
+    (display " expected=")
+    (display expected)
+    (display " actual=")
+    (display actual)
+    (newline)
+    (exit 1)))
+
+(define (checked-alloc bytes)
+  (let ((p (allocate bytes)))
+    (require-check "malloc" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (f64-abs x)
+  (if (< x 0.0) (- 0.0 x) x))
+
+(define (display-hex-nibble n)
+  (display
+    (cond ((= n 0) "0") ((= n 1) "1") ((= n 2) "2") ((= n 3) "3")
+          ((= n 4) "4") ((= n 5) "5") ((= n 6) "6") ((= n 7) "7")
+          ((= n 8) "8") ((= n 9) "9") ((= n 10) "a") ((= n 11) "b")
+          ((= n 12) "c") ((= n 13) "d") ((= n 14) "e") (else "f"))))
+
+(define (display-sha256 buf)
+  (do ((i 0 (+ i 1)))
+      ((= i 32))
+    (let ((b (ug-load-u8 (ffi-pointer buf) 32 i)))
+      (display-hex-nibble (quotient b 16))
+      (display-hex-nibble (modulo b 16)))))
+
+(define (display-tokens tok-buf count)
+  (do ((i 0 (+ i 1)))
+      ((= i count))
+    (when (> i 0) (display ","))
+    (display (ug-load-u32 (ffi-pointer tok-buf) 512 i))))
+
+(define probe-ascii
+  "eshkol transformer unigram viterbi lattice tokenizer forward backward checkpoint")
+
+(define probe-fd
+  "eshkol transformer unigram viterbi lattice tokenizer")
+
+(define (verify-cstr-viterbi-roundtrip model text tok-buf cnt-buf score-buf expect-compress)
+  (let ((len-buf (checked-alloc 8))
+        (dec-buf (checked-alloc 512))
+        (dec-len-buf (checked-alloc 8))
+        (eq-buf (checked-alloc 4)))
+    (expect-status "cstr-len" 0 (ug-cstr-len text (ffi-pointer len-buf)))
+    (let ((raw-len (ug-load-i64 (ffi-pointer len-buf) 1 0)))
+      (expect-status "encode-cstr" 0
+                     (ug-encode-cstr (ffi-pointer model) text
+                                     (ffi-pointer tok-buf) 512
+                                     (ffi-pointer cnt-buf)
+                                     (ffi-pointer score-buf)))
+      (let ((tok-count (ug-load-i64 (ffi-pointer cnt-buf) 1 0)))
+        (require-check "tok-count>0" (> tok-count 0))
+        (when expect-compress
+          ;; Require compression ratio > 1.5x (raw_len * 2 > tok_count * 3).
+          (require-check "compression>1.5x" (> (* raw-len 2) (* tok-count 3))))
+        (expect-status "decode-bytes" 0
+                       (ug-decode-bytes (ffi-pointer model)
+                                        (ffi-pointer tok-buf) tok-count
+                                        (ffi-pointer dec-buf) 512
+                                        (ffi-pointer dec-len-buf)))
+        (let ((dec-len (ug-load-i64 (ffi-pointer dec-len-buf) 1 0)))
+          (require-check "decoded-len-exact" (= dec-len raw-len))
+          (expect-status "cstr-bytes-equal" 0
+                         (ug-cstr-bytes-equal text (ffi-pointer dec-buf)
+                                              dec-len (ffi-pointer eq-buf)))
+          (require-check "cstr-lossless-exact" (= 1 (volatile-load i32 eq-buf)))
+          (release eq-buf)
+          (release dec-len-buf)
+          (release dec-buf)
+          (release len-buf)
+          tok-count)))))
+
+(define (verify-all256-nul-utf8-roundtrip model)
+  ;; 277-byte payload: NULs + 0x00..0xFF + invalid UTF-8 + valid UTF-8 + NUL.
+  (let* ((total 277)
+         (raw-buf (checked-alloc total))
+         (tok-buf (checked-alloc (* 4 512)))
+         (cnt-buf (checked-alloc 8))
+         (score-buf (checked-alloc 8))
+         (dec-buf (checked-alloc 512))
+         (dec-len-buf (checked-alloc 8))
+         (eq-buf (checked-alloc 4)))
+    (expect-status "store-0" 0 (ug-store-u8 (ffi-pointer raw-buf) total 0 0))
+    (expect-status "store-1" 0 (ug-store-u8 (ffi-pointer raw-buf) total 1 0))
+    (expect-status "store-2" 0 (ug-store-u8 (ffi-pointer raw-buf) total 2 255))
+    (expect-status "store-3" 0 (ug-store-u8 (ffi-pointer raw-buf) total 3 254))
+    (do ((b 0 (+ b 1)))
+        ((= b 256))
+      (expect-status "store-ramp" 0
+                     (ug-store-u8 (ffi-pointer raw-buf) total (+ 4 b) b)))
+    ;; Invalid UTF-8 bytes (0x80, 0xC0, 0xED, 0xA0, 0x80, 0xFE, 0xFF)
+    (expect-status "inv-0" 0 (ug-store-u8 (ffi-pointer raw-buf) total 260 128))
+    (expect-status "inv-1" 0 (ug-store-u8 (ffi-pointer raw-buf) total 261 192))
+    (expect-status "inv-2" 0 (ug-store-u8 (ffi-pointer raw-buf) total 262 237))
+    (expect-status "inv-3" 0 (ug-store-u8 (ffi-pointer raw-buf) total 263 160))
+    (expect-status "inv-4" 0 (ug-store-u8 (ffi-pointer raw-buf) total 264 128))
+    (expect-status "inv-5" 0 (ug-store-u8 (ffi-pointer raw-buf) total 265 254))
+    (expect-status "inv-6" 0 (ug-store-u8 (ffi-pointer raw-buf) total 266 255))
+    ;; Multibyte UTF-8: e6 97 a5 ("日") + f0 9f 9a 80 ("🚀") + c3 a9 ("é") + NUL
+    (expect-status "u8-0" 0 (ug-store-u8 (ffi-pointer raw-buf) total 267 230))
+    (expect-status "u8-1" 0 (ug-store-u8 (ffi-pointer raw-buf) total 268 151))
+    (expect-status "u8-2" 0 (ug-store-u8 (ffi-pointer raw-buf) total 269 165))
+    (expect-status "u8-3" 0 (ug-store-u8 (ffi-pointer raw-buf) total 270 240))
+    (expect-status "u8-4" 0 (ug-store-u8 (ffi-pointer raw-buf) total 271 159))
+    (expect-status "u8-5" 0 (ug-store-u8 (ffi-pointer raw-buf) total 272 154))
+    (expect-status "u8-6" 0 (ug-store-u8 (ffi-pointer raw-buf) total 273 128))
+    (expect-status "u8-7" 0 (ug-store-u8 (ffi-pointer raw-buf) total 274 195))
+    (expect-status "u8-8" 0 (ug-store-u8 (ffi-pointer raw-buf) total 275 169))
+    (expect-status "u8-9" 0 (ug-store-u8 (ffi-pointer raw-buf) total 276 0))
+
+    (expect-status "encode-all256" 0
+                   (ug-encode-bytes (ffi-pointer model) (ffi-pointer raw-buf) total
+                                    (ffi-pointer tok-buf) 512
+                                    (ffi-pointer cnt-buf) (ffi-pointer score-buf)))
+    (let ((tok-count (ug-load-i64 (ffi-pointer cnt-buf) 1 0)))
+      (require-check "all256-tok-positive" (> tok-count 0))
+      (expect-status "decode-all256" 0
+                     (ug-decode-bytes (ffi-pointer model) (ffi-pointer tok-buf) tok-count
+                                      (ffi-pointer dec-buf) 512 (ffi-pointer dec-len-buf)))
+      (let ((dec-len (ug-load-i64 (ffi-pointer dec-len-buf) 1 0)))
+        (require-check "all256-len-exact" (= dec-len total))
+        (expect-status "all256-bytes-equal" 0
+                       (ug-bytes-equal (ffi-pointer raw-buf) (ffi-pointer dec-buf)
+                                       total (ffi-pointer eq-buf)))
+        (require-check "all256-lossless-exact" (= 1 (volatile-load i32 eq-buf)))))
+
+    (release eq-buf)
+    (release dec-len-buf)
+    (release dec-buf)
+    (release score-buf)
+    (release cnt-buf)
+    (release tok-buf)
+    (release raw-buf)))
+
+;; Central finite-difference verification of Forward-Backward d(log Z)/d(log_p_i) == E[c_i]
+;; driven directly from compiled Eshkol AOT code.
+(define (verify-fb-central-fd model active-count text)
+  (let ((lz-buf (checked-alloc 8))
+        (exp-buf (checked-alloc (* 8 active-count)))
+        (plus-buf (checked-alloc 8))
+        (minus-buf (checked-alloc 8))
+        (eps 0.000001)
+        (max-err 0.0)
+        (checked-nonzero 0))
+    (expect-status "fb-cstr" 0
+                   (ug-fb-cstr (ffi-pointer model) text
+                               (ffi-pointer lz-buf)
+                               (ffi-pointer exp-buf) active-count))
+    (do ((tid 0 (+ tid 1)))
+        ((= tid active-count))
+      (let ((ec (ug-load-f64 (ffi-pointer exp-buf) active-count tid)))
+        (when (or (> ec 0.0) (= (modulo tid 32) 0))
+          (expect-status "fd-plus" 0
+                         (ug-perturbed-log-z (ffi-pointer model) text tid
+                                             eps (ffi-pointer plus-buf)))
+          (expect-status "fd-minus" 0
+                         (ug-perturbed-log-z (ffi-pointer model) text tid
+                                             (- 0.0 eps) (ffi-pointer minus-buf)))
+          (let* ((lzp (ug-load-f64 (ffi-pointer plus-buf) 1 0))
+                 (lzm (ug-load-f64 (ffi-pointer minus-buf) 1 0))
+                 (fd (/ (- lzp lzm) (* 2.0 eps)))
+                 (err (f64-abs (- fd ec))))
+            (require-check "fd-err<1e-6" (< err 0.000001))
+            (when (> err max-err)
+              (set! max-err err))
+            (when (> ec 0.000001)
+              (set! checked-nonzero (+ checked-nonzero 1)))))))
+    (require-check "fd-checked-nonzero>=8" (>= checked-nonzero 8))
+    (release minus-buf)
+    (release plus-buf)
+    (release exp-buf)
+    (release lz-buf)
+    max-err))
+
+(define (verify-negative-boundaries corpus model)
+  (let ((bad-model-cell (checked-alloc 8))
+        (bad-i64 (checked-alloc (* 8 4)))
+        (bad-f64 (checked-alloc (* 8 3)))
+        (oob-tok-buf (checked-alloc 8))
+        (dec-buf (checked-alloc 16))
+        (dec-len-buf (checked-alloc 8)))
+    ;; 1. target_vocab < 256 -> ET_UNIGRAM_ERR_ARGUMENT (-1)
+    (volatile-store! i64 bad-model-cell 0)
+    (expect-status "neg-vocab<256" -1
+                   (ug-train (ffi-pointer corpus) 200 512 12 2 2 4 0 0 0.75 0.001
+                             (ffi-pointer bad-model-cell)
+                             (ffi-pointer bad-i64)
+                             (ffi-pointer bad-f64)))
+    (require-check "neg-vocab-null" (= 0 (volatile-load i64 bad-model-cell)))
+
+    ;; 2. OOB decode token ID -> ET_UNIGRAM_ERR_TOKEN_ID (-10)
+    (expect-status "store-oob-0" 0 (ug-store-u32 (ffi-pointer oob-tok-buf) 2 0 65))
+    (expect-status "store-oob-1" 0 (ug-store-u32 (ffi-pointer oob-tok-buf) 2 1 999))
+    (expect-status "neg-oob-decode" -10
+                   (ug-decode-bytes (ffi-pointer model) (ffi-pointer oob-tok-buf) 2
+                                    (ffi-pointer dec-buf) 16 (ffi-pointer dec-len-buf)))
+
+    ;; 3. Non-finite log-prob create -> ET_UNIGRAM_ERR_NONFINITE (-12)
+    (expect-status "neg-nonfinite" -12 (ug-probe-nonfinite))
+
+    ;; 4. FP-env trap (FE_UPWARD) -> ET_UNIGRAM_ERR_FP_ENV (-13)
+    (expect-status "neg-fp-env" -13 (ug-probe-fp-env (ffi-pointer model)))
+
+    (release dec-len-buf)
+    (release dec-buf)
+    (release oob-tok-buf)
+    (release bad-f64)
+    (release bad-i64)
+    (release bad-model-cell)))
+
+(define (cmd-train artifact-path)
+  (let ((corpus-cell (checked-alloc 8))
+        (model-cell (checked-alloc 8))
+        (docs-buf (checked-alloc 8))
+        (stats-i64 (checked-alloc (* 8 4)))
+        (stats-f64 (checked-alloc (* 8 3)))
+        (vocab-buf (checked-alloc 8))
+        (active-buf (checked-alloc 8))
+        (learned-buf (checked-alloc 8))
+        (sha-buf (checked-alloc 32))
+        (raw-len-buf (checked-alloc 8))
+        (tok-buf (checked-alloc (* 4 512)))
+        (cnt-buf (checked-alloc 8))
+        (score-buf (checked-alloc 8))
+        (fb-lz-buf (checked-alloc 8))
+        (samp-buf (checked-alloc (* 4 512)))
+        (samp-cnt-buf (checked-alloc 8))
+        (samp-score-buf (checked-alloc 8))
+        (samp-dec-buf (checked-alloc 512))
+        (samp-dec-len (checked-alloc 8))
+        (eq-buf (checked-alloc 4))
+        (bin-doc (checked-alloc 8)))
+    (expect-status "corpus-create" 0 (ug-corpus-create (ffi-pointer corpus-cell)))
+    (let ((corpus (volatile-load ptr corpus-cell)))
+      (release corpus-cell)
+      (expect-status "add-doc-1" 0
+                     (ug-corpus-add-cstr
+                       (ffi-pointer corpus)
+                       "eshkol transformer unigram viterbi lattice tokenizer forward backward checkpoint eshkol transformer unigram viterbi lattice tokenizer forward backward checkpoint"))
+      (expect-status "add-doc-2" 0
+                     (ug-corpus-add-cstr
+                       (ffi-pointer corpus)
+                       "deterministic sentencepiece subword regularization expectation maximization pruning deterministic sentencepiece subword regularization expectation maximization pruning"))
+      (expect-status "add-doc-3" 0
+                     (ug-corpus-add-cstr
+                       (ffi-pointer corpus)
+                       "eshkol transformer tokenizer checkpoint verified sha256 artifact reload parity eshkol transformer tokenizer checkpoint verified sha256 artifact reload parity"))
+      ;; Add a binary NUL-embedded document too.
+      (expect-status "bin-0" 0 (ug-store-u8 (ffi-pointer bin-doc) 8 0 0))
+      (expect-status "bin-1" 0 (ug-store-u8 (ffi-pointer bin-doc) 8 1 255))
+      (expect-status "bin-2" 0 (ug-store-u8 (ffi-pointer bin-doc) 8 2 0))
+      (expect-status "bin-3" 0 (ug-store-u8 (ffi-pointer bin-doc) 8 3 255))
+      (expect-status "bin-4" 0 (ug-store-u8 (ffi-pointer bin-doc) 8 4 0))
+      (expect-status "bin-5" 0 (ug-store-u8 (ffi-pointer bin-doc) 8 5 255))
+      (expect-status "bin-6" 0 (ug-store-u8 (ffi-pointer bin-doc) 8 6 1))
+      (expect-status "bin-7" 0 (ug-store-u8 (ffi-pointer bin-doc) 8 7 2))
+      (expect-status "add-doc-bin" 0
+                     (ug-corpus-add-bytes (ffi-pointer corpus) (ffi-pointer bin-doc) 8))
+
+      (expect-status "doc-count" 0
+                     (ug-corpus-doc-count (ffi-pointer corpus) (ffi-pointer docs-buf)))
+      (require-check "docs==4" (= 4 (ug-load-i64 (ffi-pointer docs-buf) 1 0)))
+
+      (expect-status "train" 0
+                     (ug-train (ffi-pointer corpus)
+                               target-vocab seed-vocab max-piece min-freq
+                               sub-iters final-iters mstep-mle special-none
+                               0.75 0.001
+                               (ffi-pointer model-cell)
+                               (ffi-pointer stats-i64)
+                               (ffi-pointer stats-f64)))
+      (let ((model (volatile-load ptr model-cell)))
+        (release model-cell)
+        (expect-status "vocab-size" 0 (ug-vocab-size (ffi-pointer model) (ffi-pointer vocab-buf)))
+        (expect-status "active-count" 0 (ug-active-count (ffi-pointer model) (ffi-pointer active-buf)))
+        (expect-status "learned-count" 0 (ug-learned-count (ffi-pointer model) (ffi-pointer learned-buf)))
+
+        (let ((vocab (ug-load-i64 (ffi-pointer vocab-buf) 1 0))
+              (active (ug-load-i64 (ffi-pointer active-buf) 1 0))
+              (learned (ug-load-i64 (ffi-pointer learned-buf) 1 0))
+              (seed-active (ug-load-i64 (ffi-pointer stats-i64) 4 0))
+              (prune-rounds (ug-load-i64 (ffi-pointer stats-i64) 4 2))
+              (em-iters (ug-load-i64 (ffi-pointer stats-i64) 4 3))
+              (em-start-ll (ug-load-f64 (ffi-pointer stats-f64) 3 1))
+              (em-end-ll (ug-load-f64 (ffi-pointer stats-f64) 3 2)))
+          (require-check "vocab==320" (= vocab 320))
+          (require-check "active==320" (= active 320))
+          (require-check "learned==64" (= learned 64))
+          (require-check "prune-rounds>0" (> prune-rounds 0))
+          (require-check "em-improves-or-converges" (>= em-end-ll (- em-start-ll 0.000000001)))
+
+          ;; Central finite-difference verification on Forward-Backward marginal d(log Z)/d(log_p_i).
+          (let ((fd-max-err (verify-fb-central-fd model active probe-fd)))
+            ;; Negative boundary checks (vocab<256, OOB decode, non-finite, FP-env trap).
+            (verify-negative-boundaries corpus model)
+
+            ;; Kudo FFBS sampling lossless round-trip check.
+            (expect-status "sample-cstr" 0
+                           (ug-sample-cstr (ffi-pointer model) probe-ascii 0.5 1337
+                                           (ffi-pointer samp-buf) 512
+                                           (ffi-pointer samp-cnt-buf)
+                                           (ffi-pointer samp-score-buf)))
+            (let ((scnt (ug-load-i64 (ffi-pointer samp-cnt-buf) 1 0)))
+              (require-check "sample-count>0" (> scnt 0))
+              (expect-status "sample-decode" 0
+                             (ug-decode-bytes (ffi-pointer model)
+                                              (ffi-pointer samp-buf) scnt
+                                              (ffi-pointer samp-dec-buf) 512
+                                              (ffi-pointer samp-dec-len)))
+              (let ((sdlen (ug-load-i64 (ffi-pointer samp-dec-len) 1 0)))
+                (expect-status "sample-equal" 0
+                               (ug-cstr-bytes-equal probe-ascii
+                                                    (ffi-pointer samp-dec-buf) sdlen
+                                                    (ffi-pointer eq-buf)))
+                (require-check "sample-lossless" (= 1 (volatile-load i32 eq-buf)))))
+
+            (expect-status "save" 0
+                           (ug-save (ffi-pointer model) artifact-path (ffi-pointer sha-buf)))
+            (expect-status "probe-len" 0 (ug-cstr-len probe-ascii (ffi-pointer raw-len-buf)))
+            (let ((probe-exp-buf (checked-alloc (* 8 active))))
+              (expect-status "probe-fb" 0
+                             (ug-fb-cstr (ffi-pointer model) probe-ascii
+                                         (ffi-pointer fb-lz-buf)
+                                         (ffi-pointer probe-exp-buf) active))
+              (release probe-exp-buf))
+            (let ((raw-bytes (ug-load-i64 (ffi-pointer raw-len-buf) 1 0))
+                  (tok-count (verify-cstr-viterbi-roundtrip
+                               model probe-ascii tok-buf cnt-buf score-buf #t))
+                  (vscore (ug-load-f64 (ffi-pointer score-buf) 1 0))
+                  (fb-lz (ug-load-f64 (ffi-pointer fb-lz-buf) 1 0)))
+              (require-check "fb-lz>=vscore" (>= fb-lz (- vscore 0.000000000001)))
+              (display "UNIGRAM_AOT_TRAIN vocab=") (display vocab)
+              (display " learned=") (display learned)
+              (display " seed_active=") (display seed-active)
+              (display " prune_rounds=") (display prune-rounds)
+              (display " em_iters=") (display em-iters)
+              (display " em_start_ll=") (display em-start-ll)
+              (display " em_end_ll=") (display em-end-ll)
+              (display " raw_bytes=") (display raw-bytes)
+              (display " encoded_tokens=") (display tok-count)
+              (display " vscore=") (display vscore)
+              (display " fb_log_z=") (display fb-lz)
+              (display " fd_max_err=") (display fd-max-err)
+              (display " tokens=") (display-tokens tok-buf tok-count)
+              (display " neg_checks=PASS sha256=") (display-sha256 sha-buf)
+              (newline))))
+
+        (ug-destroy (ffi-pointer model)))
+      (ug-corpus-destroy (ffi-pointer corpus)))
+
+    (release bin-doc)
+    (release eq-buf)
+    (release samp-dec-len)
+    (release samp-dec-buf)
+    (release samp-score-buf)
+    (release samp-cnt-buf)
+    (release samp-buf)
+    (release fb-lz-buf)
+    (release score-buf)
+    (release cnt-buf)
+    (release tok-buf)
+    (release raw-len-buf)
+    (release sha-buf)
+    (release learned-buf)
+    (release active-buf)
+    (release vocab-buf)
+    (release stats-f64)
+    (release stats-i64)
+    (release docs-buf)
+    0))
+
+(define (cmd-reload artifact-path)
+  (let ((model-cell (checked-alloc 8))
+        (vocab-buf (checked-alloc 8))
+        (learned-buf (checked-alloc 8))
+        (sha-buf (checked-alloc 32))
+        (raw-len-buf (checked-alloc 8))
+        (tok-buf (checked-alloc (* 4 512)))
+        (cnt-buf (checked-alloc 8))
+        (score-buf (checked-alloc 8))
+        (fb-lz-buf (checked-alloc 8)))
+    (expect-status "load" 0
+                   (ug-load artifact-path (ffi-pointer model-cell) (ffi-pointer sha-buf)))
+    (let ((model (volatile-load ptr model-cell)))
+      (release model-cell)
+      (expect-status "reload-vocab" 0 (ug-vocab-size (ffi-pointer model) (ffi-pointer vocab-buf)))
+      (expect-status "reload-learned" 0 (ug-learned-count (ffi-pointer model) (ffi-pointer learned-buf)))
+      (expect-status "probe-len" 0 (ug-cstr-len probe-ascii (ffi-pointer raw-len-buf)))
+      (let ((reload-vocab (ug-load-i64 (ffi-pointer vocab-buf) 1 0)))
+        (let ((probe-exp-buf (checked-alloc (* 8 reload-vocab))))
+          (expect-status "probe-fb" 0
+                         (ug-fb-cstr (ffi-pointer model) probe-ascii
+                                     (ffi-pointer fb-lz-buf)
+                                     (ffi-pointer probe-exp-buf) reload-vocab))
+          (release probe-exp-buf)))
+      (let ((vocab (ug-load-i64 (ffi-pointer vocab-buf) 1 0))
+            (learned (ug-load-i64 (ffi-pointer learned-buf) 1 0))
+            (raw-bytes (ug-load-i64 (ffi-pointer raw-len-buf) 1 0))
+            (tok-count (verify-cstr-viterbi-roundtrip
+                         model probe-ascii tok-buf cnt-buf score-buf #t))
+            (vscore (ug-load-f64 (ffi-pointer score-buf) 1 0))
+            (fb-lz (ug-load-f64 (ffi-pointer fb-lz-buf) 1 0)))
+        (verify-all256-nul-utf8-roundtrip model)
+        (display "UNIGRAM_AOT_RELOAD vocab=") (display vocab)
+        (display " learned=") (display learned)
+        (display " raw_bytes=") (display raw-bytes)
+        (display " encoded_tokens=") (display tok-count)
+        (display " vscore=") (display vscore)
+        (display " fb_log_z=") (display fb-lz)
+        (display " tokens=") (display-tokens tok-buf tok-count)
+        (display " lossless_all256=PASS sha256=") (display-sha256 sha-buf)
+        (newline))
+      (ug-destroy (ffi-pointer model)))
+    (release fb-lz-buf)
+    (release score-buf)
+    (release cnt-buf)
+    (release tok-buf)
+    (release raw-len-buf)
+    (release sha-buf)
+    (release learned-buf)
+    (release vocab-buf)
+    0))
+
+(define (parse-expected-status text)
+  (cond
+    ((string=? text "-5") -5)
+    ((string=? text "-6") -6)
+    ((string=? text "-7") -7)
+    ((string=? text "-8") -8)
+    ((string=? text "-9") -9)
+    ((string=? text "-11") -11)
+    ((string=? text "-12") -12)
+    (else
+     (display "Unknown expected status: ") (display text) (newline)
+     (exit 2))))
+
+(define (cmd-reject artifact-path expected-str)
+  (let ((expected (parse-expected-status expected-str))
+        (model-cell (checked-alloc 8))
+        (sha-buf (checked-alloc 32)))
+    (volatile-store! i64 model-cell 0)
+    (let ((actual (ug-load artifact-path (ffi-pointer model-cell) (ffi-pointer sha-buf))))
+      (expect-status "reject-status" expected actual)
+      (require-check "reject-null-model" (= 0 (volatile-load i64 model-cell)))
+      (display "UNIGRAM_AOT_REJECT expected=") (display expected)
+      (display " actual=") (display actual)
+      (display " PASS") (newline))
+    (release sha-buf)
+    (release model-cell)
+    0))
+
+(define (list-len xs)
+  (if (null? xs) 0 (+ 1 (list-len (cdr xs)))))
+
+(define (arg-at xs n)
+  (if (= n 0) (car xs) (arg-at (cdr xs) (- n 1))))
+
+(let* ((args (command-line))
+       (argc (list-len args)))
+  (cond
+    ((and (= argc 4)
+          (string=? (arg-at args 1) "--mode")
+          (string=? (arg-at args 2) "train"))
+     (cmd-train (arg-at args 3))
+     (exit 0))
+    ((and (= argc 4)
+          (string=? (arg-at args 1) "--mode")
+          (string=? (arg-at args 2) "reload"))
+     (cmd-reload (arg-at args 3))
+     (exit 0))
+    ((and (= argc 5)
+          (string=? (arg-at args 1) "--mode")
+          (string=? (arg-at args 2) "reject"))
+     (cmd-reject (arg-at args 3) (arg-at args 4))
+     (exit 0))
+    (else
+     (display "Usage: test_unigram_tok_aot --mode train <art> | reload <art> | reject <art> <status>")
+     (newline)
+     (exit 2))))
