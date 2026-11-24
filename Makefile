@@ -372,6 +372,14 @@ test-mod5-aot:
 test-mod5-e2e:
 	/usr/bin/bash scripts/test-mod5-e2e-io5.sh
 
+.PHONY: test-mod5-rope
+test-mod5-rope:
+	/usr/bin/bash scripts/test-mod5-rope.sh
+
+.PHONY: test-lora
+test-lora:
+	/usr/bin/bash scripts/test-lora.sh
+
 .PHONY: test-mp4
 test-mp4:
 	/usr/bin/bash scripts/test-mp4.sh
@@ -408,6 +416,14 @@ test-amd4-aot:
 test-dist5:
 	/usr/bin/bash scripts/test-dist5.sh
 
+.PHONY: test-dist5-aot
+test-dist5-aot:
+	/usr/bin/bash scripts/test-dist5-aot.sh
+
+.PHONY: test-data4-pipeline
+test-data4-pipeline:
+	/usr/bin/bash scripts/test-data4-pipeline.sh
+
 .PHONY: test-eval5
 test-eval5:
 	/usr/bin/bash scripts/test-eval5.sh
@@ -423,6 +439,10 @@ test-doc5:
 .PHONY: test-wave4-composed
 test-wave4-composed:
 	/usr/bin/bash scripts/test-wave4-composed.sh
+
+.PHONY: test-wave4-composed-aot
+test-wave4-composed-aot:
+	/usr/bin/bash scripts/test-wave4-composed-aot.sh
 
 .PHONY: test-b0-wave45 benchmark-wave45
 test-b0-wave45:
