@@ -444,17 +444,24 @@ test-wave4-composed:
 test-wave4-composed-aot:
 	/usr/bin/bash scripts/test-wave4-composed-aot.sh
 
-.PHONY: test-b0-wave45 benchmark-wave45
+.PHONY: test-b0-wave45 benchmark-wave45 test-b0-wave5 benchmark-wave5
 test-b0-wave45:
 	/usr/bin/bash scripts/test-b0-wave45.sh
 
 benchmark-wave45:
 	/usr/bin/bash scripts/benchmark-wave45.sh
 
+test-b0-wave5:
+	/usr/bin/bash scripts/test-b0-wave5.sh
+
+benchmark-wave5:
+	/usr/bin/bash scripts/benchmark-wave5.sh
+
 .PHONY: test-io5-quant test-t2-trainer test-dpo test-spec-decode test-mod5-moe \
 	test-mod5-mla test-o2-muon test-mod5-adamw test-mod5-generate \
 	test-paged-kv test-constrained-decode test-w4a32-quant \
-	test-grpo test-rope-yarn test-continuous-batch
+	test-grpo test-rope-yarn test-continuous-batch \
+	test-fp8-gemm test-ring-attn test-e2e-lifecycle
 test-io5-quant:
 	/usr/bin/bash scripts/test-io5-quant.sh
 
@@ -499,6 +506,15 @@ test-rope-yarn:
 
 test-continuous-batch:
 	/usr/bin/bash scripts/test-continuous-batch.sh
+
+test-fp8-gemm:
+	/usr/bin/bash scripts/test-fp8-gemm.sh
+
+test-ring-attn:
+	/usr/bin/bash scripts/test-ring-attn.sh
+
+test-e2e-lifecycle:
+	/usr/bin/bash scripts/test-e2e-lifecycle.sh
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
