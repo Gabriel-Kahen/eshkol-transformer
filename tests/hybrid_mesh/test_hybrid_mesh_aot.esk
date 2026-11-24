@@ -1,0 +1,472 @@
+;;; Compiled Eshkol AOT Multi-Process 2D Hybrid Parallelism (DP x TP Device Mesh)
+;;; Training Driver over Orthogonal AF_UNIX Subgroups.
+;;;
+;;; CLI:
+;;;   --sock-dir DIR --rank R --dp DP --tp TP --mode MODE
+;;;   [--ckpt-dir DIR] [--dump-weights PATH]
+;;; Modes:
+;;;   train10      : 10-step AdamW training (+ FD grad check on 1x1)
+;;;   resume5      : 5-step training + atomic 0600 ET2D1000 shard checkpoint save
+;;;   resume5-cont : fresh-process O_NOFOLLOW checkpoint load + steps 5..9
+;;;   nonfinite    : 2 valid steps + rank-3 qNaN atomic abort across all 4 ranks + recovery
+;;;   negative     : fail-closed config/divisibility/mesh/ckpt/symlink/mismatch checks
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 mesh-open char* i64 i64 i64 i64 i64 i64 i64 f64 f64 f64 f64 f64 f64 f64 i64 ptr
+        :real et_mesh_aot_open)
+(extern void mesh-close ptr :real et_mesh_aot_close)
+(extern i32 mesh-init-params ptr i64 :real et_mesh_aot_init_params)
+(extern i32 mesh-train-step ptr i64 i64 i64 :real et_mesh_aot_train_step)
+(extern i32 mesh-step-inject-nf ptr i64 i64 i64 i64 i64 i64
+        :real et_mesh_aot_step_inject_nonfinite)
+(extern i32 mesh-fd-grad-check ptr i64 f64 i64 :real et_mesh_aot_fd_grad_check)
+(extern i32 mesh-probe-mismatch ptr i64 i64 i64 :real et_mesh_aot_probe_tag_mismatch)
+(extern i32 mesh-save-ckpt ptr char* :real et_mesh_aot_save_checkpoint)
+(extern i32 mesh-load-ckpt ptr char* :real et_mesh_aot_load_checkpoint)
+(extern i32 mesh-gather-digest ptr i64 i64 char* :real et_mesh_aot_gather_digest)
+(extern i32 mesh-hash-local ptr :real et_mesh_aot_hash_local_shard)
+(extern i32 mesh-save-mark ptr :real et_mesh_aot_save_shard_mark)
+(extern i32 mesh-matches-mark ptr :real et_mesh_aot_shard_matches_mark)
+(extern i32 mesh-full-digest-byte ptr i64 :real et_mesh_aot_full_digest_byte)
+(extern i32 mesh-local-digest-byte ptr i64 :real et_mesh_aot_local_digest_byte)
+(extern i32 mesh-corrupt-byte char* i64 :real et_mesh_aot_corrupt_file_byte)
+(extern i32 mesh-truncate-file char* i64 :real et_mesh_aot_truncate_file)
+(extern i32 mesh-make-symlink char* char* :real et_mesh_aot_make_symlink)
+
+(extern i64 mesh-dp-rank ptr :real et_mesh_aot_dp_rank)
+(extern i64 mesh-tp-rank ptr :real et_mesh_aot_tp_rank)
+(extern i64 mesh-step ptr :real et_mesh_aot_step)
+(extern i64 mesh-full-params ptr :real et_mesh_aot_full_params)
+(extern i64 mesh-full-sharded-bytes ptr :real et_mesh_aot_full_sharded_bytes)
+(extern i64 mesh-rank-sharded-bytes ptr :real et_mesh_aot_rank_sharded_bytes)
+(extern i64 mesh-replicated-bytes ptr :real et_mesh_aot_replicated_bytes)
+(extern f64 mesh-tp-ratio ptr :real et_mesh_aot_tp_sharding_ratio)
+(extern f64 mesh-last-global-loss ptr :real et_mesh_aot_last_global_loss)
+(extern f64 mesh-last-grad-norm ptr :real et_mesh_aot_last_grad_norm)
+(extern i64 mesh-last-clipped ptr :real et_mesh_aot_last_clipped)
+(extern f64 mesh-last-fd-err ptr :real et_mesh_aot_last_fd_max_err)
+(extern i64 mesh-tp-ar ptr :real et_mesh_aot_tp_allreduce_calls)
+(extern i64 mesh-dp-ar ptr :real et_mesh_aot_dp_allreduce_calls)
+(extern i64 mesh-tp-ag ptr :real et_mesh_aot_tp_allgather_calls)
+(extern i64 mesh-tp-bytes ptr :real et_mesh_aot_tp_bytes_sent)
+(extern i64 mesh-dp-bytes ptr :real et_mesh_aot_dp_bytes_sent)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Status constants from hybrid_mesh_abi.h.
+(define st-ok 0)
+(define st-err-invalid -1)
+(define st-err-divisibility -2)
+(define st-err-mismatch -4)
+(define st-err-nonfinite -7)
+(define st-err-io -8)
+(define st-err-bad-magic -10)
+(define st-err-checksum -12)
+(define st-err-truncated -13)
+(define st-err-config -15)
+
+;; Model & AdamW constants matching native C tests & Python binary64 oracle.
+(define d-model 8)
+(define d-ff 16)
+(define num-classes 6)
+(define global-batch 8)
+(define rms-eps 1e-5)
+(define model-seed 20261124)
+(define lr-val 0.05)
+(define beta1-val 0.9)
+(define beta2-val 0.999)
+(define eps-val 1e-8)
+(define wd-val 0.01)
+(define max-gn-val 0.5)
+(define timeout-ms 15000)
+
+(define (require-check label ok)
+  (unless ok
+    (display "MESH AOT FAIL: ") (display label) (newline)
+    (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "MESH AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline)
+    (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "malloc failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (char->digit ch)
+  (cond
+    ((char=? ch #\0) 0) ((char=? ch #\1) 1) ((char=? ch #\2) 2)
+    ((char=? ch #\3) 3) ((char=? ch #\4) 4) ((char=? ch #\5) 5)
+    ((char=? ch #\6) 6) ((char=? ch #\7) 7) ((char=? ch #\8) 8)
+    ((char=? ch #\9) 9)
+    (else -1)))
+
+(define (parse-nonneg-int s)
+  (let ((len (string-length s)))
+    (require-check "empty integer argument" (> len 0))
+    (do ((i 0 (+ i 1))
+         (acc 0 (+ (* acc 10) (let ((d (char->digit (string-ref s i))))
+                                (require-check "invalid integer digit" (>= d 0))
+                                d))))
+        ((= i len) acc))))
+
+(define hex-digits "0123456789abcdef")
+
+(define (display-hex-byte b)
+  (require-check "digest byte valid" (>= b 0))
+  (cond
+    ((and (>= b 48) (<= b 57))
+     (display (string-ref hex-digits (- b 48))))
+    ((and (>= b 97) (<= b 102))
+     (display (string-ref hex-digits (+ 10 (- b 97)))))
+    (else
+     (require-check "non-hex digest byte" #f))))
+
+(define (display-full-digest sess)
+  (do ((i 0 (+ i 1)))
+      ((= i 64))
+    (display-hex-byte (mesh-full-digest-byte (ffi-pointer sess) i))))
+
+(define (display-local-digest sess)
+  (do ((i 0 (+ i 1)))
+      ((= i 64))
+    (display-hex-byte (mesh-local-digest-byte (ffi-pointer sess) i))))
+
+(define (open-session sock-dir rank dp tp)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "mesh-open" st-ok
+                   (mesh-open sock-dir rank dp tp d-model d-ff num-classes
+                              global-batch rms-eps lr-val beta1-val beta2-val
+                              eps-val wd-val max-gn-val timeout-ms
+                              (ffi-pointer cell)))
+    (let ((sess (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "non-null session" (not (= (ptr->usize sess) 0)))
+      sess)))
+
+;; CLI state.
+(define cli-sock-dir "")
+(define cli-rank -1)
+(define cli-dp -1)
+(define cli-tp -1)
+(define cli-mode "")
+(define cli-ckpt-dir "")
+(define cli-dump-weights "")
+
+(define (parse-args args)
+  (let loop ((rest args))
+    (unless (null? rest)
+      (require-check "flag missing value" (pair? (cdr rest)))
+      (let ((flag (car rest))
+            (val (car (cdr rest))))
+        (cond
+          ((string=? flag "--sock-dir") (set! cli-sock-dir val))
+          ((string=? flag "--rank") (set! cli-rank (parse-nonneg-int val)))
+          ((string=? flag "--dp") (set! cli-dp (parse-nonneg-int val)))
+          ((string=? flag "--tp") (set! cli-tp (parse-nonneg-int val)))
+          ((string=? flag "--mode") (set! cli-mode val))
+          ((string=? flag "--ckpt-dir") (set! cli-ckpt-dir val))
+          ((string=? flag "--dump-weights") (set! cli-dump-weights val))
+          (else (require-check "unknown CLI flag" #f)))
+        (loop (cdr (cdr rest)))))))
+
+(let ((argv (command-line)))
+  (require-check "missing argv" (pair? argv))
+  (parse-args (cdr argv)))
+
+(require-check "invalid --dp" (or (= cli-dp 1) (= cli-dp 2) (= cli-dp 4)))
+(require-check "invalid --tp" (or (= cli-tp 1) (= cli-tp 2) (= cli-tp 4)))
+(define cli-world (* cli-dp cli-tp))
+(require-check "dp*tp <= 4" (<= cli-world 4))
+(require-check "invalid --rank" (and (>= cli-rank 0) (< cli-rank cli-world)))
+
+(define (rank-ckpt-path dir r)
+  (string-append dir "/rank-"
+                 (cond ((= r 0) "0") ((= r 1) "1") ((= r 2) "2") (else "3"))
+                 ".et2d"))
+
+(define (run-train10)
+  (let ((sess (open-session cli-sock-dir cli-rank cli-dp cli-tp)))
+    (expect-status "init-params" st-ok
+                   (mesh-init-params (ffi-pointer sess) model-seed))
+
+    ;; Central finite-difference check on (1x1) before training.
+    (when (= cli-world 1)
+      (expect-status "fd-grad-check" st-ok
+                     (mesh-fd-grad-check (ffi-pointer sess) 0 0.001953125
+                                         timeout-ms))
+      (let ((ferr (mesh-last-fd-err (ffi-pointer sess))))
+        (require-check "fd grad error < 1e-5" (< ferr 0.00001))
+        (display "MESH AOT FD_CHECK params=")
+        (display (mesh-full-params (ffi-pointer sess)))
+        (display " max_err=") (display ferr)
+        (display " PASS") (newline)))
+
+    ;; Verify exact 1/tp_size sharded memory accounting.
+    (let ((full-sh (mesh-full-sharded-bytes (ffi-pointer sess)))
+          (rank-sh (mesh-rank-sharded-bytes (ffi-pointer sess)))
+          (rep-b (mesh-replicated-bytes (ffi-pointer sess)))
+          (ratio (mesh-tp-ratio (ffi-pointer sess))))
+      (require-check "exact 1/tp sharded bytes" (= (* rank-sh cli-tp) full-sh))
+      (require-check "exact tp ratio" (< (abs (- ratio cli-tp)) 1e-9))
+      (display "MESH AOT MEM dp=") (display cli-dp)
+      (display " tp=") (display cli-tp)
+      (display " rank=") (display cli-rank)
+      (display " dp_rank=") (display (mesh-dp-rank (ffi-pointer sess)))
+      (display " tp_rank=") (display (mesh-tp-rank (ffi-pointer sess)))
+      (display " full_sharded_b=") (display full-sh)
+      (display " rank_sharded_b=") (display rank-sh)
+      (display " replicated_b=") (display rep-b)
+      (newline))
+
+    ;; 10-step decoupled AdamW training on deterministic batch 0.
+    (let ((prev-loss 1e9)
+          (init-loss 0.0)
+          (final-loss 0.0)
+          (any-clip 0))
+      (do ((s 0 (+ s 1)))
+          ((= s 10))
+        (expect-status "train-step" st-ok
+                       (mesh-train-step (ffi-pointer sess) 0 (+ 1000 (* s 16))
+                                        timeout-ms))
+        (let ((loss (mesh-last-global-loss (ffi-pointer sess)))
+              (gn (mesh-last-grad-norm (ffi-pointer sess)))
+              (cl (mesh-last-clipped (ffi-pointer sess))))
+          (require-check "strictly decreasing loss" (< loss prev-loss))
+          (when (= s 0) (set! init-loss loss))
+          (set! final-loss loss)
+          (set! prev-loss loss)
+          (when (= cl 1) (set! any-clip 1))
+          (display "MESH AOT STEP dp=") (display cli-dp)
+          (display " tp=") (display cli-tp)
+          (display " rank=") (display cli-rank)
+          (display " step=") (display s)
+          (display " loss=") (display loss)
+          (display " grad_norm=") (display gn)
+          (display " clipped=") (display cl)
+          (newline)))
+
+      (require-check "step == 10" (= (mesh-step (ffi-pointer sess)) 10))
+      (require-check "clipping exercised" (= any-clip 1))
+
+      ;; Verify exact orthogonal TP / DP collective counts before final gather.
+      (let ((tp-ar (mesh-tp-ar (ffi-pointer sess)))
+            (dp-ar (mesh-dp-ar (ffi-pointer sess)))
+            (tp-b (mesh-tp-bytes (ffi-pointer sess)))
+            (dp-b (mesh-dp-bytes (ffi-pointer sess))))
+        (require-check "exact tp_ar" (= tp-ar (if (> cli-tp 1) 30 0)))
+        (require-check "exact dp_ar" (= dp-ar (if (> cli-dp 1) 20 0)))
+        (if (= cli-tp 1)
+            (require-check "tp=1 zero tp_bytes" (= tp-b 0))
+            (require-check "tp>1 positive tp_bytes" (> tp-b 0)))
+        (if (= cli-dp 1)
+            (require-check "dp=1 zero dp_bytes" (= dp-b 0))
+            (require-check "dp>1 positive dp_bytes" (> dp-b 0)))
+
+        (expect-status "hash-local" st-ok (mesh-hash-local (ffi-pointer sess)))
+        (expect-status "gather-digest" st-ok
+                       (mesh-gather-digest (ffi-pointer sess) 88001 timeout-ms
+                                           cli-dump-weights))
+        (let ((tp-ag (mesh-tp-ag (ffi-pointer sess))))
+          (require-check "exact tp_ag" (= tp-ag (if (> cli-tp 1) 1 0)))
+          (display "MESH AOT RESULT dp=") (display cli-dp)
+          (display " tp=") (display cli-tp)
+          (display " rank=") (display cli-rank)
+          (display " steps=10 init_loss=") (display init-loss)
+          (display " final_loss=") (display final-loss)
+          (display " tp_ar=") (display tp-ar)
+          (display " dp_ar=") (display dp-ar)
+          (display " tp_ag=") (display tp-ag)
+          (display " tp_bytes=") (display tp-b)
+          (display " dp_bytes=") (display dp-b)
+          (display " local_sha256=") (display-local-digest sess)
+          (display " weights_sha256=") (display-full-digest sess)
+          (display " PASS") (newline))))
+    (mesh-close (ffi-pointer sess))))
+
+(define (run-resume5)
+  (require-check "missing --ckpt-dir" (> (string-length cli-ckpt-dir) 0))
+  (let ((sess (open-session cli-sock-dir cli-rank cli-dp cli-tp))
+        (cpath (rank-ckpt-path cli-ckpt-dir cli-rank)))
+    (expect-status "init-params" st-ok
+                   (mesh-init-params (ffi-pointer sess) model-seed))
+    (do ((s 0 (+ s 1)))
+        ((= s 5))
+      (expect-status "resume5-step" st-ok
+                     (mesh-train-step (ffi-pointer sess) 0 (+ 1000 (* s 16))
+                                      timeout-ms)))
+    (require-check "step == 5" (= (mesh-step (ffi-pointer sess)) 5))
+    (expect-status "save-ckpt" st-ok
+                   (mesh-save-ckpt (ffi-pointer sess) cpath))
+    (display "MESH AOT RESUME5_SAVED dp=") (display cli-dp)
+    (display " tp=") (display cli-tp)
+    (display " rank=") (display cli-rank)
+    (display " step=5 PASS") (newline)
+    (mesh-close (ffi-pointer sess))))
+
+(define (run-resume5-cont)
+  (require-check "missing --ckpt-dir" (> (string-length cli-ckpt-dir) 0))
+  (let ((sess (open-session cli-sock-dir cli-rank cli-dp cli-tp))
+        (cpath (rank-ckpt-path cli-ckpt-dir cli-rank)))
+    (expect-status "load-ckpt" st-ok
+                   (mesh-load-ckpt (ffi-pointer sess) cpath))
+    (require-check "loaded step == 5" (= (mesh-step (ffi-pointer sess)) 5))
+    (let ((final-loss 0.0))
+      (do ((s 5 (+ s 1)))
+          ((= s 10))
+        (expect-status "resume5-cont-step" st-ok
+                       (mesh-train-step (ffi-pointer sess) 0 (+ 1000 (* s 16))
+                                        timeout-ms))
+        (set! final-loss (mesh-last-global-loss (ffi-pointer sess))))
+      (require-check "final step == 10" (= (mesh-step (ffi-pointer sess)) 10))
+      (expect-status "hash-local-res" st-ok (mesh-hash-local (ffi-pointer sess)))
+      (expect-status "gather-digest-res" st-ok
+                     (mesh-gather-digest (ffi-pointer sess) 88001 timeout-ms ""))
+      (display "MESH AOT RESUME_RESULT dp=") (display cli-dp)
+      (display " tp=") (display cli-tp)
+      (display " rank=") (display cli-rank)
+      (display " steps=10 final_loss=") (display final-loss)
+      (display " local_sha256=") (display-local-digest sess)
+      (display " weights_sha256=") (display-full-digest sess)
+      (display " PASS") (newline))
+    (mesh-close (ffi-pointer sess))))
+
+(define (run-nonfinite)
+  (let ((sess (open-session cli-sock-dir cli-rank cli-dp cli-tp)))
+    (expect-status "init-params" st-ok
+                   (mesh-init-params (ffi-pointer sess) model-seed))
+    (expect-status "nf-step-0" st-ok
+                   (mesh-train-step (ffi-pointer sess) 0 100 timeout-ms))
+    (expect-status "nf-step-1" st-ok
+                   (mesh-train-step (ffi-pointer sess) 1 200 timeout-ms))
+    (expect-status "save-mark" st-ok (mesh-save-mark (ffi-pointer sess)))
+
+    ;; Inject qNaN (0x7fc00000 = 2143289344) ONLY on rank 3 of the 2x2 mesh!
+    (let ((st-nan (mesh-step-inject-nf (ffi-pointer sess) 2 (- cli-world 1)
+                                       17 2143289344 300 timeout-ms)))
+      (expect-status "nan-abort" st-err-nonfinite st-nan)
+      (expect-status "rehash-after-nan" st-ok (mesh-hash-local (ffi-pointer sess)))
+      (require-check "shard preserved after qNaN"
+                     (= (mesh-matches-mark (ffi-pointer sess)) 1))
+      (require-check "step preserved after qNaN"
+                     (= (mesh-step (ffi-pointer sess)) 2))
+
+      ;; Clean recovery step succeeds on all 4 ranks!
+      (expect-status "nf-recover" st-ok
+                     (mesh-train-step (ffi-pointer sess) 2 400 timeout-ms))
+      (require-check "recovered step == 3"
+                     (= (mesh-step (ffi-pointer sess)) 3))
+      (display "MESH AOT NONFINITE dp=") (display cli-dp)
+      (display " tp=") (display cli-tp)
+      (display " rank=") (display cli-rank)
+      (display " nan_status=") (display st-nan)
+      (display " shard_preserved=1 recovered=1 PASS") (newline))
+    (mesh-close (ffi-pointer sess))))
+
+(define (run-negative)
+  (if (= cli-world 1)
+      (begin
+        (require-check "missing --ckpt-dir" (> (string-length cli-ckpt-dir) 0))
+        (let ((cell (checked-allocate 8)))
+          ;; Invalid mesh dims: dp=3, tp=3, dp*tp=8.
+          (expect-status "invalid-dp-3" st-err-invalid
+                         (mesh-open "" 0 3 1 d-model d-ff num-classes global-batch
+                                    rms-eps lr-val beta1-val beta2-val eps-val
+                                    wd-val max-gn-val 1000 (ffi-pointer cell)))
+          (expect-status "invalid-dp2-tp4" st-err-invalid
+                         (mesh-open "" 0 2 4 d-model d-ff num-classes global-batch
+                                    rms-eps lr-val beta1-val beta2-val eps-val
+                                    wd-val max-gn-val 1000 (ffi-pointer cell)))
+          ;; Indivisible d_ff (15 % 2 != 0) and indivisible global_batch (6 % 4 != 0).
+          (expect-status "indivisible-dff" st-err-divisibility
+                         (mesh-open "" 0 1 2 d-model 15 num-classes global-batch
+                                    rms-eps lr-val beta1-val beta2-val eps-val
+                                    wd-val max-gn-val 1000 (ffi-pointer cell)))
+          (expect-status "indivisible-batch" st-err-divisibility
+                         (mesh-open "" 0 4 1 d-model d-ff num-classes 6
+                                    rms-eps lr-val beta1-val beta2-val eps-val
+                                    wd-val max-gn-val 1000 (ffi-pointer cell)))
+          (release (ffi-pointer cell)))
+
+        ;; Corrupted / truncated / symlink / config-mismatch checkpoint checks.
+        (let ((sess (open-session "" 0 1 1))
+              (good-p (string-append cli-ckpt-dir "/neg_good.et2d"))
+              (magic-p (string-append cli-ckpt-dir "/neg_magic.et2d"))
+              (sum-p (string-append cli-ckpt-dir "/neg_sum.et2d"))
+              (trunc-p (string-append cli-ckpt-dir "/neg_trunc.et2d"))
+              (sym-p (string-append cli-ckpt-dir "/neg_sym.et2d")))
+          (expect-status "neg-init" st-ok (mesh-init-params (ffi-pointer sess) model-seed))
+          (expect-status "neg-step" st-ok (mesh-train-step (ffi-pointer sess) 0 10 timeout-ms))
+          (expect-status "neg-mark" st-ok (mesh-save-mark (ffi-pointer sess)))
+
+          (expect-status "save-good" st-ok (mesh-save-ckpt (ffi-pointer sess) good-p))
+          (expect-status "save-magic" st-ok (mesh-save-ckpt (ffi-pointer sess) magic-p))
+          (expect-status "save-sum" st-ok (mesh-save-ckpt (ffi-pointer sess) sum-p))
+          (expect-status "save-trunc" st-ok (mesh-save-ckpt (ffi-pointer sess) trunc-p))
+
+          (expect-status "corrupt-magic" st-ok (mesh-corrupt-byte magic-p 0))
+          (expect-status "load-bad-magic" st-err-bad-magic
+                         (mesh-load-ckpt (ffi-pointer sess) magic-p))
+
+          (expect-status "corrupt-sum" st-ok (mesh-corrupt-byte sum-p 200))
+          (expect-status "load-bad-sum" st-err-checksum
+                         (mesh-load-ckpt (ffi-pointer sess) sum-p))
+
+          (expect-status "truncate" st-ok (mesh-truncate-file trunc-p 200))
+          (expect-status "load-trunc" st-err-truncated
+                         (mesh-load-ckpt (ffi-pointer sess) trunc-p))
+
+          (expect-status "make-sym" st-ok (mesh-make-symlink good-p sym-p))
+          (expect-status "load-sym" st-err-io
+                         (mesh-load-ckpt (ffi-pointer sess) sym-p))
+          (expect-status "save-sym" st-err-io
+                         (mesh-save-ckpt (ffi-pointer sess) sym-p))
+
+          ;; Different lr config rejected with ET_MESH_ERR_CONFIG_MISMATCH.
+          (let ((cell2 (checked-allocate 8)))
+            (expect-status "open-diff-lr" st-ok
+                           (mesh-open "" 0 1 1 d-model d-ff num-classes
+                                      global-batch rms-eps 0.01 beta1-val
+                                      beta2-val eps-val wd-val max-gn-val
+                                      timeout-ms (ffi-pointer cell2)))
+            (let ((s2 (volatile-load ptr cell2)))
+              (release (ffi-pointer cell2))
+              (expect-status "load-cfg-mismatch" st-err-config
+                             (mesh-load-ckpt (ffi-pointer s2) good-p))
+              (mesh-close (ffi-pointer s2))))
+
+          (expect-status "neg-rehash" st-ok (mesh-hash-local (ffi-pointer sess)))
+          (require-check "shard untouched after negative loads"
+                         (= (mesh-matches-mark (ffi-pointer sess)) 1))
+          (mesh-close (ffi-pointer sess))
+          (display "MESH AOT NEGATIVE_LOCAL PASS") (newline)))
+      ;; Multi-rank negative: sticky tag mismatch over AF_UNIX.
+      (let ((sess (open-session cli-sock-dir cli-rank cli-dp cli-tp)))
+        (let ((st1 (mesh-probe-mismatch (ffi-pointer sess) 777 1 timeout-ms))
+              (st2 (mesh-probe-mismatch (ffi-pointer sess) 777 -1 timeout-ms)))
+          (expect-status "tag-mismatch-1" st-err-mismatch st1)
+          (expect-status "tag-mismatch-sticky" st-err-mismatch st2)
+          (display "MESH AOT NEGATIVE_MISMATCH dp=") (display cli-dp)
+          (display " tp=") (display cli-tp)
+          (display " rank=") (display cli-rank)
+          (display " status=") (display st1)
+          (display " sticky=") (display st2)
+          (display " PASS") (newline))
+        (mesh-close (ffi-pointer sess)))))
+
+(cond
+  ((string=? cli-mode "train10") (run-train10))
+  ((string=? cli-mode "resume5") (run-resume5))
+  ((string=? cli-mode "resume5-cont") (run-resume5-cont))
+  ((string=? cli-mode "nonfinite") (run-nonfinite))
+  ((string=? cli-mode "negative") (run-negative))
+  (else (require-check "unknown --mode" #f)))
