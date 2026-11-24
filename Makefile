@@ -462,7 +462,8 @@ benchmark-wave5:
 	test-paged-kv test-constrained-decode test-w4a32-quant \
 	test-grpo test-rope-yarn test-continuous-batch \
 	test-fp8-gemm test-ring-attn test-e2e-lifecycle \
-	test-pipeline-1f1b test-tensor-parallel test-mamba-ssm
+	test-pipeline-1f1b test-tensor-parallel test-mamba-ssm \
+	test-fsdp-zero test-beam-search
 test-io5-quant:
 	/usr/bin/bash scripts/test-io5-quant.sh
 
@@ -525,6 +526,12 @@ test-tensor-parallel:
 
 test-mamba-ssm:
 	/usr/bin/bash scripts/test-mamba-ssm.sh
+
+test-fsdp-zero:
+	/usr/bin/bash scripts/test-fsdp-zero.sh
+
+test-beam-search:
+	/usr/bin/bash scripts/test-beam-search.sh
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
