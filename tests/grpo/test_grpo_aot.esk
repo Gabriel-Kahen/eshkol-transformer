@@ -1,0 +1,395 @@
+;;; Compiled Eshkol AOT GRPO / RLVR alignment driver:
+;;; - Verifies exact-match and structured <think>/<answer> RLVR verifiers
+;;; - Checks standard GRPO and Dr. GRPO group-relative advantages
+;;; - Runs central finite-difference gradient checks on policy weights & biases
+;;; - Executes a multi-step GRPO alignment loop with inner off-policy epochs,
+;;;   proving expected verifier reward strictly increases, greedy accuracy
+;;;   reaches 1.0, Schulman k3 KL remains >= 0 and bounded, and both unclipped
+;;;   and clipped updates occur
+;;; - Verifies malformed inputs fail closed with exact status codes.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 grpo-create i64 i64 i64 i64 i64 ptr :real et_grpo_aot_create)
+(extern void grpo-destroy ptr :real et_grpo_aot_destroy)
+(extern i32 grpo-set-loss-params ptr i64 f64 f64 f64 :real et_grpo_aot_set_loss_params)
+
+(extern i64 grpo-batch-size ptr :real et_grpo_aot_batch_size)
+(extern i64 grpo-vocab-size ptr :real et_grpo_aot_vocab_size)
+(extern i64 grpo-feat-dim ptr :real et_grpo_aot_feat_dim)
+
+(extern i32 grpo-set-feature ptr i64 i64 i64 f64 :real et_grpo_aot_set_feature)
+(extern i32 grpo-set-weight ptr i64 i64 f64 :real et_grpo_aot_set_weight)
+(extern f64 grpo-get-weight ptr i64 i64 :real et_grpo_aot_get_weight)
+(extern f64 grpo-get-grad-weight ptr i64 i64 :real et_grpo_aot_get_grad_weight)
+
+(extern i32 grpo-set-bias ptr i64 f64 :real et_grpo_aot_set_bias)
+(extern f64 grpo-get-bias ptr i64 :real et_grpo_aot_get_bias)
+(extern f64 grpo-get-grad-bias ptr i64 :real et_grpo_aot_get_grad_bias)
+
+(extern i32 grpo-set-target ptr i64 i64 i64 :real et_grpo_aot_set_target)
+(extern i32 grpo-set-mask ptr i64 i64 i64 :real et_grpo_aot_set_mask)
+(extern f64 grpo-get-reward ptr i64 :real et_grpo_aot_get_reward)
+(extern f64 grpo-get-advantage ptr i64 :real et_grpo_aot_get_advantage)
+
+(extern i32 grpo-score-rlvr ptr i64 i64 :real et_grpo_aot_score_rlvr_completion)
+(extern f64 grpo-verify-exact-case i64 :real et_grpo_aot_verify_exact_case)
+
+(extern i32 grpo-policy-forward ptr :real et_grpo_aot_policy_forward)
+(extern i32 grpo-snapshot-ref ptr :real et_grpo_aot_snapshot_ref)
+(extern i32 grpo-snapshot-old ptr :real et_grpo_aot_snapshot_old)
+(extern i32 grpo-compute-advantages ptr i64 f64 :real et_grpo_aot_compute_advantages)
+(extern i32 grpo-loss-forward ptr :real et_grpo_aot_loss_forward)
+(extern i32 grpo-loss-backward ptr :real et_grpo_aot_loss_backward)
+
+(extern f64 grpo-expected-reward ptr :real et_grpo_aot_expected_reward)
+(extern f64 grpo-greedy-reward ptr :real et_grpo_aot_greedy_reward)
+(extern f64 grpo-metric-loss ptr :real et_grpo_aot_metric_loss)
+(extern f64 grpo-metric-pg-loss ptr :real et_grpo_aot_metric_pg_loss)
+(extern f64 grpo-metric-mean-kl ptr :real et_grpo_aot_metric_mean_kl)
+(extern f64 grpo-metric-clip-fraction ptr :real et_grpo_aot_metric_clip_fraction)
+(extern f64 grpo-metric-mean-reward ptr :real et_grpo_aot_metric_mean_reward)
+(extern i64 grpo-metric-active-tokens ptr :real et_grpo_aot_metric_active_tokens)
+(extern i64 grpo-metric-clipped-tokens ptr :real et_grpo_aot_metric_clipped_tokens)
+
+(extern i32 grpo-check-negative ptr i64 :real et_grpo_aot_check_negative_case)
+
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Problem geometry: B=2 prompt groups, G=4 completions/group -> N=8 sequences,
+;; T=6 tokens (2 prompt tokens mask=0 + 4 completion tokens mask=1), V=8, D=8.
+(define num-groups 2)
+(define group-size 4)
+(define seq-len 6)
+(define vocab-size 8)
+(define feat-dim 8)
+(define outer-steps 10)
+(define inner-epochs 3)
+(define learning-rate 0.9)
+
+;; ABI constants from grpo_abi.h.
+(define status-ok 0)
+(define err-argument -1)
+(define err-shape -2)
+(define err-alias -4)
+(define err-nonfinite -5)
+(define err-overflow -7)
+(define err-index -8)
+(define err-empty-mask -9)
+
+(define adv-standard 0)
+(define adv-dr-grpo 1)
+(define norm-global-token-mean 0)
+(define norm-per-seq-mean 1)
+
+(define (require-check label ok)
+  (unless ok
+    (display "GRPO AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "GRPO AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-ctx)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "grpo-create" status-ok
+                   (grpo-create num-groups group-size seq-len vocab-size
+                                feat-dim (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (det-init i j)
+  (let ((bucket (- (modulo (+ (* 19 i) (* 29 j) 7) 23) 11)))
+    (* 0.03125 bucket)))
+
+(define (populate-rollout-task ctx)
+  ;; Initialize policy weights and biases so that initially the WRONG completion
+  ;; (variant g=1 or g=2) has higher probability than the exact RLVR winner (g=0).
+  (do ((v 0 (+ v 1)))
+      ((= v vocab-size))
+    (expect-status "set-bias" status-ok
+                   (grpo-set-bias (ffi-pointer ctx) v
+                                  (if (= v 0) -0.45
+                                      (if (= v 4) -0.45
+                                          (if (= v 2) 0.55
+                                              (if (= v 6) 0.55 0.0))))))
+    (do ((d 0 (+ d 1)))
+        ((= d feat-dim))
+      (expect-status "set-weight" status-ok
+                     (grpo-set-weight (ffi-pointer ctx) v d (det-init v d)))))
+
+  ;; Populate features, targets, response masks, and RLVR verifier rewards.
+  ;; Each completion n = b*4 + g has distinct feature activations over its
+  ;; 4 response positions (t = 2..5) so the linear policy can separate all 8
+  ;; completions cleanly.
+  (do ((n 0 (+ n 1)))
+      ((= n 8))
+    (let ((group-id (quotient n group-size))
+          (variant (modulo n group-size)))
+      (expect-status "score-rlvr" status-ok
+                     (grpo-score-rlvr (ffi-pointer ctx) n n))
+      (do ((t 0 (+ t 1)))
+          ((= t seq-len))
+        (let ((is-resp (if (>= t 2) 1 0))
+              (tok (modulo (+ (* group-id 4) variant (- t 2) 8) vocab-size)))
+          (expect-status "set-mask" status-ok
+                         (grpo-set-mask (ffi-pointer ctx) n t is-resp))
+          (expect-status "set-target" status-ok
+                         (grpo-set-target (ffi-pointer ctx) n t tok))
+          (do ((d 0 (+ d 1)))
+              ((= d feat-dim))
+            (let ((val (cond
+                         ((= d n) 1.0)
+                         ((= d (modulo (+ t group-id) feat-dim)) 0.35)
+                         (else (det-init (+ (* n 7) t) d)))))
+              (expect-status "set-feature" status-ok
+                             (grpo-set-feature (ffi-pointer ctx) n t d val)))))))))
+
+(define (eval-loss-only ctx)
+  (expect-status "fd-policy-forward" status-ok
+                 (grpo-policy-forward (ffi-pointer ctx)))
+  (expect-status "fd-loss-forward" status-ok
+                 (grpo-loss-forward (ffi-pointer ctx)))
+  (grpo-metric-loss (ffi-pointer ctx)))
+
+(define (check-fd-weight ctx v d)
+  (let ((orig (grpo-get-weight (ffi-pointer ctx) v d))
+        (analytic (grpo-get-grad-weight (ffi-pointer ctx) v d))
+        (step 0.001953125))
+    (expect-status "fd-w-plus" status-ok
+                   (grpo-set-weight (ffi-pointer ctx) v d (+ orig step)))
+    (let ((plus (eval-loss-only ctx)))
+      (expect-status "fd-w-minus" status-ok
+                     (grpo-set-weight (ffi-pointer ctx) v d (- orig step)))
+      (let* ((minus (eval-loss-only ctx))
+             (num (/ (- plus minus) (* 2.0 step))))
+        (expect-status "fd-w-restore" status-ok
+                       (grpo-set-weight (ffi-pointer ctx) v d orig))
+        (require-check "weight central FD check failed"
+                       (<= (abs (- analytic num))
+                           (+ 0.00005 (* 0.005 (abs num)))))))))
+
+(define (check-fd-bias ctx v)
+  (let ((orig (grpo-get-bias (ffi-pointer ctx) v))
+        (analytic (grpo-get-grad-bias (ffi-pointer ctx) v))
+        (step 0.001953125))
+    (expect-status "fd-b-plus" status-ok
+                   (grpo-set-bias (ffi-pointer ctx) v (+ orig step)))
+    (let ((plus (eval-loss-only ctx)))
+      (expect-status "fd-b-minus" status-ok
+                     (grpo-set-bias (ffi-pointer ctx) v (- orig step)))
+      (let* ((minus (eval-loss-only ctx))
+             (num (/ (- plus minus) (* 2.0 step))))
+        (expect-status "fd-b-restore" status-ok
+                       (grpo-set-bias (ffi-pointer ctx) v orig))
+        (require-check "bias central FD check failed"
+                       (<= (abs (- analytic num))
+                           (+ 0.00005 (* 0.005 (abs num)))))))))
+
+(define (sgd-step ctx lr)
+  (let ((v-dim (grpo-vocab-size (ffi-pointer ctx)))
+        (d-dim (grpo-feat-dim (ffi-pointer ctx))))
+    (do ((v 0 (+ v 1)))
+        ((= v v-dim))
+      (let ((nb (- (grpo-get-bias (ffi-pointer ctx) v)
+                   (* lr (grpo-get-grad-bias (ffi-pointer ctx) v)))))
+        (expect-status "update-bias" status-ok
+                       (grpo-set-bias (ffi-pointer ctx) v nb)))
+      (do ((d 0 (+ d 1)))
+          ((= d d-dim))
+        (let ((nw (- (grpo-get-weight (ffi-pointer ctx) v d)
+                     (* lr (grpo-get-grad-weight (ffi-pointer ctx) v d)))))
+          (expect-status "update-weight" status-ok
+                         (grpo-set-weight (ffi-pointer ctx) v d nw)))))))
+
+(define (verify-rlvr-exact)
+  (require-check "exact-match case 0" (= (grpo-verify-exact-case 0) 1.0))
+  (require-check "exact-match case 1 trim" (= (grpo-verify-exact-case 1) 1.0))
+  (require-check "exact-match case 2 strict" (= (grpo-verify-exact-case 2) 0.0))
+  (require-check "exact-match case 3 mismatch" (= (grpo-verify-exact-case 3) 0.0))
+  (display "GRPO AOT VERIFIER exact=PASS format=PASS") (newline))
+
+(define (verify-negatives ctx)
+  (expect-status "neg-group-size-1" err-shape
+                 (grpo-check-negative (ffi-pointer ctx) 1))
+  (expect-status "neg-nan-reward" err-nonfinite
+                 (grpo-check-negative (ffi-pointer ctx) 2))
+  (expect-status "neg-invalid-mask" err-argument
+                 (grpo-check-negative (ffi-pointer ctx) 3))
+  (expect-status "neg-target-index" err-index
+                 (grpo-check-negative (ffi-pointer ctx) 4))
+  (expect-status "neg-empty-mask" err-empty-mask
+                 (grpo-check-negative (ffi-pointer ctx) 5))
+  (expect-status "neg-clip-low-zero" err-argument
+                 (grpo-check-negative (ffi-pointer ctx) 6))
+  (expect-status "neg-negative-kl-beta" err-argument
+                 (grpo-check-negative (ffi-pointer ctx) 7))
+  (expect-status "neg-log-ratio-overflow" err-overflow
+                 (grpo-check-negative (ffi-pointer ctx) 8))
+  (expect-status "neg-aliased-output" err-alias
+                 (grpo-check-negative (ffi-pointer ctx) 9))
+  (display "GRPO AOT NEGATIVE PASS checks=9") (newline))
+
+(define (run-grpo-aot)
+  (verify-rlvr-exact)
+  (let ((ctx (create-ctx)))
+    (populate-rollout-task ctx)
+
+    ;; Verify RLVR format+answer verifier populated exact expected rewards:
+    ;; Group 0: [1.0, 0.25, 0.0, 0.0], Group 1: [1.0, 0.25, 0.0, 0.0]
+    (require-check "reward[0] == 1.0" (= (grpo-get-reward (ffi-pointer ctx) 0) 1.0))
+    (require-check "reward[1] == 0.25" (= (grpo-get-reward (ffi-pointer ctx) 1) 0.25))
+    (require-check "reward[2] == 0.0" (= (grpo-get-reward (ffi-pointer ctx) 2) 0.0))
+    (require-check "reward[3] == 0.0" (= (grpo-get-reward (ffi-pointer ctx) 3) 0.0))
+    (require-check "reward[4] == 1.0" (= (grpo-get-reward (ffi-pointer ctx) 4) 1.0))
+    (require-check "reward[5] == 0.25" (= (grpo-get-reward (ffi-pointer ctx) 5) 0.25))
+    (require-check "reward[6] == 0.0" (= (grpo-get-reward (ffi-pointer ctx) 6) 0.0))
+    (require-check "reward[7] == 0.0" (= (grpo-get-reward (ffi-pointer ctx) 7) 0.0))
+
+    ;; Check Dr. GRPO advantages first (mean = 0.3125 -> adv[0] = 0.6875).
+    (expect-status "adv-dr-grpo" status-ok
+                   (grpo-compute-advantages (ffi-pointer ctx) adv-dr-grpo 0.000001))
+    (require-check "dr-grpo adv[0]"
+                   (<= (abs (- (grpo-get-advantage (ffi-pointer ctx) 0) 0.6875)) 0.00001))
+
+    ;; Switch to standard GRPO advantages for alignment training.
+    (expect-status "adv-standard" status-ok
+                   (grpo-compute-advantages (ffi-pointer ctx) adv-standard 0.000001))
+    (require-check "std adv[0] > 1.5" (> (grpo-get-advantage (ffi-pointer ctx) 0) 1.5))
+    (require-check "std adv[2] < -0.5" (< (grpo-get-advantage (ffi-pointer ctx) 2) -0.5))
+
+    ;; Configure asymmetric clipping (DAPO-style) + Schulman k3 KL penalty.
+    (expect-status "set-loss-params" status-ok
+                   (grpo-set-loss-params (ffi-pointer ctx) norm-per-seq-mean
+                                         0.12 0.16 0.03))
+
+    ;; Initial forward + freeze reference policy pi_ref.
+    (expect-status "init-policy-forward" status-ok
+                   (grpo-policy-forward (ffi-pointer ctx)))
+    (expect-status "snapshot-ref" status-ok
+                   (grpo-snapshot-ref (ffi-pointer ctx)))
+    (expect-status "snapshot-old-0" status-ok
+                   (grpo-snapshot-old (ffi-pointer ctx)))
+
+    ;; Step 0: on-policy (log_pi == log_old == log_ref) -> KL == 0, clip_frac == 0.
+    (expect-status "init-loss-backward" status-ok
+                   (grpo-loss-backward (ffi-pointer ctx)))
+    (require-check "initial active tokens == 32"
+                   (= (grpo-metric-active-tokens (ffi-pointer ctx)) 32))
+    (require-check "initial KL == 0"
+                   (<= (abs (grpo-metric-mean-kl (ffi-pointer ctx))) 0.000001))
+    (require-check "initial clip_fraction == 0"
+                   (= (grpo-metric-clip-fraction (ffi-pointer ctx)) 0.0))
+
+    ;; In-Eshkol central finite-difference gradient checks on weights & biases.
+    (check-fd-weight ctx 0 0)
+    (check-fd-weight ctx 2 2)
+    (check-fd-weight ctx 4 4)
+    (check-fd-weight ctx 6 6)
+    (check-fd-bias ctx 0)
+    (check-fd-bias ctx 2)
+    (check-fd-bias ctx 4)
+    (check-fd-bias ctx 6)
+    ;; Restore exact forward/backward state after FD probes.
+    (expect-status "restore-policy-forward" status-ok
+                   (grpo-policy-forward (ffi-pointer ctx)))
+    (expect-status "restore-loss-backward" status-ok
+                   (grpo-loss-backward (ffi-pointer ctx)))
+
+    (let ((init-exp-r (grpo-expected-reward (ffi-pointer ctx)))
+          (init-greedy-r (grpo-greedy-reward (ffi-pointer ctx)))
+          (prev-exp-r 0.0)
+          (max-kl 0.0)
+          (unclipped-seen 0)
+          (total-clipped 0))
+      (set! prev-exp-r init-exp-r)
+      (require-check "initial greedy reward < 1.0" (< init-greedy-r 1.0))
+      (display "GRPO AOT STEP 0 exp_reward=")
+      (display (number->string init-exp-r))
+      (display " kl=")
+      (display (number->string (grpo-metric-mean-kl (ffi-pointer ctx))))
+      (display " clip_frac=")
+      (display (number->string (grpo-metric-clip-fraction (ffi-pointer ctx))))
+      (newline)
+
+      ;; Multi-step GRPO loop: each outer step snapshots pi_old and executes
+      ;; multiple inner off-policy epochs to exercise both unclipped and clipped
+      ;; surrogate updates.
+      (do ((step 1 (+ step 1)))
+          ((> step outer-steps))
+        (expect-status "outer-snapshot-old" status-ok
+                       (grpo-snapshot-old (ffi-pointer ctx)))
+        (let ((step-clip-frac 0.0))
+          (do ((epoch 0 (+ epoch 1)))
+              ((= epoch inner-epochs))
+            (expect-status "inner-policy-forward" status-ok
+                           (grpo-policy-forward (ffi-pointer ctx)))
+            (expect-status "inner-loss-backward" status-ok
+                           (grpo-loss-backward (ffi-pointer ctx)))
+            (let ((kl (grpo-metric-mean-kl (ffi-pointer ctx)))
+                  (cf (grpo-metric-clip-fraction (ffi-pointer ctx)))
+                  (ct (grpo-metric-clipped-tokens (ffi-pointer ctx))))
+              (require-check "KL must be non-negative" (>= kl 0.0))
+              (require-check "KL must stay bounded" (< kl 5.0))
+              (when (> kl max-kl) (set! max-kl kl))
+              (when (= epoch 0)
+                (require-check "epoch 0 must be unclipped" (= cf 0.0))
+                (set! unclipped-seen (+ unclipped-seen 1)))
+              (set! total-clipped (+ total-clipped ct))
+              (when (> cf step-clip-frac) (set! step-clip-frac cf)))
+            (sgd-step ctx learning-rate))
+
+          ;; Evaluate post-step policy on updated weights.
+          (expect-status "post-step-forward" status-ok
+                         (grpo-policy-forward (ffi-pointer ctx)))
+          (expect-status "post-step-loss" status-ok
+                         (grpo-loss-forward (ffi-pointer ctx)))
+          (let ((curr-exp-r (grpo-expected-reward (ffi-pointer ctx)))
+                (curr-kl (grpo-metric-mean-kl (ffi-pointer ctx))))
+            (require-check "KL non-negative post-step" (>= curr-kl 0.0))
+            (require-check "KL bounded post-step" (< curr-kl 5.0))
+            (require-check "expected reward failed to strictly increase"
+                           (> curr-exp-r prev-exp-r))
+            (when (> curr-kl max-kl) (set! max-kl curr-kl))
+            (display "GRPO AOT STEP ") (display step)
+            (display " exp_reward=") (display (number->string curr-exp-r))
+            (display " kl=") (display (number->string curr-kl))
+            (display " clip_frac=") (display (number->string step-clip-frac))
+            (newline)
+            (set! prev-exp-r curr-exp-r))))
+
+      ;; Final alignment assertions.
+      (let ((final-greedy-r (grpo-greedy-reward (ffi-pointer ctx))))
+        (require-check "unclipped regime not observed" (= unclipped-seen outer-steps))
+        (require-check "clipped regime not observed" (> total-clipped 0))
+        (require-check "final expected reward must exceed 0.90" (> prev-exp-r 0.90))
+        (require-check "final greedy reward must equal 1.0" (= final-greedy-r 1.0))
+        (display "GRPO AOT TRAIN steps=10 init_exp_r=")
+        (display (number->string init-exp-r))
+        (display " final_exp_r=")
+        (display (number->string prev-exp-r))
+        (display " final_greedy_r=")
+        (display (number->string final-greedy-r))
+        (display " max_kl=")
+        (display (number->string max-kl))
+        (display " total_clipped=")
+        (display total-clipped)
+        (display " grad_checks=8")
+        (newline)))
+
+    (verify-negatives ctx)
+    (grpo-destroy (ffi-pointer ctx))))
+
+(run-grpo-aot)
