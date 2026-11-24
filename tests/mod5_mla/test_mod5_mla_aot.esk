@@ -1,0 +1,496 @@
+;;; Multi-Head Latent Attention (MLA) compiled Eshkol AOT verification:
+;;;   - Malformed FFI / negative contract checks with untouched output sentinels
+;;;   - Central finite-difference verification on all 6 gradients (dX, dW_q,
+;;;     dW_dkv, dW_uk, dW_uv, dW_o)
+;;;   - 12 deterministic SGD steps with strictly decreasing MSE loss
+;;;   - Compressed latent KV-cache prefill + incremental decode parity against
+;;;     full-context MLA forward (N=1, T=8, D=16, H=4, Dh=8, dc=8 -> 8x KV compression)
+;;; Compiled with: eshkol-run --strict-types --optimize 0 --no-stdlib
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+;; MOD5 MLA K1 provider + KV-cache AOT bridge
+(extern i32 mla-open ptr :real et_mod5_mla_aot_open)
+(extern void mla-close ptr :real et_mod5_mla_aot_close)
+(extern i64 mla-dims-bytes :real et_mod5_mla_aot_dims_struct_bytes)
+(extern i64 mla-cache-bytes :real et_mod5_mla_aot_cache_struct_bytes)
+(extern i32 mla-set-dims ptr i64 i64 i64 i64 i64 i64
+        :real et_mod5_mla_aot_set_dims)
+(extern i32 mla-forward ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_mod5_mla_aot_forward)
+(extern i32 mla-backward ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_mod5_mla_aot_backward)
+(extern i64 mla-latent-kv-bytes i64 i64 i64 :real et_mod5_mla_aot_latent_kv_bytes)
+(extern i64 mla-full-kv-bytes i64 i64 i64 i64 :real et_mod5_mla_aot_full_kv_bytes)
+(extern f64 mla-kv-compression-ratio i64 i64 i64
+        :real et_mod5_mla_aot_kv_compression_ratio)
+(extern i32 mla-cache-init ptr ptr ptr i64 :real et_mod5_mla_aot_cache_init)
+(extern i32 mla-cache-reset ptr :real et_mod5_mla_aot_cache_reset)
+(extern i64 mla-cache-seq-len ptr :real et_mod5_mla_aot_cache_seq_len)
+(extern i32 mla-cache-prefill ptr i64 ptr ptr ptr ptr ptr ptr ptr
+        :real et_mod5_mla_aot_cache_prefill)
+(extern i32 mla-cache-step ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_mod5_mla_aot_cache_step)
+(extern void mla-store-f32 ptr i64 f64 :real et_mod5_mla_aot_store_f32)
+(extern f64 mla-load-f32 ptr i64 :real et_mod5_mla_aot_load_f32)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Configuration: N=1, T=8, D=16, H=4, Dh=8, dc=8 (HD=32, 8x KV compression).
+(define batch 1)
+(define tokens 8)
+(define model-dim 16)
+(define heads 4)
+(define head-dim 8)
+(define hd (* heads head-dim))
+(define latent-dim 8)
+(define prefill-len 3)
+(define decode-len (- tokens prefill-len))
+(define sgd-steps 12)
+(define learning-rate 0.1)
+
+(define (expect-status operation expected actual)
+  (unless (= actual expected)
+    (display operation) (display " expected status ") (display expected)
+    (display ", received ") (display actual) (newline) (exit 1)))
+
+(define (require-check label ok)
+  (unless ok (display label) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "MOD5 MLA AOT allocation failed"
+                   (not (= (ptr->usize p) 0)))
+    p))
+
+;; Discover MLA K1 provider runtime.
+(define mla-runtime
+  (let ((cell (checked-allocate 8)))
+    (expect-status "MLA discovery" 0 (mla-open (ffi-pointer cell)))
+    (let ((rt (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      rt)))
+
+;; Allocate disjoint aligned descriptors and f32 spans.
+(define dims-buf (checked-allocate (mla-dims-bytes)))
+(define bad-dims-buf (checked-allocate (mla-dims-bytes)))
+(define cache-buf (checked-allocate (mla-cache-bytes)))
+
+(define x-elems (* batch tokens model-dim))
+(define wq-elems (* hd model-dim))
+(define wdkv-elems (* latent-dim model-dim))
+(define wuk-elems (* hd latent-dim))
+(define wo-elems (* model-dim hd))
+
+(define x-buf (checked-allocate (* 4 x-elems)))
+(define wq-buf (checked-allocate (* 4 wq-elems)))
+(define wdkv-buf (checked-allocate (* 4 wdkv-elems)))
+(define wuk-buf (checked-allocate (* 4 wuk-elems)))
+(define wuv-buf (checked-allocate (* 4 wuk-elems)))
+(define wo-buf (checked-allocate (* 4 wo-elems)))
+(define dy-buf (checked-allocate (* 4 x-elems)))
+
+(define o-buf (checked-allocate (* 4 x-elems)))
+(define dx-buf (checked-allocate (* 4 x-elems)))
+(define dwq-buf (checked-allocate (* 4 wq-elems)))
+(define dwdkv-buf (checked-allocate (* 4 wdkv-elems)))
+(define dwuk-buf (checked-allocate (* 4 wuk-elems)))
+(define dwuv-buf (checked-allocate (* 4 wuk-elems)))
+(define dwo-buf (checked-allocate (* 4 wo-elems)))
+
+(define latent-kv-bytes (mla-latent-kv-bytes batch tokens latent-dim))
+(define full-kv-bytes (mla-full-kv-bytes batch tokens heads head-dim))
+(define kv-ratio (mla-kv-compression-ratio heads head-dim latent-dim))
+
+(define ckv-buf (checked-allocate latent-kv-bytes))
+(define x-prefill-buf (checked-allocate (* 4 batch prefill-len model-dim)))
+(define o-prefill-buf (checked-allocate (* 4 batch prefill-len model-dim)))
+(define x-step-buf (checked-allocate (* 4 batch model-dim)))
+(define o-step-buf (checked-allocate (* 4 batch model-dim)))
+
+(expect-status "MLA set dims" 0
+               (mla-set-dims (ffi-pointer dims-buf)
+                             batch tokens model-dim heads head-dim latent-dim))
+
+;; Pack/unpack between Eshkol f64 tensors and binary32 buffers.
+(define (pack tensor buffer)
+  (let* ((count (tensor-length tensor))
+         (flat (reshape tensor (list count))))
+    (do ((i 0 (+ i 1)))
+        ((= i count))
+      (mla-store-f32 (ffi-pointer buffer) i (tensor-ref flat i)))))
+
+(define (unpack buffer rows cols)
+  (let* ((count (* rows cols))
+         (flat (zeros (list count))))
+    (do ((i 0 (+ i 1)))
+        ((= i count) (reshape flat (list rows cols)))
+      (tensor-set! flat i (mla-load-f32 (ffi-pointer buffer) i)))))
+
+(define (seed-tensor rows cols salt scale)
+  (let ((t (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) t)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (let* ((idx (+ (* r cols) c))
+               (v (- (modulo (+ (* 29 salt) (* 17 idx) (* 5 r)) 33) 16)))
+          (tensor-set! t r c (* (exact->inexact v) scale)))))))
+
+;; Parameter vector layout:
+;;   0: W_q [32, 16]
+;;   1: W_dkv [8, 16]
+;;   2: W_uk [32, 8]
+;;   3: W_uv [32, 8]
+;;   4: W_o [16, 32]
+(define (initial-weights)
+  (vector
+   (seed-tensor hd model-dim 2 0.03125)
+   (seed-tensor latent-dim model-dim 3 0.03125)
+   (seed-tensor hd latent-dim 4 0.03125)
+   (seed-tensor hd latent-dim 5 0.03125)
+   (seed-tensor model-dim hd 6 0.03125)))
+
+(define (mla-fwd-tensor x weights)
+  (pack x x-buf)
+  (pack (vector-ref weights 0) wq-buf)
+  (pack (vector-ref weights 1) wdkv-buf)
+  (pack (vector-ref weights 2) wuk-buf)
+  (pack (vector-ref weights 3) wuv-buf)
+  (pack (vector-ref weights 4) wo-buf)
+  (expect-status "MLA forward" 0
+                 (mla-forward (ffi-pointer mla-runtime) (ffi-pointer dims-buf)
+                              (ffi-pointer x-buf) (ffi-pointer wq-buf)
+                              (ffi-pointer wdkv-buf) (ffi-pointer wuk-buf)
+                              (ffi-pointer wuv-buf) (ffi-pointer wo-buf)
+                              (ffi-pointer o-buf)))
+  (unpack o-buf tokens model-dim))
+
+;; Compute MSE loss = 0.5 * mean((O - target)^2); if grads-out != #f, fill all 6 grads.
+;; grads-out layout: 0..4 = dW_q..dW_o, 5 = dX.
+(define (mla-loss weights x target grads-out)
+  (let* ((out (mla-fwd-tensor x weights))
+         (diff (tensor-sub out target))
+         (inv-n (/ 1.0 (exact->inexact x-elems)))
+         (sq-sum (let ((flat (reshape diff (list x-elems))))
+                   (do ((i 0 (+ i 1))
+                        (acc 0.0 (+ acc (* (tensor-ref flat i)
+                                           (tensor-ref flat i)))))
+                       ((= i x-elems) acc))))
+         (loss (* 0.5 inv-n sq-sum)))
+    (when grads-out
+      (let ((dy (tensor-scale diff inv-n)))
+        (pack dy dy-buf)
+        (expect-status "MLA backward" 0
+                       (mla-backward (ffi-pointer mla-runtime)
+                                     (ffi-pointer dims-buf)
+                                     (ffi-pointer x-buf) (ffi-pointer wq-buf)
+                                     (ffi-pointer wdkv-buf) (ffi-pointer wuk-buf)
+                                     (ffi-pointer wuv-buf) (ffi-pointer wo-buf)
+                                     (ffi-pointer dy-buf)
+                                     (ffi-pointer dx-buf) (ffi-pointer dwq-buf)
+                                     (ffi-pointer dwdkv-buf)
+                                     (ffi-pointer dwuk-buf)
+                                     (ffi-pointer dwuv-buf)
+                                     (ffi-pointer dwo-buf)))
+        (vector-set! grads-out 0 (unpack dwq-buf hd model-dim))
+        (vector-set! grads-out 1 (unpack dwdkv-buf latent-dim model-dim))
+        (vector-set! grads-out 2 (unpack dwuk-buf hd latent-dim))
+        (vector-set! grads-out 3 (unpack dwuv-buf hd latent-dim))
+        (vector-set! grads-out 4 (unpack dwo-buf model-dim hd))
+        (vector-set! grads-out 5 (unpack dx-buf tokens model-dim))))
+    loss))
+
+;; 1. Malformed FFI checks with sentinel verification.
+(define (check-malformed-calls weights x)
+  (pack x x-buf)
+  (pack (vector-ref weights 0) wq-buf)
+  (pack (vector-ref weights 1) wdkv-buf)
+  (pack (vector-ref weights 2) wuk-buf)
+  (pack (vector-ref weights 3) wuv-buf)
+  (pack (vector-ref weights 4) wo-buf)
+  (mla-store-f32 (ffi-pointer o-buf) 0 11.25)
+  (mla-store-f32 (ffi-pointer o-buf) 5 -7.5)
+
+  ;; Compression violation: dc == 2*H*Dh (H=1, Dh=2, dc=4) -> UNSUPPORTED (6).
+  (expect-status "MLA set bad compression dims" 0
+                 (mla-set-dims (ffi-pointer bad-dims-buf) 1 4 8 1 2 4))
+  (expect-status "MLA invalid compression dc>=2*H*Dh" 6
+                 (mla-forward (ffi-pointer mla-runtime)
+                              (ffi-pointer bad-dims-buf)
+                              (ffi-pointer x-buf) (ffi-pointer wq-buf)
+                              (ffi-pointer wdkv-buf) (ffi-pointer wuk-buf)
+                              (ffi-pointer wuv-buf) (ffi-pointer wo-buf)
+                              (ffi-pointer o-buf)))
+
+  ;; Out-of-range tokens (T=33) -> UNSUPPORTED (6).
+  (expect-status "MLA set bad token dims" 0
+                 (mla-set-dims (ffi-pointer bad-dims-buf) 1 33 16 4 8 8))
+  (expect-status "MLA invalid tokens=33" 6
+                 (mla-forward (ffi-pointer mla-runtime)
+                              (ffi-pointer bad-dims-buf)
+                              (ffi-pointer x-buf) (ffi-pointer wq-buf)
+                              (ffi-pointer wdkv-buf) (ffi-pointer wuk-buf)
+                              (ffi-pointer wuv-buf) (ffi-pointer wo-buf)
+                              (ffi-pointer o-buf)))
+
+  ;; Misaligned input pointer via ptr-add -> INVALID_ARGUMENT (1).
+  (expect-status "MLA misaligned x" 1
+                 (mla-forward (ffi-pointer mla-runtime) (ffi-pointer dims-buf)
+                              (ptr-add x-buf 1) (ffi-pointer wq-buf)
+                              (ffi-pointer wdkv-buf) (ffi-pointer wuk-buf)
+                              (ffi-pointer wuv-buf) (ffi-pointer wo-buf)
+                              (ffi-pointer o-buf)))
+
+  ;; Non-finite input (+Inf via f32 overflow) -> INVALID_ARGUMENT (1).
+  (mla-store-f32 (ffi-pointer x-buf) 2 1.0e308)
+  (expect-status "MLA non-finite x" 1
+                 (mla-forward (ffi-pointer mla-runtime) (ffi-pointer dims-buf)
+                              (ffi-pointer x-buf) (ffi-pointer wq-buf)
+                              (ffi-pointer wdkv-buf) (ffi-pointer wuk-buf)
+                              (ffi-pointer wuv-buf) (ffi-pointer wo-buf)
+                              (ffi-pointer o-buf)))
+
+  ;; Aliased output -> INVALID_ARGUMENT (1).
+  (pack x x-buf)
+  (expect-status "MLA aliased output" 1
+                 (mla-forward (ffi-pointer mla-runtime) (ffi-pointer dims-buf)
+                              (ffi-pointer x-buf) (ffi-pointer wq-buf)
+                              (ffi-pointer wdkv-buf) (ffi-pointer wuk-buf)
+                              (ffi-pointer wuv-buf) (ffi-pointer wo-buf)
+                              (ffi-pointer x-buf)))
+
+  ;; Verify sentinels untouched.
+  (require-check "MLA sentinel 0 modified"
+                 (= (mla-load-f32 (ffi-pointer o-buf) 0) 11.25))
+  (require-check "MLA sentinel 5 modified"
+                 (= (mla-load-f32 (ffi-pointer o-buf) 5) -7.5))
+  (display "MOD5 MLA AOT malformed statuses PASS") (newline))
+
+;; 2. Central finite-difference checks across all 6 tensors.
+(define (check-one-fd weights x target operand derivative row col)
+  (let* ((orig (tensor-get operand row col))
+         (step 0.00390625))
+    (tensor-set! operand row col (+ orig step))
+    (let ((plus (mla-loss weights x target #f)))
+      (tensor-set! operand row col (- orig step))
+      (let* ((minus (mla-loss weights x target #f))
+             (numerical (/ (- plus minus) (* 2.0 step)))
+             (analytic (tensor-get derivative row col))
+             (diff (abs (- analytic numerical))))
+        (tensor-set! operand row col orig)
+        (unless (<= diff (+ 0.0001 (* 0.01 (abs numerical))))
+          (display "MLA FD mismatch row=") (display row)
+          (display " col=") (display col)
+          (display " analytic=") (display (number->string analytic))
+          (display " numerical=") (display (number->string numerical))
+          (display " diff=") (display (number->string diff)) (newline)
+          (exit 1))
+        diff))))
+
+(define (check-all-gradients weights x target grads)
+  (let ((checked 0)
+        (max-err 0.0))
+    (do ((p 0 (+ p 1)))
+        ((= p 6)
+         (display "MOD5 MLA AOT FD_GRADIENTS checked=") (display checked)
+         (display " max_abs_err=") (display (number->string max-err))
+         (display " PASS") (newline))
+      (let* ((operand (if (= p 5) x (vector-ref weights p)))
+             (derivative (vector-ref grads p))
+             (shape (tensor-shape operand))
+             (rows (car shape))
+             (cols (car (cdr shape)))
+             (mid-r (quotient rows 2))
+             (mid-c (quotient cols 2)))
+        (require-check "MLA inactive gradient"
+                       (> (tensor-sum (tensor-abs derivative)) 0.0000001))
+        (let ((e1 (check-one-fd weights x target operand derivative 0 0))
+              (e2 (check-one-fd weights x target operand derivative mid-r mid-c))
+              (e3 (check-one-fd weights x target operand derivative
+                                (- rows 1) (- cols 1))))
+          (when (> e1 max-err) (set! max-err e1))
+          (when (> e2 max-err) (set! max-err e2))
+          (when (> e3 max-err) (set! max-err e3))
+          (set! checked (+ checked 3)))))))
+
+(define (parameter-checksum weights)
+  (do ((p 0 (+ p 1))
+       (total 0.0 (+ total (* (+ p 1) (tensor-sum (vector-ref weights p))))))
+      ((= p 5) total)))
+
+;; 3. Compressed latent KV-cache prefill + incremental decode parity check.
+(define (check-kv-cache-parity weights x)
+  (require-check "MLA latent_kv_bytes mismatch" (= latent-kv-bytes 256))
+  (require-check "MLA full_kv_bytes mismatch" (= full-kv-bytes 2048))
+  (require-check "MLA compression ratio mismatch"
+                 (< (abs (- kv-ratio 8.0)) 1.0e-12))
+
+  (let ((o-full (mla-fwd-tensor x weights)))
+    ;; Pack prefill tokens [0..prefill-len-1].
+    (do ((t 0 (+ t 1)))
+        ((= t prefill-len))
+      (do ((d 0 (+ d 1)))
+          ((= d model-dim))
+        (mla-store-f32 (ffi-pointer x-prefill-buf)
+                       (+ (* t model-dim) d)
+                       (tensor-get x t d))))
+
+    (expect-status "MLA cache init" 0
+                   (mla-cache-init (ffi-pointer cache-buf)
+                                   (ffi-pointer dims-buf)
+                                   (ffi-pointer ckv-buf)
+                                   latent-kv-bytes))
+    (require-check "MLA cache seq_len != 0 after init"
+                   (= (mla-cache-seq-len (ffi-pointer cache-buf)) 0))
+
+    (expect-status "MLA cache prefill" 0
+                   (mla-cache-prefill (ffi-pointer cache-buf)
+                                      prefill-len
+                                      (ffi-pointer x-prefill-buf)
+                                      (ffi-pointer wq-buf)
+                                      (ffi-pointer wdkv-buf)
+                                      (ffi-pointer wuk-buf)
+                                      (ffi-pointer wuv-buf)
+                                      (ffi-pointer wo-buf)
+                                      (ffi-pointer o-prefill-buf)))
+    (require-check "MLA cache seq_len mismatch after prefill"
+                   (= (mla-cache-seq-len (ffi-pointer cache-buf)) prefill-len))
+
+    (let ((max-diff 0.0))
+      ;; Compare prefill outputs against full-context MLA forward.
+      (do ((t 0 (+ t 1)))
+          ((= t prefill-len))
+        (do ((d 0 (+ d 1)))
+            ((= d model-dim))
+          (let* ((got (mla-load-f32 (ffi-pointer o-prefill-buf)
+                                    (+ (* t model-dim) d)))
+                 (want (tensor-get o-full t d))
+                 (diff (abs (- got want))))
+            (when (> diff max-diff) (set! max-diff diff)))))
+
+      ;; Incremental decode steps t = prefill-len .. tokens - 1.
+      (do ((t prefill-len (+ t 1)))
+          ((= t tokens))
+        (do ((d 0 (+ d 1)))
+            ((= d model-dim))
+          (mla-store-f32 (ffi-pointer x-step-buf) d (tensor-get x t d)))
+        (expect-status "MLA cache step" 0
+                       (mla-cache-step (ffi-pointer cache-buf)
+                                       (ffi-pointer x-step-buf)
+                                       (ffi-pointer wq-buf)
+                                       (ffi-pointer wdkv-buf)
+                                       (ffi-pointer wuk-buf)
+                                       (ffi-pointer wuv-buf)
+                                       (ffi-pointer wo-buf)
+                                       (ffi-pointer o-step-buf)))
+        (require-check "MLA cache seq_len mismatch after step"
+                       (= (mla-cache-seq-len (ffi-pointer cache-buf)) (+ t 1)))
+        (do ((d 0 (+ d 1)))
+            ((= d model-dim))
+          (let* ((got (mla-load-f32 (ffi-pointer o-step-buf) d))
+                 (want (tensor-get o-full t d))
+                 (diff (abs (- got want))))
+            (when (> diff max-diff) (set! max-diff diff)))))
+
+      ;; Verify cache overflow at seq_len == tokens preserves sentinel.
+      (mla-store-f32 (ffi-pointer o-step-buf) 0 -9.75)
+      (expect-status "MLA cache overflow" 1
+                     (mla-cache-step (ffi-pointer cache-buf)
+                                     (ffi-pointer x-step-buf)
+                                     (ffi-pointer wq-buf)
+                                     (ffi-pointer wdkv-buf)
+                                     (ffi-pointer wuk-buf)
+                                     (ffi-pointer wuv-buf)
+                                     (ffi-pointer wo-buf)
+                                     (ffi-pointer o-step-buf)))
+      (require-check "MLA cache overflow changed sentinel"
+                     (= (mla-load-f32 (ffi-pointer o-step-buf) 0) -9.75))
+      (require-check "MLA cache overflow changed seq_len"
+                     (= (mla-cache-seq-len (ffi-pointer cache-buf)) tokens))
+
+      ;; Verify reset clears seq_len.
+      (expect-status "MLA cache reset" 0
+                     (mla-cache-reset (ffi-pointer cache-buf)))
+      (require-check "MLA cache seq_len != 0 after reset"
+                     (= (mla-cache-seq-len (ffi-pointer cache-buf)) 0))
+
+      (require-check "MLA cached decode parity exceeded 1e-6"
+                     (<= max-diff 1.0e-6))
+      (display "MOD5 MLA AOT KV_CACHE prefill=") (display prefill-len)
+      (display " decode=") (display decode-len)
+      (display " latent_bytes=") (display latent-kv-bytes)
+      (display " full_mha_kv_bytes=") (display full-kv-bytes)
+      (display " compression_ratio=") (display (number->string kv-ratio))
+      (display " max_abs_diff=") (display (number->string max-diff))
+      (display " PASS") (newline))))
+
+(define (print-loss step loss)
+  (display "MOD5 MLA AOT LOSS ") (display step)
+  (display " ") (display (number->string loss)) (newline))
+
+(define (run-mla-aot)
+  (let* ((weights (initial-weights))
+         (x (seed-tensor tokens model-dim 1 0.0625))
+         (target (seed-tensor tokens model-dim 19 0.0625))
+         (grads (make-vector 6 #f)))
+    (check-malformed-calls weights x)
+    (let ((initial (mla-loss weights x target grads))
+          (initial-checksum (parameter-checksum weights)))
+      (check-all-gradients weights x target grads)
+      (print-loss 0 initial)
+      (do ((step 1 (+ step 1))
+           (previous initial))
+          ((> step sgd-steps)
+           (let ((checksum (parameter-checksum weights)))
+             (require-check "MLA parameters did not update"
+                            (not (= checksum initial-checksum)))
+             (check-kv-cache-parity weights x)
+             (display "MOD5 MLA AOT RESULT n=1 t=8 d=16 h=4 dh=8 dc=8 steps=12 initial=")
+             (display (number->string initial))
+             (display " final=") (display (number->string previous))
+             (display " checksum=") (display (number->string checksum))
+             (newline)))
+        (do ((p 0 (+ p 1)))
+            ((= p 5))
+          (let ((g (vector-ref grads p)))
+            (require-check "MLA nonfinite gradient"
+                           (< (tensor-sum (tensor-abs g)) 1.0e300))
+            (vector-set! weights p
+                         (tensor-sub (vector-ref weights p)
+                                     (tensor-scale g learning-rate)))))
+        (let ((current (mla-loss weights x target grads)))
+          (require-check "MLA loss failed to decrease"
+                         (and (>= current 0.0) (< current previous)))
+          (print-loss step current)
+          (set! previous current))))))
+
+(run-mla-aot)
+
+(mla-close (ffi-pointer mla-runtime))
+(release (ffi-pointer dims-buf))
+(release (ffi-pointer bad-dims-buf))
+(release (ffi-pointer cache-buf))
+(release (ffi-pointer x-buf))
+(release (ffi-pointer wq-buf))
+(release (ffi-pointer wdkv-buf))
+(release (ffi-pointer wuk-buf))
+(release (ffi-pointer wuv-buf))
+(release (ffi-pointer wo-buf))
+(release (ffi-pointer dy-buf))
+(release (ffi-pointer o-buf))
+(release (ffi-pointer dx-buf))
+(release (ffi-pointer dwq-buf))
+(release (ffi-pointer dwdkv-buf))
+(release (ffi-pointer dwuk-buf))
+(release (ffi-pointer dwuv-buf))
+(release (ffi-pointer dwo-buf))
+(release (ffi-pointer ckv-buf))
+(release (ffi-pointer x-prefill-buf))
+(release (ffi-pointer o-prefill-buf))
+(release (ffi-pointer x-step-buf))
+(release (ffi-pointer o-step-buf))
