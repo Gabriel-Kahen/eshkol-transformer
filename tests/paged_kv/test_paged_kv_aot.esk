@@ -1,0 +1,424 @@
+;;; Compiled Eshkol AOT PagedAttention / Block-Table KV-Cache Manager driver:
+;;; Multi-sequence prompt prefill -> SHA-256 prefix-cache hit -> CoW fork into
+;;; 3 diverging continuations -> exact Paged GQA causal decode attention parity
+;;; vs Eshkol-native dense contiguous reference -> speculative truncation
+;;; rollback -> OOM block exhaustion fail-closed -> full sequence cleanup.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+(extern f64 c-exp f64 :real exp)
+(extern f64 c-sqrt f64 :real sqrt)
+
+(extern i32 kv-create i64 i64 i64 i64 i64 i64 i64 ptr :real et_paged_kv_aot_create)
+(extern void kv-destroy ptr :real et_paged_kv_aot_destroy)
+
+(extern i64 kv-seq-alloc ptr :real et_paged_kv_aot_seq_alloc)
+(extern i32 kv-seq-free ptr i64 :real et_paged_kv_aot_seq_free)
+(extern i64 kv-seq-fork ptr i64 :real et_paged_kv_aot_seq_fork)
+(extern i32 kv-seq-truncate ptr i64 i64 :real et_paged_kv_aot_seq_truncate)
+
+(extern i64 kv-seq-len ptr i64 :real et_paged_kv_aot_seq_len)
+(extern i64 kv-seq-num-blocks ptr i64 :real et_paged_kv_aot_seq_num_blocks)
+(extern i64 kv-seq-phys-block ptr i64 i64 :real et_paged_kv_aot_seq_phys_block)
+(extern i64 kv-block-refcount ptr i64 :real et_paged_kv_aot_block_refcount)
+
+(extern i32 kv-set-k ptr i64 i64 i64 f64 :real et_paged_kv_aot_set_k)
+(extern i32 kv-set-v ptr i64 i64 i64 f64 :real et_paged_kv_aot_set_v)
+(extern i32 kv-append-token ptr i64 :real et_paged_kv_aot_append_token)
+
+(extern i32 kv-set-q ptr i64 i64 f64 :real et_paged_kv_aot_set_q)
+(extern i32 kv-decode-attn ptr i64 i64 i64 f64 :real et_paged_kv_aot_decode_attention)
+(extern f64 kv-get-out ptr i64 i64 :real et_paged_kv_aot_get_out)
+(extern i64 kv-get-out-bits ptr i64 i64 :real et_paged_kv_aot_get_out_bits)
+
+(extern i32 kv-set-token-id ptr i64 i64 :real et_paged_kv_aot_set_token_id)
+(extern i32 kv-hash-block ptr i64 i64 :real et_paged_kv_aot_hash_block)
+(extern i32 kv-prefix-register ptr i64 i64 i64 :real et_paged_kv_aot_prefix_register)
+(extern i64 kv-prefix-attach ptr i64 i64 :real et_paged_kv_aot_prefix_attach)
+
+(extern i64 kv-stat-total ptr :real et_paged_kv_aot_stat_total_blocks)
+(extern i64 kv-stat-free ptr :real et_paged_kv_aot_stat_free_blocks)
+(extern i64 kv-stat-used ptr :real et_paged_kv_aot_stat_used_blocks)
+(extern i64 kv-stat-seqs ptr :real et_paged_kv_aot_stat_active_seqs)
+(extern i64 kv-stat-shared ptr :real et_paged_kv_aot_stat_shared_blocks)
+(extern i64 kv-stat-prefix-cached ptr :real et_paged_kv_aot_stat_prefix_cached)
+(extern i64 kv-stat-cow-copies ptr :real et_paged_kv_aot_stat_cow_copies)
+(extern i64 kv-stat-prefix-hits ptr :real et_paged_kv_aot_stat_prefix_hits)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Pool geometry and GQA attention shape.
+(define num-blocks 10)
+(define num-layers 2)
+(define num-kv-heads 2)
+(define num-q-heads 4)
+(define block-size 4)
+(define head-dim 8)
+(define max-seqs 8)
+(define max-blocks-per-seq 8)
+(define tok-floats (* num-layers num-kv-heads head-dim))
+(define max-dense-len 16)
+(define seq-stride (* max-dense-len tok-floats))
+
+;; Expected status codes from paged_kv_abi.h.
+(define status-ok 0)
+(define err-nonfinite -5)
+(define err-oom-blocks -7)
+(define err-invalid-seq -9)
+(define err-invalid-range -11)
+
+(define (require-check label ok)
+  (unless ok
+    (display "PAGED_KV AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-eq label expected actual)
+  (unless (= expected actual)
+    (display "PAGED_KV AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-ctx)
+  (let ((cell (checked-allocate 8)))
+    (expect-eq "kv-create" status-ok
+               (kv-create num-blocks num-layers num-kv-heads block-size
+                          head-dim max-seqs max-blocks-per-seq
+                          (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+;; Deterministic dyadic binary32-exact value generator.
+(define (det-val seed idx scale)
+  (let ((bucket (- (modulo (+ (* 37 seed) (* 19 idx) (quotient idx 3)) 41) 20)))
+    (* scale bucket)))
+
+;; Dense shadow KV store in Eshkol for independent contiguous GQA reference
+;; (4 tracked sequences: slots 0..3, max 16 tokens each).
+(define dense-k (make-vector (* 4 seq-stride) 0.0))
+(define dense-v (make-vector (* 4 seq-stride) 0.0))
+(define dense-lens (make-vector 4 0))
+
+(define (dense-index slot pos layer kv-h d)
+  (+ (* slot seq-stride)
+     (* pos tok-floats)
+     (* (+ (* layer num-kv-heads) kv-h) head-dim)
+     d))
+
+(define (append-tracked-token ctx seq-id slot seed)
+  (let ((pos (vector-ref dense-lens slot)))
+    (do ((l 0 (+ l 1)))
+        ((= l num-layers))
+      (do ((h 0 (+ h 1)))
+          ((= h num-kv-heads))
+        (do ((d 0 (+ d 1)))
+            ((= d head-dim))
+          (let* ((idx (+ (* (+ (* l num-kv-heads) h) head-dim) d))
+                 (kv (det-val seed idx 0.0625))
+                 (vv (det-val (+ seed 13) idx 0.0625))
+                 (di (dense-index slot pos l h d)))
+            (expect-eq "set-k" status-ok (kv-set-k (ffi-pointer ctx) l h d kv))
+            (expect-eq "set-v" status-ok (kv-set-v (ffi-pointer ctx) l h d vv))
+            (vector-set! dense-k di kv)
+            (vector-set! dense-v di vv)))))
+    (expect-eq "append-token" status-ok (kv-append-token (ffi-pointer ctx) seq-id))
+    (vector-set! dense-lens slot (+ pos 1))))
+
+(define (copy-dense-prefix src-slot dst-slot)
+  (let ((len (vector-ref dense-lens src-slot)))
+    (do ((pos 0 (+ pos 1)))
+        ((= pos len))
+      (do ((l 0 (+ l 1)))
+          ((= l num-layers))
+        (do ((h 0 (+ h 1)))
+            ((= h num-kv-heads))
+          (do ((d 0 (+ d 1)))
+              ((= d head-dim))
+            (let ((si (dense-index src-slot pos l h d))
+                  (di (dense-index dst-slot pos l h d)))
+              (vector-set! dense-k di (vector-ref dense-k si))
+              (vector-set! dense-v di (vector-ref dense-v si)))))))
+    (vector-set! dense-lens dst-slot len)))
+
+;; Compute independent dense contiguous GQA decode attention in Eshkol and
+;; return max absolute error vs paged decode attention for (seq-id, layer).
+(define (verify-gqa-parity ctx seq-id slot layer seed)
+  (let* ((len (vector-ref dense-lens slot))
+         (scale (/ 1.0 (c-sqrt (* 1.0 head-dim))))
+         (group-size (quotient num-q-heads num-kv-heads))
+         (q-vec (make-vector (* num-q-heads head-dim) 0.0))
+         (scores (make-vector len 0.0))
+         (weights (make-vector len 0.0))
+         (max-err 0.0))
+    (do ((qh 0 (+ qh 1)))
+        ((= qh num-q-heads))
+      (do ((d 0 (+ d 1)))
+          ((= d head-dim))
+        (let* ((qi (+ (* qh head-dim) d))
+               (qv (det-val (+ seed 71) qi 0.0625)))
+          (vector-set! q-vec qi qv)
+          (expect-eq "set-q" status-ok (kv-set-q (ffi-pointer ctx) qh d qv)))))
+    (expect-eq "decode-attn" status-ok
+               (kv-decode-attn (ffi-pointer ctx) seq-id layer num-q-heads scale))
+    (do ((qh 0 (+ qh 1)))
+        ((= qh num-q-heads) max-err)
+      (let ((kv-h (quotient qh group-size))
+            (max-s -1000000000.0)
+            (denom 0.0))
+        (do ((t 0 (+ t 1)))
+            ((= t len))
+          (let ((dot 0.0))
+            (do ((d 0 (+ d 1)))
+                ((= d head-dim))
+              (let ((qv (vector-ref q-vec (+ (* qh head-dim) d)))
+                    (kv (vector-ref dense-k (dense-index slot t layer kv-h d))))
+                (set! dot (+ dot (* qv kv)))))
+            (let ((s (* dot scale)))
+              (vector-set! scores t s)
+              (when (or (= t 0) (> s max-s))
+                (set! max-s s)))))
+        (do ((t 0 (+ t 1)))
+            ((= t len))
+          (let ((w (c-exp (- (vector-ref scores t) max-s))))
+            (vector-set! weights t w)
+            (set! denom (+ denom w))))
+        (do ((d 0 (+ d 1)))
+            ((= d head-dim))
+          (let ((ref 0.0))
+            (do ((t 0 (+ t 1)))
+                ((= t len))
+              (let ((vv (vector-ref dense-v (dense-index slot t layer kv-h d))))
+                (set! ref (+ ref (* (/ (vector-ref weights t) denom) vv)))))
+            (let* ((paged (kv-get-out (ffi-pointer ctx) qh d))
+                   (err (abs (- paged ref))))
+              (when (> err max-err) (set! max-err err))
+              (require-check "paged GQA parity exceeded 1e-6"
+                             (<= err 0.000001)))))))))
+
+(define (capture-out-bits ctx)
+  (let* ((n (* num-q-heads head-dim))
+         (bits (make-vector n 0)))
+    (do ((qh 0 (+ qh 1)))
+        ((= qh num-q-heads) bits)
+      (do ((d 0 (+ d 1)))
+          ((= d head-dim))
+        (vector-set! bits (+ (* qh head-dim) d)
+                     (kv-get-out-bits (ffi-pointer ctx) qh d))))))
+
+(define (verify-out-bits-eq ctx ref-bits label)
+  (do ((qh 0 (+ qh 1)))
+      ((= qh num-q-heads))
+    (do ((d 0 (+ d 1)))
+        ((= d head-dim))
+      (require-check label
+                     (= (vector-ref ref-bits (+ (* qh head-dim) d))
+                        (kv-get-out-bits (ffi-pointer ctx) qh d))))))
+
+(define (run-paged-kv-aot)
+  (let ((ctx (create-ctx))
+        (global-max-err 0.0))
+    (expect-eq "init-total" num-blocks (kv-stat-total (ffi-pointer ctx)))
+    (expect-eq "init-free" num-blocks (kv-stat-free (ffi-pointer ctx)))
+
+    ;; 1. Multi-sequence prompt prefill (6 tokens = 1 full block + 2 partial).
+    (let ((seq0 (kv-seq-alloc (ffi-pointer ctx))))
+      (expect-eq "seq0-id" 0 seq0)
+      (do ((t 0 (+ t 1)))
+          ((= t 6))
+        (append-tracked-token ctx seq0 0 (+ 10 t)))
+      (expect-eq "prefill-len" 6 (kv-seq-len (ffi-pointer ctx) seq0))
+      (expect-eq "prefill-used" 2 (kv-stat-used (ffi-pointer ctx)))
+
+      ;; Prefix block deduplication / SHA-256 hash attach test.
+      (expect-eq "tid-0" status-ok (kv-set-token-id (ffi-pointer ctx) 0 101))
+      (expect-eq "tid-1" status-ok (kv-set-token-id (ffi-pointer ctx) 1 102))
+      (expect-eq "tid-2" status-ok (kv-set-token-id (ffi-pointer ctx) 2 103))
+      (expect-eq "tid-3" status-ok (kv-set-token-id (ffi-pointer ctx) 3 104))
+      (expect-eq "hash-blk0" status-ok (kv-hash-block (ffi-pointer ctx) -1 0))
+      (expect-eq "prefix-reg" status-ok
+                 (kv-prefix-register (ffi-pointer ctx) seq0 0 0))
+      (expect-eq "prefix-cached-1" 1 (kv-stat-prefix-cached (ffi-pointer ctx)))
+
+      (let ((seq-indep (kv-seq-alloc (ffi-pointer ctx)))
+            (blk0 (kv-seq-phys-block (ffi-pointer ctx) seq0 0)))
+        (expect-eq "prefix-attach-hit" 1
+                   (kv-prefix-attach (ffi-pointer ctx) seq-indep 0))
+        (expect-eq "prefix-indep-len" 4 (kv-seq-len (ffi-pointer ctx) seq-indep))
+        (expect-eq "prefix-shared-phys" blk0
+                   (kv-seq-phys-block (ffi-pointer ctx) seq-indep 0))
+        (expect-eq "prefix-hits-1" 1 (kv-stat-prefix-hits (ffi-pointer ctx)))
+        (expect-eq "prefix-rc-2" 2 (kv-block-refcount (ffi-pointer ctx) blk0))
+        (expect-eq "free-indep" status-ok
+                   (kv-seq-free (ffi-pointer ctx) seq-indep))
+        (expect-eq "prefix-rc-1" 1 (kv-block-refcount (ffi-pointer ctx) blk0)))
+
+      ;; 2. CoW fork seq0 into 3 diverging continuations (zero copies at fork!).
+      (let ((seq1 (kv-seq-fork (ffi-pointer ctx) seq0))
+            (seq2 (kv-seq-fork (ffi-pointer ctx) seq0))
+            (seq3 (kv-seq-fork (ffi-pointer ctx) seq0))
+            (blk0 (kv-seq-phys-block (ffi-pointer ctx) seq0 0))
+            (blk1 (kv-seq-phys-block (ffi-pointer ctx) seq0 1)))
+        (copy-dense-prefix 0 1)
+        (copy-dense-prefix 0 2)
+        (copy-dense-prefix 0 3)
+
+        (expect-eq "fork-cow-0" 0 (kv-stat-cow-copies (ffi-pointer ctx)))
+        (expect-eq "fork-used-2" 2 (kv-stat-used (ffi-pointer ctx)))
+        (expect-eq "fork-shared-2" 2 (kv-stat-shared (ffi-pointer ctx)))
+        (expect-eq "fork-rc0-4" 4 (kv-block-refcount (ffi-pointer ctx) blk0))
+        (expect-eq "fork-rc1-4" 4 (kv-block-refcount (ffi-pointer ctx) blk1))
+
+        ;; Diverging continuations: seq1 +3 (len 9), seq2 +5 (len 11), seq3 +1 (len 7).
+        (do ((t 0 (+ t 1))) ((= t 3))
+          (append-tracked-token ctx seq1 1 (+ 100 t)))
+        (do ((t 0 (+ t 1))) ((= t 5))
+          (append-tracked-token ctx seq2 2 (+ 200 t)))
+        (append-tracked-token ctx seq3 3 300)
+
+        (expect-eq "div-cow-3" 3 (kv-stat-cow-copies (ffi-pointer ctx)))
+        (expect-eq "div-used-7" 7 (kv-stat-used (ffi-pointer ctx)))
+        (expect-eq "div-free-3" 3 (kv-stat-free (ffi-pointer ctx)))
+        (expect-eq "div-shared-1" 1 (kv-stat-shared (ffi-pointer ctx)))
+        (expect-eq "div-rc0-4" 4 (kv-block-refcount (ffi-pointer ctx) blk0))
+        (expect-eq "div-rc1-1" 1 (kv-block-refcount (ffi-pointer ctx) blk1))
+
+        ;; Verify all 4 sequences share logical block 0, but have distinct block 1.
+        (let ((b1-1 (kv-seq-phys-block (ffi-pointer ctx) seq1 1))
+              (b1-2 (kv-seq-phys-block (ffi-pointer ctx) seq2 1))
+              (b1-3 (kv-seq-phys-block (ffi-pointer ctx) seq3 1)))
+          (require-check "blk0 shared across forks"
+                         (and (= blk0 (kv-seq-phys-block (ffi-pointer ctx) seq1 0))
+                              (= blk0 (kv-seq-phys-block (ffi-pointer ctx) seq2 0))
+                              (= blk0 (kv-seq-phys-block (ffi-pointer ctx) seq3 0))))
+          (require-check "blk1 split across forks"
+                         (and (not (= blk1 b1-1)) (not (= blk1 b1-2))
+                              (not (= blk1 b1-3)) (not (= b1-1 b1-2))
+                              (not (= b1-1 b1-3)) (not (= b1-2 b1-3)))))
+
+        (display "PAGED_KV AOT COW forks=3 cow_copies=3 shared_blocks=1 prefix_hits=1")
+        (newline)
+
+        ;; 3. Exact Paged GQA Causal Decode Attention parity across all 4 seqs & 2 layers.
+        (let ((seq-ids (make-vector 4 0)))
+          (vector-set! seq-ids 0 seq0)
+          (vector-set! seq-ids 1 seq1)
+          (vector-set! seq-ids 2 seq2)
+          (vector-set! seq-ids 3 seq3)
+          (do ((si 0 (+ si 1)))
+              ((= si 4))
+            (do ((l 0 (+ l 1)))
+                ((= l num-layers))
+              (let ((err (verify-gqa-parity ctx (vector-ref seq-ids si) si l
+                                            (+ (* 31 si) (* 7 l)))))
+                (when (> err global-max-err) (set! global-max-err err))))))
+
+        (display "PAGED_KV AOT GQA_PARITY checks=8 max_abs_err=")
+        (display (number->string global-max-err))
+        (display " status=PASS") (newline)
+
+        ;; 4. Speculative decoding truncation rollback on seq1 (len 9 -> 13 -> 9).
+        (let* ((err-pre (verify-gqa-parity ctx seq1 1 0 555))
+               (bits-pre (capture-out-bits ctx)))
+          (require-check "pre-spec parity" (<= err-pre 0.000001))
+          (do ((t 0 (+ t 1))) ((= t 4))
+            (append-tracked-token ctx seq1 1 (+ 400 t)))
+          (expect-eq "spec-len-13" 13 (kv-seq-len (ffi-pointer ctx) seq1))
+          (expect-eq "spec-used-8" 8 (kv-stat-used (ffi-pointer ctx)))
+          (require-check "spec-parity"
+                         (<= (verify-gqa-parity ctx seq1 1 0 555) 0.000001))
+          (expect-eq "spec-truncate" status-ok
+                     (kv-seq-truncate (ffi-pointer ctx) seq1 9))
+          (vector-set! dense-lens 1 9)
+          (expect-eq "post-trunc-len" 9 (kv-seq-len (ffi-pointer ctx) seq1))
+          (expect-eq "post-trunc-used" 7 (kv-stat-used (ffi-pointer ctx)))
+          (expect-eq "post-trunc-free" 3 (kv-stat-free (ffi-pointer ctx)))
+          (require-check "post-trunc-parity"
+                         (<= (verify-gqa-parity ctx seq1 1 0 555) 0.000001))
+          (verify-out-bits-eq ctx bits-pre "truncate rollback bitwise mismatch")
+          (display "PAGED_KV AOT TRUNCATE from=13 to=9 freed_blocks=1 bitwise_restore=PASS")
+          (newline))
+
+        ;; 5. OOM block exhaustion fail-closed & negative contract checks.
+        (let* ((seq4 (kv-seq-fork (ffi-pointer ctx) seq0))
+               (seq-fill (kv-seq-alloc (ffi-pointer ctx)))
+               (err-s0 (verify-gqa-parity ctx seq0 0 0 777))
+               (s0-bits-before (capture-out-bits ctx)))
+          (require-check "s0-before-oom-parity" (<= err-s0 0.000001))
+          ;; Fill the remaining 3 free blocks (12 tokens) via seq-fill.
+          (do ((t 0 (+ t 1)))
+              ((= t 12))
+            (do ((l 0 (+ l 1))) ((= l num-layers))
+              (do ((h 0 (+ h 1))) ((= h num-kv-heads))
+                (do ((d 0 (+ d 1))) ((= d head-dim))
+                  (expect-eq "fill-k" status-ok
+                             (kv-set-k (ffi-pointer ctx) l h d 0.125))
+                  (expect-eq "fill-v" status-ok
+                             (kv-set-v (ffi-pointer ctx) l h d -0.125)))))
+            (expect-eq "fill-append" status-ok
+                       (kv-append-token (ffi-pointer ctx) seq-fill)))
+          (expect-eq "oom-free-0" 0 (kv-stat-free (ffi-pointer ctx)))
+
+          ;; CoW append on seq4 and boundary append on seq-fill MUST fail with OOM!
+          (expect-eq "oom-cow-append" err-oom-blocks
+                     (kv-append-token (ffi-pointer ctx) seq4))
+          (expect-eq "oom-boundary-append" err-oom-blocks
+                     (kv-append-token (ffi-pointer ctx) seq-fill))
+          (expect-eq "oom-cow-unchanged" 3 (kv-stat-cow-copies (ffi-pointer ctx)))
+          (expect-eq "oom-seq4-len-unchanged" 6 (kv-seq-len (ffi-pointer ctx) seq4))
+          (expect-eq "oom-rc1-unchanged" 2 (kv-block-refcount (ffi-pointer ctx) blk1))
+
+          ;; Verify sibling seq0 attention output is bitwise unchanged!
+          (require-check "s0-after-oom-parity"
+                         (<= (verify-gqa-parity ctx seq0 0 0 777) 0.000001))
+          (verify-out-bits-eq ctx s0-bits-before "sibling mutated on OOM CoW")
+
+          ;; Negative checks: truncate beyond seq_len, fork freed seq, non-finite Q/K.
+          (expect-eq "neg-trunc-beyond" err-invalid-range
+                     (kv-seq-truncate (ffi-pointer ctx) seq0 7))
+          (expect-eq "free-fill" status-ok
+                     (kv-seq-free (ffi-pointer ctx) seq-fill))
+          (expect-eq "neg-fork-freed" err-invalid-seq
+                     (kv-seq-fork (ffi-pointer ctx) seq-fill))
+          (let ((nan-val (/ 0.0 0.0)))
+            (expect-eq "set-nan-q" status-ok (kv-set-q (ffi-pointer ctx) 0 0 nan-val))
+            (expect-eq "neg-nan-q" err-nonfinite
+                       (kv-decode-attn (ffi-pointer ctx) seq0 0 num-q-heads 0.35355339))
+            (expect-eq "restore-q" status-ok (kv-set-q (ffi-pointer ctx) 0 0 0.25))
+            (expect-eq "set-nan-k" status-ok
+                       (kv-set-k (ffi-pointer ctx) 0 0 0 nan-val))
+            (expect-eq "neg-nan-k" err-nonfinite
+                       (kv-append-token (ffi-pointer ctx) seq0))
+            (expect-eq "seq0-len-still-6" 6 (kv-seq-len (ffi-pointer ctx) seq0)))
+
+          (display "PAGED_KV AOT OOM_AND_NEGATIVE status=PASS") (newline)
+
+          ;; 6. Full sequence cleanup: verify free_blocks == total_blocks.
+          (expect-eq "free-s4" status-ok (kv-seq-free (ffi-pointer ctx) seq4))
+          (expect-eq "free-s3" status-ok (kv-seq-free (ffi-pointer ctx) seq3))
+          (expect-eq "free-s2" status-ok (kv-seq-free (ffi-pointer ctx) seq2))
+          (expect-eq "free-s1" status-ok (kv-seq-free (ffi-pointer ctx) seq1))
+          (expect-eq "free-s0" status-ok (kv-seq-free (ffi-pointer ctx) seq0))
+
+          (expect-eq "clean-active-0" 0 (kv-stat-seqs (ffi-pointer ctx)))
+          (expect-eq "clean-used-0" 0 (kv-stat-used (ffi-pointer ctx)))
+          (expect-eq "clean-shared-0" 0 (kv-stat-shared (ffi-pointer ctx)))
+          (expect-eq "clean-prefix-0" 0 (kv-stat-prefix-cached (ffi-pointer ctx)))
+          (expect-eq "clean-free-eq-total"
+                     (kv-stat-total (ffi-pointer ctx))
+                     (kv-stat-free (ffi-pointer ctx)))
+          (display "PAGED_KV AOT CLEANUP free_blocks=")
+          (display (kv-stat-free (ffi-pointer ctx)))
+          (display " total_blocks=")
+          (display (kv-stat-total (ffi-pointer ctx)))
+          (display " status=PASS") (newline))))
+    (kv-destroy (ffi-pointer ctx))))
+
+(run-paged-kv-aot)
