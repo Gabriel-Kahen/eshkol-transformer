@@ -1,0 +1,348 @@
+;;; Compiled Eshkol AOT DeepSeek-V3 Multi-Token Prediction (MTP, D=3) Driver.
+;;; Modes:
+;;;   --mode train12
+;;;     - Negative boundary checks (invalid depth 0/5, short seq T <= D+1,
+;;;       OOB token id, non-finite h0, FP-env trap)
+;;;     - Exhaustive central FD gradient check across main + D=3 sequential
+;;;       MTP heads (including shared E, W_lm, and d_h0, max_err < 1e-5)
+;;;     - 12-step AdamW training demonstrating strictly decreasing L_total,
+;;;       L_main, and L_mtp_avg
+;;;     - Self-speculative D=3 greedy draft-verify bitwise equivalence with
+;;;       step-by-step greedy decode and > 1.0 tokens/step acceptance
+;;;     - Prints canonical 64-hex SHA-256 of (step, params, m, v)
+;;;   --mode resume6 --ckpt PATH
+;;;     - Runs steps 1..6 and saves atomic 0600 ETMT1000 v1.0 checkpoint
+;;;   --mode resume6-cont --ckpt PATH --tmp-dir DIR
+;;;     - Fresh OS process: loads ETMT1000 checkpoint, verifies tamper,
+;;;       truncation, symlink, and config-mismatch rejection without altering
+;;;       live state, runs steps 7..12, and prints final 64-hex SHA-256
+;;;       for bitwise parity verification against train12.
+;;; Compiled with: eshkol-run --strict-types --optimize 0 --no-stdlib
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 mtp-open i64 i64 i64 i64 i64 i64 i64 f64 f64 f64 f64 f64 f64 f64 f64 ptr
+        :real et_mtp_aot_open)
+(extern void mtp-close ptr :real et_mtp_aot_close)
+(extern i32 mtp-init-weights ptr i64 :real et_mtp_aot_init_weights)
+(extern i32 mtp-init-seq ptr i64 :real et_mtp_aot_init_sequence)
+(extern i32 mtp-train-step ptr :real et_mtp_aot_train_step)
+(extern i32 mtp-fd-check ptr f64 :real et_mtp_aot_fd_grad_check)
+(extern i32 mtp-spec-verify ptr :real et_mtp_aot_spec_greedy_verify)
+(extern i32 mtp-save-ckpt ptr char* :real et_mtp_aot_save_checkpoint)
+(extern i32 mtp-load-ckpt ptr char* :real et_mtp_aot_load_checkpoint)
+(extern i32 mtp-compute-digest ptr :real et_mtp_aot_compute_state_digest)
+(extern i32 mtp-digest-byte ptr i64 :real et_mtp_aot_digest_byte)
+
+(extern i32 mtp-probe-bad-depth i64 :real et_mtp_aot_probe_invalid_depth)
+(extern i32 mtp-probe-short-seq ptr i64 :real et_mtp_aot_probe_short_seq)
+(extern i32 mtp-probe-oob-tok ptr :real et_mtp_aot_probe_oob_token)
+(extern i32 mtp-probe-nf-h0 ptr :real et_mtp_aot_probe_nonfinite_h0)
+(extern i32 mtp-probe-fp-env ptr :real et_mtp_aot_probe_fp_env_trap)
+(extern i32 mtp-probe-cfg-mismatch char* i64
+        :real et_mtp_aot_probe_ckpt_config_mismatch)
+(extern i32 mtp-corrupt-byte char* i64 :real et_mtp_aot_corrupt_file_byte)
+(extern i32 mtp-truncate-file char* i64 :real et_mtp_aot_truncate_file)
+(extern i32 mtp-copy-file char* char* :real et_mtp_aot_copy_file)
+(extern i32 mtp-make-symlink char* char* :real et_mtp_aot_make_symlink)
+
+(extern i64 mtp-total-params ptr :real et_mtp_aot_total_params)
+(extern i64 mtp-step ptr :real et_mtp_aot_step)
+(extern f64 mtp-loss-total ptr :real et_mtp_aot_last_loss_total)
+(extern f64 mtp-loss-main ptr :real et_mtp_aot_last_loss_main)
+(extern f64 mtp-loss-mtp-avg ptr :real et_mtp_aot_last_loss_mtp_avg)
+(extern f64 mtp-loss-depth ptr i64 :real et_mtp_aot_last_loss_depth)
+(extern f64 mtp-grad-norm ptr :real et_mtp_aot_last_grad_norm)
+(extern f64 mtp-fd-param-err ptr :real et_mtp_aot_last_fd_param_max_err)
+(extern f64 mtp-fd-h0-err ptr :real et_mtp_aot_last_fd_h0_max_err)
+(extern i64 mtp-fd-checked ptr :real et_mtp_aot_last_fd_checked)
+(extern i64 mtp-spec-exact ptr :real et_mtp_aot_spec_exact_match)
+(extern i64 mtp-spec-emitted ptr :real et_mtp_aot_spec_total_emitted)
+(extern i64 mtp-spec-steps ptr :real et_mtp_aot_spec_verify_steps)
+(extern f64 mtp-spec-tps ptr :real et_mtp_aot_spec_tokens_per_step)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Status codes from mtp_head_abi.h.
+(define st-ok 0)
+(define st-err-unsupported -2)
+(define st-err-shape -3)
+(define st-err-tok-range -4)
+(define st-err-nonfinite -5)
+(define st-err-fp-env -6)
+(define st-err-checksum -11)
+(define st-err-truncated -12)
+(define st-err-config -13)
+(define st-err-symlink -14)
+
+;; Model & training constants (V=16, H=8, F=16, D=3 untied, B=1, T=16).
+(define vocab-size 16)
+(define hidden-dim 8)
+(define ffn-dim 16)
+(define mtp-depth 3)
+(define tie-weights 0)
+(define batch-size 1)
+(define seq-len 16)
+(define rms-eps 1e-6)
+(define lambda-mtp 0.5)
+(define lr-val 0.08)
+(define beta1-val 0.9)
+(define beta2-val 0.999)
+(define eps-val 1e-8)
+(define wd-val 0.01)
+(define max-gn-val 5.0)
+(define weight-seed 20261124)
+(define seq-seed 314159)
+
+(define (require-check label ok)
+  (unless ok
+    (display "MTP AOT FAIL: ") (display label) (newline)
+    (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "MTP AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline)
+    (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "malloc failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define hex-digits "0123456789abcdef")
+
+(define (display-state-digest sess)
+  (expect-status "compute-digest" st-ok
+                 (mtp-compute-digest (ffi-pointer sess)))
+  (do ((i 0 (+ i 1)))
+      ((= i 64))
+    (let ((b (mtp-digest-byte (ffi-pointer sess) i)))
+      (require-check "digest byte valid" (>= b 0))
+      (cond
+        ((and (>= b 48) (<= b 57))
+         (display (string-ref hex-digits (- b 48))))
+        ((and (>= b 97) (<= b 102))
+         (display (string-ref hex-digits (+ 10 (- b 97)))))
+        (else
+         (require-check "non-hex digest byte" #f))))))
+
+(define (open-session)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "mtp-open" st-ok
+                   (mtp-open vocab-size hidden-dim ffn-dim mtp-depth
+                             tie-weights batch-size seq-len rms-eps lambda-mtp
+                             lr-val beta1-val beta2-val eps-val wd-val
+                             max-gn-val (ffi-pointer cell)))
+    (let ((sess (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "non-null session" (not (= (ptr->usize sess) 0)))
+      sess)))
+
+;; CLI flags.
+(define cli-mode "train12")
+(define cli-ckpt "")
+(define cli-tmp-dir "")
+
+(define (parse-args args)
+  (let loop ((rest args))
+    (unless (null? rest)
+      (require-check "flag missing value" (pair? (cdr rest)))
+      (let ((flag (car rest))
+            (val (car (cdr rest))))
+        (cond
+          ((string=? flag "--mode") (set! cli-mode val))
+          ((string=? flag "--ckpt") (set! cli-ckpt val))
+          ((string=? flag "--tmp-dir") (set! cli-tmp-dir val))
+          (else (require-check "unknown CLI flag" #f)))
+        (loop (cdr (cdr rest)))))))
+
+(let ((argv (command-line)))
+  (require-check "missing argv" (pair? argv))
+  (parse-args (cdr argv)))
+
+(define (run-negative-checks sess)
+  (expect-status "invalid depth 0" st-err-unsupported (mtp-probe-bad-depth 0))
+  (expect-status "invalid depth 5" st-err-unsupported (mtp-probe-bad-depth 5))
+  (expect-status "short seq T=D+1=4" st-err-shape
+                 (mtp-probe-short-seq (ffi-pointer sess) 4))
+  (expect-status "short seq T=D=3" st-err-shape
+                 (mtp-probe-short-seq (ffi-pointer sess) 3))
+  (expect-status "oob token id" st-err-tok-range
+                 (mtp-probe-oob-tok (ffi-pointer sess)))
+  (expect-status "nonfinite h0" st-err-nonfinite
+                 (mtp-probe-nf-h0 (ffi-pointer sess)))
+  (expect-status "fp env trap" st-err-fp-env
+                 (mtp-probe-fp-env (ffi-pointer sess)))
+  (display "MTP AOT NEGATIVE PASS") (newline))
+
+(define (run-train12)
+  (let ((sess (open-session)))
+    (expect-status "init-weights" st-ok
+                   (mtp-init-weights (ffi-pointer sess) weight-seed))
+    (expect-status "init-seq" st-ok
+                   (mtp-init-seq (ffi-pointer sess) seq-seed))
+
+    (run-negative-checks sess)
+
+    ;; Exhaustive central FD across main + D=3 MTP heads (all params + h0).
+    (expect-status "fd-check" st-ok
+                   (mtp-fd-check (ffi-pointer sess) 0.00048828125))
+    (let ((perr (mtp-fd-param-err (ffi-pointer sess)))
+          (herr (mtp-fd-h0-err (ffi-pointer sess)))
+          (cnt (mtp-fd-checked (ffi-pointer sess))))
+      (require-check "fd param max_err < 1e-5" (< perr 0.00001))
+      (require-check "fd h0 max_err < 1e-5" (< herr 0.00001))
+      (display "MTP AOT FD_CHECK checked=") (display cnt)
+      (display " params=") (display (mtp-total-params (ffi-pointer sess)))
+      (display " max_param_err=") (display perr)
+      (display " max_h0_err=") (display herr)
+      (display " PASS") (newline))
+
+    ;; 12-step AdamW training demonstrating strictly decreasing losses.
+    (let ((prev-total 1e9)
+          (prev-main 1e9)
+          (prev-mtp 1e9)
+          (init-total 0.0)
+          (final-total 0.0)
+          (init-main 0.0)
+          (final-main 0.0)
+          (init-mtp 0.0)
+          (final-mtp 0.0))
+      (do ((s 0 (+ s 1)))
+          ((= s 12))
+        (expect-status "train-step" st-ok (mtp-train-step (ffi-pointer sess)))
+        (let ((lt (mtp-loss-total (ffi-pointer sess)))
+              (lm (mtp-loss-main (ffi-pointer sess)))
+              (la (mtp-loss-mtp-avg (ffi-pointer sess)))
+              (l1 (mtp-loss-depth (ffi-pointer sess) 0))
+              (l2 (mtp-loss-depth (ffi-pointer sess) 1))
+              (l3 (mtp-loss-depth (ffi-pointer sess) 2))
+              (gn (mtp-grad-norm (ffi-pointer sess))))
+          (require-check "L_total strictly decreasing" (< lt prev-total))
+          (require-check "L_main strictly decreasing" (< lm prev-main))
+          (require-check "L_mtp_avg strictly decreasing" (< la prev-mtp))
+          (when (= s 0)
+            (set! init-total lt)
+            (set! init-main lm)
+            (set! init-mtp la))
+          (set! final-total lt)
+          (set! final-main lm)
+          (set! final-mtp la)
+          (set! prev-total lt)
+          (set! prev-main lm)
+          (set! prev-mtp la)
+          (display "MTP AOT LOSS step=") (display s)
+          (display " total=") (display lt)
+          (display " main=") (display lm)
+          (display " mtp_avg=") (display la)
+          (display " l1=") (display l1)
+          (display " l2=") (display l2)
+          (display " l3=") (display l3)
+          (display " grad_norm=") (display gn)
+          (newline)))
+
+      ;; Self-speculative D=3 greedy draft-verify equivalence & speedup.
+      (expect-status "spec-verify" st-ok (mtp-spec-verify (ffi-pointer sess)))
+      (let ((exact (mtp-spec-exact (ffi-pointer sess)))
+            (emitted (mtp-spec-emitted (ffi-pointer sess)))
+            (vsteps (mtp-spec-steps (ffi-pointer sess)))
+            (tps (mtp-spec-tps (ffi-pointer sess))))
+        (require-check "self-spec greedy exact match" (= exact 1))
+        (require-check "self-spec tokens/step > 1.0" (> tps 1.0))
+        (display "MTP AOT SPEC_VERIFY depth=") (display mtp-depth)
+        (display " exact=") (display exact)
+        (display " emitted=") (display emitted)
+        (display " steps=") (display vsteps)
+        (display " tokens_per_step=") (display tps)
+        (display " PASS") (newline))
+
+      (display "MTP AOT RESULT mode=train12 step=")
+      (display (mtp-step (ffi-pointer sess)))
+      (display " init_total=") (display init-total)
+      (display " final_total=") (display final-total)
+      (display " init_main=") (display init-main)
+      (display " final_main=") (display final-main)
+      (display " init_mtp=") (display init-mtp)
+      (display " final_mtp=") (display final-mtp)
+      (display " sha256=")
+      (display-state-digest sess)
+      (newline))
+
+    (mtp-close (ffi-pointer sess))))
+
+(define (run-resume6)
+  (require-check "missing --ckpt" (> (string-length cli-ckpt) 0))
+  (let ((sess (open-session)))
+    (expect-status "init-weights" st-ok
+                   (mtp-init-weights (ffi-pointer sess) weight-seed))
+    (expect-status "init-seq" st-ok
+                   (mtp-init-seq (ffi-pointer sess) seq-seed))
+    (do ((s 0 (+ s 1)))
+        ((= s 6))
+      (expect-status "train-step" st-ok (mtp-train-step (ffi-pointer sess))))
+    (expect-status "save-ckpt" st-ok
+                   (mtp-save-ckpt (ffi-pointer sess) cli-ckpt))
+    (display "MTP AOT RESUME6_SAVED step=")
+    (display (mtp-step (ffi-pointer sess)))
+    (display " sha256=")
+    (display-state-digest sess)
+    (newline)
+    (mtp-close (ffi-pointer sess))))
+
+(define (run-resume6-cont)
+  (require-check "missing --ckpt" (> (string-length cli-ckpt) 0))
+  (require-check "missing --tmp-dir" (> (string-length cli-tmp-dir) 0))
+  (let ((sess (open-session))
+        (tamper-path (string-append cli-tmp-dir "/tamper.etmt"))
+        (trunc-path (string-append cli-tmp-dir "/trunc.etmt"))
+        (sym-path (string-append cli-tmp-dir "/sym.etmt")))
+    (expect-status "init-seq" st-ok
+                   (mtp-init-seq (ffi-pointer sess) seq-seed))
+
+    ;; Load step-6 ETMT1000 checkpoint in this fresh OS process.
+    (expect-status "load-ckpt" st-ok
+                   (mtp-load-ckpt (ffi-pointer sess) cli-ckpt))
+    (require-check "reloaded step == 6" (= (mtp-step (ffi-pointer sess)) 6))
+
+    ;; Exercise tamper, truncation, symlink, and config-mismatch rejections.
+    (expect-status "copy tamper" st-ok (mtp-copy-file cli-ckpt tamper-path))
+    (expect-status "corrupt byte" st-ok (mtp-corrupt-byte tamper-path 160))
+    (expect-status "tamper rejected" st-err-checksum
+                   (mtp-load-ckpt (ffi-pointer sess) tamper-path))
+
+    (expect-status "copy trunc" st-ok (mtp-copy-file cli-ckpt trunc-path))
+    (expect-status "truncate" st-ok (mtp-truncate-file trunc-path 140))
+    (expect-status "trunc rejected" st-err-truncated
+                   (mtp-load-ckpt (ffi-pointer sess) trunc-path))
+
+    (expect-status "make symlink" st-ok (mtp-make-symlink cli-ckpt sym-path))
+    (expect-status "symlink rejected" st-err-symlink
+                   (mtp-load-ckpt (ffi-pointer sess) sym-path))
+
+    (expect-status "config mismatch rejected" st-err-config
+                   (mtp-probe-cfg-mismatch cli-ckpt 2))
+    (display "MTP AOT CKPT_NEGATIVE PASS") (newline)
+
+    ;; Continue steps 7..12 from reloaded state.
+    (do ((s 6 (+ s 1)))
+        ((= s 12))
+      (expect-status "train-step" st-ok (mtp-train-step (ffi-pointer sess))))
+
+    (display "MTP AOT RESUME_RESULT mode=resume6-cont step=")
+    (display (mtp-step (ffi-pointer sess)))
+    (display " sha256=")
+    (display-state-digest sess)
+    (newline)
+    (mtp-close (ffi-pointer sess))))
+
+(cond
+  ((string=? cli-mode "train12") (run-train12))
+  ((string=? cli-mode "resume6") (run-resume6))
+  ((string=? cli-mode "resume6-cont") (run-resume6-cont))
+  (else (require-check "unknown --mode" #f)))
