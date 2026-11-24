@@ -1,0 +1,328 @@
+;;; Compiled Eshkol AOT Megatron-Style 1D Tensor Parallelism driver:
+;;; - Spawns real multi-process AF_UNIX TP groups for W = 1, 2, 4
+;;; - Verifies exact 1/W per-rank sharded weight memory reduction
+;;; - Runs Full TP Transformer Block (RMSNorm + Head-Sharded Causal GQA + Res +
+;;;   RMSNorm + TP-SwiGLU + Res) forward + backward + 10-step SGD training
+;;; - Proves W = 2 and W = 4 match W = 1 loss, outputs, dX, gradients, and
+;;;   AllGathered final weights to max_abs_err <= 1e-6
+;;; - Verifies exact collective counts (2 fwd AllReduces + 2 bwd AllReduces/block)
+;;; - Runs central finite-difference gradient checks across all 9 block parameter
+;;;   tensors and input X
+;;; - Verifies all 12 fail-closed negative rejections with exact status codes.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 tp-session-create i64 i64 i64 i64 i64 i64 i64 i64 f64 ptr
+        :real et_tp_aot_session_create)
+(extern void tp-session-destroy ptr :real et_tp_aot_session_destroy)
+
+(extern i32 tp-forward ptr :real et_tp_aot_forward)
+(extern f64 tp-mse-loss ptr :real et_tp_aot_mse_loss)
+(extern i32 tp-backward ptr :real et_tp_aot_backward)
+(extern i32 tp-sgd-step ptr f64 :real et_tp_aot_sgd_step)
+(extern i32 tp-gather-weights ptr :real et_tp_aot_gather_weights)
+(extern i32 tp-gather-grads ptr :real et_tp_aot_gather_grads)
+
+(extern i64 tp-allreduce-calls ptr :real et_tp_aot_allreduce_calls)
+(extern i64 tp-ipc-allreduce-calls ptr :real et_tp_aot_ipc_allreduce_calls)
+(extern i64 tp-allgather-calls ptr :real et_tp_aot_allgather_calls)
+(extern i64 tp-ipc-allgather-calls ptr :real et_tp_aot_ipc_allgather_calls)
+(extern i64 tp-full-sharded-bytes ptr :real et_tp_aot_full_sharded_weight_bytes)
+(extern i64 tp-rank-sharded-bytes ptr :real et_tp_aot_rank_sharded_weight_bytes)
+(extern i64 tp-replicated-bytes ptr :real et_tp_aot_replicated_weight_bytes)
+
+(extern i64 tp-param-count ptr i64 :real et_tp_aot_param_count)
+(extern f64 tp-get-input ptr i64 :real et_tp_aot_get_input)
+(extern i32 tp-set-input ptr i64 f64 :real et_tp_aot_set_input)
+(extern f64 tp-get-dx ptr i64 :real et_tp_aot_get_dx)
+(extern f64 tp-get-weight ptr i64 i64 :real et_tp_aot_get_weight)
+(extern i32 tp-set-weight ptr i64 i64 f64 :real et_tp_aot_set_weight)
+(extern f64 tp-get-gathered-grad ptr i64 i64 :real et_tp_aot_get_gathered_grad)
+
+(extern f64 tp-max-output-diff ptr ptr :real et_tp_aot_max_output_diff)
+(extern f64 tp-max-dx-diff ptr ptr :real et_tp_aot_max_dx_diff)
+(extern f64 tp-max-grad-diff ptr ptr :real et_tp_aot_max_grad_diff)
+(extern f64 tp-max-weight-diff ptr ptr :real et_tp_aot_max_weight_diff)
+
+(extern i32 tp-check-negative i64 :real et_tp_aot_check_negative_case)
+
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Block geometry: B=2, T=4, D=32, F=32, H_q=8, H_kv=4, D_h=4, eps=1e-5.
+;; True GQA (group_ratio=2) divisible across W = 1, 2, 4.
+(define cfg-batch 2)
+(define cfg-seq-len 4)
+(define cfg-d-model 32)
+(define cfg-d-ff 32)
+(define cfg-num-q-heads 8)
+(define cfg-num-kv-heads 4)
+(define cfg-head-dim 4)
+(define cfg-rms-eps 0.00001)
+(define train-steps 10)
+(define learning-rate 0.8)
+(define parity-tol 0.000001)
+
+;; ABI status constants from tensor_parallel_abi.h.
+(define status-ok 0)
+(define err-invalid-arg -1)
+(define err-divisibility -3)
+(define err-alias -4)
+(define err-alignment -5)
+(define err-nonfinite -6)
+(define err-timeout -9)
+(define err-peer-disconnected -10)
+
+(define (abs-f64 x)
+  (if (< x 0.0) (- 0.0 x) x))
+
+(define (max-f64 a b)
+  (if (> a b) a b))
+
+(define (require-check label ok)
+  (unless ok
+    (display "TP AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "TP AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "malloc failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-session world)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "session-create" status-ok
+                   (tp-session-create world cfg-batch cfg-seq-len cfg-d-model
+                                      cfg-d-ff cfg-num-q-heads cfg-num-kv-heads
+                                      cfg-head-dim cfg-rms-eps
+                                      (ffi-pointer cell)))
+    (let ((s (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null session" (not (= (ptr->usize s) 0)))
+      s)))
+
+;; 1. Spawn W=1, W=2, W=4 sessions (real AF_UNIX multi-process for W=2, 4).
+(define s1 (create-session 1))
+(define s2 (create-session 2))
+(define s4 (create-session 4))
+
+;; 2. Verify exact 1/W per-rank sharded weight memory reduction.
+(define full-bytes (tp-full-sharded-bytes (ffi-pointer s1)))
+(define bytes-w1 (tp-rank-sharded-bytes (ffi-pointer s1)))
+(define bytes-w2 (tp-rank-sharded-bytes (ffi-pointer s2)))
+(define bytes-w4 (tp-rank-sharded-bytes (ffi-pointer s4)))
+(define rep-bytes (tp-replicated-bytes (ffi-pointer s1)))
+(require-check "full bytes 24576" (= full-bytes 24576))
+(require-check "w1 sharded bytes" (= bytes-w1 full-bytes))
+(require-check "w2 exact 1/2 sharded bytes" (= (* bytes-w2 2) full-bytes))
+(require-check "w4 exact 1/4 sharded bytes" (= (* bytes-w4 4) full-bytes))
+(require-check "replicated gamma bytes" (= rep-bytes 256))
+
+(display "TP AOT MEMORY full_sharded=") (display full-bytes)
+(display " w1=") (display bytes-w1)
+(display " w2=") (display bytes-w2)
+(display " w4=") (display bytes-w4)
+(display " replicated=") (display rep-bytes)
+(display " PASS") (newline)
+
+;; 3. Run 10-step SGD training across W=1, W=2, W=4 and prove parity <= 1e-6.
+(define init-loss 0.0)
+(define final-loss 0.0)
+(define prev-loss 1000000000.0)
+(define max-loss-err-w2 0.0)
+(define max-loss-err-w4 0.0)
+(define max-out-err-w2 0.0)
+(define max-out-err-w4 0.0)
+(define max-dx-err-w2 0.0)
+(define max-dx-err-w4 0.0)
+(define max-grad-err-w2 0.0)
+(define max-grad-err-w4 0.0)
+
+(do ((step 0 (+ step 1)))
+    ((= step train-steps))
+  (expect-status "fwd w1" status-ok (tp-forward (ffi-pointer s1)))
+  (expect-status "fwd w2" status-ok (tp-forward (ffi-pointer s2)))
+  (expect-status "fwd w4" status-ok (tp-forward (ffi-pointer s4)))
+
+  ;; Exact 2 forward AllReduces per block per step.
+  (let ((expected-fwd-ar (+ (* step 4) 2)))
+    (require-check "w1 fwd ar" (= (tp-allreduce-calls (ffi-pointer s1)) expected-fwd-ar))
+    (require-check "w2 fwd ar" (= (tp-allreduce-calls (ffi-pointer s2)) expected-fwd-ar))
+    (require-check "w4 fwd ar" (= (tp-allreduce-calls (ffi-pointer s4)) expected-fwd-ar))
+    (require-check "w1 ipc ar 0" (= (tp-ipc-allreduce-calls (ffi-pointer s1)) 0))
+    (require-check "w2 ipc fwd ar" (= (tp-ipc-allreduce-calls (ffi-pointer s2)) expected-fwd-ar))
+    (require-check "w4 ipc fwd ar" (= (tp-ipc-allreduce-calls (ffi-pointer s4)) expected-fwd-ar)))
+
+  (let ((l1 (tp-mse-loss (ffi-pointer s1)))
+        (l2 (tp-mse-loss (ffi-pointer s2)))
+        (l4 (tp-mse-loss (ffi-pointer s4)))
+        (oe2 (tp-max-output-diff (ffi-pointer s1) (ffi-pointer s2)))
+        (oe4 (tp-max-output-diff (ffi-pointer s1) (ffi-pointer s4))))
+    (let ((le2 (abs-f64 (- l1 l2)))
+          (le4 (abs-f64 (- l1 l4))))
+      (require-check "loss strictly decreases" (< l1 prev-loss))
+      (require-check "w2 loss parity <= 1e-6" (<= le2 parity-tol))
+      (require-check "w4 loss parity <= 1e-6" (<= le4 parity-tol))
+      (require-check "w2 output parity <= 1e-6" (<= oe2 parity-tol))
+      (require-check "w4 output parity <= 1e-6" (<= oe4 parity-tol))
+      (if (= step 0) (set! init-loss l1) 0)
+      (set! final-loss l1)
+      (set! prev-loss l1)
+      (set! max-loss-err-w2 (max-f64 max-loss-err-w2 le2))
+      (set! max-loss-err-w4 (max-f64 max-loss-err-w4 le4))
+      (set! max-out-err-w2 (max-f64 max-out-err-w2 oe2))
+      (set! max-out-err-w4 (max-f64 max-out-err-w4 oe4))
+      (display "TP AOT STEP ") (display step)
+      (display " loss=") (display l1)
+      (display " w2_out_err=") (display oe2)
+      (display " w4_out_err=") (display oe4) (newline)))
+
+  (expect-status "bwd w1" status-ok (tp-backward (ffi-pointer s1)))
+  (expect-status "bwd w2" status-ok (tp-backward (ffi-pointer s2)))
+  (expect-status "bwd w4" status-ok (tp-backward (ffi-pointer s4)))
+
+  ;; Exact 2 backward AllReduces per block per step (4 total per step).
+  (let ((expected-bwd-ar (* (+ step 1) 4)))
+    (require-check "w1 bwd ar" (= (tp-allreduce-calls (ffi-pointer s1)) expected-bwd-ar))
+    (require-check "w2 bwd ar" (= (tp-allreduce-calls (ffi-pointer s2)) expected-bwd-ar))
+    (require-check "w4 bwd ar" (= (tp-allreduce-calls (ffi-pointer s4)) expected-bwd-ar))
+    (require-check "w2 ipc bwd ar" (= (tp-ipc-allreduce-calls (ffi-pointer s2)) expected-bwd-ar))
+    (require-check "w4 ipc bwd ar" (= (tp-ipc-allreduce-calls (ffi-pointer s4)) expected-bwd-ar)))
+
+  (let ((dxe2 (tp-max-dx-diff (ffi-pointer s1) (ffi-pointer s2)))
+        (dxe4 (tp-max-dx-diff (ffi-pointer s1) (ffi-pointer s4))))
+    (require-check "w2 dx parity <= 1e-6" (<= dxe2 parity-tol))
+    (require-check "w4 dx parity <= 1e-6" (<= dxe4 parity-tol))
+    (set! max-dx-err-w2 (max-f64 max-dx-err-w2 dxe2))
+    (set! max-dx-err-w4 (max-f64 max-dx-err-w4 dxe4)))
+
+  (when (or (= step 0) (= step (- train-steps 1)))
+    (expect-status "gather grads w1" status-ok (tp-gather-grads (ffi-pointer s1)))
+    (expect-status "gather grads w2" status-ok (tp-gather-grads (ffi-pointer s2)))
+    (expect-status "gather grads w4" status-ok (tp-gather-grads (ffi-pointer s4)))
+    (let ((ge2 (tp-max-grad-diff (ffi-pointer s1) (ffi-pointer s2)))
+          (ge4 (tp-max-grad-diff (ffi-pointer s1) (ffi-pointer s4))))
+      (require-check "w2 grad parity <= 1e-6" (<= ge2 parity-tol))
+      (require-check "w4 grad parity <= 1e-6" (<= ge4 parity-tol))
+      (set! max-grad-err-w2 (max-f64 max-grad-err-w2 ge2))
+      (set! max-grad-err-w4 (max-f64 max-grad-err-w4 ge4))))
+
+  (expect-status "sgd w1" status-ok (tp-sgd-step (ffi-pointer s1) learning-rate))
+  (expect-status "sgd w2" status-ok (tp-sgd-step (ffi-pointer s2) learning-rate))
+  (expect-status "sgd w4" status-ok (tp-sgd-step (ffi-pointer s4) learning-rate)))
+
+;; Final weight AllGather parity across W=1, W=2, W=4.
+(expect-status "gather weights w1" status-ok (tp-gather-weights (ffi-pointer s1)))
+(expect-status "gather weights w2" status-ok (tp-gather-weights (ffi-pointer s2)))
+(expect-status "gather weights w4" status-ok (tp-gather-weights (ffi-pointer s4)))
+(define w-err-w2 (tp-max-weight-diff (ffi-pointer s1) (ffi-pointer s2)))
+(define w-err-w4 (tp-max-weight-diff (ffi-pointer s1) (ffi-pointer s4)))
+(require-check "w2 final weight parity <= 1e-6" (<= w-err-w2 parity-tol))
+(require-check "w4 final weight parity <= 1e-6" (<= w-err-w4 parity-tol))
+
+;; Exact collective counts: 40 AllReduces (20 fwd + 20 bwd) and 21 AllGathers
+;; (7 sharded weights x 2 grad gathers + 1 final weight gather).
+(define total-ar-w2 (tp-ipc-allreduce-calls (ffi-pointer s2)))
+(define total-ar-w4 (tp-ipc-allreduce-calls (ffi-pointer s4)))
+(define total-ag-w2 (tp-ipc-allgather-calls (ffi-pointer s2)))
+(define total-ag-w4 (tp-ipc-allgather-calls (ffi-pointer s4)))
+(require-check "total ipc ar w2 == 40" (= total-ar-w2 40))
+(require-check "total ipc ar w4 == 40" (= total-ar-w4 40))
+(require-check "total ipc ag w2 == 21" (= total-ag-w2 21))
+(require-check "total ipc ag w4 == 21" (= total-ag-w4 21))
+
+(display "TP AOT TRAIN steps=10 init_loss=") (display init-loss)
+(display " final_loss=") (display final-loss)
+(display " w2_max_w_err=") (display w-err-w2)
+(display " w4_max_w_err=") (display w-err-w4)
+(display " w2_max_g_err=") (display max-grad-err-w2)
+(display " w4_max_g_err=") (display max-grad-err-w4)
+(display " ipc_ar=") (display total-ar-w4)
+(display " ipc_ag=") (display total-ag-w4)
+(display " PASS") (newline)
+
+;; 4. Central Finite-Difference Gradient Checks across all 9 parameters + X.
+(expect-status "fd fwd" status-ok (tp-forward (ffi-pointer s1)))
+(define fd-base-loss (tp-mse-loss (ffi-pointer s1)))
+(require-check "fd base loss >= 0" (>= fd-base-loss 0.0))
+(expect-status "fd bwd" status-ok (tp-backward (ffi-pointer s1)))
+(expect-status "fd gather grads" status-ok (tp-gather-grads (ffi-pointer s1)))
+
+(define fd-h 0.001)
+(define fd-tol 0.0005)
+(define max-fd-err 0.0)
+(define fd-checks 0)
+
+(do ((p 0 (+ p 1)))
+    ((= p 9))
+  (let* ((n (tp-param-count (ffi-pointer s1) p))
+         (idx (modulo (* (+ p 1) 13) n))
+         (analytic (tp-get-gathered-grad (ffi-pointer s1) p idx))
+         (orig (tp-get-weight (ffi-pointer s1) p idx)))
+    (expect-status "fd set +" status-ok
+                   (tp-set-weight (ffi-pointer s1) p idx (+ orig fd-h)))
+    (expect-status "fd fwd +" status-ok (tp-forward (ffi-pointer s1)))
+    (let ((lp (tp-mse-loss (ffi-pointer s1))))
+      (expect-status "fd set -" status-ok
+                     (tp-set-weight (ffi-pointer s1) p idx (- orig fd-h)))
+      (expect-status "fd fwd -" status-ok (tp-forward (ffi-pointer s1)))
+      (let ((lm (tp-mse-loss (ffi-pointer s1))))
+        (expect-status "fd restore" status-ok
+                       (tp-set-weight (ffi-pointer s1) p idx orig))
+        (let* ((fd (/ (- lp lm) (* 2.0 fd-h)))
+               (err (abs-f64 (- fd analytic))))
+          (require-check "param fd err" (<= err fd-tol))
+          (set! max-fd-err (max-f64 max-fd-err err))
+          (set! fd-checks (+ fd-checks 1)))))))
+
+;; Central FD check on input X.
+(let* ((idx 17)
+       (analytic (tp-get-dx (ffi-pointer s1) idx))
+       (orig (tp-get-input (ffi-pointer s1) idx)))
+  (expect-status "fd x +" status-ok
+                 (tp-set-input (ffi-pointer s1) idx (+ orig fd-h)))
+  (expect-status "fd x fwd +" status-ok (tp-forward (ffi-pointer s1)))
+  (let ((lp (tp-mse-loss (ffi-pointer s1))))
+    (expect-status "fd x -" status-ok
+                   (tp-set-input (ffi-pointer s1) idx (- orig fd-h)))
+    (expect-status "fd x fwd -" status-ok (tp-forward (ffi-pointer s1)))
+    (let ((lm (tp-mse-loss (ffi-pointer s1))))
+      (expect-status "fd x restore" status-ok
+                     (tp-set-input (ffi-pointer s1) idx orig))
+      (let* ((fd (/ (- lp lm) (* 2.0 fd-h)))
+             (err (abs-f64 (- fd analytic))))
+        (require-check "input x fd err" (<= err fd-tol))
+        (set! max-fd-err (max-f64 max-fd-err err))
+        (set! fd-checks (+ fd-checks 1))))))
+
+(display "TP AOT FD checks=") (display fd-checks)
+(display " max_err=") (display max-fd-err)
+(display " PASS") (newline)
+
+;; 5. Fail-closed negative validation cases (12 cases).
+(expect-status "neg world=3" err-invalid-arg (tp-check-negative 0))
+(expect-status "neg col out%w" err-divisibility (tp-check-negative 1))
+(expect-status "neg row in%w" err-divisibility (tp-check-negative 2))
+(expect-status "neg swiglu dff%w" err-divisibility (tp-check-negative 3))
+(expect-status "neg gqa hq%w" err-divisibility (tp-check-negative 4))
+(expect-status "neg gqa hkv%w" err-divisibility (tp-check-negative 5))
+(expect-status "neg gqa hq%hkv" err-divisibility (tp-check-negative 6))
+(expect-status "neg nonfinite" err-nonfinite (tp-check-negative 7))
+(expect-status "neg alignment" err-alignment (tp-check-negative 8))
+(expect-status "neg alias" err-alias (tp-check-negative 9))
+(expect-status "neg timeout" err-timeout (tp-check-negative 10))
+(expect-status "neg disconnect" err-peer-disconnected (tp-check-negative 11))
+
+(display "TP AOT NEGATIVE PASS checks=12") (newline)
+
+;; 6. Clean teardown of all sessions and worker processes.
+(tp-session-destroy (ffi-pointer s1))
+(tp-session-destroy (ffi-pointer s2))
+(tp-session-destroy (ffi-pointer s4))
