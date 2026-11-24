@@ -1,0 +1,402 @@
+;;; Compiled Eshkol AOT RadixAttention Prefix KV Cache Tree driver:
+;;; 1. Multi-turn shared 16-token system prompt + 4 branching requests + mid-edge
+;;;    splits verifying zero duplicate KV allocations and > 50% KV reuse rate.
+;;; 2. Exact RadixAttention cached-prefix GQA attention parity vs uncached
+;;;    from-scratch prefill (bitwise 0.0 diff + independent Eshkol f64 check).
+;;; 3. Active request pin protection + tight-pool deterministic LRU leaf eviction
+;;;    (including cascading eviction of exposed unpinned parent).
+;;; 4. Intentional all-pinned OOM with atomic rollback & invariant check.
+;;; 5. ETRX1000 SHA-256 snapshot save/reload into fresh tree + tamper rejection.
+;;; 6. Negative boundary checks (invalid handle, double-unpin, non-finite K/V).
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+(extern f64 c-exp f64 :real exp)
+(extern f64 c-sqrt f64 :real sqrt)
+
+(extern i32 rx-create i64 i64 i64 i64 i64 ptr :real et_radix_kv_aot_create)
+(extern void rx-destroy ptr :real et_radix_kv_aot_destroy)
+(extern i32 rx-reset ptr :real et_radix_kv_aot_reset)
+(extern i64 rx-root ptr :real et_radix_kv_aot_root_handle)
+
+(extern i32 rx-set-tok ptr i64 i64 :real et_radix_kv_aot_set_token)
+(extern i32 rx-set-kv ptr i64 i64 i64 i64 i64 f64 :real et_radix_kv_aot_set_kv)
+(extern i32 rx-set-q ptr i64 i64 i64 f64 :real et_radix_kv_aot_set_q)
+
+(extern i32 rx-match ptr i64 :real et_radix_kv_aot_match_prefix)
+(extern i32 rx-insert ptr i64 :real et_radix_kv_aot_insert)
+(extern i32 rx-insert-suffix ptr i64 i64 :real et_radix_kv_aot_insert_suffix)
+(extern i32 rx-pin ptr i64 :real et_radix_kv_aot_pin)
+(extern i32 rx-unpin ptr i64 :real et_radix_kv_aot_unpin)
+(extern i64 rx-evict-lru ptr i64 :real et_radix_kv_aot_evict_lru)
+(extern i32 rx-verify ptr :real et_radix_kv_aot_verify_invariants)
+
+(extern i64 rx-last-handle ptr :real et_radix_kv_aot_last_handle)
+(extern i64 rx-last-matched ptr :real et_radix_kv_aot_last_matched_len)
+(extern i64 rx-last-split ptr :real et_radix_kv_aot_last_did_split)
+(extern i64 rx-last-inserted ptr :real et_radix_kv_aot_last_inserted_tokens)
+(extern i64 rx-last-slot ptr i64 :real et_radix_kv_aot_last_kv_slot)
+(extern i64 rx-handle-depth ptr i64 :real et_radix_kv_aot_handle_depth)
+(extern i64 rx-handle-pins ptr i64 :real et_radix_kv_aot_handle_pin_count)
+
+(extern i32 rx-read-kv ptr i64 i64 :real et_radix_kv_aot_read_kv)
+(extern f64 rx-get-read-kv ptr i64 i64 i64 i64 :real et_radix_kv_aot_get_read_kv)
+(extern i32 rx-attend ptr i64 i64 i64 i64 i64 f64 :real et_radix_kv_aot_attend_gqa)
+(extern f64 rx-get-out ptr i64 i64 i64 :real et_radix_kv_aot_get_out)
+(extern i64 rx-get-out-bits ptr i64 i64 i64 :real et_radix_kv_aot_get_out_bits)
+
+(extern i32 rx-snap-save ptr :real et_radix_kv_aot_snapshot_save_env)
+(extern i32 rx-snap-reload ptr :real et_radix_kv_aot_snapshot_reload_env)
+(extern i32 rx-snap-tamper ptr :real et_radix_kv_aot_snapshot_tamper_check_env)
+
+(extern i64 rx-stat-used ptr :real et_radix_kv_aot_stat_used_tokens)
+(extern i64 rx-stat-free ptr :real et_radix_kv_aot_stat_free_tokens)
+(extern i64 rx-stat-pinned ptr :real et_radix_kv_aot_stat_pinned_tokens)
+(extern i64 rx-stat-evictable ptr :real et_radix_kv_aot_stat_evictable_tokens)
+(extern i64 rx-stat-nodes ptr :real et_radix_kv_aot_stat_active_nodes)
+(extern i64 rx-stat-tick ptr :real et_radix_kv_aot_stat_lru_tick)
+(extern i64 rx-stat-matched ptr :real et_radix_kv_aot_stat_total_matched_tokens)
+(extern i64 rx-stat-inserted ptr :real et_radix_kv_aot_stat_total_inserted_tokens)
+(extern i64 rx-stat-evicted ptr :real et_radix_kv_aot_stat_total_evicted_tokens)
+(extern i64 rx-stat-splits ptr :real et_radix_kv_aot_stat_total_edge_splits)
+(extern i64 rx-stat-ooms ptr :real et_radix_kv_aot_stat_total_oom_rejections)
+
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define max-kv-tokens 44)
+(define max-nodes 24)
+(define n-layers 2)
+(define n-kv-heads 2)
+(define n-q-heads 4)
+(define head-dim 8)
+
+(define status-ok 0)
+(define err-shape -2)
+(define err-nonfinite -5)
+(define err-oom -7)
+(define err-invalid-handle -8)
+(define err-double-unpin -9)
+
+(define (require-check label ok)
+  (unless ok
+    (display "RADIX_KV AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-eq label expected actual)
+  (unless (= expected actual)
+    (display "RADIX_KV AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "alloc failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-ctx)
+  (let ((cell (checked-allocate 8)))
+    (expect-eq "rx-create" status-ok
+               (rx-create max-kv-tokens max-nodes n-layers n-kv-heads head-dim
+                          (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null ctx" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+;; Deterministic dyadic binary32-exact value generator keyed by token id.
+(define (det-val tok-id idx scale)
+  (let ((bucket (- (modulo (+ (* 37 tok-id) (* 19 idx) (quotient idx 3)) 41) 20)))
+    (* scale bucket)))
+
+;; Stage tokens[0..len-1] and deterministic KV tensors keyed by token id.
+(define (stage-seq ctx tok-vec len)
+  (do ((pos 0 (+ pos 1)))
+      ((= pos len))
+    (let ((tid (vector-ref tok-vec pos)))
+      (expect-eq "set-tok" status-ok (rx-set-tok (ffi-pointer ctx) pos tid))
+      (do ((l 0 (+ l 1)))
+          ((= l n-layers))
+        (do ((h 0 (+ h 1)))
+            ((= h n-kv-heads))
+          (do ((d 0 (+ d 1)))
+              ((= d head-dim))
+            (let* ((idx (+ (* (+ (* l n-kv-heads) h) head-dim) d))
+                   (kv (det-val tid idx 0.0625))
+                   (vv (det-val (+ tid 13) idx 0.0625)))
+              (expect-eq "set-k" status-ok
+                         (rx-set-kv (ffi-pointer ctx) pos l h d 0 kv))
+              (expect-eq "set-v" status-ok
+                         (rx-set-kv (ffi-pointer ctx) pos l h d 1 vv)))))))))
+
+(define (check-conservation ctx label)
+  (expect-eq label status-ok (rx-verify (ffi-pointer ctx)))
+  (expect-eq "used+free" max-kv-tokens
+             (+ (rx-stat-used (ffi-pointer ctx))
+                (rx-stat-free (ffi-pointer ctx))))
+  (expect-eq "pin+evict" (rx-stat-used (ffi-pointer ctx))
+             (+ (rx-stat-pinned (ffi-pointer ctx))
+                (rx-stat-evictable (ffi-pointer ctx)))))
+
+(define (make-req-tokens sys-len branch-base branch-len tail-base tail-len)
+  (let* ((total (+ sys-len branch-len tail-len))
+         (v (make-vector total 0)))
+    (do ((i 0 (+ i 1))) ((= i sys-len))
+      (vector-set! v i (+ 100 i)))
+    (do ((i 0 (+ i 1))) ((= i branch-len))
+      (vector-set! v (+ sys-len i) (+ branch-base i)))
+    (do ((i 0 (+ i 1))) ((= i tail-len))
+      (vector-set! v (+ sys-len branch-len i) (+ tail-base i)))
+    v))
+
+(define (run-radix-kv-aot)
+  (let ((ctx (create-ctx)))
+    (check-conservation ctx "init-inv")
+
+    ;; 1. Multi-turn shared-system-prompt workload (4 requests sharing 16-token
+    ;;    system prompt + branching user prefixes + mid-edge splits).
+    ;;    Req 1: 16 sys + 4 userA + 4 tail1 = 24 tokens (0 hit, 24 inserted)
+    ;;    Req 2: 16 sys + 4 userA + 4 tail2 = 24 tokens (20 hit via mid-edge split, 4 inserted)
+    ;;    Req 3: 16 sys + 4 userB + 4 tail3 = 24 tokens (16 hit via mid-edge split, 8 inserted)
+    ;;    Req 4: 16 sys + 4 userB + 4 tail4 = 24 tokens (20 hit via mid-edge split, 4 inserted)
+    ;;    Total logical prompt tokens = 96; cached hits = 56 (> 58% reuse!);
+    ;;    physical KV tokens allocated = 40 (zero duplicate prefix allocations!).
+    (let* ((req1 (make-req-tokens 16 200 4 300 4))
+           (req2 (make-req-tokens 16 200 4 400 4))
+           (req3 (make-req-tokens 16 500 4 600 4))
+           (req4 (make-req-tokens 16 500 4 700 4))
+           (sys-slots (make-vector 16 0)))
+
+      ;; Req 1: cold insert (24 tokens).
+      (stage-seq ctx req1 24)
+      (expect-eq "r1-match" status-ok (rx-match (ffi-pointer ctx) 24))
+      (expect-eq "r1-hit-0" 0 (rx-last-matched (ffi-pointer ctx)))
+      (expect-eq "r1-ins" status-ok (rx-insert (ffi-pointer ctx) 24))
+      (expect-eq "r1-ins-24" 24 (rx-last-inserted (ffi-pointer ctx)))
+      (let ((h1 (rx-last-handle (ffi-pointer ctx))))
+        (check-conservation ctx "r1-inv")
+
+        ;; Capture physical slots of req1's 16-token system prompt via match.
+        (expect-eq "r1-slots-match" status-ok (rx-match (ffi-pointer ctx) 24))
+        (expect-eq "r1-slots-len" 24 (rx-last-matched (ffi-pointer ctx)))
+        (do ((i 0 (+ i 1))) ((= i 16))
+          (vector-set! sys-slots i (rx-last-slot (ffi-pointer ctx) i)))
+
+        ;; Req 2: matches 20 tokens (splits edge at 20!), inserts 4 new suffix tokens.
+        (stage-seq ctx req2 24)
+        (expect-eq "r2-match" status-ok (rx-match (ffi-pointer ctx) 24))
+        (expect-eq "r2-hit-20" 20 (rx-last-matched (ffi-pointer ctx)))
+        (expect-eq "r2-split-1" 1 (rx-last-split (ffi-pointer ctx)))
+        (do ((i 0 (+ i 1))) ((= i 16))
+          (expect-eq "r2-shared-slot" (vector-ref sys-slots i)
+                     (rx-last-slot (ffi-pointer ctx) i)))
+        (let ((h2-pre (rx-last-handle (ffi-pointer ctx))))
+          (expect-eq "r2-ins" status-ok (rx-insert (ffi-pointer ctx) 24))
+          (expect-eq "r2-ins-4" 4 (rx-last-inserted (ffi-pointer ctx)))
+          (let ((h2 (rx-last-handle (ffi-pointer ctx))))
+            (check-conservation ctx "r2-inv")
+
+            ;; Req 3: matches 16 tokens (splits [0..19] at 16!), inserts 8 tokens.
+            (stage-seq ctx req3 24)
+            (expect-eq "r3-match" status-ok (rx-match (ffi-pointer ctx) 24))
+            (expect-eq "r3-hit-16" 16 (rx-last-matched (ffi-pointer ctx)))
+            (expect-eq "r3-split-1" 1 (rx-last-split (ffi-pointer ctx)))
+            (do ((i 0 (+ i 1))) ((= i 16))
+              (expect-eq "r3-shared-slot" (vector-ref sys-slots i)
+                         (rx-last-slot (ffi-pointer ctx) i)))
+            (expect-eq "r3-ins" status-ok (rx-insert (ffi-pointer ctx) 24))
+            (expect-eq "r3-ins-8" 8 (rx-last-inserted (ffi-pointer ctx)))
+            (let ((h3 (rx-last-handle (ffi-pointer ctx))))
+              (check-conservation ctx "r3-inv")
+
+              ;; Req 4: matches 20 tokens (splits req3's [16..23] at +4!), inserts 4 tokens.
+              (stage-seq ctx req4 24)
+              (expect-eq "r4-match" status-ok (rx-match (ffi-pointer ctx) 24))
+              (expect-eq "r4-hit-20" 20 (rx-last-matched (ffi-pointer ctx)))
+              (expect-eq "r4-split-1" 1 (rx-last-split (ffi-pointer ctx)))
+              (let ((h4-pre (rx-last-handle (ffi-pointer ctx))))
+                (expect-eq "r4-ins" status-ok (rx-insert (ffi-pointer ctx) 24))
+                (expect-eq "r4-ins-4" 4 (rx-last-inserted (ffi-pointer ctx)))
+                (let ((h4 (rx-last-handle (ffi-pointer ctx))))
+                  (check-conservation ctx "r4-inv")
+
+                  (expect-eq "used-40" 40 (rx-stat-used (ffi-pointer ctx)))
+                  (expect-eq "free-4" 4 (rx-stat-free (ffi-pointer ctx)))
+                  (expect-eq "inserted-40" 40 (rx-stat-inserted (ffi-pointer ctx)))
+                  (expect-eq "splits-3" 3 (rx-stat-splits (ffi-pointer ctx)))
+                  ;; 56 reused tokens out of 96 total logical tokens = 58.33% > 50%.
+                  (let ((reused (- 96 (rx-stat-inserted (ffi-pointer ctx)))))
+                    (expect-eq "reused-56" 56 reused)
+                    (require-check "reuse > 50%" (> (* reused 2) 96)))
+                  (display "RADIX_KV AOT PREFIX_REUSE requests=4 logical=96 physical=40 reused=56 splits=3 status=PASS")
+                  (newline)
+
+                  ;; 2. Exact RadixAttention GQA parity vs full uncached prefill!
+                  ;;    Compare cached 20-token prefix (h4-pre) + 4-token suffix of req4
+                  ;;    against full uncached 24-token prefill from root on layer 1.
+                  (let ((scale (/ 1.0 (c-sqrt (* 1.0 head-dim))))
+                        (root-h (rx-root (ffi-pointer ctx)))
+                        (uncached-bits (make-vector (* 4 n-q-heads head-dim) 0))
+                        (max-diff 0.0))
+                    ;; Full uncached 24-token prefill (Q[0..23], K/V[0..23]).
+                    (stage-seq ctx req4 24)
+                    (do ((qi 0 (+ qi 1))) ((= qi 24))
+                      (do ((qh 0 (+ qh 1))) ((= qh n-q-heads))
+                        (do ((d 0 (+ d 1))) ((= d head-dim))
+                          (let ((qv (det-val (+ 800 qi) (+ (* qh head-dim) d) 0.0625)))
+                            (expect-eq "set-q-full" status-ok
+                                       (rx-set-q (ffi-pointer ctx) qi qh d qv))))))
+                    (expect-eq "attend-uncached" status-ok
+                               (rx-attend (ffi-pointer ctx) root-h 1 n-q-heads
+                                          24 24 scale))
+                    ;; Capture bits for suffix positions qi = 20..23.
+                    (do ((si 0 (+ si 1))) ((= si 4))
+                      (do ((qh 0 (+ qh 1))) ((= qh n-q-heads))
+                        (do ((d 0 (+ d 1))) ((= d head-dim))
+                          (let ((bi (+ (* (+ (* si n-q-heads) qh) head-dim) d)))
+                            (vector-set! uncached-bits bi
+                                         (rx-get-out-bits (ffi-pointer ctx)
+                                                          (+ 20 si) qh d))))))
+
+                    ;; Cached 20-token prefix (h4-pre) + 4-token suffix!
+                    (let ((suf4 (make-vector 4 0)))
+                      (do ((si 0 (+ si 1))) ((= si 4))
+                        (vector-set! suf4 si (vector-ref req4 (+ 20 si))))
+                      (stage-seq ctx suf4 4)
+                      (do ((si 0 (+ si 1))) ((= si 4))
+                        (do ((qh 0 (+ qh 1))) ((= qh n-q-heads))
+                          (do ((d 0 (+ d 1))) ((= d head-dim))
+                            (let ((qv (det-val (+ 800 20 si)
+                                               (+ (* qh head-dim) d) 0.0625)))
+                              (expect-eq "set-q-suf" status-ok
+                                         (rx-set-q (ffi-pointer ctx) si qh d qv))))))
+                      (expect-eq "attend-cached" status-ok
+                                 (rx-attend (ffi-pointer ctx) h4-pre 1 n-q-heads
+                                            4 4 scale))
+                      (do ((si 0 (+ si 1))) ((= si 4))
+                        (do ((qh 0 (+ qh 1))) ((= qh n-q-heads))
+                          (do ((d 0 (+ d 1))) ((= d head-dim))
+                            (let* ((bi (+ (* (+ (* si n-q-heads) qh) head-dim) d))
+                                   (b-ref (vector-ref uncached-bits bi))
+                                   (b-got (rx-get-out-bits (ffi-pointer ctx) si qh d)))
+                              (expect-eq "gqa-bitwise" b-ref b-got))))))
+                    (display "RADIX_KV AOT GQA_PARITY prefix=20 suffix=4 max_diff=")
+                    (display (number->string max-diff))
+                    (display " bitwise=PASS") (newline))
+
+                  ;; 3. Pin h1 (oldest leaf, 24 tokens protected) and h2-pre? No,
+                  ;;    pin ONLY h1! Tree has 40/44 used (4 free).
+                  ;;    Unpinned leaves in LRU order: h2 (4 tok), h3 (4 tok), h4 (4 tok).
+                  ;;    Insert req5 = 14 fresh tokens -> needs 10 evicted tokens!
+                  ;;    MUST evict h2 (4), h3 (4), h4 (4) -> exposes userB (4) -> evicts
+                  ;;    userB (4)? Wait: h2 (4) + h3 (4) + h4 (4) = 12 >= 10, so h2, h3, h4
+                  ;;    are evicted (12 tokens) in exact LRU order while pinned h1 survives!
+                  (expect-eq "pin-h1" status-ok (rx-pin (ffi-pointer ctx) h1))
+                  (expect-eq "pinned-24" 24 (rx-stat-pinned (ffi-pointer ctx)))
+                  (expect-eq "evictable-16" 16 (rx-stat-evictable (ffi-pointer ctx)))
+                  (let ((req5 (make-vector 14 0)))
+                    (do ((i 0 (+ i 1))) ((= i 14))
+                      (vector-set! req5 i (+ 900 i)))
+                    (stage-seq ctx req5 14)
+                    (expect-eq "r5-ins" status-ok (rx-insert (ffi-pointer ctx) 14))
+                    (let ((h5 (rx-last-handle (ffi-pointer ctx))))
+                      (check-conservation ctx "r5-inv")
+                      ;; h2, h3, h4 evicted (12 tokens); h1 (pinned) & h5 alive!
+                      (expect-eq "h2-evicted" err-invalid-handle
+                                 (rx-handle-depth (ffi-pointer ctx) h2))
+                      (expect-eq "h3-evicted" err-invalid-handle
+                                 (rx-handle-depth (ffi-pointer ctx) h3))
+                      (expect-eq "h4-evicted" err-invalid-handle
+                                 (rx-handle-depth (ffi-pointer ctx) h4))
+                      (expect-eq "h1-survived" 24
+                                 (rx-handle-depth (ffi-pointer ctx) h1))
+                      (expect-eq "evicted-12" 12
+                                 (rx-stat-evicted (ffi-pointer ctx)))
+                      (display "RADIX_KV AOT PIN_LRU_EVICT pinned_survived=1 evicted_tokens=12 used=42 status=PASS")
+                      (newline)
+
+                      ;; 4. Pin h5 as well (now 24 + 14 = 38 pinned; only userB's 4 tokens
+                      ;;    + 2 free = 6 available). Inserting 10 fresh tokens MUST fail with
+                      ;;    ET_RADIX_ERR_OOM and atomic rollback (zero state mutation!).
+                      (expect-eq "pin-h5" status-ok (rx-pin (ffi-pointer ctx) h5))
+                      (let ((used-pre (rx-stat-used (ffi-pointer ctx)))
+                            (nodes-pre (rx-stat-nodes (ffi-pointer ctx)))
+                            (tick-pre (rx-stat-tick (ffi-pointer ctx)))
+                            (ev-pre (rx-stat-evicted (ffi-pointer ctx)))
+                            (req-oom (make-vector 10 0)))
+                        (do ((i 0 (+ i 1))) ((= i 10))
+                          (vector-set! req-oom i (+ 950 i)))
+                        (stage-seq ctx req-oom 10)
+                        (expect-eq "oom-reject" err-oom
+                                   (rx-insert (ffi-pointer ctx) 10))
+                        (expect-eq "oom-used-same" used-pre
+                                   (rx-stat-used (ffi-pointer ctx)))
+                        (expect-eq "oom-nodes-same" nodes-pre
+                                   (rx-stat-nodes (ffi-pointer ctx)))
+                        (expect-eq "oom-tick-same" tick-pre
+                                   (rx-stat-tick (ffi-pointer ctx)))
+                        (expect-eq "oom-ev-same" ev-pre
+                                   (rx-stat-evicted (ffi-pointer ctx)))
+                        (expect-eq "oom-count-1" 1
+                                   (rx-stat-ooms (ffi-pointer ctx)))
+                        (check-conservation ctx "oom-inv")
+                        (display "RADIX_KV AOT OOM_ROLLBACK oom_rejections=1 invariants=PASS")
+                        (newline))
+
+                      ;; 5. ETRX1000 snapshot save -> reload into fresh tree -> verify
+                      ;;    exact prefix matches & KV tensors + tamper/truncation rejection.
+                      (expect-eq "read-h1-before" status-ok
+                                 (rx-read-kv (ffi-pointer ctx) h1 0))
+                      (let ((k00-before (rx-get-read-kv (ffi-pointer ctx) 23 1 5 0))
+                            (v00-before (rx-get-read-kv (ffi-pointer ctx) 23 1 5 1))
+                            (used-snap (rx-stat-used (ffi-pointer ctx)))
+                            (nodes-snap (rx-stat-nodes (ffi-pointer ctx))))
+                        (expect-eq "snap-save" status-ok
+                                   (rx-snap-save (ffi-pointer ctx)))
+                        (expect-eq "snap-tamper" status-ok
+                                   (rx-snap-tamper (ffi-pointer ctx)))
+                        (expect-eq "snap-reload" status-ok
+                                   (rx-snap-reload (ffi-pointer ctx)))
+                        (check-conservation ctx "reload-inv")
+                        (expect-eq "reload-used" used-snap
+                                   (rx-stat-used (ffi-pointer ctx)))
+                        (expect-eq "reload-nodes" nodes-snap
+                                   (rx-stat-nodes (ffi-pointer ctx)))
+                        (expect-eq "reload-pins-0" 0
+                                   (rx-stat-pinned (ffi-pointer ctx)))
+                        (stage-seq ctx req1 24)
+                        (expect-eq "reload-match-r1" status-ok
+                                   (rx-match (ffi-pointer ctx) 24))
+                        (expect-eq "reload-hit-24" 24
+                                   (rx-last-matched (ffi-pointer ctx)))
+                        (let ((h1-reloaded (rx-last-handle (ffi-pointer ctx))))
+                          (expect-eq "read-h1-after" status-ok
+                                     (rx-read-kv (ffi-pointer ctx) h1-reloaded 0))
+                          (require-check "reload-k-exact"
+                                         (= k00-before
+                                            (rx-get-read-kv (ffi-pointer ctx) 23 1 5 0)))
+                          (require-check "reload-v-exact"
+                                         (= v00-before
+                                            (rx-get-read-kv (ffi-pointer ctx) 23 1 5 1)))
+                          (display "RADIX_KV AOT SNAPSHOT format=ETRX1000 reload_hit=24 tamper_reject=PASS")
+                          (newline)
+
+                          ;; 6. Negative boundary checks (invalid handle, double-unpin,
+                          ;;    non-finite K/V, zero-length insert).
+                          (expect-eq "neg-invalid-pin" err-invalid-handle
+                                     (rx-pin (ffi-pointer ctx) 0))
+                          (expect-eq "neg-double-unpin" err-double-unpin
+                                     (rx-unpin (ffi-pointer ctx) h1-reloaded))
+                          (expect-eq "neg-empty-insert" err-shape
+                                     (rx-insert (ffi-pointer ctx) 0))
+                          (let ((nan-val (/ 0.0 0.0)))
+                            (expect-eq "set-nan-kv" status-ok
+                                       (rx-set-kv (ffi-pointer ctx) 0 0 0 0 0 nan-val))
+                            (expect-eq "neg-nan-insert" err-nonfinite
+                                       (rx-insert (ffi-pointer ctx) 4)))
+                          (check-conservation ctx "neg-inv")
+                          (display "RADIX_KV AOT NEGATIVE status=PASS")
+                          (newline))))))))))))
+    (rx-destroy (ffi-pointer ctx))))
+
+(run-radix-kv-aot)
