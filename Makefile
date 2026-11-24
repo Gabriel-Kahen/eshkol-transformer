@@ -466,7 +466,8 @@ benchmark-wave5:
 	test-grpo test-rope-yarn test-continuous-batch \
 	test-fp8-gemm test-ring-attn test-e2e-lifecycle \
 	test-pipeline-1f1b test-tensor-parallel test-mamba-ssm \
-	test-fsdp-zero test-beam-search test-qlora-nf4 test-flash-attn2
+	test-fsdp-zero test-beam-search test-qlora-nf4 test-flash-attn2 \
+	test-radix-kv test-hybrid-mesh
 test-io5-quant:
 	/usr/bin/bash scripts/test-io5-quant.sh
 
@@ -541,6 +542,12 @@ test-qlora-nf4:
 
 test-flash-attn2:
 	/usr/bin/bash scripts/test-flash-attn2.sh
+
+test-radix-kv:
+	/usr/bin/bash scripts/test-radix-kv.sh
+
+test-hybrid-mesh:
+	/usr/bin/bash scripts/test-hybrid-mesh.sh
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
