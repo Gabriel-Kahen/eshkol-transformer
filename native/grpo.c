@@ -317,15 +317,18 @@ et_grpo_status et_grpo_group_advantages_v1_raw(uint32_t num_groups,
   if (!all_finite_f32(rewards, total))
     return ET_GRPO_ERR_NONFINITE;
 
-  /* Pass 1: compute and verify every output is finite before mutating output. */
-  const double inv_g = 1.0 / (double)group_size;
+  /* Pass 1: compute and verify every output is finite before mutating output.
+   * Use direct IEEE-754 binary64 division by (double)group_size rather than
+   * multiplying by 1.0 / (double)group_size to avoid double rounding on
+   * reciprocals such as G = 49 where 49.0 * (1.0 / 49.0) != 1.0. */
+  const double g_d = (double)group_size;
   const double eps_d = (double)eps;
   for (uint32_t b = 0; b < num_groups; ++b) {
     const size_t base = (size_t)b * (size_t)group_size;
     double sum = 0.0;
     for (uint32_t g = 0; g < group_size; ++g)
       sum += (double)rewards[base + (size_t)g];
-    const double mean = sum * inv_g;
+    const double mean = sum / g_d;
     if (!isfinite(mean))
       return ET_GRPO_ERR_OVERFLOW;
 
@@ -336,7 +339,7 @@ et_grpo_status et_grpo_group_advantages_v1_raw(uint32_t num_groups,
         const double diff = (double)rewards[base + (size_t)g] - mean;
         var_sum += diff * diff;
       }
-      const double var = var_sum * inv_g;
+      const double var = var_sum / g_d;
       denom = sqrt(var) + eps_d;
       if (!isfinite(var) || !isfinite(denom) || !(denom > 0.0))
         return ET_GRPO_ERR_OVERFLOW;
@@ -357,7 +360,7 @@ et_grpo_status et_grpo_group_advantages_v1_raw(uint32_t num_groups,
     double sum = 0.0;
     for (uint32_t g = 0; g < group_size; ++g)
       sum += (double)rewards[base + (size_t)g];
-    const double mean = sum * inv_g;
+    const double mean = sum / g_d;
 
     double denom = 1.0;
     if (adv_mode == ET_GRPO_ADV_STANDARD) {
@@ -366,7 +369,7 @@ et_grpo_status et_grpo_group_advantages_v1_raw(uint32_t num_groups,
         const double diff = (double)rewards[base + (size_t)g] - mean;
         var_sum += diff * diff;
       }
-      denom = sqrt(var_sum * inv_g) + eps_d;
+      denom = sqrt(var_sum / g_d) + eps_d;
     }
 
     for (uint32_t g = 0; g < group_size; ++g) {

@@ -260,6 +260,29 @@ static int test_group_advantages(void) {
   CHECK(adv_dr[2] == 0.0f && adv_dr[3] == 0.0f);
   for (int i = 4; i < 8; ++i)
     CHECK(adv_dr[i] == 0.0f);
+
+  /* Regression for G = 49 (where 49.0 * (1.0 / 49.0) != 1.0 in binary64):
+   * all-equal rewards must yield exact 0.0f in STANDARD (even with tiny eps)
+   * and DR_GRPO across non-dyadic values like 0.1f and -0.3f. */
+  const float vals49[3] = {0.1f, -0.3f, 0.7f};
+  for (int k = 0; k < 3; ++k) {
+    float r49[49];
+    float a49[49];
+    for (uint32_t g = 0; g < 49u; ++g)
+      r49[g] = vals49[k];
+    CHECK(et_grpo_group_advantages_v1(1u, 49u, r49, ET_GRPO_ADV_STANDARD,
+                                      1e-6f, a49) == ET_GRPO_OK);
+    for (uint32_t g = 0; g < 49u; ++g)
+      CHECK(a49[g] == 0.0f);
+    CHECK(et_grpo_group_advantages_v1(1u, 49u, r49, ET_GRPO_ADV_STANDARD,
+                                      1e-20f, a49) == ET_GRPO_OK);
+    for (uint32_t g = 0; g < 49u; ++g)
+      CHECK(a49[g] == 0.0f);
+    CHECK(et_grpo_group_advantages_v1(1u, 49u, r49, ET_GRPO_ADV_DR_GRPO,
+                                      0.0f, a49) == ET_GRPO_OK);
+    for (uint32_t g = 0; g < 49u; ++g)
+      CHECK(a49[g] == 0.0f);
+  }
   return 0;
 }
 

@@ -218,8 +218,7 @@
   (require-check "exact-match case 0" (= (grpo-verify-exact-case 0) 1.0))
   (require-check "exact-match case 1 trim" (= (grpo-verify-exact-case 1) 1.0))
   (require-check "exact-match case 2 strict" (= (grpo-verify-exact-case 2) 0.0))
-  (require-check "exact-match case 3 mismatch" (= (grpo-verify-exact-case 3) 0.0))
-  (display "GRPO AOT VERIFIER exact=PASS format=PASS") (newline))
+  (require-check "exact-match case 3 mismatch" (= (grpo-verify-exact-case 3) 0.0)))
 
 (define (verify-negatives ctx)
   (expect-status "neg-group-size-1" err-shape
@@ -257,6 +256,7 @@
     (require-check "reward[5] == 0.25" (= (grpo-get-reward (ffi-pointer ctx) 5) 0.25))
     (require-check "reward[6] == 0.0" (= (grpo-get-reward (ffi-pointer ctx) 6) 0.0))
     (require-check "reward[7] == 0.0" (= (grpo-get-reward (ffi-pointer ctx) 7) 0.0))
+    (display "GRPO AOT VERIFIER exact=PASS format=PASS") (newline)
 
     ;; Check Dr. GRPO advantages first (mean = 0.3125 -> adv[0] = 0.6875).
     (expect-status "adv-dr-grpo" status-ok

@@ -89,7 +89,7 @@ For each active token $(n, t)$ with $m_{n,t} = 1$, $\Delta_{\text{old}} = \ell_{
 Verified inside container `eshkol-r0-debug:20260928` (`CC=clang-21`, `CXX=clang++-21`, pinned Eshkol toolchain `/tc/build`):
 
 - **Deterministic static archives:**
-  - `libeshkol_transformer_grpo.a` SHA-256: `70337e9cd1c256b4b4557f7f1edbfa30ce9f27bdc624d5869f498327fa0326ea`
+  - `libeshkol_transformer_grpo.a` SHA-256: `1d219f955d3e23943f581267e0048876e0e2d0a363ed1b525577526e3fe8a420`
   - `libeshkol_transformer_grpo_aot.a` SHA-256: `25b983dd27ea95fce43dbcfdf5137f3ee36e3b3a37bb84647f79e14a1cbabe58`
 - **Numerical gradient checks (central finite differences, unclipped & clipped regimes):**
   - C11 binary32 central FD (`h = 1/256`):
@@ -102,7 +102,7 @@ Verified inside container `eshkol-r0-debug:20260928` (`CC=clang-21`, `CXX=clang+
 - **Sanitizers:** C11 + C++17 suites pass under `-fsanitize=address,undefined` with `ASAN_OPTIONS=detect_leaks=1:halt_on_error=1` and `UBSAN_OPTIONS=halt_on_error=1`.
 - **Compiled Eshkol AOT driver (`tests/grpo/test_grpo_aot.esk`, `--strict-types --optimize 0 --no-stdlib`):**
   - Dual fresh compilations produce byte-identical ELFs and byte-identical stdout.
-  - AOT ELF SHA-256: `33a8493f0453ee50dd30c9f926c5c73c7819fa8ff04384db6d3bf8b0f94d64f6`
+  - AOT ELF SHA-256: `67993957b9a8bf3d7a5354bad29d0047a6bf4408fdee23be51f83e08646860ce`
   - Multi-step alignment loop (10 outer steps × 3 inner off-policy epochs, $B=2, G=4, T=6, V=8$):
     - Policy expected RLVR verifier reward strictly increases every step: `0.286991 -> 0.922678`
     - Final greedy-decoded verifier reward: `1.0` (100% format + exact answer)
