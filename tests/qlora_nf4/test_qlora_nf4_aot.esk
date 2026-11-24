@@ -1,0 +1,320 @@
+;;; Compiled Eshkol AOT QLoRA (NF4 Double-Quantized Frozen Base + Trainable LoRA
+;;; Fine-Tuning) verifier: SQ & DQ quantization footprints, Gaussian NF4 vs
+;;; Uniform INT4 RMSE, central finite-difference gradient checks (dX, dA, dB),
+;;; 12-step AdamW training with frozen NF4 base SHA-256 invariance, fused vs
+;;; merge_to_f32 parity, 6+6 fresh-process ETQL1000 checkpoint resume parity,
+;;; and negative/tamper rejection.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 qlora-create i64 i64 i64 i64 i64 i64 i64 i64 f64 ptr :real et_qlora_aot_create)
+(extern void qlora-destroy ptr :real et_qlora_aot_destroy)
+(extern i32 qlora-prepare ptr i64 i64 :real et_qlora_aot_prepare_model)
+
+(extern i64 qlora-f32-bytes ptr :real et_qlora_aot_f32_bytes)
+(extern i64 qlora-sq-bytes ptr :real et_qlora_aot_sq_packed_bytes)
+(extern i64 qlora-dq-bytes ptr :real et_qlora_aot_dq_packed_bytes)
+(extern f64 qlora-sq-bpp ptr :real et_qlora_aot_sq_bits_per_param)
+(extern f64 qlora-dq-bpp ptr :real et_qlora_aot_dq_bits_per_param)
+(extern f64 qlora-sq-ratio ptr :real et_qlora_aot_sq_compression_ratio)
+(extern f64 qlora-dq-ratio ptr :real et_qlora_aot_dq_compression_ratio)
+(extern f64 qlora-nf4-sq-rmse ptr :real et_qlora_aot_nf4_sq_rmse)
+(extern f64 qlora-nf4-dq-rmse ptr :real et_qlora_aot_nf4_dq_rmse)
+(extern f64 qlora-unif-rmse ptr :real et_qlora_aot_uniform_int4_rmse)
+
+(extern i32 qlora-run-grad-checks ptr :real et_qlora_aot_run_grad_checks)
+(extern f64 qlora-grad-max-err ptr :real et_qlora_aot_grad_max_err)
+(extern i64 qlora-grad-check-count ptr :real et_qlora_aot_grad_check_count)
+
+(extern i32 qlora-configure-adamw ptr f64 f64 f64 f64 f64 :real et_qlora_aot_configure_adamw)
+(extern i32 qlora-eval-loss ptr :real et_qlora_aot_eval_loss)
+(extern i32 qlora-train-step ptr :real et_qlora_aot_train_step)
+(extern f64 qlora-last-loss ptr :real et_qlora_aot_last_loss)
+(extern i64 qlora-adamw-step ptr :real et_qlora_aot_adamw_step)
+
+(extern i32 qlora-verify-merge ptr :real et_qlora_aot_verify_merge_parity)
+(extern f64 qlora-max-merge-diff ptr :real et_qlora_aot_max_merge_diff)
+
+(extern i32 qlora-compute-digests ptr :real et_qlora_aot_compute_digests)
+(extern i64 qlora-base-sha-word ptr i64 :real et_qlora_aot_base_sha256_word)
+(extern i64 qlora-y-sha-word ptr i64 :real et_qlora_aot_y_sha256_word)
+(extern i64 qlora-state-sha-word ptr i64 :real et_qlora_aot_state_sha256_word)
+
+(extern i32 qlora-poison-state ptr :real et_qlora_aot_poison_trainable_state)
+(extern i64 qlora-env-phase :real et_qlora_aot_env_phase)
+(extern i32 qlora-save-ckpt ptr :real et_qlora_aot_save_env_checkpoint)
+(extern i32 qlora-load-ckpt ptr :real et_qlora_aot_load_env_checkpoint)
+(extern i32 qlora-check-negatives ptr :real et_qlora_aot_check_negative_suite)
+(extern i64 qlora-neg-count ptr :real et_qlora_aot_negative_checks_passed)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Multi-layer QLoRA MLP geometry: 128 -> 128 -> 64, NF4 block=64, DQ block=256.
+(define dim-m 8)
+(define dim-in 128)
+(define dim-hidden 128)
+(define dim-out 64)
+(define dim-r 4)
+(define nf4-block-size 64)
+(define dq-block-size 256)
+(define quant-mode-dq 2)
+(define lora-alpha 8.0)
+
+(define base-seed 20261124)
+(define lora-seed 4242)
+(define adamw-lr 0.003)
+(define adamw-beta1 0.9)
+(define adamw-beta2 0.999)
+(define adamw-eps 0.00000001)
+(define adamw-wd 0.01)
+
+(define status-ok 0)
+
+(define (require-check label ok)
+  (unless ok
+    (display "QLORA AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "QLORA AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-and-prepare)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "qlora-create" status-ok
+                   (qlora-create dim-m dim-in dim-hidden dim-out dim-r
+                                 nf4-block-size dq-block-size quant-mode-dq
+                                 lora-alpha (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context" (not (= (ptr->usize ctx) 0)))
+      (expect-status "qlora-prepare" status-ok
+                     (qlora-prepare (ffi-pointer ctx) base-seed lora-seed))
+      (expect-status "configure-adamw" status-ok
+                     (qlora-configure-adamw (ffi-pointer ctx)
+                                            adamw-lr adamw-beta1 adamw-beta2
+                                            adamw-eps adamw-wd))
+      ctx)))
+
+(define (capture-base-sha ctx)
+  (expect-status "compute-digests" status-ok
+                 (qlora-compute-digests (ffi-pointer ctx)))
+  (let ((words (make-vector 4 0)))
+    (do ((i 0 (+ i 1)))
+        ((= i 4) words)
+      (vector-set! words i (qlora-base-sha-word (ffi-pointer ctx) i)))))
+
+(define (verify-base-invariant ctx ref-sha)
+  (expect-status "recompute-digests" status-ok
+                 (qlora-compute-digests (ffi-pointer ctx)))
+  (do ((i 0 (+ i 1)))
+      ((= i 4))
+    (require-check "frozen NF4 base SHA-256 mutated"
+                   (= (vector-ref ref-sha i)
+                      (qlora-base-sha-word (ffi-pointer ctx) i)))))
+
+(define (print-digest-line tag w0 w1 w2 w3)
+  (display tag)
+  (display " ") (display w0)
+  (display " ") (display w1)
+  (display " ") (display w2)
+  (display " ") (display w3)
+  (newline))
+
+;; Phase 1: Quantization metrics, Gaussian RMSE, FD grad checks, full 12-step
+;; AdamW fine-tuning, frozen base SHA-256 invariance, and merge_to_f32 parity.
+(define (run-full12-phase)
+  (let* ((ctx (create-and-prepare))
+         (f32-b (qlora-f32-bytes (ffi-pointer ctx)))
+         (sq-b (qlora-sq-bytes (ffi-pointer ctx)))
+         (dq-b (qlora-dq-bytes (ffi-pointer ctx)))
+         (sq-bpp (qlora-sq-bpp (ffi-pointer ctx)))
+         (dq-bpp (qlora-dq-bpp (ffi-pointer ctx)))
+         (sq-rat (qlora-sq-ratio (ffi-pointer ctx)))
+         (dq-rat (qlora-dq-ratio (ffi-pointer ctx)))
+         (sq-rmse (qlora-nf4-sq-rmse (ffi-pointer ctx)))
+         (dq-rmse (qlora-nf4-dq-rmse (ffi-pointer ctx)))
+         (u4-rmse (qlora-unif-rmse (ffi-pointer ctx))))
+    (require-check "SQ compression ratio >= 6.5x" (>= sq-rat 6.5))
+    (require-check "DQ compression ratio >= 6.5x" (>= dq-rat 6.5))
+    (require-check "DQ smaller than SQ" (< dq-b sq-b))
+    (require-check "NF4 SQ RMSE < Uniform INT4 RMSE" (< sq-rmse u4-rmse))
+    (require-check "NF4 DQ RMSE < Uniform INT4 RMSE" (< dq-rmse u4-rmse))
+    (display "QLORA AOT QUANT f32_bytes=") (display f32-b)
+    (display " sq_bytes=") (display sq-b)
+    (display " dq_bytes=") (display dq-b)
+    (display " sq_bpp=") (display (number->string sq-bpp))
+    (display " dq_bpp=") (display (number->string dq-bpp))
+    (display " dq_ratio=") (display (number->string dq-rat))
+    (newline)
+    (display "QLORA AOT RMSE nf4_sq=") (display (number->string sq-rmse))
+    (display " nf4_dq=") (display (number->string dq-rmse))
+    (display " unif_int4=") (display (number->string u4-rmse))
+    (display " nf4_beats_int4=PASS") (newline)
+
+    ;; Central finite-difference checks on dX, dA, dB.
+    (expect-status "run-grad-checks" status-ok
+                   (qlora-run-grad-checks (ffi-pointer ctx)))
+    (let ((g-err (qlora-grad-max-err (ffi-pointer ctx)))
+          (g-cnt (qlora-grad-check-count (ffi-pointer ctx))))
+      (require-check "grad check count == 12" (= g-cnt 12))
+      (require-check "grad max_err < 1e-5" (< g-err 0.00001))
+      (display "QLORA AOT GRAD checks=") (display g-cnt)
+      (display " max_err=") (display (number->string g-err))
+      (display " PASS") (newline))
+
+    (let ((base-sha (capture-base-sha ctx))
+          (prev-loss 0.0)
+          (init-loss 0.0))
+      (expect-status "eval-init-loss" status-ok
+                     (qlora-eval-loss (ffi-pointer ctx)))
+      (set! init-loss (qlora-last-loss (ffi-pointer ctx)))
+      (set! prev-loss init-loss)
+      (display "QLORA AOT FULL12_LOSS 0 ")
+      (display (number->string init-loss)) (newline)
+
+      (do ((step 1 (+ step 1)))
+          ((> step 12))
+        (expect-status "train-step" status-ok
+                       (qlora-train-step (ffi-pointer ctx)))
+        (expect-status "eval-step-loss" status-ok
+                       (qlora-eval-loss (ffi-pointer ctx)))
+        (let ((curr-loss (qlora-last-loss (ffi-pointer ctx))))
+          (require-check "loss strictly decreasing"
+                         (and (>= curr-loss 0.0) (< curr-loss prev-loss)))
+          (verify-base-invariant ctx base-sha)
+          (display "QLORA AOT FULL12_LOSS ") (display step) (display " ")
+          (display (number->string curr-loss)) (newline)
+          (set! prev-loss curr-loss)))
+
+      (require-check "adamw step == 12" (= (qlora-adamw-step (ffi-pointer ctx)) 12))
+      (expect-status "verify-merge-parity" status-ok
+                     (qlora-verify-merge (ffi-pointer ctx)))
+      (let ((mdiff (qlora-max-merge-diff (ffi-pointer ctx))))
+        (require-check "merge_to_f32 parity < 1e-6" (< mdiff 0.000001))
+        (expect-status "final-digests" status-ok
+                       (qlora-compute-digests (ffi-pointer ctx)))
+        (display "QLORA AOT FULL12 steps=12 initial=")
+        (display (number->string init-loss))
+        (display " final=")
+        (display (number->string prev-loss))
+        (display " max_merge_diff=")
+        (display (number->string mdiff))
+        (display " base_frozen=PASS") (newline)
+        (print-digest-line
+          "QLORA AOT BASE_SHA256"
+          (vector-ref base-sha 0) (vector-ref base-sha 1)
+          (vector-ref base-sha 2) (vector-ref base-sha 3))
+        (print-digest-line
+          "QLORA AOT FULL12_Y_SHA256"
+          (qlora-y-sha-word (ffi-pointer ctx) 0)
+          (qlora-y-sha-word (ffi-pointer ctx) 1)
+          (qlora-y-sha-word (ffi-pointer ctx) 2)
+          (qlora-y-sha-word (ffi-pointer ctx) 3))
+        (print-digest-line
+          "QLORA AOT FULL12_STATE_SHA256"
+          (qlora-state-sha-word (ffi-pointer ctx) 0)
+          (qlora-state-sha-word (ffi-pointer ctx) 1)
+          (qlora-state-sha-word (ffi-pointer ctx) 2)
+          (qlora-state-sha-word (ffi-pointer ctx) 3)))
+      (qlora-destroy (ffi-pointer ctx)))))
+
+;; Phase 2 (Part 1 of 6+6): Run 6 AdamW steps and save ETQL1000 checkpoint.
+(define (run-part1-phase)
+  (let* ((ctx (create-and-prepare))
+         (base-sha (capture-base-sha ctx)))
+    (do ((step 1 (+ step 1)))
+        ((> step 6))
+      (expect-status "part1-step" status-ok
+                     (qlora-train-step (ffi-pointer ctx)))
+      (verify-base-invariant ctx base-sha))
+    (require-check "part1 step == 6" (= (qlora-adamw-step (ffi-pointer ctx)) 6))
+    (expect-status "save-ckpt" status-ok
+                   (qlora-save-ckpt (ffi-pointer ctx)))
+    (display "QLORA AOT PART1 saved_step=6 base_frozen=PASS") (newline)
+    (qlora-destroy (ffi-pointer ctx))))
+
+;; Phase 3 (Part 2 of 6+6): Fresh process reloads ETQL1000, finishes steps 7..12,
+;; verifies merge parity, prints digests, and runs negative/tamper suite.
+(define (run-part2-phase)
+  (let* ((ctx (create-and-prepare))
+         (base-sha (capture-base-sha ctx)))
+    ;; Poison trainable LoRA & AdamW state so reload must restore everything.
+    (expect-status "poison-state" status-ok
+                   (qlora-poison-state (ffi-pointer ctx)))
+    (expect-status "load-ckpt" status-ok
+                   (qlora-load-ckpt (ffi-pointer ctx)))
+    (require-check "reloaded step == 6" (= (qlora-adamw-step (ffi-pointer ctx)) 6))
+
+    (expect-status "eval-loss-at-6" status-ok
+                   (qlora-eval-loss (ffi-pointer ctx)))
+    (let ((prev-loss (qlora-last-loss (ffi-pointer ctx))))
+      (do ((step 7 (+ step 1)))
+          ((> step 12))
+        (expect-status "part2-step" status-ok
+                       (qlora-train-step (ffi-pointer ctx)))
+        (expect-status "eval-part2-loss" status-ok
+                       (qlora-eval-loss (ffi-pointer ctx)))
+        (let ((curr-loss (qlora-last-loss (ffi-pointer ctx))))
+          (require-check "part2 loss strictly decreasing"
+                         (and (>= curr-loss 0.0) (< curr-loss prev-loss)))
+          (verify-base-invariant ctx base-sha)
+          (display "QLORA AOT RESUME_LOSS ") (display step) (display " ")
+          (display (number->string curr-loss)) (newline)
+          (set! prev-loss curr-loss)))
+
+      (require-check "resumed step == 12"
+                     (= (qlora-adamw-step (ffi-pointer ctx)) 12))
+      (expect-status "part2-merge-parity" status-ok
+                     (qlora-verify-merge (ffi-pointer ctx)))
+      (let ((mdiff (qlora-max-merge-diff (ffi-pointer ctx))))
+        (require-check "part2 merge parity < 1e-6" (< mdiff 0.000001))
+        (expect-status "part2-digests" status-ok
+                       (qlora-compute-digests (ffi-pointer ctx)))
+        (print-digest-line
+          "QLORA AOT RESUME_BASE_SHA256"
+          (vector-ref base-sha 0) (vector-ref base-sha 1)
+          (vector-ref base-sha 2) (vector-ref base-sha 3))
+        (print-digest-line
+          "QLORA AOT RESUME12_Y_SHA256"
+          (qlora-y-sha-word (ffi-pointer ctx) 0)
+          (qlora-y-sha-word (ffi-pointer ctx) 1)
+          (qlora-y-sha-word (ffi-pointer ctx) 2)
+          (qlora-y-sha-word (ffi-pointer ctx) 3))
+        (print-digest-line
+          "QLORA AOT RESUME12_STATE_SHA256"
+          (qlora-state-sha-word (ffi-pointer ctx) 0)
+          (qlora-state-sha-word (ffi-pointer ctx) 1)
+          (qlora-state-sha-word (ffi-pointer ctx) 2)
+          (qlora-state-sha-word (ffi-pointer ctx) 3))
+        (display "QLORA AOT RESUME final=")
+        (display (number->string prev-loss))
+        (display " max_merge_diff=")
+        (display (number->string mdiff))
+        (display " parity=PASS") (newline)))
+
+    ;; Negative & tamper checks.
+    (expect-status "negative-suite" status-ok
+                   (qlora-check-negatives (ffi-pointer ctx)))
+    (display "QLORA AOT NEGATIVE checks=")
+    (display (qlora-neg-count (ffi-pointer ctx)))
+    (display " PASS") (newline)
+    (qlora-destroy (ffi-pointer ctx))))
+
+(let ((phase (qlora-env-phase)))
+  (cond
+    ((= phase 0) (run-full12-phase) (run-part1-phase) (run-part2-phase))
+    ((= phase 1) (run-full12-phase))
+    ((= phase 2) (run-part1-phase))
+    ((= phase 3) (run-part2-phase))
+    (else (require-check "invalid QLORA_AOT_PHASE" #f))))
