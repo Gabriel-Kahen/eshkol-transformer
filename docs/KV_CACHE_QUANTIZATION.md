@@ -12,7 +12,7 @@ v1.0), and a compiled Eshkol AOT driver.
 - Core implementation: `native/kv_cache_quant.c` -> deterministic archive
   `build/kv_cache_quant/libeshkol_transformer_kv_cache_quant.a`
   - SHA-256 (Clang 21.1.8, Ubuntu 22.04, `-O2 -ffp-contract=off -fexcess-precision=standard -fno-fast-math`):
-    `3cc781ac549eed13d70d4a2d4085a9eb73e381d2a34d5aa4ab60309b9d9213d6`
+    `7c19828e2a2298b646d528fcd3bb210f78362d10d0b55d0b89d239be7fbdbcfe`
 - Eshkol AOT bridge: `native/kv_cache_quant_eshkol_bridge.h`,
   `native/kv_cache_quant_eshkol_bridge.c` -> deterministic archive
   `build/kv_cache_quant/libeshkol_transformer_kv_cache_quant_aot.a`
@@ -21,7 +21,7 @@ v1.0), and a compiled Eshkol AOT driver.
 - Compiled Eshkol AOT driver: `tests/kv_cache_quant/test_kv_cache_quant_aot.esk`
   - Compiled with `--strict-types --optimize 0 --no-stdlib` from two fresh
     directories; byte-identical ELF SHA-256:
-    `155debe1e37db2681b018ca72f1589ef9ea1d38bd28955818c7620333757af02`
+    `307d0f5902b6fe7dcee5a46f9dd615d9cf87047545d617c6a2f59582185ce2b6`
 - Native C11 / C++17 / Python oracle test suite:
   - `tests/kv_cache_quant/header_kvq_cpp.cpp`
   - `tests/kv_cache_quant/test_kv_cache_quant_native.c`

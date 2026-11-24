@@ -940,6 +940,61 @@ static void test_flt_max_and_scale_boundaries(void) {
   (void)rmdir(tdir);
   et_kvq_cache_destroy(c2);
   et_kvq_cache_destroy(c);
+
+  /* External-pool decode_gqa contract consistency: verify et_kvq_decode_gqa_v1
+   * rejects -0.0f scales (ET_KVQ_ERR_NONFINITE) and FP8 scale==0.0f with
+   * non-zero payload magnitude (ET_KVQ_ERR_CORRUPT) for both K and V. */
+  {
+    const et_kvq_format qfmts[2] = {ET_KVQ_FMT_INT8_SYM, ET_KVQ_FMT_FP8_E4M3FN};
+    for (int fi = 0; fi < 2; ++fi) {
+      const et_kvq_config ecfg = {qfmts[fi], 1u, 1u, 8u, 2u, 0u};
+      size_t req_bytes = 0u;
+      CHECK(et_kvq_storage_bytes_required(&ecfg, &req_bytes) == ET_KVQ_OK);
+      uint8_t *pool = (uint8_t *)__real_calloc(1u, req_bytes);
+      CHECK(pool != NULL);
+      et_kvq_cache *ec = NULL;
+      CHECK(et_kvq_cache_create(&ecfg, pool, req_bytes, &ec) == ET_KVQ_OK);
+
+      float zeros8[8] = {0};
+      float q1[8] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+      float out8[8];
+      CHECK(et_kvq_append_token_v1(ec, 0u, zeros8, zeros8) == ET_KVQ_OK);
+      CHECK(et_kvq_decode_gqa_v1(ec, 0u, 1u, 1.0f, 0u, q1, out8) == ET_KVQ_OK);
+
+      /* Layout: total_vectors = 1 * 2 * 2 * 1 = 4; scales at bytes 0..15
+       * (K pos0 = idx 0 @ 0..3, V pos0 = idx 2 @ 8..11), payloads at 16..47
+       * (K pos0 @ 16..23, V pos0 @ 32..39). */
+      const uint32_t neg_zero_bits = 0x80000000u;
+      /* Tamper K scale to -0.0f -> ET_KVQ_ERR_NONFINITE. */
+      memcpy(pool + 0u, &neg_zero_bits, 4u);
+      CHECK(et_kvq_decode_gqa_v1(ec, 0u, 1u, 1.0f, 0u, q1, out8) ==
+            ET_KVQ_ERR_NONFINITE);
+      memset(pool + 0u, 0, 4u);
+
+      /* Tamper V scale to -0.0f -> ET_KVQ_ERR_NONFINITE. */
+      memcpy(pool + 8u, &neg_zero_bits, 4u);
+      CHECK(et_kvq_decode_gqa_v1(ec, 0u, 1u, 1.0f, 0u, q1, out8) ==
+            ET_KVQ_ERR_NONFINITE);
+      memset(pool + 8u, 0, 4u);
+
+      if (qfmts[fi] == ET_KVQ_FMT_FP8_E4M3FN) {
+        /* Tamper K payload to non-zero 0x38 while K scale == +0.0f -> CORRUPT. */
+        pool[16] = 0x38u;
+        CHECK(et_kvq_decode_gqa_v1(ec, 0u, 1u, 1.0f, 0u, q1, out8) ==
+              ET_KVQ_ERR_CORRUPT);
+        pool[16] = 0x00u;
+
+        /* Tamper V payload to non-zero 0x38 while V scale == +0.0f -> CORRUPT. */
+        pool[32] = 0x38u;
+        CHECK(et_kvq_decode_gqa_v1(ec, 0u, 1u, 1.0f, 0u, q1, out8) ==
+              ET_KVQ_ERR_CORRUPT);
+        pool[32] = 0x00u;
+      }
+
+      et_kvq_cache_destroy(ec);
+      __real_free(pool);
+    }
+  }
 }
 
 int main(int argc, char **argv) {

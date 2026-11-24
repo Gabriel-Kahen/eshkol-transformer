@@ -1107,7 +1107,7 @@ et_kvq_status et_kvq_decode_gqa_v1(const et_kvq_cache *cache, uint32_t layer,
         }
       } else if (fmt == ET_KVQ_FMT_INT8_SYM) {
         const float k_scale = load_f32_at(cache_scale_cptr(cache, k_vidx), 0u);
-        if (!f32_is_finite(k_scale) || k_scale < 0.0f)
+        if (!f32_scale_is_valid(k_scale))
           return ET_KVQ_ERR_NONFINITE;
         const double kdscale = (double)k_scale;
         const int8_t *k_q = (const int8_t *)cache_quant_cptr(cache, k_vidx);
@@ -1121,11 +1121,13 @@ et_kvq_status et_kvq_decode_gqa_v1(const et_kvq_cache *cache, uint32_t layer,
         }
       } else {
         const float k_scale = load_f32_at(cache_scale_cptr(cache, k_vidx), 0u);
-        if (!f32_is_finite(k_scale) || k_scale < 0.0f)
+        if (!f32_scale_is_valid(k_scale))
           return ET_KVQ_ERR_NONFINITE;
         const double kdscale = (double)k_scale;
         const uint8_t *k_q = cache_quant_cptr(cache, k_vidx);
         for (uint32_t d = 0u; d < hd; ++d) {
+          if (k_scale == 0.0f && (k_q[d] & 0x7Fu) != 0u)
+            return ET_KVQ_ERR_CORRUPT;
           float kd = 0.0f;
           const et_kvq_status st = dequant_fp8_elem_f32(k_q[d], kdscale, &kd);
           if (st != ET_KVQ_OK)
@@ -1171,7 +1173,7 @@ et_kvq_status et_kvq_decode_gqa_v1(const et_kvq_cache *cache, uint32_t layer,
         }
       } else if (fmt == ET_KVQ_FMT_INT8_SYM) {
         const float v_scale = load_f32_at(cache_scale_cptr(cache, v_vidx), 0u);
-        if (!f32_is_finite(v_scale) || v_scale < 0.0f)
+        if (!f32_scale_is_valid(v_scale))
           return ET_KVQ_ERR_NONFINITE;
         const double vdscale = (double)v_scale;
         const int8_t *v_q = (const int8_t *)cache_quant_cptr(cache, v_vidx);
@@ -1196,12 +1198,14 @@ et_kvq_status et_kvq_decode_gqa_v1(const et_kvq_cache *cache, uint32_t layer,
         }
       } else {
         const float v_scale = load_f32_at(cache_scale_cptr(cache, v_vidx), 0u);
-        if (!f32_is_finite(v_scale) || v_scale < 0.0f)
+        if (!f32_scale_is_valid(v_scale))
           return ET_KVQ_ERR_NONFINITE;
         const double vdscale = (double)v_scale;
         const uint8_t *v_q = cache_quant_cptr(cache, v_vidx);
         if (alpha != 1.0) {
           for (uint32_t d = 0u; d < hd; ++d) {
+            if (v_scale == 0.0f && (v_q[d] & 0x7Fu) != 0u)
+              return ET_KVQ_ERR_CORRUPT;
             float vd = 0.0f;
             const et_kvq_status st = dequant_fp8_elem_f32(v_q[d], vdscale, &vd);
             if (st != ET_KVQ_OK)
@@ -1210,6 +1214,8 @@ et_kvq_status et_kvq_decode_gqa_v1(const et_kvq_cache *cache, uint32_t layer,
           }
         } else {
           for (uint32_t d = 0u; d < hd; ++d) {
+            if (v_scale == 0.0f && (v_q[d] & 0x7Fu) != 0u)
+              return ET_KVQ_ERR_CORRUPT;
             float vd = 0.0f;
             const et_kvq_status st = dequant_fp8_elem_f32(v_q[d], vdscale, &vd);
             if (st != ET_KVQ_OK)
