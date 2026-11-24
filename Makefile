@@ -452,7 +452,9 @@ benchmark-wave45:
 	/usr/bin/bash scripts/benchmark-wave45.sh
 
 .PHONY: test-io5-quant test-t2-trainer test-dpo test-spec-decode test-mod5-moe \
-	test-mod5-mla test-o2-muon test-mod5-adamw
+	test-mod5-mla test-o2-muon test-mod5-adamw test-mod5-generate \
+	test-paged-kv test-constrained-decode test-w4a32-quant \
+	test-grpo test-rope-yarn test-continuous-batch
 test-io5-quant:
 	/usr/bin/bash scripts/test-io5-quant.sh
 
@@ -476,6 +478,27 @@ test-o2-muon:
 
 test-mod5-adamw:
 	/usr/bin/bash scripts/test-mod5-adamw.sh
+
+test-mod5-generate:
+	/usr/bin/bash scripts/test-mod5-generate.sh
+
+test-paged-kv:
+	/usr/bin/bash scripts/test-paged-kv.sh
+
+test-constrained-decode:
+	/usr/bin/bash scripts/test-constrained-decode.sh
+
+test-w4a32-quant:
+	/usr/bin/bash scripts/test-w4a32-quant.sh
+
+test-grpo:
+	/usr/bin/bash scripts/test-grpo.sh
+
+test-rope-yarn:
+	/usr/bin/bash scripts/test-rope-yarn.sh
+
+test-continuous-batch:
+	/usr/bin/bash scripts/test-continuous-batch.sh
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
