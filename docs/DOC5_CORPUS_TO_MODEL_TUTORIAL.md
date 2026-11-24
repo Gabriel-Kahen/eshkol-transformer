@@ -197,3 +197,39 @@ D1/D2 corpus, exporting its live weights, integrating MP4 into the trainer,
 and selecting PA4 by default require separate integration. Full public TR3,
 CPU-v1 release admission and GPU execution have separate gates tracked in
 the [roadmap](ROADMAP.md).
+
+## Next Steps: Full 8-Stage Eshkol AOT LLM Lifecycle & Wave 4/5 Suites
+
+Beyond the baseline DOC5 walkthrough above, the repository integrates an
+executable 8-stage compiled Eshkol AOT lifecycle and an 11-engine Wave 5
+native benchmark suite on the pinned CPU lane:
+
+```bash
+make test-e2e-lifecycle
+make test-b0-wave5
+bash scripts/test-doc5-wave45-walkthrough.sh
+```
+
+- **`make test-e2e-lifecycle`** builds and runs the statically linked compiled
+  Eshkol AOT binary across five OS process boundaries, chaining DATA4 corpus
+  hygiene and near-deduplication, T2 BPE training (`ETBPE100`) and D1 `.ets`
+  sharding, MOD5 RoPE + AdamW pretraining with bitwise fresh-process
+  `ETM5TRN1` resume, LoRA fine-tuning (`ETLR1000`) and reversible merge, DPO
+  preference alignment, contamination-gated EVAL5 scoring, lossless
+  speculative decoding, and native IO5 `F16`/`BF16`/`Q8_0` quantization. See
+  [E2E_LLM_LIFECYCLE.md](E2E_LLM_LIFECYCLE.md).
+- **`make test-b0-wave5`** builds all 11 Wave 5 native static archives plus
+  normal and ASan/UBSan/LSan benchmark runners (`wave5-bench-v1`) and checks
+  two-run and sanitizer numerical checksum invariance. See
+  [B0_WAVE5_BENCHMARKS.md](B0_WAVE5_BENCHMARKS.md).
+- **`bash scripts/test-doc5-wave45-walkthrough.sh`** programmatically verifies
+  every header path, doc link, script path, and `make` target referenced across
+  [DOC5_API_REFERENCE.md](DOC5_API_REFERENCE.md), this tutorial, and the
+  [Wave 4/5 operator guide](DOC5_WAVE45_GUIDE.md), then executes
+  `make test-e2e-lifecycle`, `make test-b0-wave5`, `make test-python-isolation`,
+  and `make test-ci-topology` in a fresh disposable checkout.
+
+For the full category-indexed directory of Wave 4/5 subsystems (Data &
+Tokenizer, Architecture, Optimizers, Alignment, Quantization, Distributed,
+Serving, Benchmarks, and Lifecycle), see
+[docs/DOC5_WAVE45_GUIDE.md](DOC5_WAVE45_GUIDE.md).

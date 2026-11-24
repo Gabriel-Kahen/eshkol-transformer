@@ -1,6 +1,8 @@
 # Eshkol Transformer API reference
 
-Source baseline `1976e667bfa00415e3da8e7cce344335970d9d41`. Paths and commands
+Source baseline `319c8822a78a5ce4811893a773681055f7a3b37e` (preserving the
+earlier `1976e667bfa00415e3da8e7cce344335970d9d41` Wave 0–5 baseline rows).
+Paths and commands
 are relative to the checkout root. Eshkol facades need the corresponding
 linked package. Native providers advertise supported operations and shapes
 through K1. Check the capability before dispatch and follow each contract's
@@ -76,6 +78,42 @@ or shell command for the indicated component.
 | IO5 | `tests/io5/test_model_mapping.py` | `c1-to-sharded-safetensors`, `sharded-safetensors-to-c1` | `make test-io5` | Executed command examples for bounded index and shard exchange. |
 | IO5 | `tests/io5/live_c1_io5_bridge.esk` | `c1-checkpoint-save-state-internal!`, `c1-checkpoint-load-state-internal` | `make test-io5-live-c1` | Compiled C1 reload for five exchange routes on one M3 checkpoint fixture. |
 
+### Wave 4/5 Native & Eshkol AOT Subsystems
+
+The rows below cover all integrated Wave 4/5 C11/C++17 native ABIs and compiled Eshkol AOT bridges on the pinned CPU lane. See the [Wave 4/5 operator guide](DOC5_WAVE45_GUIDE.md) for category-organized commands and per-subsystem design specifications.
+
+| Component | Source | Key symbols or commands | Gate | Scope |
+| --- | --- | --- | --- | --- |
+| MP4 AOT | `native/mp4_eshkol_bridge.h` | `et_mp4_aot_open`, `et_mp4_aot_close`, `et_mp4_aot_cast_f32_to_f16` | `make test-mp4-aot` | Compiled Eshkol AOT bridge over `include/eshkol_transformer/mp4_mixed_precision_abi.h` for f16/bf16 casts and loss scaling. |
+| PA4-Wider AOT | `native/pa4_wider_eshkol_bridge.h` | `et_pa4_wider_aot_open`, `et_pa4_wider_aot_forward`, `et_pa4_wider_aot_backward`, `et_pa4_wider_aot_close` | `make test-pa4-wider-aot` | Compiled Eshkol AOT bridge over `include/eshkol_transformer/pa4_wider_attention_abi.h` for reference and online-softmax attention. |
+| AC4 | `include/eshkol_transformer/ac4_checkpointing_abi.h` | `et_ac4_plan_v1`, `et_ac4_run_v1` | `make test-ac4`, `make test-ac4-aot` | Activation checkpointing over 1–16 pre-norm blocks (`NONE`, `EVERY_LAYER`, `SQRT_SEGMENTS`, `EVERY_K`) with bounded activation arenas. |
+| AMD4 | `include/eshkol_transformer/amd4_hip_abi.h` | `et_amd4_probe_v1`, `et_amd4_probe_with_ops_v1`, `et_amd4_format_report_v1`, `et_amd4_kernel_provider_v1` | `make test-amd4`, `make test-amd4-aot` | Fail-closed `/dev/kfd` and dynamic HIP runtime observability probe without ROCm compile-time headers. |
+| DIST5 | `include/eshkol_transformer/dist5_collectives_abi.h` | `et_dist5_comm_create`, `et_dist5_barrier`, `et_dist5_broadcast`, `et_dist5_allreduce`, `et_dist5_allgather`, `et_dist5_reduce_scatter`, `et_dist5_sync_gradients_f32`, `et_dist5_comm_destroy` | `make test-dist5`, `make test-dist5-aot` | Synchronous multi-process data-parallel collectives over pre-connected `AF_UNIX` `SOCK_STREAM` endpoints. |
+| EVAL5 | `include/eshkol_transformer/eval5_benchmark_abi.h` | `et_eval5_audit_contamination`, `et_eval5_score_lm`, `et_eval5_score_mc`, `et_eval5_manifest_format`, `et_eval5_manifest_parse`, `et_eval5_manifest_write_atomic`, `et_eval5_manifest_read_file` | `make test-eval5`, `make test-eval5-aot` | Fail-closed n-gram contamination audit, LM perplexity/NLL and MC accuracy scoring, and checksummed atomic manifests. |
+| IO5-Quant | `include/eshkol_transformer/io5_quant_abi.h` | `et_io5_quant_abi_version`, `et_io5_encode_f16`, `et_io5_decode_f16`, `et_io5_encode_bf16`, `et_io5_decode_bf16`, `et_io5_quantize_q8_0`, `et_io5_dequantize_q8_0` | `make test-io5-quant` | Native C11 `F16`, `BF16`, and block-32 `Q8_0` weight codecs with finite validation for quantized interchange. |
+| DATA4-Pipeline | `include/eshkol_transformer/data4_pipeline_abi.h` | `et_data4_config_default`, `et_data4_validate_utf8`, `et_data4_compute_minhash`, `et_data4_pipeline_run`, `et_data4_report_format`, `et_data4_report_verify` | `make test-data4-pipeline` | UTF-8 validation, quality/length filtering, SHA-256 exact dedup, MinHash LSH near-dedup, and checksummed provenance reports. |
+| T2-Trainer | `include/eshkol_transformer/t2_bpe_trainer_abi.h` | `et_t2_bpe_train`, `et_t2_bpe_encode`, `et_t2_bpe_decode`, `et_t2_bpe_serialize`, `et_t2_bpe_deserialize`, `et_t2_bpe_save_file`, `et_t2_bpe_load_file`, `et_t2_bpe_destroy` | `make test-t2-trainer` | Deterministic byte-level BPE trainer, lossless encode/decode, and SHA-256 checksummed `ETBPE100` v1.0 artifacts. |
+| MOD5-RoPE | `include/eshkol_transformer/mod5_rope_abi.h` | `et_mod5_rope_kernel_provider_v1`, `et_mod5_rope_forward_f32`, `et_mod5_rope_backward_f32` | `make test-mod5-rope` | K1-dispatched CPU-f32 Rotary Position Embedding forward/backward and 2-layer Llama-style AOT decoder training. |
+| MOD5-MoE | `include/eshkol_transformer/mod5_moe_abi.h` | `et_mod5_moe_kernel_provider_v1`, `et_mod5_moe_forward_f32`, `et_mod5_moe_backward_f32` | `make test-mod5-moe` | Sparse Top-K Mixture-of-Experts router, auxiliary load-balancing loss, and SwiGLU expert dispatch forward/backward. |
+| MOD5-MLA | `include/eshkol_transformer/mod5_mla_abi.h` | `et_mod5_mla_kernel_provider_v1`, `et_mod5_mla_forward_f32`, `et_mod5_mla_backward_f32`, `et_mod5_mla_cache_init`, `et_mod5_mla_cache_prefill_f32`, `et_mod5_mla_cache_step_f32` | `make test-mod5-mla` | Multi-Head Latent Attention forward/backward and compressed latent KV-cache prefill/step execution. |
+| MOD5-AdamW | `include/eshkol_transformer/mod5_adamw_abi.h` | `et_mod5_adamw_create`, `et_mod5_adamw_step`, `et_mod5_adamw_save_snapshot`, `et_mod5_adamw_load_snapshot`, `et_mod5_adamw_compute_lr`, `et_mod5_adamw_destroy` | `make test-mod5-adamw` | Decoupled AdamW optimizer, LR schedules, global-norm clipping, D1 `.ets` shards, and bitwise fresh-process `ETM5TRN1` resume. |
+| MOD5-Generate | `include/eshkol_transformer/mod5_generate_abi.h` | `et_mod5_gen_engine_create`, `et_mod5_gen_kv_cache_create`, `et_mod5_gen_prefill`, `et_mod5_gen_decode_step`, `et_mod5_gen_sample`, `et_mod5_gen_generate` | `make test-mod5-generate` | Autoregressive MOD5 generation engine with KV-cache prefill/decode parity and seeded deterministic sampling. |
+| O2-Muon | `include/eshkol_transformer/o2_muon_abi.h` | `et_muon_newton_schulz5_f32`, `et_muon_orthogonality_error_f32`, `et_wsd_lr`, `et_muon_hybrid_step`, `et_muon_hybrid_step_wsd` | `make test-o2-muon` | Newton-Schulz5 orthogonalized Muon updates for 2D weights paired with hybrid AdamW and WSD LR scheduling. |
+| LoRA | `include/eshkol_transformer/lora_adapter_abi.h` | `et_lora_init_adapter`, `et_lora_forward`, `et_lora_backward`, `et_lora_merge`, `et_lora_unmerge`, `et_lora_checkpoint_save`, `et_lora_checkpoint_load` | `make test-lora` | Low-rank adapter forward/backward, frozen-base SHA-256 invariance, reversible merge/unmerge, and `ETLR1000` checkpoints. |
+| DPO | `include/eshkol_transformer/dpo_alignment_abi.h` | `et_dpo_validate_config`, `et_dpo_sequence_logps`, `et_dpo_forward`, `et_dpo_forward_backward`, `et_dpo_weight_sha256` | `make test-dpo` | Direct Preference Optimization (DPO, cDPO, reference-free) forward/backward with prompt masking and frozen-reference checks. |
+| GRPO | `include/eshkol_transformer/grpo_abi.h` | `et_grpo_group_advantages_v1`, `et_grpo_token_logprobs_v1`, `et_grpo_loss_forward_v1`, `et_grpo_loss_backward_v1`, `et_grpo_verify_exact_match_v1`, `et_grpo_verify_format_and_answer_v1` | `make test-grpo` | Group Relative Policy Optimization / RLVR group-advantage normalization, clipped surrogate + KL loss, and deterministic verifiers. |
+| Spec-Decode | `include/eshkol_transformer/spec_decode_abi.h` | `et_spec_logits_to_probs_v1`, `et_spec_sample_token_v1`, `et_spec_verify_greedy_v1`, `et_spec_verify_sample_v1` | `make test-spec-decode` | Exact lossless speculative decoding (greedy and seeded rejection-sampling verification with exact target-distribution parity). |
+| Paged-KV | `include/eshkol_transformer/paged_kv_abi.h` | `et_paged_kv_create`, `et_paged_kv_seq_alloc`, `et_paged_kv_seq_fork`, `et_paged_kv_append_token`, `et_paged_kv_decode_attention_v1`, `et_paged_kv_prefix_cache_attach`, `et_paged_kv_destroy` | `make test-paged-kv` | Block-table KV-cache allocator with Copy-on-Write prefix sharing, SHA-256 prefix deduplication, and online-softmax GQA decode. |
+| Continuous-Batch | `include/eshkol_transformer/continuous_batch_abi.h` | `et_cb_init`, `et_cb_enqueue`, `et_cb_cancel`, `et_cb_step_plan`, `et_cb_step_commit`, `et_cb_get_stats`, `et_cb_verify_invariants` | `make test-continuous-batch` | Zero-heap iteration-level continuous batching and chunked-prefill scheduler with deterministic preemption and conservation checks. |
+| Constrained-Decode | `include/eshkol_transformer/constrained_decode_abi.h` | `et_cd_dfa_compile_literal_choices`, `et_cd_dfa_compile_flat_json_schema`, `et_cd_vocab_index_build`, `et_cd_apply_logit_mask_v1`, `et_cd_advance_token_v1`, `et_cd_dfa_save`, `et_cd_dfa_load` | `make test-constrained-decode` | Byte-level DFA and flat JSON-object schema compiler, vocabulary bitset logit masking, and `ETCD1000` v1.0 serialized grammars. |
+| W4A32-Quant | `include/eshkol_transformer/w4a32_quant_abi.h` | `et_w4a32_q4_0_quantize_v1`, `et_w4a32_q4_0_gemm_v1`, `et_w4a32_asym_quantize_v1`, `et_w4a32_asym_gemm_v1`, `et_w4a32_container_save`, `et_w4a32_container_load` | `make test-w4a32-quant` | Group-wise symmetric `Q4_0` and asymmetric INT4 weight quantization, fused dequant-matmul, and checksummed containers. |
+| FP8-GEMM | `include/eshkol_transformer/fp8_gemm_abi.h` | `et_fp8_e4m3_encode_v1`, `et_fp8_e5m2_encode_v1`, `et_fp8_delayed_scale_init`, `et_fp8_delayed_scale_update`, `et_fp8_block_quantize_e4m3_v1`, `et_fp8_block_gemm_e4m3_v1`, `et_fp8_block_gemm_e4m3_backward_v1` | `make test-fp8-gemm` | OCP FP8 (`E4M3FN` and `E5M2`) codecs, delayed amax scaling, and block-scaled `W8A8` GEMM forward/backward. |
+| RoPE-YaRN | `include/eshkol_transformer/rope_yarn_abi.h` | `et_rope_yarn_validate_config_v1`, `et_rope_yarn_compute_freqs_v1`, `et_rope_yarn_forward_v1`, `et_rope_yarn_backward_v1`, `et_rope_yarn_qk_dot_invariance_check_v1` | `make test-rope-yarn` | Long-context RoPE extension (`STANDARD`, `LINEAR_PI`, `NTK_AWARE`, `YARN` with `mscale`), partial rotary dims, and analytic VJP. |
+| Ring-Attn | `include/eshkol_transformer/ring_attn_abi.h` | `et_ring_attn_comm_create_v1`, `et_ring_attn_forward_v1`, `et_ring_attn_backward_v1`, `et_ring_attn_multiprocess_forward_v1`, `et_ring_attn_multiprocess_backward_v1`, `et_ring_attn_comm_destroy_v1` | `make test-ring-attn` | Sequence-parallel causal Ring Attention (GQA online-softmax forward + analytic backward) over multi-process `AF_UNIX` rings. |
+| Wave4-Composed | `include/eshkol_transformer/wave4_composed_trainer_abi.h` | `et_wave4_composed_plan_v1`, `et_wave4_composed_bootstrap_v1`, `et_wave4_composed_step_v1`, `et_wave4_composed_evaluate_v1` | `make test-wave4-composed`, `make test-wave4-composed-aot` | Bounded native composition of MP4, AC4, MOD5, DIST5, and EVAL5 for multi-process CPU training and evaluation. |
+| E2E-Lifecycle | `include/eshkol_transformer/e2e_lifecycle_abi.h` | `et_e2e_run_full_in_process`, `et_e2e_stage3_check_fd_gradients` | `make test-e2e-lifecycle` | In-process 8-stage LLM lifecycle pipeline and Stage 3 central finite-difference gradient check. |
+| E2E-Lifecycle AOT | `native/e2e_lifecycle_eshkol_bridge.h` | `et_e2e_aot_create`, `et_e2e_aot_run_stage1_data4`, `et_e2e_aot_run_stage2_train_save`, `et_e2e_aot_run_stage3_pretrain_part1`, `et_e2e_aot_destroy` | `make test-e2e-lifecycle` | Compiled Eshkol AOT bridge driving all 8 lifecycle stages across 5 OS process boundaries with byte-identical ELFs. |
+
 ## Build and validation
 
 | Component | Source | Key symbols or commands | Gate | Scope |
@@ -83,7 +121,12 @@ or shell command for the indicated component.
 | F0 / R0 | `toolchain/eshkol.lock` | `eshkol_commit`, `supported_os`, `clang_version` | `make toolchain`, `make configure`, `make build` | Pinned compiler identity and build entry points. |
 | Q0 | `tests/q0/test_python_isolation.py` | — | `make test-q0`, `make test-python-isolation` | Validation harness and Python development/interop boundary. |
 | B0 | `scripts/test-b0.sh` | — | `make test-b0`, `make benchmark-attention-supported` | Benchmark evidence for the specifically measured host, build and shapes. |
+| B0 Wave 4/5 | `scripts/test-b0-wave45.sh` | — | `make test-b0-wave45`, `make benchmark-wave45` | Unified Wave 4/5 performance and memory benchmark (`wave45-bench-v1`) across MOD5, PA4-Wider, MP4, AC4, and DIST5. |
+| B0 Wave 5 | `scripts/test-b0-wave5.sh` | — | `make test-b0-wave5`, `make benchmark-wave5` | Extended 11-engine Wave 5 native benchmark suite (`wave5-bench-v1`, 25 cases, ASan/UBSan/LSan and checksum invariance). |
+| DOC5 | `scripts/test-doc5-walkthrough.sh` | — | `make test-doc5`, `bash scripts/test-doc5-wave45-walkthrough.sh` | Executable documentation, source-symbol, Makefile-target, and end-to-end walkthrough verification gates. |
 
 See the [public API contract](PUBLIC_API_CONTRACT.md) for signatures and
-ownership conventions, the [roadmap](ROADMAP.md) for admission state, and the
-[walkthrough](DOC5_CORPUS_TO_MODEL_TUTORIAL.md) for a reproducible test run.
+ownership conventions, the [roadmap](ROADMAP.md) for admission state, the
+[Wave 4/5 operator guide](DOC5_WAVE45_GUIDE.md) for category-indexed commands,
+and the [walkthrough](DOC5_CORPUS_TO_MODEL_TUTORIAL.md) for a reproducible test
+run.
