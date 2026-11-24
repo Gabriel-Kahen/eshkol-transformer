@@ -1,0 +1,453 @@
+;;; Ring Attention / Sequence-Parallel Causal Attention compiled Eshkol AOT test:
+;;;   - Negative fail-closed rejections (T%W!=0, invalid W, invalid GQA,
+;;;     misaligned ptr, aliased output, non-finite Q/dO) with sentinel checks
+;;;   - Real multi-process Unix-socket Ring Attention forward + backward across
+;;;     W = 1, 2, 4 (both causal and non-causal, GQA H=4/Hkv=2, N=1, T=8, Dh=4)
+;;;   - Exact parity vs single-rank full attention (max_abs_err <= 1e-6 for
+;;;     O, LSE, dQ, dK, and dV)
+;;;   - Exact causal block skip verification (W=4 skips 6/16 rank-blocks in both
+;;;     forward and backward; W=2 skips 1/4; non-causal skips 0/16)
+;;;   - Central finite-difference gradient checks across (Q, K, V) on W=4
+;;;     multi-process causal and non-causal Ring Attention
+;;; Compiled with: eshkol-run --strict-types --optimize 0 --no-stdlib
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+;; Ring Attention Eshkol AOT bridge
+(extern i64 ring-config-bytes :real et_ring_attn_aot_config_bytes)
+(extern i64 ring-stats-bytes :real et_ring_attn_aot_stats_bytes)
+(extern i32 ring-set-config ptr i64 i64 i64 i64 i64 i64 i64 f64 i64
+        :real et_ring_attn_aot_set_config)
+(extern i32 ring-dense-forward ptr ptr ptr ptr ptr ptr
+        :real et_ring_attn_aot_dense_forward)
+(extern i32 ring-dense-backward ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_ring_attn_aot_dense_backward)
+(extern i32 ring-mp-forward ptr ptr ptr ptr ptr ptr ptr
+        :real et_ring_attn_aot_mp_forward)
+(extern i32 ring-mp-backward ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_ring_attn_aot_mp_backward)
+(extern i64 ring-stats-total-blocks ptr
+        :real et_ring_attn_aot_stats_total_blocks)
+(extern i64 ring-stats-executed-blocks ptr
+        :real et_ring_attn_aot_stats_executed_blocks)
+(extern i64 ring-stats-skipped-causal ptr
+        :real et_ring_attn_aot_stats_skipped_causal)
+(extern i64 ring-stats-ring-rounds ptr
+        :real et_ring_attn_aot_stats_ring_rounds)
+(extern i64 ring-stats-bytes-sent ptr
+        :real et_ring_attn_aot_stats_bytes_sent)
+(extern i64 ring-stats-bytes-received ptr
+        :real et_ring_attn_aot_stats_bytes_received)
+(extern void ring-store-f32 ptr i64 f64 :real et_ring_attn_aot_store_f32)
+(extern f64 ring-load-f32 ptr i64 :real et_ring_attn_aot_load_f32)
+(extern void ring-store-f64 ptr i64 f64 :real et_ring_attn_aot_store_f64)
+(extern f64 ring-load-f64 ptr i64 :real et_ring_attn_aot_load_f64)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Primary GQA configuration: N=1, T=8, H=4, Hkv=2, Dh=4
+(define cfg-n 1)
+(define cfg-t 8)
+(define cfg-h 4)
+(define cfg-hkv 2)
+(define cfg-dh 4)
+(define cfg-timeout-ms 10000)
+
+(define q-elems (* cfg-n cfg-t cfg-h cfg-dh))
+(define kv-elems (* cfg-n cfg-t cfg-hkv cfg-dh))
+(define lse-elems (* cfg-n cfg-t cfg-h))
+
+(define (expect-status label expected actual)
+  (unless (= actual expected)
+    (display label) (display " expected status ") (display expected)
+    (display ", got ") (display actual) (newline) (exit 1)))
+
+(define (require-check label ok)
+  (unless ok (display label) (newline) (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "RING_ATTN AOT allocation failed"
+                   (not (= (ptr->usize p) 0)))
+    p))
+
+;; Allocate aligned descriptors and tensor spans.
+(define cfg-buf (checked-allocate (ring-config-bytes)))
+(define bad-cfg-buf (checked-allocate (ring-config-bytes)))
+(define fstats-buf (checked-allocate (ring-stats-bytes)))
+(define bstats-buf (checked-allocate (ring-stats-bytes)))
+
+(define q-buf (checked-allocate (* 4 q-elems)))
+(define k-buf (checked-allocate (* 4 kv-elems)))
+(define v-buf (checked-allocate (* 4 kv-elems)))
+(define do-buf (checked-allocate (* 4 q-elems)))
+
+(define o-ref-buf (checked-allocate (* 4 q-elems)))
+(define lse-ref-buf (checked-allocate (* 8 lse-elems)))
+(define dq-ref-buf (checked-allocate (* 4 q-elems)))
+(define dk-ref-buf (checked-allocate (* 4 kv-elems)))
+(define dv-ref-buf (checked-allocate (* 4 kv-elems)))
+
+(define o-mp-buf (checked-allocate (* 4 q-elems)))
+(define lse-mp-buf (checked-allocate (* 8 lse-elems)))
+(define dq-mp-buf (checked-allocate (* 4 q-elems)))
+(define dk-mp-buf (checked-allocate (* 4 kv-elems)))
+(define dv-mp-buf (checked-allocate (* 4 kv-elems)))
+
+(define o-tmp-buf (checked-allocate (* 4 q-elems)))
+(define lse-tmp-buf (checked-allocate (* 8 lse-elems)))
+
+;; Deterministic seeding into binary32 buffers.
+(define (seed-f32-buf buf count salt scale)
+  (do ((i 0 (+ i 1)))
+      ((= i count))
+    (let ((v (- (modulo (+ (* 31 salt) (* 17 i) (* 7 (quotient i 4))) 33) 16)))
+      (ring-store-f32 (ffi-pointer buf) i (* (exact->inexact v) scale)))))
+
+(define (max-diff-f32 a b count)
+  (do ((i 0 (+ i 1))
+       (best 0.0))
+      ((= i count) best)
+    (let ((d (abs (- (ring-load-f32 (ffi-pointer a) i)
+                     (ring-load-f32 (ffi-pointer b) i)))))
+      (when (> d best) (set! best d)))))
+
+(define (max-diff-f64 a b count)
+  (do ((i 0 (+ i 1))
+       (best 0.0))
+      ((= i count) best)
+    (let ((d (abs (- (ring-load-f64 (ffi-pointer a) i)
+                     (ring-load-f64 (ffi-pointer b) i)))))
+      (when (> d best) (set! best d)))))
+
+;; 1. Negative fail-closed rejections + sentinel preservation.
+(define (check-negative-cases)
+  (seed-f32-buf q-buf q-elems 1 0.0625)
+  (seed-f32-buf k-buf kv-elems 2 0.0625)
+  (seed-f32-buf v-buf kv-elems 3 0.0625)
+  (seed-f32-buf do-buf q-elems 4 0.0625)
+
+  ;; Plant sentinels in outputs.
+  (ring-store-f32 (ffi-pointer o-mp-buf) 0 17.5)
+  (ring-store-f64 (ffi-pointer lse-mp-buf) 0 -23.25)
+  (ring-store-f32 (ffi-pointer dq-mp-buf) 0 9.125)
+  (ring-store-f32 (ffi-pointer dk-mp-buf) 0 -4.75)
+  (ring-store-f32 (ffi-pointer dv-mp-buf) 0 11.25)
+
+  ;; Non-divisible T % W != 0 (T=6, W=4) -> SHAPE_MISMATCH (2)
+  (expect-status "set bad T%W cfg" 0
+                 (ring-set-config (ffi-pointer bad-cfg-buf)
+                                  1 6 4 2 4 4 1 0.0 cfg-timeout-ms))
+  (expect-status "reject T%W!=0" 2
+                 (ring-mp-forward (ffi-pointer bad-cfg-buf)
+                                  (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                  (ffi-pointer lse-mp-buf)
+                                  (ffi-pointer fstats-buf)))
+
+  ;; Invalid W=3 -> UNSUPPORTED (3)
+  (expect-status "set bad W=3 cfg" 0
+                 (ring-set-config (ffi-pointer bad-cfg-buf)
+                                  1 6 4 2 4 3 1 0.0 cfg-timeout-ms))
+  (expect-status "reject W=3" 3
+                 (ring-mp-forward (ffi-pointer bad-cfg-buf)
+                                  (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                  (ffi-pointer lse-mp-buf)
+                                  (ffi-pointer fstats-buf)))
+
+  ;; Invalid GQA H=4, Hkv=3 -> SHAPE_MISMATCH (2)
+  (expect-status "set bad GQA cfg" 0
+                 (ring-set-config (ffi-pointer bad-cfg-buf)
+                                  1 8 4 3 4 4 1 0.0 cfg-timeout-ms))
+  (expect-status "reject H%Hkv!=0" 2
+                 (ring-mp-forward (ffi-pointer bad-cfg-buf)
+                                  (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                  (ffi-pointer lse-mp-buf)
+                                  (ffi-pointer fstats-buf)))
+
+  ;; Valid W=4 config for pointer/aliasing/non-finite checks.
+  (expect-status "set valid W=4 cfg" 0
+                 (ring-set-config (ffi-pointer cfg-buf)
+                                  cfg-n cfg-t cfg-h cfg-hkv cfg-dh
+                                  4 1 0.0 cfg-timeout-ms))
+
+  ;; Misaligned Q pointer -> INVALID_ARGUMENT (1)
+  (expect-status "reject misaligned Q" 1
+                 (ring-mp-forward (ffi-pointer cfg-buf)
+                                  (ptr-add q-buf 1) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                  (ffi-pointer lse-mp-buf)
+                                  (ffi-pointer fstats-buf)))
+
+  ;; Aliased output O == Q -> INVALID_ARGUMENT (1)
+  (expect-status "reject aliased O==Q" 1
+                 (ring-mp-forward (ffi-pointer cfg-buf)
+                                  (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer q-buf)
+                                  (ffi-pointer lse-mp-buf)
+                                  (ffi-pointer fstats-buf)))
+
+  ;; Non-finite Q (+Inf via f32 overflow) -> NONFINITE (4)
+  (ring-store-f32 (ffi-pointer q-buf) 3 1.0e308)
+  (expect-status "reject non-finite Q" 4
+                 (ring-mp-forward (ffi-pointer cfg-buf)
+                                  (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                  (ffi-pointer lse-mp-buf)
+                                  (ffi-pointer fstats-buf)))
+  (seed-f32-buf q-buf q-elems 1 0.0625)
+
+  ;; Non-finite dO -> NONFINITE (4)
+  (ring-store-f32 (ffi-pointer do-buf) 2 -1.0e308)
+  (expect-status "reject non-finite dO" 4
+                 (ring-mp-backward (ffi-pointer cfg-buf)
+                                   (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                   (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                   (ffi-pointer lse-mp-buf)
+                                   (ffi-pointer do-buf)
+                                   (ffi-pointer dq-mp-buf)
+                                   (ffi-pointer dk-mp-buf)
+                                   (ffi-pointer dv-mp-buf)
+                                   (ffi-pointer bstats-buf)))
+  (seed-f32-buf do-buf q-elems 4 0.0625)
+
+  ;; Verify all sentinels untouched.
+  (require-check "O sentinel modified"
+                 (= (ring-load-f32 (ffi-pointer o-mp-buf) 0) 17.5))
+  (require-check "LSE sentinel modified"
+                 (= (ring-load-f64 (ffi-pointer lse-mp-buf) 0) -23.25))
+  (require-check "dQ sentinel modified"
+                 (= (ring-load-f32 (ffi-pointer dq-mp-buf) 0) 9.125))
+  (require-check "dK sentinel modified"
+                 (= (ring-load-f32 (ffi-pointer dk-mp-buf) 0) -4.75))
+  (require-check "dV sentinel modified"
+                 (= (ring-load-f32 (ffi-pointer dv-mp-buf) 0) 11.25))
+  (display "RING_ATTN AOT NEGATIVE PASS") (newline))
+
+;; 2. Verify W = 1, 2, 4 multi-process parity vs single-rank dense reference.
+(define (check-world-parity world causal)
+  (expect-status "set dense ref cfg" 0
+                 (ring-set-config (ffi-pointer cfg-buf)
+                                  cfg-n cfg-t cfg-h cfg-hkv cfg-dh
+                                  1 causal 0.0 cfg-timeout-ms))
+  (expect-status "dense ref forward" 0
+                 (ring-dense-forward (ffi-pointer cfg-buf)
+                                     (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                     (ffi-pointer v-buf) (ffi-pointer o-ref-buf)
+                                     (ffi-pointer lse-ref-buf)))
+  (expect-status "dense ref backward" 0
+                 (ring-dense-backward (ffi-pointer cfg-buf)
+                                      (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                      (ffi-pointer v-buf)
+                                      (ffi-pointer o-ref-buf)
+                                      (ffi-pointer lse-ref-buf)
+                                      (ffi-pointer do-buf)
+                                      (ffi-pointer dq-ref-buf)
+                                      (ffi-pointer dk-ref-buf)
+                                      (ffi-pointer dv-ref-buf)))
+
+  (expect-status "set ring mp cfg" 0
+                 (ring-set-config (ffi-pointer cfg-buf)
+                                  cfg-n cfg-t cfg-h cfg-hkv cfg-dh
+                                  world causal 0.0 cfg-timeout-ms))
+  (expect-status "ring mp forward" 0
+                 (ring-mp-forward (ffi-pointer cfg-buf)
+                                  (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                  (ffi-pointer lse-mp-buf)
+                                  (ffi-pointer fstats-buf)))
+  (expect-status "ring mp backward" 0
+                 (ring-mp-backward (ffi-pointer cfg-buf)
+                                   (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                   (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                   (ffi-pointer lse-mp-buf)
+                                   (ffi-pointer do-buf)
+                                   (ffi-pointer dq-mp-buf)
+                                   (ffi-pointer dk-mp-buf)
+                                   (ffi-pointer dv-mp-buf)
+                                   (ffi-pointer bstats-buf)))
+
+  (let* ((exp-total (* world world))
+         (exp-skip (if (= causal 1) (quotient (* world (- world 1)) 2) 0))
+         (exp-exec (- exp-total exp-skip))
+         (exp-frounds (if (= world 1) 0 (- world 1)))
+         (exp-brounds (if (= world 1) 0 world))
+         (ftotal (ring-stats-total-blocks (ffi-pointer fstats-buf)))
+         (fexec (ring-stats-executed-blocks (ffi-pointer fstats-buf)))
+         (fskip (ring-stats-skipped-causal (ffi-pointer fstats-buf)))
+         (frounds (ring-stats-ring-rounds (ffi-pointer fstats-buf)))
+         (fsent (ring-stats-bytes-sent (ffi-pointer fstats-buf)))
+         (frecv (ring-stats-bytes-received (ffi-pointer fstats-buf)))
+         (btotal (ring-stats-total-blocks (ffi-pointer bstats-buf)))
+         (bexec (ring-stats-executed-blocks (ffi-pointer bstats-buf)))
+         (bskip (ring-stats-skipped-causal (ffi-pointer bstats-buf)))
+         (brounds (ring-stats-ring-rounds (ffi-pointer bstats-buf)))
+         (bsent (ring-stats-bytes-sent (ffi-pointer bstats-buf)))
+         (brecv (ring-stats-bytes-received (ffi-pointer bstats-buf)))
+         (err-o (max-diff-f32 o-ref-buf o-mp-buf q-elems))
+         (err-lse (max-diff-f64 lse-ref-buf lse-mp-buf lse-elems))
+         (err-dq (max-diff-f32 dq-ref-buf dq-mp-buf q-elems))
+         (err-dk (max-diff-f32 dk-ref-buf dk-mp-buf kv-elems))
+         (err-dv (max-diff-f32 dv-ref-buf dv-mp-buf kv-elems)))
+
+    (require-check "fwd total blocks mismatch" (= ftotal exp-total))
+    (require-check "fwd skipped blocks mismatch" (= fskip exp-skip))
+    (require-check "fwd executed blocks mismatch" (= fexec exp-exec))
+    (require-check "fwd rounds mismatch" (= frounds exp-frounds))
+    (require-check "fwd bytes sent!=recv" (= fsent frecv))
+    (when (> world 1) (require-check "fwd bytes_sent==0" (> fsent 0)))
+
+    (require-check "bwd total blocks mismatch" (= btotal exp-total))
+    (require-check "bwd skipped blocks mismatch" (= bskip exp-skip))
+    (require-check "bwd executed blocks mismatch" (= bexec exp-exec))
+    (require-check "bwd rounds mismatch" (= brounds exp-brounds))
+    (require-check "bwd bytes sent!=recv" (= bsent brecv))
+    (when (> world 1) (require-check "bwd bytes_sent==0" (> bsent 0)))
+
+    (require-check "O parity > 1e-6" (<= err-o 1.0e-6))
+    (require-check "LSE parity > 1e-6" (<= err-lse 1.0e-6))
+    (require-check "dQ parity > 1e-6" (<= err-dq 1.0e-6))
+    (require-check "dK parity > 1e-6" (<= err-dk 1.0e-6))
+    (require-check "dV parity > 1e-6" (<= err-dv 1.0e-6))
+
+    (display "RING_ATTN AOT PARITY world=") (display world)
+    (display " causal=") (display causal)
+    (display " skip=") (display fskip) (display "/") (display ftotal)
+    (display " bskip=") (display bskip) (display "/") (display btotal)
+    (display " err_o=") (display (number->string err-o))
+    (display " err_lse=") (display (number->string err-lse))
+    (display " err_dq=") (display (number->string err-dq))
+    (display " err_dk=") (display (number->string err-dk))
+    (display " err_dv=") (display (number->string err-dv))
+    (display " PASS") (newline)))
+
+;; 3. Central finite-difference checks on W=4 multi-process Ring Attention.
+(define (eval-mp-weighted-loss)
+  (expect-status "ring mp fd forward" 0
+                 (ring-mp-forward (ffi-pointer cfg-buf)
+                                  (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer o-tmp-buf)
+                                  (ffi-pointer lse-tmp-buf)
+                                  (ffi-pointer fstats-buf)))
+  (let ((acc 0.0))
+    (do ((i 0 (+ i 1)))
+        ((= i q-elems) acc)
+      (set! acc (+ acc (* (ring-load-f32 (ffi-pointer o-tmp-buf) i)
+                          (ring-load-f32 (ffi-pointer do-buf) i)))))))
+
+(define (check-one-fd buf grad-buf idx)
+  (let* ((orig (ring-load-f32 (ffi-pointer buf) idx))
+         (eps 0.00390625))
+    (ring-store-f32 (ffi-pointer buf) idx (+ orig eps))
+    (let ((lp (eval-mp-weighted-loss)))
+      (ring-store-f32 (ffi-pointer buf) idx (- orig eps))
+      (let* ((lm (eval-mp-weighted-loss))
+             (fd (/ (- lp lm) (* 2.0 eps)))
+             (an (ring-load-f32 (ffi-pointer grad-buf) idx))
+             (err (abs (- an fd))))
+        (ring-store-f32 (ffi-pointer buf) idx orig)
+        (unless (<= err (+ 0.0001 (* 0.01 (abs fd))))
+          (display "RING_ATTN AOT FD mismatch idx=") (display idx)
+          (display " analytic=") (display (number->string an))
+          (display " numerical=") (display (number->string fd))
+          (display " err=") (display (number->string err)) (newline)
+          (exit 1))
+        err))))
+
+(define (check-fd-gradients causal)
+  (expect-status "set W=4 fd cfg" 0
+                 (ring-set-config (ffi-pointer cfg-buf)
+                                  cfg-n cfg-t cfg-h cfg-hkv cfg-dh
+                                  4 causal 0.0 cfg-timeout-ms))
+  (expect-status "ring mp fwd for fd" 0
+                 (ring-mp-forward (ffi-pointer cfg-buf)
+                                  (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                  (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                  (ffi-pointer lse-mp-buf)
+                                  (ffi-pointer fstats-buf)))
+  (expect-status "ring mp bwd for fd" 0
+                 (ring-mp-backward (ffi-pointer cfg-buf)
+                                   (ffi-pointer q-buf) (ffi-pointer k-buf)
+                                   (ffi-pointer v-buf) (ffi-pointer o-mp-buf)
+                                   (ffi-pointer lse-mp-buf)
+                                   (ffi-pointer do-buf)
+                                   (ffi-pointer dq-mp-buf)
+                                   (ffi-pointer dk-mp-buf)
+                                   (ffi-pointer dv-mp-buf)
+                                   (ffi-pointer bstats-buf)))
+
+  (let ((checked 0)
+        (max-err 0.0))
+    ;; Sample 6 indices across Q (spanning all 4 sequence shards)
+    (do ((s 0 (+ s 1)))
+        ((= s 6))
+      (let* ((idx (* s 21))
+             (e (check-one-fd q-buf dq-mp-buf idx)))
+        (when (> e max-err) (set! max-err e))
+        (set! checked (+ checked 1))))
+    ;; Sample 6 indices across K (spanning all 4 sequence shards)
+    (do ((s 0 (+ s 1)))
+        ((= s 6))
+      (let* ((idx (* s 10))
+             (e (check-one-fd k-buf dk-mp-buf idx)))
+        (when (> e max-err) (set! max-err e))
+        (set! checked (+ checked 1))))
+    ;; Sample 6 indices across V (spanning all 4 sequence shards)
+    (do ((s 0 (+ s 1)))
+        ((= s 6))
+      (let* ((idx (* s 10))
+             (e (check-one-fd v-buf dv-mp-buf idx)))
+        (when (> e max-err) (set! max-err e))
+        (set! checked (+ checked 1))))
+
+    (display "RING_ATTN AOT FD_GRADIENTS world=4 causal=") (display causal)
+    (display " checked=") (display checked)
+    (display " max_abs_err=") (display (number->string max-err))
+    (display " PASS") (newline)))
+
+;; Run full AOT suite.
+(check-negative-cases)
+(seed-f32-buf q-buf q-elems 11 0.0625)
+(seed-f32-buf k-buf kv-elems 22 0.0625)
+(seed-f32-buf v-buf kv-elems 33 0.0625)
+(seed-f32-buf do-buf q-elems 44 0.0625)
+
+(check-world-parity 1 1)
+(check-world-parity 2 1)
+(check-world-parity 4 1)
+(check-world-parity 2 0)
+(check-world-parity 4 0)
+
+(check-fd-gradients 1)
+(check-fd-gradients 0)
+
+(display "RING_ATTN AOT SUMMARY n=1 t=8 h=4 hkv=2 dh=4 worlds=1,2,4 PASS")
+(newline)
+
+;; Release all buffers cleanly.
+(release (ffi-pointer cfg-buf))
+(release (ffi-pointer bad-cfg-buf))
+(release (ffi-pointer fstats-buf))
+(release (ffi-pointer bstats-buf))
+(release (ffi-pointer q-buf))
+(release (ffi-pointer k-buf))
+(release (ffi-pointer v-buf))
+(release (ffi-pointer do-buf))
+(release (ffi-pointer o-ref-buf))
+(release (ffi-pointer lse-ref-buf))
+(release (ffi-pointer dq-ref-buf))
+(release (ffi-pointer dk-ref-buf))
+(release (ffi-pointer dv-ref-buf))
+(release (ffi-pointer o-mp-buf))
+(release (ffi-pointer lse-mp-buf))
+(release (ffi-pointer dq-mp-buf))
+(release (ffi-pointer dk-mp-buf))
+(release (ffi-pointer dv-mp-buf))
+(release (ffi-pointer o-tmp-buf))
+(release (ffi-pointer lse-tmp-buf))
