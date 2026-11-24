@@ -1,0 +1,511 @@
+;;; Compiled Eshkol AOT verification for hybrid Muon (Newton-Schulz5) + AdamW
+;;; parameter-group weight-decay masking + WSD (Warmup-Stable-Decay) LR scheduler.
+;;;
+;;; Trains a 2-layer MLP + RMSNorm model:
+;;;   - W1 [8, 12]   : 2D Muon group, apply_weight_decay=1 (wd=0.01)
+;;;   - W2 [12, 8]   : 2D Muon group, apply_weight_decay=1 (wd=0.01)
+;;;   - gamma1 [8]   : 1D AdamW group, apply_weight_decay=0 (wd=0.0)
+;;;   - gamma2 [12]  : 1D AdamW group, apply_weight_decay=0 (wd=0.0)
+;;; for 15 steps under a WSD cosine schedule spanning Warmup, Stable, and Decay.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 muon-create f64 f64 f64 i64 i64 f64 f64 f64 f64 f64
+        i64 i64 i64 f64 f64 i64 ptr :real et_muon_aot_create)
+(extern void muon-destroy ptr :real et_muon_aot_destroy)
+(extern i32 muon-add-2d ptr i64 i64 i64 :real et_muon_aot_add_muon_group)
+(extern i32 muon-add-1d ptr i64 i64 :real et_muon_aot_add_adamw_group)
+
+(extern i32 muon-set-param ptr i64 i64 f64 :real et_muon_aot_set_param)
+(extern f64 muon-get-param ptr i64 i64 :real et_muon_aot_get_param)
+(extern i32 muon-set-grad ptr i64 i64 f64 :real et_muon_aot_set_grad)
+(extern i64 muon-param-bits ptr i64 i64 :real et_muon_aot_param_bits)
+
+(extern i32 muon-query-wsd ptr i64 :real et_muon_aot_query_wsd)
+(extern f64 muon-last-lr ptr :real et_muon_aot_last_lr)
+(extern i64 muon-last-phase ptr :real et_muon_aot_last_phase)
+(extern i32 muon-step-wsd ptr i64 :real et_muon_aot_step_wsd)
+
+(extern i32 muon-group-ortho ptr i64 :real et_muon_aot_group_ns5_ortho_error)
+(extern f64 muon-last-ortho ptr :real et_muon_aot_last_ortho_error)
+
+(extern ptr muon-alloc-f32 i64 :real et_muon_aot_alloc_f32)
+(extern void muon-free-f32 ptr :real et_muon_aot_free_f32)
+(extern i32 muon-store-f32 ptr i64 i64 f64 :real et_muon_aot_store_f32)
+(extern f64 muon-load-f32 ptr i64 i64 :real et_muon_aot_load_f32)
+(extern i32 muon-raw-ns5 i64 i64 ptr i64 f64 ptr :real et_muon_aot_newton_schulz5)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Model dimensions: wide W1 [8, 12], tall W2 [12, 8], RMSNorm scales [8] and [12].
+(define batch-size 16)
+(define dim-d 8)
+(define dim-h 12)
+(define rms-eps 0.0001)
+
+;; WSD schedule across 15 training steps (step 0..14):
+;;   Warmup: [0, 4)   -> steps 0, 1, 2, 3
+;;   Stable: [4, 9)   -> steps 4, 5, 6, 7, 8
+;;   Decay : [9, 14]  -> steps 9, 10, 11, 12, 13, 14
+(define train-steps 15)
+(define wsd-warmup 4)
+(define wsd-stable 5)
+(define wsd-total 14)
+(define wsd-max-lr 0.025)
+(define wsd-min-lr 0.0025)
+(define wsd-cosine 1)
+
+;; Optimizer hyperparameters.
+(define muon-beta 0.85)
+(define muon-eps 0.0000001)
+(define muon-wd 0.01)
+(define muon-ns-steps 5)
+(define muon-nesterov 1)
+(define adamw-beta1 0.9)
+(define adamw-beta2 0.999)
+(define adamw-eps 0.00000001)
+(define adamw-wd 0.01)
+(define adamw-lr-scale 0.5)
+
+;; Status codes from o2_muon_abi.h.
+(define status-ok 0)
+(define err-argument -1)
+(define err-shape -2)
+(define err-alias -4)
+(define err-nonfinite -5)
+
+(define (require-check label ok)
+  (unless ok
+    (display "O2 MUON AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "O2 MUON AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (det-val index salt scale)
+  (let ((bucket (- (modulo (+ (* 29 index) (* 17 salt) (quotient index 3)) 37) 18)))
+    (* scale bucket)))
+
+(define (seed-2d rows cols salt base scale)
+  (let ((t (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) t)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (tensor-set! t r c (+ base (det-val (+ (* r cols) c) salt scale)))))))
+
+(define (seed-1d len salt base scale)
+  (let ((t (zeros (list len))))
+    (do ((i 0 (+ i 1)))
+        ((= i len) t)
+      (tensor-set! t i (+ base (det-val i salt scale))))))
+
+;; Push / pull Eshkol tensors to/from the native optimizer context groups.
+(define (push-param-2d ctx gid tensor rows cols)
+  (do ((r 0 (+ r 1)))
+      ((= r rows))
+    (do ((c 0 (+ c 1)))
+        ((= c cols))
+      (expect-status "set-param-2d" status-ok
+                     (muon-set-param (ffi-pointer ctx) gid (+ (* r cols) c)
+                                     (tensor-get tensor r c))))))
+
+(define (pull-param-2d ctx gid rows cols)
+  (let ((t (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) t)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (tensor-set! t r c
+                     (muon-get-param (ffi-pointer ctx) gid (+ (* r cols) c)))))))
+
+(define (push-grad-2d ctx gid tensor rows cols)
+  (do ((r 0 (+ r 1)))
+      ((= r rows))
+    (do ((c 0 (+ c 1)))
+        ((= c cols))
+      (expect-status "set-grad-2d" status-ok
+                     (muon-set-grad (ffi-pointer ctx) gid (+ (* r cols) c)
+                                    (tensor-get tensor r c))))))
+
+(define (push-param-1d ctx gid tensor len)
+  (do ((i 0 (+ i 1)))
+      ((= i len))
+    (expect-status "set-param-1d" status-ok
+                   (muon-set-param (ffi-pointer ctx) gid i (tensor-ref tensor i)))))
+
+(define (pull-param-1d ctx gid len)
+  (let ((t (zeros (list len))))
+    (do ((i 0 (+ i 1)))
+        ((= i len) t)
+      (tensor-set! t i (muon-get-param (ffi-pointer ctx) gid i)))))
+
+(define (push-grad-1d ctx gid tensor len)
+  (do ((i 0 (+ i 1)))
+      ((= i len))
+    (expect-status "set-grad-1d" status-ok
+                   (muon-set-grad (ffi-pointer ctx) gid i (tensor-ref tensor i)))))
+
+;; RMSNorm forward: returns #(y u rms) for x [B, C], gamma [C].
+(define (rmsnorm-forward x gamma rows cols)
+  (let ((y (zeros (list rows cols)))
+        (u (zeros (list rows cols)))
+        (rms (zeros (list rows)))
+        (inv-c (/ 1.0 cols)))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) (vector y u rms))
+      (let ((acc 0.0))
+        (do ((c 0 (+ c 1)))
+            ((= c cols))
+          (let ((v (tensor-get x r c)))
+            (set! acc (+ acc (* v v)))))
+        (let ((rv (sqrt (+ (* inv-c acc) rms-eps))))
+          (tensor-set! rms r rv)
+          (do ((c 0 (+ c 1)))
+              ((= c cols))
+            (let ((uv (/ (tensor-get x r c) rv)))
+              (tensor-set! u r c uv)
+              (tensor-set! y r c (* uv (tensor-ref gamma c))))))))))
+
+;; RMSNorm backward: returns #(dx dgamma).
+(define (rmsnorm-backward u rms gamma dy rows cols)
+  (let ((dx (zeros (list rows cols)))
+        (dgamma (zeros (list cols)))
+        (inv-c (/ 1.0 cols)))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) (vector dx dgamma))
+      (let ((rv (tensor-ref rms r))
+            (dot 0.0))
+        (do ((c 0 (+ c 1)))
+            ((= c cols))
+          (let* ((dyv (tensor-get dy r c))
+                 (uv (tensor-get u r c))
+                 (gv (tensor-ref gamma c)))
+            (tensor-set! dgamma c (+ (tensor-ref dgamma c) (* dyv uv)))
+            (set! dot (+ dot (* dyv gv uv)))))
+        (let ((mean-dot (* inv-c dot)))
+          (do ((c 0 (+ c 1)))
+              ((= c cols))
+            (let* ((du (* (tensor-get dy r c) (tensor-ref gamma c)))
+                   (uv (tensor-get u r c)))
+              (tensor-set! dx r c (/ (- du (* uv mean-dot)) rv)))))))))
+
+;; Smooth algebraic activation: act(z) = z / sqrt(1 + z^2),
+;; act'(z) = 1 / ((1 + z^2) * sqrt(1 + z^2)).
+(define (act-forward z rows cols)
+  (let ((h (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) h)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (let ((v (tensor-get z r c)))
+          (tensor-set! h r c (/ v (sqrt (+ 1.0 (* v v))))))))))
+
+(define (act-backward z dh rows cols)
+  (let ((dz (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) dz)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (let* ((v (tensor-get z r c))
+               (q (+ 1.0 (* v v)))
+               (deriv (/ 1.0 (* q (sqrt q)))))
+          (tensor-set! dz r c (* (tensor-get dh r c) deriv)))))))
+
+;; 2-layer MLP + RMSNorm forward & optional analytic backward.
+;; weights = #(W1 W2 gamma1 gamma2), grads = #f or #(dW1 dW2 dgamma1 dgamma2).
+(define (mlp-loss weights x target grads)
+  (let* ((w1 (vector-ref weights 0))
+         (w2 (vector-ref weights 1))
+         (g1 (vector-ref weights 2))
+         (g2 (vector-ref weights 3))
+         (rn1 (rmsnorm-forward x g1 batch-size dim-d))
+         (n1 (vector-ref rn1 0))
+         (u1 (vector-ref rn1 1))
+         (rms1 (vector-ref rn1 2))
+         (z1 (matmul n1 w1))
+         (h1 (act-forward z1 batch-size dim-h))
+         (rn2 (rmsnorm-forward h1 g2 batch-size dim-h))
+         (n2 (vector-ref rn2 0))
+         (u2 (vector-ref rn2 1))
+         (rms2 (vector-ref rn2 2))
+         (y (matmul n2 w2))
+         (delta (tensor-sub y target))
+         (inv-elems (/ 1.0 (* batch-size dim-d)))
+         (loss (* 0.5 inv-elems (tensor-sum (tensor-mul delta delta)))))
+    (when grads
+      (let* ((dy (tensor-scale delta inv-elems))
+             (dw2 (matmul (transpose n2) dy))
+             (dn2 (matmul dy (transpose w2)))
+             (drn2 (rmsnorm-backward u2 rms2 g2 dn2 batch-size dim-h))
+             (dh1 (vector-ref drn2 0))
+             (dg2 (vector-ref drn2 1))
+             (dz1 (act-backward z1 dh1 batch-size dim-h))
+             (dw1 (matmul (transpose n1) dz1))
+             (dn1 (matmul dz1 (transpose w1)))
+             (drn1 (rmsnorm-backward u1 rms1 g1 dn1 batch-size dim-d))
+             (dg1 (vector-ref drn1 1)))
+        (vector-set! grads 0 dw1)
+        (vector-set! grads 1 dw2)
+        (vector-set! grads 2 dg1)
+        (vector-set! grads 3 dg2)))
+    loss))
+
+;; Central finite-difference check for 2D weight and 1D norm scale.
+(define (check-fd-2d weights x target grad-mat idx r c)
+  (let* ((w (vector-ref weights idx))
+         (orig (tensor-get w r c))
+         (eps 0.0009765625))
+    (tensor-set! w r c (+ orig eps))
+    (let ((plus (mlp-loss weights x target #f)))
+      (tensor-set! w r c (- orig eps))
+      (let* ((minus (mlp-loss weights x target #f))
+             (num (/ (- plus minus) (* 2.0 eps)))
+             (ana (tensor-get grad-mat r c)))
+        (tensor-set! w r c orig)
+        (require-check "2D analytic gradient mismatch"
+                       (<= (abs (- ana num)) (+ 0.00001 (* 0.005 (abs num)))))))))
+
+(define (check-fd-1d weights x target grad-vec idx i)
+  (let* ((v (vector-ref weights idx))
+         (orig (tensor-ref v i))
+         (eps 0.0009765625))
+    (tensor-set! v i (+ orig eps))
+    (let ((plus (mlp-loss weights x target #f)))
+      (tensor-set! v i (- orig eps))
+      (let* ((minus (mlp-loss weights x target #f))
+             (num (/ (- plus minus) (* 2.0 eps)))
+             (ana (tensor-ref grad-vec i)))
+        (tensor-set! v i orig)
+        (require-check "1D analytic gradient mismatch"
+                       (<= (abs (- ana num)) (+ 0.00001 (* 0.005 (abs num)))))))))
+
+;; Negative checks: malformed configs, non-finite gradients, aliasing, and wd=0 mask.
+(define (run-negative-and-mask-checks)
+  (let ((cell (checked-allocate 8)))
+    ;; 1. Invalid WSD: warmup + stable > total.
+    (expect-status "bad WSD warmup+stable>total" err-argument
+                   (muon-create muon-beta muon-eps muon-wd muon-ns-steps
+                                muon-nesterov adamw-beta1 adamw-beta2
+                                adamw-eps adamw-wd adamw-lr-scale
+                                10 10 14 wsd-max-lr wsd-min-lr wsd-cosine
+                                (ffi-pointer cell)))
+    ;; 2. Invalid ns_steps = 0.
+    (expect-status "bad ns_steps=0" err-argument
+                   (muon-create muon-beta muon-eps muon-wd 0
+                                muon-nesterov adamw-beta1 adamw-beta2
+                                adamw-eps adamw-wd adamw-lr-scale
+                                wsd-warmup wsd-stable wsd-total
+                                wsd-max-lr wsd-min-lr wsd-cosine
+                                (ffi-pointer cell)))
+    ;; 3. Valid probe ctx for group/setter/mask checks.
+    (expect-status "probe create" status-ok
+                   (muon-create muon-beta muon-eps muon-wd muon-ns-steps
+                                muon-nesterov adamw-beta1 adamw-beta2
+                                adamw-eps adamw-wd adamw-lr-scale
+                                wsd-warmup wsd-stable wsd-total
+                                wsd-max-lr wsd-min-lr wsd-cosine
+                                (ffi-pointer cell)))
+    (let ((pctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      ;; Invalid wd mask = 2.
+      (expect-status "bad wd mask" err-argument
+                     (muon-add-2d (ffi-pointer pctx) 4 4 2))
+      ;; Register a 1D norm group with apply_weight_decay=0 and nonzero adamw_wd=0.01.
+      (expect-status "probe add 1d" 0
+                     (muon-add-1d (ffi-pointer pctx) 4 0))
+      (do ((i 0 (+ i 1)))
+          ((= i 4))
+        (expect-status "probe set param" status-ok
+                       (muon-set-param (ffi-pointer pctx) 0 i (+ 1.0 (* 0.25 i))))
+        (expect-status "probe set zero grad" status-ok
+                       (muon-set-grad (ffi-pointer pctx) 0 i 0.0)))
+      ;; Reject out-of-range f32 overflow grad.
+      (expect-status "overflow grad rejected" err-nonfinite
+                     (muon-set-grad (ffi-pointer pctx) 0 0 1.0e308))
+      ;; Capture exact bit patterns before zero-grad step.
+      (let ((bits0 (muon-param-bits (ffi-pointer pctx) 0 0))
+            (bits3 (muon-param-bits (ffi-pointer pctx) 0 3)))
+        (expect-status "zero-grad wd=0 step" status-ok
+                       (muon-step-wsd (ffi-pointer pctx) 4))
+        (require-check "wd=0 norm scale mutated on zero grad"
+                       (and (= bits0 (muon-param-bits (ffi-pointer pctx) 0 0))
+                            (= bits3 (muon-param-bits (ffi-pointer pctx) 0 3)))))
+      ;; Reject 1D group passed to 2D NS5 diagnostic.
+      (expect-status "1d group ortho rejected" err-argument
+                     (muon-group-ortho (ffi-pointer pctx) 0))
+      (muon-destroy (ffi-pointer pctx))))
+
+  ;; 4. Raw NS5 negative checks: alias, invalid shape, non-finite input preserves output.
+  (let ((buf-g (muon-alloc-f32 16))
+        (buf-u (muon-alloc-f32 16)))
+    (require-check "raw alloc failed"
+                   (and (not (= (ptr->usize buf-g) 0))
+                        (not (= (ptr->usize buf-u) 0))))
+    (expect-status "sentinel store" status-ok
+                   (muon-store-f32 (ffi-pointer buf-u) 16 0 7.5))
+    (expect-status "raw NS5 self-alias" err-alias
+                   (muon-raw-ns5 4 4 (ffi-pointer buf-g) 5 muon-eps (ffi-pointer buf-g)))
+    (expect-status "raw NS5 bad shape" err-shape
+                   (muon-raw-ns5 0 4 (ffi-pointer buf-g) 5 muon-eps (ffi-pointer buf-u)))
+    (expect-status "raw NS5 nonfinite store" status-ok
+                   (muon-store-f32 (ffi-pointer buf-g) 16 0 1.0e308))
+    (expect-status "raw NS5 nonfinite rejected" err-nonfinite
+                   (muon-raw-ns5 4 4 (ffi-pointer buf-g) 5 muon-eps (ffi-pointer buf-u)))
+    (require-check "raw NS5 failure mutated output sentinel"
+                   (= (muon-load-f32 (ffi-pointer buf-u) 16 0) 7.5))
+    (muon-free-f32 (ffi-pointer buf-g))
+    (muon-free-f32 (ffi-pointer buf-u)))
+
+  (display "O2 MUON AOT NEGATIVE PASS") (newline))
+
+(define (run-training)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "train create" status-ok
+                   (muon-create muon-beta muon-eps muon-wd muon-ns-steps
+                                muon-nesterov adamw-beta1 adamw-beta2
+                                adamw-eps adamw-wd adamw-lr-scale
+                                wsd-warmup wsd-stable wsd-total
+                                wsd-max-lr wsd-min-lr wsd-cosine
+                                (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (expect-status "add W1" 0 (muon-add-2d (ffi-pointer ctx) dim-d dim-h 1))
+      (expect-status "add W2" 1 (muon-add-2d (ffi-pointer ctx) dim-h dim-d 1))
+      (expect-status "add gamma1" 2 (muon-add-1d (ffi-pointer ctx) dim-d 0))
+      (expect-status "add gamma2" 3 (muon-add-1d (ffi-pointer ctx) dim-h 0))
+
+      (let* ((w1 (seed-2d dim-d dim-h 11 0.0 0.03125))
+             (w2 (seed-2d dim-h dim-d 19 0.0 0.03125))
+             (g1 (seed-1d dim-d 23 1.0 0.015625))
+             (g2 (seed-1d dim-h 29 1.0 0.015625))
+             (weights (vector w1 w2 g1 g2))
+             (x (seed-2d batch-size dim-d 37 0.0 0.0625))
+             (target (tensor-add (tensor-scale x 0.75)
+                                 (seed-2d batch-size dim-d 43 0.0 0.03125)))
+             (grads (make-vector 4 #f)))
+
+        ;; Initialize native context buffers with exact binary32 copies, then pull back
+        ;; so Eshkol tensors match native f32 weights identically at step 0.
+        (push-param-2d ctx 0 w1 dim-d dim-h)
+        (push-param-2d ctx 1 w2 dim-h dim-d)
+        (push-param-1d ctx 2 g1 dim-d)
+        (push-param-1d ctx 3 g2 dim-h)
+        (vector-set! weights 0 (pull-param-2d ctx 0 dim-d dim-h))
+        (vector-set! weights 1 (pull-param-2d ctx 1 dim-h dim-d))
+        (vector-set! weights 2 (pull-param-1d ctx 2 dim-d))
+        (vector-set! weights 3 (pull-param-1d ctx 3 dim-h))
+
+        (let ((initial-loss (mlp-loss weights x target grads)))
+          ;; Verify analytic gradients via central finite differences before step 0.
+          (check-fd-2d weights x target (vector-ref grads 0) 0 0 0)
+          (check-fd-2d weights x target (vector-ref grads 0) 0 4 7)
+          (check-fd-2d weights x target (vector-ref grads 1) 1 0 0)
+          (check-fd-2d weights x target (vector-ref grads 1) 1 7 4)
+          (check-fd-1d weights x target (vector-ref grads 2) 2 3)
+          (check-fd-1d weights x target (vector-ref grads 3) 3 5)
+
+          (display "O2 MUON AOT LOSS 0 ")
+          (display (number->string initial-loss)) (newline)
+
+          (let ((prev-loss initial-loss)
+                (max-ortho 0.0)
+                (warmup-count 0)
+                (stable-count 0)
+                (decay-count 0))
+            (do ((step 0 (+ step 1)))
+                ((= step train-steps)
+                 (require-check "exact WSD phase counts"
+                                (and (= warmup-count 4)
+                                     (= stable-count 5)
+                                     (= decay-count 6)))
+                 (display "O2 MUON AOT SUMMARY steps=15 initial=")
+                 (display (number->string initial-loss))
+                 (display " final=")
+                 (display (number->string prev-loss))
+                 (display " max_ortho=")
+                 (display (number->string max-ortho))
+                 (display " phases=4/5/6 grad_checks=6")
+                 (newline))
+              ;; Query WSD phase and LR before stepping.
+              (expect-status "query-wsd" status-ok
+                             (muon-query-wsd (ffi-pointer ctx) step))
+              (let ((q-lr (muon-last-lr (ffi-pointer ctx)))
+                    (q-phase (muon-last-phase (ffi-pointer ctx)))
+                    (exp-phase (if (< step wsd-warmup)
+                                   0
+                                   (if (< step (+ wsd-warmup wsd-stable)) 1 2))))
+                (require-check "WSD phase transition mismatch" (= q-phase exp-phase))
+                (when (= q-phase 0) (set! warmup-count (+ warmup-count 1)))
+                (when (= q-phase 1)
+                  (set! stable-count (+ stable-count 1))
+                  (require-check "WSD stable LR not constant max_lr"
+                                 (= q-lr wsd-max-lr)))
+                (when (= q-phase 2) (set! decay-count (+ decay-count 1)))
+                (when (= step wsd-total)
+                  (require-check "WSD final decay LR not min_lr"
+                                 (= q-lr wsd-min-lr)))
+
+                ;; Push gradients into native hybrid optimizer context.
+                (push-grad-2d ctx 0 (vector-ref grads 0) dim-d dim-h)
+                (push-grad-2d ctx 1 (vector-ref grads 1) dim-h dim-d)
+                (push-grad-1d ctx 2 (vector-ref grads 2) dim-d)
+                (push-grad-1d ctx 3 (vector-ref grads 3) dim-h)
+
+                ;; Measure Newton-Schulz5 orthogonality error on wide W1 and tall W2 grads.
+                (expect-status "ortho W1" status-ok
+                               (muon-group-ortho (ffi-pointer ctx) 0))
+                (let ((o1 (muon-last-ortho (ffi-pointer ctx))))
+                  (expect-status "ortho W2" status-ok
+                                 (muon-group-ortho (ffi-pointer ctx) 1))
+                  (let ((o2 (muon-last-ortho (ffi-pointer ctx))))
+                    (require-check "W1 NS5 ortho error unbounded"
+                                   (and (>= o1 0.0) (< o1 (sqrt dim-d))))
+                    (require-check "W2 NS5 ortho error unbounded"
+                                   (and (>= o2 0.0) (< o2 (sqrt dim-d))))
+                    (when (> o1 max-ortho) (set! max-ortho o1))
+                    (when (> o2 max-ortho) (set! max-ortho o2))
+
+                    ;; Execute failure-atomic hybrid Muon + AdamW step under WSD.
+                    (expect-status "step-wsd" status-ok
+                                   (muon-step-wsd (ffi-pointer ctx) step))
+                    (require-check "step-wsd LR mismatch"
+                                   (= (muon-last-lr (ffi-pointer ctx)) q-lr))
+                    (require-check "step-wsd phase mismatch"
+                                   (= (muon-last-phase (ffi-pointer ctx)) q-phase))
+
+                    ;; Pull updated f32 parameters back into Eshkol tensors.
+                    (vector-set! weights 0 (pull-param-2d ctx 0 dim-d dim-h))
+                    (vector-set! weights 1 (pull-param-2d ctx 1 dim-h dim-d))
+                    (vector-set! weights 2 (pull-param-1d ctx 2 dim-d))
+                    (vector-set! weights 3 (pull-param-1d ctx 3 dim-h))
+
+                    (let ((next-loss (mlp-loss weights x target grads)))
+                      (require-check "loss failed to strictly decrease"
+                                     (and (>= next-loss 0.0) (< next-loss prev-loss)))
+                      (display "O2 MUON AOT STEP ") (display step)
+                      (display " phase=") (display q-phase)
+                      (display " lr=") (display (number->string q-lr))
+                      (display " ortho1=") (display (number->string o1))
+                      (display " ortho2=") (display (number->string o2))
+                      (display " loss=") (display (number->string next-loss))
+                      (newline)
+                      (display "O2 MUON AOT LOSS ") (display (+ step 1))
+                      (display " ") (display (number->string next-loss))
+                      (newline)
+                      (set! prev-loss next-loss)))))))))
+      (muon-destroy (ffi-pointer ctx)))))
+
+(run-negative-and-mask-checks)
+(run-training)
