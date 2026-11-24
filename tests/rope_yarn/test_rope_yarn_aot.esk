@@ -1,0 +1,396 @@
+;;; Compiled Eshkol AOT driver for RoPE Long-Context Extension Engine:
+;;;   - All 4 scaling modes: STANDARD, LINEAR_PI, NTK_AWARE, YARN (s = 4.0)
+;;;   - Exact YaRN attention temperature mscale = 0.1 * ln(s) + 1.0
+;;;   - Both pair layouts (NEOX_SPLIT_HALF, INTERLEAVED) and partial rotary
+;;;   - Relative-position QK dot-product shift invariance across pos = 0..8192
+;;;   - Central finite-difference gradient checks across forward + backward
+;;;   - Negative rejections with byte-for-byte untouched output sentinels
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+(extern f64 c-log f64 :real log)
+
+(extern i32 rope-compute-freqs
+        i64 i64 i64 i64 i64 f64 f64 f64 f64 ptr i64 ptr
+        :real et_rope_yarn_aot_compute_freqs)
+(extern i32 rope-forward
+        i64 i64 i64 i64 i64 f64 f64 f64 f64 i64 i64 i64 ptr ptr ptr
+        :real et_rope_yarn_aot_forward)
+(extern i32 rope-backward
+        i64 i64 i64 i64 i64 f64 f64 f64 f64 i64 i64 i64 ptr ptr ptr
+        :real et_rope_yarn_aot_backward)
+(extern i32 rope-qk-invariance
+        i64 i64 i64 i64 i64 f64 f64 f64 f64 ptr ptr i64 i64 i64 ptr
+        :real et_rope_yarn_aot_qk_invariance)
+
+(extern void store-f32 ptr i64 f64 :real et_rope_yarn_aot_store_f32)
+(extern f64 load-f32 ptr i64 :real et_rope_yarn_aot_load_f32)
+(extern void store-i64 ptr i64 i64 :real et_rope_yarn_aot_store_i64)
+(extern i64 load-i64 ptr i64 :real et_rope_yarn_aot_load_i64)
+(extern void store-f64 ptr i64 f64 :real et_rope_yarn_aot_store_f64)
+(extern f64 load-f64 ptr i64 :real et_rope_yarn_aot_load_f64)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Scaling modes.
+(define mode-standard 0)
+(define mode-linear-pi 1)
+(define mode-ntk-aware 2)
+(define mode-yarn 3)
+
+;; Pair layouts.
+(define layout-neox 0)
+(define layout-interleaved 1)
+
+;; Status codes from rope_yarn_abi.h.
+(define status-ok 0)
+(define err-argument -1)
+(define err-shape -2)
+(define err-alignment -3)
+(define err-alias -4)
+(define err-nonfinite -5)
+(define err-position -8)
+
+;; Shared RoPE/YaRN parameters.
+(define rope-base 10000.0)
+(define orig-ctx 2048)
+(define scale-ext 4.0)
+(define beta-fast 32.0)
+(define beta-slow 1.0)
+
+(define (require-check label ok)
+  (unless ok
+    (display "ROPE YARN AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= actual expected)
+    (display "ROPE YARN AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "workspace allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (det-f32 idx salt)
+  (let ((bucket (- (modulo (+ (* 31 salt) (* 17 idx) (quotient idx 3)) 41) 20)))
+    (* 0.0625 bucket)))
+
+(define (fill-f32 buf count salt)
+  (do ((i 0 (+ i 1)))
+      ((= i count))
+    (store-f32 (ffi-pointer buf) i (det-f32 i salt))))
+
+(define (dot-f32 a b count)
+  (let ((acc 0.0))
+    (do ((i 0 (+ i 1)))
+        ((= i count) acc)
+      (set! acc (+ acc (* (load-f32 (ffi-pointer a) i)
+                          (load-f32 (ffi-pointer b) i)))))))
+
+;; Disjoint aligned workspaces (sufficient for N=2, T=6, H=2, Dh=20 -> 480 f32).
+(define max-elems 512)
+(define buf-x (checked-allocate (* max-elems 4)))
+(define buf-dy (checked-allocate (* max-elems 4)))
+(define buf-y (checked-allocate (* max-elems 4)))
+(define buf-dx (checked-allocate (* max-elems 4)))
+(define buf-yp (checked-allocate (* max-elems 4)))
+(define buf-ym (checked-allocate (* max-elems 4)))
+(define buf-pos (checked-allocate (* 64 8)))
+(define buf-freqs (checked-allocate (* 16 8)))
+(define buf-mscale (checked-allocate 8))
+(define buf-metrics (checked-allocate (* 6 8)))
+
+;; 1. Verify exact frequencies and YaRN mscale across all 4 modes.
+(define (check-frequencies-and-mscale)
+  (let ((d-rot 16)
+        (half 8)
+        (expected-yarn-mscale (+ (* 0.1 (c-log scale-ext)) 1.0)))
+    ;; STANDARD (s = 1.0)
+    (expect-status "freqs standard" status-ok
+                   (rope-compute-freqs mode-standard layout-neox 16 d-rot orig-ctx
+                                       rope-base 1.0 beta-fast beta-slow
+                                       (ffi-pointer buf-freqs) half
+                                       (ffi-pointer buf-mscale)))
+    (let ((std-f0 (load-f64 (ffi-pointer buf-freqs) 0))
+          (std-f3 (load-f64 (ffi-pointer buf-freqs) 3))
+          (std-f7 (load-f64 (ffi-pointer buf-freqs) 7))
+          (std-ms (load-f64 (ffi-pointer buf-mscale) 0)))
+      (require-check "standard mscale != 1.0" (= std-ms 1.0))
+      (require-check "standard f0 != 1.0" (= std-f0 1.0))
+
+      ;; LINEAR_PI (s = 4.0)
+      (expect-status "freqs linear-pi" status-ok
+                     (rope-compute-freqs mode-linear-pi layout-neox 16 d-rot orig-ctx
+                                         rope-base scale-ext beta-fast beta-slow
+                                         (ffi-pointer buf-freqs) half
+                                         (ffi-pointer buf-mscale)))
+      (let ((pi-f0 (load-f64 (ffi-pointer buf-freqs) 0))
+            (pi-f7 (load-f64 (ffi-pointer buf-freqs) 7))
+            (pi-ms (load-f64 (ffi-pointer buf-mscale) 0)))
+        (require-check "linear-pi mscale != 1.0" (= pi-ms 1.0))
+        (require-check "linear-pi f0 != 0.25" (< (abs (- pi-f0 0.25)) 1.0e-15))
+        (require-check "linear-pi f7 != std/4"
+                       (< (abs (- pi-f7 (/ std-f7 scale-ext))) 1.0e-15)))
+
+      ;; NTK_AWARE (s = 4.0)
+      (expect-status "freqs ntk-aware" status-ok
+                     (rope-compute-freqs mode-ntk-aware layout-neox 16 d-rot orig-ctx
+                                         rope-base scale-ext beta-fast beta-slow
+                                         (ffi-pointer buf-freqs) half
+                                         (ffi-pointer buf-mscale)))
+      (let ((ntk-f0 (load-f64 (ffi-pointer buf-freqs) 0))
+            (ntk-f7 (load-f64 (ffi-pointer buf-freqs) 7))
+            (ntk-ms (load-f64 (ffi-pointer buf-mscale) 0)))
+        (require-check "ntk mscale != 1.0" (= ntk-ms 1.0))
+        (require-check "ntk f0 != 1.0" (= ntk-f0 1.0))
+        (require-check "ntk f7 not scaled below std" (< ntk-f7 std-f7)))
+
+      ;; YARN (s = 4.0): verify all 3 bands (gamma=1, 0<gamma<1, gamma=0) + mscale.
+      (expect-status "freqs yarn" status-ok
+                     (rope-compute-freqs mode-yarn layout-neox 16 d-rot orig-ctx
+                                         rope-base scale-ext beta-fast beta-slow
+                                         (ffi-pointer buf-freqs) half
+                                         (ffi-pointer buf-mscale)))
+      (let ((y-f0 (load-f64 (ffi-pointer buf-freqs) 0))
+            (y-f3 (load-f64 (ffi-pointer buf-freqs) 3))
+            (y-f7 (load-f64 (ffi-pointer buf-freqs) 7))
+            (y-ms (load-f64 (ffi-pointer buf-mscale) 0)))
+        (require-check "yarn mscale mismatch"
+                       (< (abs (- y-ms expected-yarn-mscale)) 1.0e-14))
+        (require-check "yarn high-freq band not unscaled"
+                       (< (abs (- y-f0 std-f0)) 1.0e-15))
+        (require-check "yarn mid-freq band not ramped"
+                       (and (> y-f3 (/ std-f3 scale-ext)) (< y-f3 std-f3)))
+        (require-check "yarn low-freq band not full PI"
+                       (< (abs (- y-f7 (/ std-f7 scale-ext))) 1.0e-15))
+        (display "ROPE YARN AOT FREQS modes=4 yarn_mscale=")
+        (display (number->string y-ms))
+        (display " yarn_f0=") (display (number->string y-f0))
+        (display " yarn_f3=") (display (number->string y-f3))
+        (display " yarn_f7=") (display (number->string y-f7))
+        (display " PASS") (newline)))))
+
+;; 2. Verify relative-position QK dot-product invariance up to pos = 8192.
+(define (check-one-invariance mode layout head-dim rot-dim ctx-len scale pos-m pos-n shift)
+  (fill-f32 buf-x head-dim (+ (* mode 11) (* layout 5) 1))
+  (fill-f32 buf-dy head-dim (+ (* mode 11) (* layout 5) 2))
+  (expect-status "qk invariance" status-ok
+                 (rope-qk-invariance mode layout head-dim rot-dim ctx-len
+                                     rope-base scale beta-fast beta-slow
+                                     (ffi-pointer buf-x) (ffi-pointer buf-dy)
+                                     pos-m pos-n shift
+                                     (ffi-pointer buf-metrics)))
+  (let ((shift-err (load-f64 (ffi-pointer buf-metrics) 3))
+        (rel-err (load-f64 (ffi-pointer buf-metrics) 4)))
+    (require-check "qk shift invariance error exceeded" (<= shift-err 2.0e-5))
+    (require-check "qk relative identity error exceeded" (<= rel-err 2.0e-5))
+    (if (> shift-err rel-err) shift-err rel-err)))
+
+(define (check-all-invariance)
+  ;; STANDARD (orig_max_pos=8192, s=1.0 -> covers pos 0..8192)
+  ;; LINEAR_PI, NTK_AWARE, YARN (orig_max_pos=2048, s=4.0 -> covers pos 0..8192)
+  ;; Tests both NEOX_SPLIT_HALF and INTERLEAVED, plus partial rotary (Dh=20, d_rot=16).
+  (let ((max-err 0.0)
+        (checked 0))
+    (do ((m 0 (+ m 1)))
+        ((= m 4))
+      (let ((ctx (if (= m mode-standard) 8192 orig-ctx))
+            (sc (if (= m mode-standard) 1.0 scale-ext)))
+        ;; Full rotary NEOX at pos=17,5 shifted by +8175 -> pos=8192,8180
+        (let ((e1 (check-one-invariance m layout-neox 16 16 ctx sc 17 5 8175))
+              ;; Partial rotary INTERLEAVED (Dh=20, d_rot=16) with negative m-n
+              (e2 (check-one-invariance m layout-interleaved 20 16 ctx sc 12 45 8147)))
+          (when (> e1 max-err) (set! max-err e1))
+          (when (> e2 max-err) (set! max-err e2))
+          (set! checked (+ checked 2)))))
+    (display "ROPE YARN AOT INVARIANCE checked=") (display checked)
+    (display " max_pos=8192 max_abs_err=") (display (number->string max-err))
+    (display " PASS") (newline)))
+
+;; 3. Central finite-difference gradient verification across all 4 modes,
+;;    both layouts, and partial rotary (including tail pass-through verification).
+(define (check-fd-case mode layout head-dim rot-dim ctx-len scale salt)
+  (let* ((batch 2)
+         (tokens 4)
+         (heads 2)
+         (elems (* batch tokens heads head-dim))
+         (eps 0.00390625)
+         (case-max 0.0)
+         (case-checks 0))
+    (fill-f32 buf-x elems salt)
+    (fill-f32 buf-dy elems (+ salt 1))
+    ;; Extended non-contiguous positions spanning 0..8192.
+    (store-i64 (ffi-pointer buf-pos) 0 0)
+    (store-i64 (ffi-pointer buf-pos) 1 513)
+    (store-i64 (ffi-pointer buf-pos) 2 4096)
+    (store-i64 (ffi-pointer buf-pos) 3 8192)
+    (store-i64 (ffi-pointer buf-pos) 4 17)
+    (store-i64 (ffi-pointer buf-pos) 5 2048)
+    (store-i64 (ffi-pointer buf-pos) 6 6144)
+    (store-i64 (ffi-pointer buf-pos) 7 8191)
+
+    (expect-status "fd forward" status-ok
+                   (rope-forward mode layout head-dim rot-dim ctx-len
+                                 rope-base scale beta-fast beta-slow
+                                 batch tokens heads
+                                 (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                                 (ffi-pointer buf-y)))
+    (expect-status "fd backward" status-ok
+                   (rope-backward mode layout head-dim rot-dim ctx-len
+                                  rope-base scale beta-fast beta-slow
+                                  batch tokens heads
+                                  (ffi-pointer buf-dy) (ffi-pointer buf-pos)
+                                  (ffi-pointer buf-dx)))
+
+    ;; Verify partial rotary tail elements passed through unchanged.
+    (when (< rot-dim head-dim)
+      (do ((d rot-dim (+ d 1)))
+          ((= d head-dim))
+        (require-check "partial rotary forward tail mutated"
+                       (= (load-f32 (ffi-pointer buf-y) d)
+                          (load-f32 (ffi-pointer buf-x) d)))
+        (require-check "partial rotary backward tail mutated"
+                       (= (load-f32 (ffi-pointer buf-dx) d)
+                          (load-f32 (ffi-pointer buf-dy) d)))))
+
+    ;; Central FD across rotary pairs + tail + final batch/token element.
+    (let ((indices (vector 0 1 (- rot-dim 1) (- head-dim 1)
+                           (+ (* 3 heads head-dim) 2) (- elems 1))))
+      (do ((k 0 (+ k 1)))
+          ((= k 6))
+        (let* ((idx (vector-ref indices k))
+               (orig (load-f32 (ffi-pointer buf-x) idx)))
+          (store-f32 (ffi-pointer buf-x) idx (+ orig eps))
+          (expect-status "fd plus" status-ok
+                         (rope-forward mode layout head-dim rot-dim ctx-len
+                                       rope-base scale beta-fast beta-slow
+                                       batch tokens heads
+                                       (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                                       (ffi-pointer buf-yp)))
+          (store-f32 (ffi-pointer buf-x) idx (- orig eps))
+          (expect-status "fd minus" status-ok
+                         (rope-forward mode layout head-dim rot-dim ctx-len
+                                       rope-base scale beta-fast beta-slow
+                                       batch tokens heads
+                                       (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                                       (ffi-pointer buf-ym)))
+          (store-f32 (ffi-pointer buf-x) idx orig)
+          (let* ((lp (dot-f32 buf-yp buf-dy elems))
+                 (lm (dot-f32 buf-ym buf-dy elems))
+                 (num (/ (- lp lm) (* 2.0 eps)))
+                 (ana (load-f32 (ffi-pointer buf-dx) idx))
+                 (diff (abs (- ana num))))
+            (require-check "central FD gradient mismatch" (<= diff 5.0e-4))
+            (when (> diff case-max) (set! case-max diff))
+            (set! case-checks (+ case-checks 1))))))
+    (vector case-checks case-max)))
+
+(define (check-all-fd-gradients)
+  (let ((total-checks 0)
+        (max-err 0.0))
+    (do ((m 0 (+ m 1)))
+        ((= m 4))
+      (let ((ctx (if (= m mode-standard) 8192 orig-ctx))
+            (sc (if (= m mode-standard) 1.0 scale-ext)))
+        ;; NEOX full rotary (16/16) and INTERLEAVED partial rotary (20/16)
+        (let ((r1 (check-fd-case m layout-neox 16 16 ctx sc (+ (* m 10) 1)))
+              (r2 (check-fd-case m layout-interleaved 20 16 ctx sc (+ (* m 10) 5))))
+          (set! total-checks (+ total-checks (vector-ref r1 0) (vector-ref r2 0)))
+          (when (> (vector-ref r1 1) max-err) (set! max-err (vector-ref r1 1)))
+          (when (> (vector-ref r2 1) max-err) (set! max-err (vector-ref r2 1))))))
+    (display "ROPE YARN AOT FD_GRADIENTS checked=") (display total-checks)
+    (display " max_abs_err=") (display (number->string max-err))
+    (display " PASS") (newline)))
+
+;; 4. Negative rejections + sentinel preservation.
+(define (check-negative-cases)
+  (fill-f32 buf-x 64 99)
+  (store-i64 (ffi-pointer buf-pos) 0 0)
+  (store-i64 (ffi-pointer buf-pos) 1 100)
+  (store-f32 (ffi-pointer buf-y) 0 13.5)
+  (store-f32 (ffi-pointer buf-y) 15 -4.25)
+  (store-f64 (ffi-pointer buf-mscale) 0 77.5)
+
+  ;; Odd d_rot
+  (expect-status "neg odd d_rot" err-shape
+                 (rope-forward mode-yarn layout-neox 16 7 orig-ctx
+                               rope-base scale-ext beta-fast beta-slow
+                               1 2 1 (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                               (ffi-pointer buf-y)))
+  ;; s < 1.0
+  (expect-status "neg s < 1.0" err-argument
+                 (rope-compute-freqs mode-yarn layout-neox 16 16 orig-ctx
+                                     rope-base 0.5 beta-fast beta-slow
+                                     (ffi-pointer buf-freqs) 8
+                                     (ffi-pointer buf-mscale)))
+  ;; beta_fast <= beta_slow
+  (expect-status "neg beta_fast <= beta_slow" err-argument
+                 (rope-forward mode-yarn layout-neox 16 16 orig-ctx
+                               rope-base scale-ext 1.0 1.0
+                               1 2 1 (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                               (ffi-pointer buf-y)))
+  ;; NTK_AWARE with d_rot = 2
+  (expect-status "neg ntk d_rot=2" err-shape
+                 (rope-forward mode-ntk-aware layout-neox 4 2 orig-ctx
+                               rope-base scale-ext beta-fast beta-slow
+                               1 2 1 (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                               (ffi-pointer buf-y)))
+  ;; Aliasing (x == y)
+  (expect-status "neg alias" err-alias
+                 (rope-forward mode-yarn layout-neox 16 16 orig-ctx
+                               rope-base scale-ext beta-fast beta-slow
+                               1 2 1 (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                               (ffi-pointer buf-x)))
+  ;; Misaligned output pointer
+  (expect-status "neg misaligned" err-alignment
+                 (rope-forward mode-yarn layout-neox 16 16 orig-ctx
+                               rope-base scale-ext beta-fast beta-slow
+                               1 2 1 (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                               (ptr-add buf-y 2)))
+  ;; Non-finite input (+Inf via f32 overflow)
+  (store-f32 (ffi-pointer buf-x) 31 1.0e308)
+  (expect-status "neg nonfinite" err-nonfinite
+                 (rope-forward mode-yarn layout-neox 16 16 orig-ctx
+                               rope-base scale-ext beta-fast beta-slow
+                               1 2 1 (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                               (ffi-pointer buf-y)))
+  (store-f32 (ffi-pointer buf-x) 31 0.25)
+  ;; Out-of-range position (> orig_ctx * scale_ext = 8192)
+  (store-i64 (ffi-pointer buf-pos) 1 8193)
+  (expect-status "neg pos oob" err-position
+                 (rope-forward mode-yarn layout-neox 16 16 orig-ctx
+                               rope-base scale-ext beta-fast beta-slow
+                               1 2 1 (ffi-pointer buf-x) (ffi-pointer buf-pos)
+                               (ffi-pointer buf-y)))
+
+  ;; Verify output sentinels completely untouched.
+  (require-check "sentinel y[0] mutated"
+                 (= (load-f32 (ffi-pointer buf-y) 0) 13.5))
+  (require-check "sentinel y[15] mutated"
+                 (= (load-f32 (ffi-pointer buf-y) 15) -4.25))
+  (require-check "sentinel mscale mutated"
+                 (= (load-f64 (ffi-pointer buf-mscale) 0) 77.5))
+  (display "ROPE YARN AOT NEGATIVE checks=8 PASS") (newline))
+
+(check-negative-cases)
+(check-frequencies-and-mscale)
+(check-all-invariance)
+(check-all-fd-gradients)
+(display "ROPE YARN AOT SUMMARY modes=4 layouts=2 partial_rotary=1 max_pos=8192 PASS")
+(newline)
+
+(release (ffi-pointer buf-x))
+(release (ffi-pointer buf-dy))
+(release (ffi-pointer buf-y))
+(release (ffi-pointer buf-dx))
+(release (ffi-pointer buf-yp))
+(release (ffi-pointer buf-ym))
+(release (ffi-pointer buf-pos))
+(release (ffi-pointer buf-freqs))
+(release (ffi-pointer buf-mscale))
+(release (ffi-pointer buf-metrics))
