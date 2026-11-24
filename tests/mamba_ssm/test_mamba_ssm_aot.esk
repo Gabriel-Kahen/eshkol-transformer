@@ -1,0 +1,560 @@
+;;; Mamba / S6 Selective State-Space Model compiled Eshkol AOT verification:
+;;;   - Malformed FFI / negative contract checks (bad dims, A_log overflow,
+;;;     misaligned pointer, non-finite input, aliased output) with untouched sentinels
+;;;   - Central finite-difference gradient verification across ALL 9 differentiable
+;;;     tensors of the composed Mamba S6 block (conv_w, conv_b, A_log, D_skip,
+;;;     u, dt_raw, B, C, z)
+;;;   - 12 deterministic SGD steps on trainable Mamba S6 parameters proving
+;;;     strictly decreasing MSE loss
+;;;   - O(1) constant-memory recurrent cache step-by-step parity (<= 1e-6) against
+;;;     full-sequence causal_conv1d_silu + selective_scan while reporting constant
+;;;     state bytes across growing T in {8, 32, 64}
+;;; Compiled with: eshkol-run --strict-types --optimize 0 --no-stdlib
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+;; Mamba S6 AOT bridge
+(extern i64 mamba-config-bytes :real et_mamba_aot_config_bytes)
+(extern i64 mamba-cache-bytes :real et_mamba_aot_cache_bytes)
+(extern i32 mamba-set-config ptr i64 i64 i64 i64 i64
+        :real et_mamba_aot_set_config)
+(extern i64 mamba-conv-state-bytes ptr :real et_mamba_aot_conv_state_bytes)
+(extern i64 mamba-ssm-state-bytes ptr :real et_mamba_aot_ssm_state_bytes)
+(extern i64 mamba-total-state-bytes ptr :real et_mamba_aot_total_state_bytes)
+(extern i32 mamba-conv1d-fwd ptr ptr ptr ptr ptr
+        :real et_mamba_aot_conv1d_silu_forward)
+(extern i32 mamba-conv1d-bwd ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_mamba_aot_conv1d_silu_backward)
+(extern i32 mamba-scan-fwd ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_mamba_aot_selective_scan_forward)
+(extern i32 mamba-scan-bwd ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_mamba_aot_selective_scan_backward)
+(extern i32 mamba-cache-init ptr ptr ptr i64 ptr i64
+        :real et_mamba_aot_cache_init)
+(extern i32 mamba-cache-reset ptr :real et_mamba_aot_cache_reset)
+(extern i64 mamba-cache-step-count ptr :real et_mamba_aot_cache_step_count)
+(extern i32 mamba-cache-step ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_mamba_aot_cache_step)
+(extern void mamba-store-f32 ptr i64 f64 :real et_mamba_aot_store_f32)
+(extern f64 mamba-load-f32 ptr i64 :real et_mamba_aot_load_f32)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Configuration: N=1, T=8, D_inner=8, D_state=4, K_conv=4 (gated S6).
+(define batch 1)
+(define seq-len 8)
+(define d-inner 8)
+(define d-state 4)
+(define k-conv 4)
+(define sgd-steps 12)
+(define learning-rate 0.25)
+
+(define ntd-elems (* batch seq-len d-inner))
+(define nts-elems (* batch seq-len d-state))
+(define dk-elems (* d-inner k-conv))
+(define ds-elems (* d-inner d-state))
+
+(define (expect-status operation expected actual)
+  (unless (= actual expected)
+    (display operation) (display " expected status ") (display expected)
+    (display ", received ") (display actual) (newline) (exit 1)))
+
+(define (require-check label ok)
+  (unless ok (display label) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "MAMBA_SSM AOT allocation failed"
+                   (not (= (ptr->usize p) 0)))
+    p))
+
+;; Allocate disjoint aligned descriptors and f32/f64 spans.
+(define cfg-buf (checked-allocate (mamba-config-bytes)))
+(define bad-cfg-buf (checked-allocate (mamba-config-bytes)))
+(define t32-cfg-buf (checked-allocate (mamba-config-bytes)))
+(define t64-cfg-buf (checked-allocate (mamba-config-bytes)))
+(define cache-buf (checked-allocate (mamba-cache-bytes)))
+
+(expect-status "MAMBA set config" 0
+               (mamba-set-config (ffi-pointer cfg-buf)
+                                 batch seq-len d-inner d-state k-conv))
+(expect-status "MAMBA set T=32 config" 0
+               (mamba-set-config (ffi-pointer t32-cfg-buf)
+                                 batch 32 d-inner d-state k-conv))
+(expect-status "MAMBA set T=64 config" 0
+               (mamba-set-config (ffi-pointer t64-cfg-buf)
+                                 batch 64 d-inner d-state k-conv))
+
+(define conv-state-bytes (mamba-conv-state-bytes (ffi-pointer cfg-buf)))
+(define ssm-state-bytes (mamba-ssm-state-bytes (ffi-pointer cfg-buf)))
+(define total-state-bytes-t8 (mamba-total-state-bytes (ffi-pointer cfg-buf)))
+(define total-state-bytes-t32 (mamba-total-state-bytes (ffi-pointer t32-cfg-buf)))
+(define total-state-bytes-t64 (mamba-total-state-bytes (ffi-pointer t64-cfg-buf)))
+
+(define u-buf (checked-allocate (* 4 ntd-elems)))
+(define cw-buf (checked-allocate (* 4 dk-elems)))
+(define cb-buf (checked-allocate (* 4 d-inner)))
+(define x-buf (checked-allocate (* 4 ntd-elems)))
+(define dt-buf (checked-allocate (* 4 ntd-elems)))
+(define alog-buf (checked-allocate (* 4 ds-elems)))
+(define b-buf (checked-allocate (* 4 nts-elems)))
+(define c-buf (checked-allocate (* 4 nts-elems)))
+(define dskip-buf (checked-allocate (* 4 d-inner)))
+(define z-buf (checked-allocate (* 4 ntd-elems)))
+(define out-buf (checked-allocate (* 4 ntd-elems)))
+(define dout-buf (checked-allocate (* 4 ntd-elems)))
+
+(define dx-buf (checked-allocate (* 4 ntd-elems)))
+(define ddt-buf (checked-allocate (* 4 ntd-elems)))
+(define dalog-buf (checked-allocate (* 4 ds-elems)))
+(define db-buf (checked-allocate (* 4 nts-elems)))
+(define dc-buf (checked-allocate (* 4 nts-elems)))
+(define ddskip-buf (checked-allocate (* 4 d-inner)))
+(define dz-buf (checked-allocate (* 4 ntd-elems)))
+(define du-buf (checked-allocate (* 4 ntd-elems)))
+(define dcw-buf (checked-allocate (* 4 dk-elems)))
+(define dcb-buf (checked-allocate (* 4 d-inner)))
+
+(define conv-state-buf (checked-allocate conv-state-bytes))
+(define ssm-state-buf (checked-allocate ssm-state-bytes))
+(define u-step-buf (checked-allocate (* 4 batch d-inner)))
+(define dt-step-buf (checked-allocate (* 4 batch d-inner)))
+(define z-step-buf (checked-allocate (* 4 batch d-inner)))
+(define b-step-buf (checked-allocate (* 4 batch d-state)))
+(define c-step-buf (checked-allocate (* 4 batch d-state)))
+(define out-step-buf (checked-allocate (* 4 batch d-inner)))
+
+;; Pack/unpack helpers between Eshkol f64 tensors and binary32 buffers.
+(define (pack tensor buffer)
+  (let* ((count (tensor-length tensor))
+         (flat (reshape tensor (list count))))
+    (do ((i 0 (+ i 1)))
+        ((= i count))
+      (mamba-store-f32 (ffi-pointer buffer) i (tensor-ref flat i)))))
+
+(define (unpack buffer rows cols)
+  (let* ((count (* rows cols))
+         (flat (zeros (list count))))
+    (do ((i 0 (+ i 1)))
+        ((= i count) (reshape flat (list rows cols)))
+      (tensor-set! flat i (mamba-load-f32 (ffi-pointer buffer) i)))))
+
+(define (seed-tensor rows cols salt scale)
+  (let ((t (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) t)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (let* ((idx (+ (* r cols) c))
+               (v (- (modulo (+ (* 29 salt) (* 17 idx) (* 5 r)) 33) 16)))
+          (tensor-set! t r c (* (exact->inexact v) scale)))))))
+
+(define (seed-a-log rows cols)
+  (let ((t (zeros (list rows cols))))
+    (do ((r 0 (+ r 1)))
+        ((= r rows) t)
+      (do ((c 0 (+ c 1)))
+          ((= c cols))
+        (tensor-set! t r c (+ -0.4 (* 0.35 (exact->inexact c))
+                              (* 0.05 (exact->inexact (modulo r 3)))))))))
+
+;; Tensor bundle layout (9 differentiable tensors):
+;;   Trainable params (0..3):
+;;     0: conv_w [D, K]
+;;     1: conv_b [D, 1]
+;;     2: a_log  [D, S]
+;;     3: d_skip [D, 1]
+;;   Sequence inputs (4..8):
+;;     4: u      [T, D]
+;;     5: dt_raw [T, D]
+;;     6: b_in   [T, S]
+;;     7: c_in   [T, S]
+;;     8: z_in   [T, D]
+(define (initial-tensors)
+  (vector
+   (seed-tensor d-inner k-conv 2 0.0625)
+   (seed-tensor d-inner 1 3 0.03125)
+   (seed-a-log d-inner d-state)
+   (seed-tensor d-inner 1 4 0.0625)
+   (seed-tensor seq-len d-inner 5 0.09375)
+   (seed-tensor seq-len d-inner 6 0.125)
+   (seed-tensor seq-len d-state 7 0.09375)
+   (seed-tensor seq-len d-state 8 0.09375)
+   (seed-tensor seq-len d-inner 9 0.09375)))
+
+(define (mamba-fwd-tensor tensors)
+  (pack (vector-ref tensors 0) cw-buf)
+  (pack (vector-ref tensors 1) cb-buf)
+  (pack (vector-ref tensors 2) alog-buf)
+  (pack (vector-ref tensors 3) dskip-buf)
+  (pack (vector-ref tensors 4) u-buf)
+  (pack (vector-ref tensors 5) dt-buf)
+  (pack (vector-ref tensors 6) b-buf)
+  (pack (vector-ref tensors 7) c-buf)
+  (pack (vector-ref tensors 8) z-buf)
+  (expect-status "MAMBA conv1d forward" 0
+                 (mamba-conv1d-fwd (ffi-pointer cfg-buf)
+                                   (ffi-pointer u-buf)
+                                   (ffi-pointer cw-buf)
+                                   (ffi-pointer cb-buf)
+                                   (ffi-pointer x-buf)))
+  (expect-status "MAMBA scan forward" 0
+                 (mamba-scan-fwd (ffi-pointer cfg-buf)
+                                 (ffi-pointer x-buf)
+                                 (ffi-pointer dt-buf)
+                                 (ffi-pointer alog-buf)
+                                 (ffi-pointer b-buf)
+                                 (ffi-pointer c-buf)
+                                 (ffi-pointer dskip-buf)
+                                 (ffi-pointer z-buf)
+                                 (ffi-pointer out-buf)))
+  (unpack out-buf seq-len d-inner))
+
+;; MSE loss = 0.5 * mean((out - target)^2); if grads-out != #f, compute all 9 grads.
+(define (mamba-loss tensors target grads-out)
+  (let* ((out (mamba-fwd-tensor tensors))
+         (diff (tensor-sub out target))
+         (inv-n (/ 1.0 (exact->inexact ntd-elems)))
+         (sq-sum (let ((flat (reshape diff (list ntd-elems))))
+                   (do ((i 0 (+ i 1))
+                        (acc 0.0 (+ acc (* (tensor-ref flat i)
+                                           (tensor-ref flat i)))))
+                       ((= i ntd-elems) acc))))
+         (loss (* 0.5 inv-n sq-sum)))
+    (when grads-out
+      (let ((dout (tensor-scale diff inv-n)))
+        (pack dout dout-buf)
+        (expect-status "MAMBA scan backward" 0
+                       (mamba-scan-bwd (ffi-pointer cfg-buf)
+                                       (ffi-pointer x-buf)
+                                       (ffi-pointer dt-buf)
+                                       (ffi-pointer alog-buf)
+                                       (ffi-pointer b-buf)
+                                       (ffi-pointer c-buf)
+                                       (ffi-pointer dskip-buf)
+                                       (ffi-pointer z-buf)
+                                       (ffi-pointer dout-buf)
+                                       (ffi-pointer dx-buf)
+                                       (ffi-pointer ddt-buf)
+                                       (ffi-pointer dalog-buf)
+                                       (ffi-pointer db-buf)
+                                       (ffi-pointer dc-buf)
+                                       (ffi-pointer ddskip-buf)
+                                       (ffi-pointer dz-buf)))
+        (expect-status "MAMBA conv1d backward" 0
+                       (mamba-conv1d-bwd (ffi-pointer cfg-buf)
+                                         (ffi-pointer u-buf)
+                                         (ffi-pointer cw-buf)
+                                         (ffi-pointer cb-buf)
+                                         (ffi-pointer dx-buf)
+                                         (ffi-pointer du-buf)
+                                         (ffi-pointer dcw-buf)
+                                         (ffi-pointer dcb-buf)))
+        (vector-set! grads-out 0 (unpack dcw-buf d-inner k-conv))
+        (vector-set! grads-out 1 (unpack dcb-buf d-inner 1))
+        (vector-set! grads-out 2 (unpack dalog-buf d-inner d-state))
+        (vector-set! grads-out 3 (unpack ddskip-buf d-inner 1))
+        (vector-set! grads-out 4 (unpack du-buf seq-len d-inner))
+        (vector-set! grads-out 5 (unpack ddt-buf seq-len d-inner))
+        (vector-set! grads-out 6 (unpack db-buf seq-len d-state))
+        (vector-set! grads-out 7 (unpack dc-buf seq-len d-state))
+        (vector-set! grads-out 8 (unpack dz-buf seq-len d-inner))))
+    loss))
+
+;; 1. Negative fail-closed FFI checks with untouched output sentinels.
+(define (check-negative-calls tensors)
+  (pack (vector-ref tensors 0) cw-buf)
+  (pack (vector-ref tensors 1) cb-buf)
+  (pack (vector-ref tensors 2) alog-buf)
+  (pack (vector-ref tensors 3) dskip-buf)
+  (pack (vector-ref tensors 4) u-buf)
+  (pack (vector-ref tensors 5) dt-buf)
+  (pack (vector-ref tensors 6) b-buf)
+  (pack (vector-ref tensors 7) c-buf)
+  (pack (vector-ref tensors 8) z-buf)
+  (mamba-store-f32 (ffi-pointer out-buf) 0 13.25)
+  (mamba-store-f32 (ffi-pointer out-buf) 7 -9.5)
+
+  ;; Out-of-range seq_len (T=65) -> UNSUPPORTED (3).
+  (expect-status "MAMBA set bad T=65" 0
+                 (mamba-set-config (ffi-pointer bad-cfg-buf) 1 65 8 4 4))
+  (expect-status "MAMBA invalid T=65" 3
+                 (mamba-conv1d-fwd (ffi-pointer bad-cfg-buf)
+                                   (ffi-pointer u-buf)
+                                   (ffi-pointer cw-buf)
+                                   (ffi-pointer cb-buf)
+                                   (ffi-pointer out-buf)))
+
+  ;; Invalid kernel size (K=5) -> UNSUPPORTED (3).
+  (expect-status "MAMBA set bad K=5" 0
+                 (mamba-set-config (ffi-pointer bad-cfg-buf) 1 8 8 4 5))
+  (expect-status "MAMBA invalid K=5" 3
+                 (mamba-conv1d-fwd (ffi-pointer bad-cfg-buf)
+                                   (ffi-pointer u-buf)
+                                   (ffi-pointer cw-buf)
+                                   (ffi-pointer cb-buf)
+                                   (ffi-pointer out-buf)))
+
+  ;; A_log overflow (100.0 > ET_MAMBA_MAX_A_LOG) -> OVERFLOW (5).
+  (expect-status "MAMBA conv1d prep" 0
+                 (mamba-conv1d-fwd (ffi-pointer cfg-buf)
+                                   (ffi-pointer u-buf)
+                                   (ffi-pointer cw-buf)
+                                   (ffi-pointer cb-buf)
+                                   (ffi-pointer x-buf)))
+  (mamba-store-f32 (ffi-pointer alog-buf) 3 100.0)
+  (expect-status "MAMBA A_log overflow" 5
+                 (mamba-scan-fwd (ffi-pointer cfg-buf)
+                                 (ffi-pointer x-buf)
+                                 (ffi-pointer dt-buf)
+                                 (ffi-pointer alog-buf)
+                                 (ffi-pointer b-buf)
+                                 (ffi-pointer c-buf)
+                                 (ffi-pointer dskip-buf)
+                                 (ffi-pointer z-buf)
+                                 (ffi-pointer out-buf)))
+  (pack (vector-ref tensors 2) alog-buf)
+
+  ;; Misaligned pointer via ptr-add -> INVALID_ARGUMENT (1).
+  (expect-status "MAMBA misaligned u" 1
+                 (mamba-conv1d-fwd (ffi-pointer cfg-buf)
+                                   (ptr-add u-buf 1)
+                                   (ffi-pointer cw-buf)
+                                   (ffi-pointer cb-buf)
+                                   (ffi-pointer out-buf)))
+
+  ;; Non-finite input (+Inf via f32 overflow) -> NONFINITE (4).
+  (mamba-store-f32 (ffi-pointer u-buf) 2 1.0e308)
+  (expect-status "MAMBA non-finite u" 4
+                 (mamba-conv1d-fwd (ffi-pointer cfg-buf)
+                                   (ffi-pointer u-buf)
+                                   (ffi-pointer cw-buf)
+                                   (ffi-pointer cb-buf)
+                                   (ffi-pointer out-buf)))
+  (pack (vector-ref tensors 4) u-buf)
+
+  ;; Aliased output -> INVALID_ARGUMENT (1).
+  (expect-status "MAMBA aliased output" 1
+                 (mamba-scan-fwd (ffi-pointer cfg-buf)
+                                 (ffi-pointer x-buf)
+                                 (ffi-pointer dt-buf)
+                                 (ffi-pointer alog-buf)
+                                 (ffi-pointer b-buf)
+                                 (ffi-pointer c-buf)
+                                 (ffi-pointer dskip-buf)
+                                 (ffi-pointer z-buf)
+                                 (ffi-pointer x-buf)))
+
+  ;; Verify output sentinels untouched.
+  (require-check "MAMBA sentinel 0 modified"
+                 (= (mamba-load-f32 (ffi-pointer out-buf) 0) 13.25))
+  (require-check "MAMBA sentinel 7 modified"
+                 (= (mamba-load-f32 (ffi-pointer out-buf) 7) -9.5))
+  (display "MAMBA_SSM AOT NEGATIVE PASS") (newline))
+
+;; 2. Central finite-difference checks across ALL 9 differentiable tensors.
+(define (check-one-fd tensors target operand derivative row col)
+  (let* ((orig (tensor-get operand row col))
+         (step 0.00390625))
+    (tensor-set! operand row col (+ orig step))
+    (let ((plus (mamba-loss tensors target #f)))
+      (tensor-set! operand row col (- orig step))
+      (let* ((minus (mamba-loss tensors target #f))
+             (numerical (/ (- plus minus) (* 2.0 step)))
+             (analytic (tensor-get derivative row col))
+             (diff (abs (- analytic numerical))))
+        (tensor-set! operand row col orig)
+        (unless (<= diff (+ 0.0001 (* 0.01 (abs numerical))))
+          (display "MAMBA FD mismatch row=") (display row)
+          (display " col=") (display col)
+          (display " analytic=") (display (number->string analytic))
+          (display " numerical=") (display (number->string numerical))
+          (display " diff=") (display (number->string diff)) (newline)
+          (exit 1))
+        diff))))
+
+(define (check-all-gradients tensors target grads)
+  (let ((checked 0)
+        (max-err 0.0))
+    (do ((p 0 (+ p 1)))
+        ((= p 9)
+         (require-check "MAMBA FD max_err > 1e-4" (<= max-err 0.0001))
+         (display "MAMBA_SSM AOT FD_GRADIENTS checked=") (display checked)
+         (display " max_abs_err=") (display (number->string max-err))
+         (display " PASS") (newline))
+      (let* ((operand (vector-ref tensors p))
+             (derivative (vector-ref grads p))
+             (shape (tensor-shape operand))
+             (rows (car shape))
+             (cols (car (cdr shape)))
+             (mid-r (quotient rows 2))
+             (mid-c (quotient cols 2)))
+        (require-check "MAMBA inactive gradient"
+                       (> (tensor-sum (tensor-abs derivative)) 0.0000001))
+        (let ((e1 (check-one-fd tensors target operand derivative 0 0))
+              (e2 (check-one-fd tensors target operand derivative mid-r mid-c))
+              (e3 (check-one-fd tensors target operand derivative
+                                (- rows 1) (- cols 1))))
+          (when (> e1 max-err) (set! max-err e1))
+          (when (> e2 max-err) (set! max-err e2))
+          (when (> e3 max-err) (set! max-err e3))
+          (set! checked (+ checked 3)))))))
+
+(define (parameter-checksum tensors)
+  (do ((p 0 (+ p 1))
+       (total 0.0 (+ total (* (+ p 1) (tensor-sum (vector-ref tensors p))))))
+      ((= p 4) total)))
+
+;; 3. O(1) constant-memory recurrent cache step-by-step parity check.
+(define (check-o1-cache-parity tensors)
+  (require-check "MAMBA O(1) state bytes not constant for T=8 vs T=32"
+                 (= total-state-bytes-t8 total-state-bytes-t32))
+  (require-check "MAMBA O(1) state bytes not constant for T=8 vs T=64"
+                 (= total-state-bytes-t8 total-state-bytes-t64))
+  (require-check "MAMBA O(1) expected total state bytes 352"
+                 (= total-state-bytes-t8 352))
+
+  (let ((o-full (mamba-fwd-tensor tensors))
+        (u-t (vector-ref tensors 4))
+        (dt-t (vector-ref tensors 5))
+        (b-t (vector-ref tensors 6))
+        (c-t (vector-ref tensors 7))
+        (z-t (vector-ref tensors 8)))
+    (expect-status "MAMBA cache init" 0
+                   (mamba-cache-init (ffi-pointer cache-buf)
+                                     (ffi-pointer cfg-buf)
+                                     (ffi-pointer conv-state-buf)
+                                     conv-state-bytes
+                                     (ffi-pointer ssm-state-buf)
+                                     ssm-state-bytes))
+    (require-check "MAMBA cache step_count != 0 after init"
+                   (= (mamba-cache-step-count (ffi-pointer cache-buf)) 0))
+
+    (let ((max-diff 0.0))
+      (do ((t 0 (+ t 1)))
+          ((= t seq-len))
+        (do ((d 0 (+ d 1)))
+            ((= d d-inner))
+          (mamba-store-f32 (ffi-pointer u-step-buf) d (tensor-get u-t t d))
+          (mamba-store-f32 (ffi-pointer dt-step-buf) d (tensor-get dt-t t d))
+          (mamba-store-f32 (ffi-pointer z-step-buf) d (tensor-get z-t t d)))
+        (do ((s 0 (+ s 1)))
+            ((= s d-state))
+          (mamba-store-f32 (ffi-pointer b-step-buf) s (tensor-get b-t t s))
+          (mamba-store-f32 (ffi-pointer c-step-buf) s (tensor-get c-t t s)))
+        (expect-status "MAMBA cache step" 0
+                       (mamba-cache-step (ffi-pointer cache-buf)
+                                         (ffi-pointer u-step-buf)
+                                         (ffi-pointer cw-buf)
+                                         (ffi-pointer cb-buf)
+                                         (ffi-pointer dt-step-buf)
+                                         (ffi-pointer alog-buf)
+                                         (ffi-pointer b-step-buf)
+                                         (ffi-pointer c-step-buf)
+                                         (ffi-pointer dskip-buf)
+                                         (ffi-pointer z-step-buf)
+                                         (ffi-pointer out-step-buf)))
+        (require-check "MAMBA cache step_count mismatch"
+                       (= (mamba-cache-step-count (ffi-pointer cache-buf))
+                          (+ t 1)))
+        (do ((d 0 (+ d 1)))
+            ((= d d-inner))
+          (let* ((got (mamba-load-f32 (ffi-pointer out-step-buf) d))
+                 (want (tensor-get o-full t d))
+                 (diff (abs (- got want))))
+            (when (> diff max-diff) (set! max-diff diff)))))
+
+      (expect-status "MAMBA cache reset" 0
+                     (mamba-cache-reset (ffi-pointer cache-buf)))
+      (require-check "MAMBA cache step_count != 0 after reset"
+                     (= (mamba-cache-step-count (ffi-pointer cache-buf)) 0))
+
+      (require-check "MAMBA O(1) cache parity exceeded 1e-6"
+                     (<= max-diff 1.0e-6))
+      (display "MAMBA_SSM AOT O1_CACHE steps=") (display seq-len)
+      (display " state_bytes_t8=") (display total-state-bytes-t8)
+      (display " state_bytes_t32=") (display total-state-bytes-t32)
+      (display " state_bytes_t64=") (display total-state-bytes-t64)
+      (display " max_abs_diff=") (display (number->string max-diff))
+      (display " PASS") (newline))))
+
+(define (print-loss step loss)
+  (display "MAMBA_SSM AOT LOSS ") (display step)
+  (display " ") (display (number->string loss)) (newline))
+
+(define (run-mamba-aot)
+  (let* ((tensors (initial-tensors))
+         (target (seed-tensor seq-len d-inner 19 0.0625))
+         (grads (make-vector 9 #f)))
+    (check-negative-calls tensors)
+    (let ((initial (mamba-loss tensors target grads))
+          (initial-checksum (parameter-checksum tensors)))
+      (check-all-gradients tensors target grads)
+      (print-loss 0 initial)
+      (do ((step 1 (+ step 1))
+           (previous initial))
+          ((> step sgd-steps)
+           (let ((checksum (parameter-checksum tensors)))
+             (require-check "MAMBA parameters did not update"
+                            (not (= checksum initial-checksum)))
+             (check-o1-cache-parity tensors)
+             (display "MAMBA_SSM AOT RESULT n=1 t=8 d=8 s=4 k=4 steps=12 initial=")
+             (display (number->string initial))
+             (display " final=") (display (number->string previous))
+             (display " checksum=") (display (number->string checksum))
+             (newline)))
+        (do ((p 0 (+ p 1)))
+            ((= p 4))
+          (let ((g (vector-ref grads p)))
+            (require-check "MAMBA nonfinite gradient"
+                           (< (tensor-sum (tensor-abs g)) 1.0e300))
+            (vector-set! tensors p
+                         (tensor-sub (vector-ref tensors p)
+                                     (tensor-scale g learning-rate)))))
+        (let ((current (mamba-loss tensors target grads)))
+          (require-check "MAMBA loss failed to decrease"
+                         (and (>= current 0.0) (< current previous)))
+          (print-loss step current)
+          (set! previous current))))))
+
+(run-mamba-aot)
+
+(release (ffi-pointer cfg-buf))
+(release (ffi-pointer bad-cfg-buf))
+(release (ffi-pointer t32-cfg-buf))
+(release (ffi-pointer t64-cfg-buf))
+(release (ffi-pointer cache-buf))
+(release (ffi-pointer u-buf))
+(release (ffi-pointer cw-buf))
+(release (ffi-pointer cb-buf))
+(release (ffi-pointer x-buf))
+(release (ffi-pointer dt-buf))
+(release (ffi-pointer alog-buf))
+(release (ffi-pointer b-buf))
+(release (ffi-pointer c-buf))
+(release (ffi-pointer dskip-buf))
+(release (ffi-pointer z-buf))
+(release (ffi-pointer out-buf))
+(release (ffi-pointer dout-buf))
+(release (ffi-pointer dx-buf))
+(release (ffi-pointer ddt-buf))
+(release (ffi-pointer dalog-buf))
+(release (ffi-pointer db-buf))
+(release (ffi-pointer dc-buf))
+(release (ffi-pointer ddskip-buf))
+(release (ffi-pointer dz-buf))
+(release (ffi-pointer du-buf))
+(release (ffi-pointer dcw-buf))
+(release (ffi-pointer dcb-buf))
+(release (ffi-pointer conv-state-buf))
+(release (ffi-pointer ssm-state-buf))
+(release (ffi-pointer u-step-buf))
+(release (ffi-pointer dt-step-buf))
+(release (ffi-pointer z-step-buf))
+(release (ffi-pointer b-step-buf))
+(release (ffi-pointer c-step-buf))
+(release (ffi-pointer out-step-buf))
