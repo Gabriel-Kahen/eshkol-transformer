@@ -432,9 +432,12 @@ test-eval5:
 test-eval5-aot:
 	/usr/bin/bash scripts/test-eval5-aot.sh
 
-.PHONY: test-doc5
+.PHONY: test-doc5 test-doc5-wave45
 test-doc5:
 	/usr/bin/bash scripts/test-doc5-walkthrough.sh
+
+test-doc5-wave45:
+	/usr/bin/bash scripts/test-doc5-wave45-walkthrough.sh
 
 .PHONY: test-wave4-composed
 test-wave4-composed:
