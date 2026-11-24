@@ -109,6 +109,12 @@ def ref_int8_quant_dequant(vec_bits):
     scale = to_f32(amax / 127.0)
     if scale == 0.0:
         scale = f32_bits_to_float(1)
+    else:
+        try:
+            if not math.isfinite(to_f32(127.0 * scale)):
+                scale = f32_bits_to_float(float_to_f32_bits(scale) - 1)
+        except OverflowError:
+            scale = f32_bits_to_float(float_to_f32_bits(scale) - 1)
     scale_bits = float_to_f32_bits(scale)
     q_u8 = []
     deq_bits = []

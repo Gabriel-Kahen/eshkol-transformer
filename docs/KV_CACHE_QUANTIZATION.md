@@ -45,10 +45,16 @@ slice of length `D_h = head_dim`.
 - Non-zero rule:
   - `scale = (float)((double)amax / 127.0)` (if subnormal `amax` underflows
     `scale` to `0.0f`, `scale` clamps to `FLT_TRUE_MIN = 2^-149` so
-    `x[d] / scale` remains an exact integer in `[-63, 63]`).
+    `x[d] / scale` remains an exact integer in `[-63, 63]`; if `amax` near
+    `FLT_MAX` causes `scale` to round up such that `(float)(127.0 * (double)scale)`
+    overflows `binary32`, `scale` steps down by 1 ULP to `0x7c010203` so all
+    dequantized values in `[-127, 127]` stay strictly finite).
   - `q[d] = rne_clamp_i8((double)x[d] / (double)scale) in [-127, 127]` using
     exact IEEE-754 round-to-nearest-even (`-128` is forbidden and rejected as
-    `ET_KVQ_ERR_CORRUPT` on dequantize/decode/load).
+    `ET_KVQ_ERR_CORRUPT` on dequantize/decode/load; negative or `-0.0f` scales
+    are rejected as `ET_KVQ_ERR_NONFINITE`, and `scale == 0.0f` with non-zero
+    quantized payloads is rejected as `ET_KVQ_ERR_CORRUPT` in both `INT8_SYM`
+    and `FP8_E4M3FN`).
 - Dequantization: `x_deq[d] = (float)((double)q[d] * (double)scale)`.
 - Storage per vector: `D_h` int8 bytes + `4` bytes scale (`D_h + 4` bytes).
 
@@ -127,7 +133,7 @@ Executed with `CC=clang-21`, `CXX=clang++-21`, `--network none`:
 - **Native C11 (`-O2` + `--wrap` hot-path zero-alloc trap) & ASan/UBSan/LSan
   (`detect_leaks=1:halt_on_error=1`)**: PASS.
 - **Python Exact-Fraction & binary64 Oracle**:
-  `256 FP8 codes + 21 ties + 4 vec pairs 0.0 ULP + 6 GQA cases / 768 vals max_abs_err=0.000e+00`.
+  `256 FP8 codes + 21 ties + 5 vec pairs 0.0 ULP + 6 GQA cases / 768 vals max_abs_err=0.000e+00`.
 - **Compiled Eshkol AOT Driver (`L=2, H_q=8, H_kv=2, D_h=64, T=32`)**:
   - Compression: `65536 B -> 17408 B` (`ratio = 3.764705882352941`, exact `64/17`)
   - Fused vs explicit dequantized decode: `0` mismatched bits (`0.0` error) for

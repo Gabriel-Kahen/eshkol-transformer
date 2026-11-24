@@ -205,7 +205,9 @@ static void run_oracle_dump(void) {
   const float vec3[8] = {bits_f32(1u),  bits_f32(2u),  bits_f32(5u),
                          bits_f32(10u), -bits_f32(3u), -bits_f32(7u),
                          0.0f,          bits_f32(12u)};
-  const float *vecs[4] = {vec0, vec1, vec2, vec3};
+  const float vec4[8] = {FLT_MAX, -FLT_MAX, 1.0e37f, -1.0e37f,
+                         0.0f,    1.0f,     -1.0f,   FLT_MAX * 0.5f};
+  const float *vecs[5] = {vec0, vec1, vec2, vec3, vec4};
   printf("VEC_CASES %zu\n", ARRAY_COUNT(vecs));
   for (size_t ci = 0u; ci < ARRAY_COUNT(vecs); ++ci) {
     int8_t qi8[8];
@@ -755,6 +757,109 @@ static void test_snapshots(void) {
   close(fd);
   CHECK(et_kvq_cache_load_snapshot(c_i8, path_trunc) == ET_KVQ_ERR_CHECKSUM);
 
+  /* Validly re-hashed snapshot with corrupt INT8 = -128 -> ET_KVQ_ERR_CORRUPT,
+   * and validly re-hashed FP8 snapshot with NaN 0x7F -> ET_KVQ_ERR_NONFINITE. */
+  {
+    /* Minimal standalone SHA-256 to re-sign tampered snapshots. */
+    static const uint32_t k256[64] = {
+        0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu,
+        0x59f111f1u, 0x923f82a4u, 0xab1c5ed5u, 0xd807aa98u, 0x12835b01u,
+        0x243185beu, 0x550c7dc3u, 0x72be5d74u, 0x80deb1feu, 0x9bdc06a7u,
+        0xc19bf174u, 0xe49b69c1u, 0xefbe4786u, 0x0fc19dc6u, 0x240ca1ccu,
+        0x2de92c6fu, 0x4a7484aau, 0x5cb0a9dcu, 0x76f988dau, 0x983e5152u,
+        0xa831c66du, 0xb00327c8u, 0xbf597fc7u, 0xc6e00bf3u, 0xd5a79147u,
+        0x06ca6351u, 0x14292967u, 0x27b70a85u, 0x2e1b2138u, 0x4d2c6dfcu,
+        0x53380d13u, 0x650a7354u, 0x766a0abbu, 0x81c2c92eu, 0x92722c85u,
+        0xa2bfe8a1u, 0xa81a664bu, 0xc24b8b70u, 0xc76c51a3u, 0xd192e819u,
+        0xd6990624u, 0xf40e3585u, 0x106aa070u, 0x19a4c116u, 0x1e376c08u,
+        0x2748774cu, 0x34b0bcb5u, 0x391c0cb3u, 0x4ed8aa4au, 0x5b9cca4fu,
+        0x682e6ff3u, 0x748f82eeu, 0x78a5636fu, 0x84c87814u, 0x8cc70208u,
+        0x90befffau, 0xa4506cebu, 0xbef9a3f7u, 0xc67178f2u,
+    };
+    const char *src_paths[2] = {path_i8, path_f8};
+    et_kvq_cache *dst_caches[2] = {c_i8, c_f8};
+    const uint8_t bad_bytes[2] = {0x80u, 0x7Fu};
+    const et_kvq_status expected_st[2] = {ET_KVQ_ERR_CORRUPT,
+                                          ET_KVQ_ERR_NONFINITE};
+    for (int tc = 0; tc < 2; ++tc) {
+      struct stat st_c;
+      CHECK(stat(src_paths[tc], &st_c) == 0 && st_c.st_size > 104);
+      const size_t total = (size_t)st_c.st_size;
+      const size_t body = total - 32u;
+      uint8_t *cbuf = (uint8_t *)__real_malloc(total);
+      CHECK(cbuf != NULL);
+      int cfd = open(src_paths[tc], O_RDONLY);
+      CHECK(cfd >= 0 && read(cfd, cbuf, total) == (ssize_t)total);
+      close(cfd);
+
+      /* Offset 64 (header) + 4*L (L=2 -> 8) + 4 (first scale) = 76 is first
+       * quantized byte of layer 0, K, pos 0, head 0. */
+      cbuf[76] = bad_bytes[tc];
+
+      /* Recompute SHA-256 over cbuf[0..body-1] into cbuf[body..total-1]. */
+      uint32_t h[8] = {0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au,
+                       0x510e527fu, 0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u};
+      const size_t padded_len = ((body + 9u + 63u) / 64u) * 64u;
+      uint8_t *pbuf = (uint8_t *)__real_calloc(padded_len, 1u);
+      CHECK(pbuf != NULL);
+      memcpy(pbuf, cbuf, body);
+      pbuf[body] = 0x80u;
+      const uint64_t bits64 = (uint64_t)body * 8u;
+      for (int bi = 0; bi < 8; ++bi) {
+        pbuf[padded_len - 1u - (size_t)bi] =
+            (uint8_t)((bits64 >> (8 * bi)) & 0xFFu);
+      }
+      for (size_t off = 0u; off < padded_len; off += 64u) {
+        uint32_t w[64];
+        for (size_t wi = 0u; wi < 16u; ++wi) {
+          const uint8_t *b = pbuf + off + wi * 4u;
+          w[wi] = ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) |
+                  ((uint32_t)b[2] << 8) | (uint32_t)b[3];
+        }
+        for (size_t wi = 16u; wi < 64u; ++wi) {
+          const uint32_t s0 = ((w[wi - 15u] >> 7) | (w[wi - 15u] << 25)) ^
+                              ((w[wi - 15u] >> 18) | (w[wi - 15u] << 14)) ^
+                              (w[wi - 15u] >> 3);
+          const uint32_t s1 = ((w[wi - 2u] >> 17) | (w[wi - 2u] << 15)) ^
+                              ((w[wi - 2u] >> 19) | (w[wi - 2u] << 13)) ^
+                              (w[wi - 2u] >> 10);
+          w[wi] = w[wi - 16u] + s0 + w[wi - 7u] + s1;
+        }
+        uint32_t a = h[0], b = h[1], c = h[2], d = h[3];
+        uint32_t e = h[4], f = h[5], g = h[6], hh = h[7];
+        for (size_t wi = 0u; wi < 64u; ++wi) {
+          const uint32_t S1 = ((e >> 6) | (e << 26)) ^ ((e >> 11) | (e << 21)) ^
+                              ((e >> 25) | (e << 7));
+          const uint32_t ch = (e & f) ^ ((~e) & g);
+          const uint32_t t1 = hh + S1 + ch + k256[wi] + w[wi];
+          const uint32_t S0 = ((a >> 2) | (a << 30)) ^ ((a >> 13) | (a << 19)) ^
+                              ((a >> 22) | (a << 10));
+          const uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+          const uint32_t t2 = S0 + maj;
+          hh = g; g = f; f = e; e = d + t1;
+          d = c; c = b; b = a; a = t1 + t2;
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d;
+        h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+      }
+      for (size_t hi = 0u; hi < 8u; ++hi) {
+        cbuf[body + hi * 4u + 0u] = (uint8_t)((h[hi] >> 24) & 0xFFu);
+        cbuf[body + hi * 4u + 1u] = (uint8_t)((h[hi] >> 16) & 0xFFu);
+        cbuf[body + hi * 4u + 2u] = (uint8_t)((h[hi] >> 8) & 0xFFu);
+        cbuf[body + hi * 4u + 3u] = (uint8_t)(h[hi] & 0xFFu);
+      }
+      __real_free(pbuf);
+
+      cfd = open(path_trunc, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+      CHECK(cfd >= 0 && write(cfd, cbuf, total) == (ssize_t)total);
+      close(cfd);
+      __real_free(cbuf);
+
+      CHECK(et_kvq_cache_load_snapshot(dst_caches[tc], path_trunc) ==
+            expected_st[tc]);
+    }
+  }
+
   __real_free(raw);
   (void)unlink(path_i8);
   (void)unlink(path_f8);
@@ -768,6 +873,75 @@ static void test_snapshots(void) {
   et_kvq_cache_destroy(c_i8);
 }
 
+static void test_flt_max_and_scale_boundaries(void) {
+  /* P1 regression: INT8_SYM quantization of +/-FLT_MAX must produce a scale
+   * whose 127 * scale dequantization stays finite and never poisons the cache. */
+  const float extreme[8] = {FLT_MAX, -FLT_MAX, 1.0e37f, -1.0e37f,
+                            0.0f,    1.0f,     -1.0f,   FLT_MAX};
+  int8_t qi8[8];
+  float sc = 0.0f;
+  float deq[8];
+  forbid_alloc = 1;
+  CHECK(et_kvq_int8_sym_quantize_vec(extreme, 8u, qi8, &sc) == ET_KVQ_OK);
+  CHECK(f32_bits(sc) == 0x7c010203u);
+  CHECK(qi8[0] == 127 && qi8[1] == -127);
+  CHECK(et_kvq_int8_sym_dequantize_vec(qi8, 8u, sc, deq) == ET_KVQ_OK);
+  for (size_t i = 0u; i < 8u; ++i) {
+    CHECK(isfinite(deq[i]));
+  }
+  CHECK(f32_bits(deq[0]) == 0x7f7ffffeu);
+  CHECK(f32_bits(deq[1]) == 0xff7ffffeu);
+
+  /* Scale validation symmetry: reject -0.0f scales and FP8 scale==0 with
+   * non-zero magnitude payloads. */
+  const float neg_zero = bits_f32(0x80000000u);
+  const int8_t zeros_i8[4] = {0, 0, 0, 0};
+  const uint8_t zeros_f8[4] = {0x00u, 0x80u, 0x00u, 0x00u};
+  const uint8_t nz_f8[4] = {0x38u, 0x00u, 0x00u, 0x00u};
+  float out4[4];
+  CHECK(et_kvq_int8_sym_dequantize_vec(zeros_i8, 4u, neg_zero, out4) ==
+        ET_KVQ_ERR_NONFINITE);
+  CHECK(et_kvq_fp8_e4m3_dequantize_vec(zeros_f8, 4u, neg_zero, out4) ==
+        ET_KVQ_ERR_NONFINITE);
+  CHECK(et_kvq_fp8_e4m3_dequantize_vec(zeros_f8, 4u, 0.0f, out4) == ET_KVQ_OK);
+  CHECK(et_kvq_fp8_e4m3_dequantize_vec(nz_f8, 4u, 0.0f, out4) ==
+        ET_KVQ_ERR_CORRUPT);
+  forbid_alloc = 0;
+
+  /* End-to-end cache append, dequant, GQA decode, and snapshot with +/-FLT_MAX. */
+  const et_kvq_config cfg = {ET_KVQ_FMT_INT8_SYM, 1u, 1u, 8u, 4u, 0u};
+
+  et_kvq_cache *c = NULL;
+  CHECK(et_kvq_cache_create(&cfg, NULL, 0u, &c) == ET_KVQ_OK);
+
+  float v_small[8] = {1.0f, -1.0f, 0.5f, -0.5f, 0.25f, -0.25f, 0.0f, 0.125f};
+  float q_tiny[8] = {1.0e-38f, 1.0e-38f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  float kd[8], vd[8], out_gqa[8];
+
+  forbid_alloc = 1;
+  CHECK(et_kvq_append_token_v1(c, 0u, extreme, v_small) == ET_KVQ_OK);
+  CHECK(et_kvq_dequant_slice_v1(c, 0u, 0u, kd, vd) == ET_KVQ_OK);
+  CHECK(isfinite(kd[0]) && isfinite(kd[1]));
+  CHECK(et_kvq_decode_gqa_v1(c, 0u, 1u, 1.0f, 0u, q_tiny, out_gqa) == ET_KVQ_OK);
+  for (size_t i = 0u; i < 8u; ++i) {
+    CHECK(isfinite(out_gqa[i]));
+  }
+  forbid_alloc = 0;
+
+  char tdir[] = "/tmp/kvq_fltmax_XXXXXX";
+  CHECK(mkdtemp(tdir) != NULL);
+  char spath[256];
+  snprintf(spath, sizeof(spath), "%s/fltmax.etkq", tdir);
+  CHECK(et_kvq_cache_save_snapshot(c, spath) == ET_KVQ_OK);
+  et_kvq_cache *c2 = NULL;
+  CHECK(et_kvq_cache_create(&cfg, NULL, 0u, &c2) == ET_KVQ_OK);
+  CHECK(et_kvq_cache_load_snapshot(c2, spath) == ET_KVQ_OK);
+  (void)unlink(spath);
+  (void)rmdir(tdir);
+  et_kvq_cache_destroy(c2);
+  et_kvq_cache_destroy(c);
+}
+
 int main(int argc, char **argv) {
   if (argc == 2 && strcmp(argv[1], "--oracle") == 0) {
     run_oracle_dump();
@@ -775,6 +949,7 @@ int main(int argc, char **argv) {
   }
 
   test_codecs_exhaustive();
+  test_flt_max_and_scale_boundaries();
   test_kvq_core_and_decode();
   test_snapshots();
   puts("KVQ native C11 tests (codecs + zero-alloc hot path + parity + "

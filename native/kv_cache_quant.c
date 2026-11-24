@@ -417,6 +417,10 @@ static int8_t rne_round_clamp_i8(double v) {
   return (int8_t)(neg ? -fl : fl);
 }
 
+static int f32_scale_is_valid(float s) {
+  return f32_is_finite(s) && ((f32_to_bits(s) & UINT32_C(0x80000000)) == 0u);
+}
+
 static void quantize_int8_vec_unchecked(const float *src, size_t count,
                                         int8_t *dst_q, float *out_scale) {
   float amax = 0.0f;
@@ -435,6 +439,11 @@ static void quantize_int8_vec_unchecked(const float *src, size_t count,
     /* Subnormal amax < 63.5 * 2^-149: use smallest positive binary32 subnormal
      * so every x[i] / scale is an exact integer in [-63, 63]. */
     scale = bits_to_f32(1u);
+  } else if (!f32_is_finite((float)(127.0 * (double)scale))) {
+    /* For amax near FLT_MAX, (float)(amax / 127.0) can round up such that
+     * 127.0 * scale exceeds the binary32 overflow threshold; step down 1 ULP
+     * so every dequantized value in [-127, 127] stays finite. */
+    scale = bits_to_f32(f32_to_bits(scale) - 1u);
   }
   const double dscale = (double)scale;
   for (size_t i = 0u; i < count; ++i) {
@@ -816,19 +825,12 @@ et_kvq_status et_kvq_append_token_v1(et_kvq_cache *cache, uint32_t layer,
   const size_t slice_floats = (size_t)hkv * (size_t)hd;
   const size_t slice_bytes = slice_floats * sizeof(float);
 
-  const span_entry spans[4] = {
-      {cache, sizeof(*cache)},
-      {cache->storage, cache->storage_bytes},
-      {k_new, slice_bytes},
-      {v_new, slice_bytes},
-  };
-  /* Allow k_new == v_new? No, treat overlapping inputs with cache storage as alias. */
+  /* Treat inputs overlapping cache control block or backing storage as alias. */
   if (spans_overlap(k_new, slice_bytes, cache, sizeof(*cache)) ||
       spans_overlap(v_new, slice_bytes, cache, sizeof(*cache)) ||
       spans_overlap(k_new, slice_bytes, cache->storage, cache->storage_bytes) ||
       spans_overlap(v_new, slice_bytes, cache->storage, cache->storage_bytes))
     return ET_KVQ_ERR_ALIAS;
-  (void)spans;
 
   /* Pass 1: validate ALL inputs are finite before writing a single byte. */
   for (size_t i = 0u; i < slice_floats; ++i) {
@@ -891,7 +893,7 @@ static et_kvq_status validate_stored_vector(const et_kvq_cache *cache,
   }
 
   const float scale = load_f32_at(cache_scale_cptr(cache, vidx), 0u);
-  if (!f32_is_finite(scale) || scale < 0.0f)
+  if (!f32_scale_is_valid(scale))
     return ET_KVQ_ERR_NONFINITE;
   const double dscale = (double)scale;
 
@@ -911,6 +913,8 @@ static et_kvq_status validate_stored_vector(const et_kvq_cache *cache,
 
   const uint8_t *q = cache_quant_cptr(cache, vidx);
   for (uint32_t d = 0u; d < hd; ++d) {
+    if (scale == 0.0f && (q[d] & 0x7Fu) != 0u)
+      return ET_KVQ_ERR_CORRUPT;
     float fv = 0.0f;
     const et_kvq_status st = dequant_fp8_elem_f32(q[d], dscale, &fv);
     if (st != ET_KVQ_OK)
@@ -1285,7 +1289,7 @@ et_kvq_status et_kvq_int8_sym_dequantize_vec(const int8_t *src_q, size_t count,
     return ET_KVQ_ERR_INVALID_ARG;
   if (!fp_environment_supported())
     return ET_KVQ_ERR_FP_ENV;
-  if (!f32_is_finite(scale) || scale < 0.0f)
+  if (!f32_scale_is_valid(scale))
     return ET_KVQ_ERR_NONFINITE;
   if (count > SIZE_MAX / sizeof(float))
     return ET_KVQ_ERR_OVERFLOW;
@@ -1332,7 +1336,7 @@ et_kvq_status et_kvq_fp8_e4m3_dequantize_vec(const uint8_t *src_q, size_t count,
     return ET_KVQ_ERR_INVALID_ARG;
   if (!fp_environment_supported())
     return ET_KVQ_ERR_FP_ENV;
-  if (!f32_is_finite(scale) || scale < 0.0f)
+  if (!f32_scale_is_valid(scale))
     return ET_KVQ_ERR_NONFINITE;
   if (count > SIZE_MAX / sizeof(float))
     return ET_KVQ_ERR_OVERFLOW;
@@ -1340,6 +1344,8 @@ et_kvq_status et_kvq_fp8_e4m3_dequantize_vec(const uint8_t *src_q, size_t count,
     return ET_KVQ_ERR_ALIAS;
   const double dscale = (double)scale;
   for (size_t i = 0u; i < count; ++i) {
+    if (scale == 0.0f && (src_q[i] & 0x7Fu) != 0u)
+      return ET_KVQ_ERR_CORRUPT;
     float fv = 0.0f;
     const et_kvq_status st = dequant_fp8_elem_f32(src_q[i], dscale, &fv);
     if (st != ET_KVQ_OK)
@@ -1826,7 +1832,7 @@ et_kvq_status et_kvq_cache_load_snapshot(et_kvq_cache *cache,
           } else if (hdr_fmt == ET_KVQ_FMT_INT8_SYM) {
             const float sc = bits_to_f32(get_u32_le(buf + scan));
             scan += 4u;
-            if (!f32_is_finite(sc) || sc < 0.0f) {
+            if (!f32_scale_is_valid(sc)) {
               free(buf);
               return ET_KVQ_ERR_NONFINITE;
             }
@@ -1845,13 +1851,17 @@ et_kvq_status et_kvq_cache_load_snapshot(et_kvq_cache *cache,
           } else {
             const float sc = bits_to_f32(get_u32_le(buf + scan));
             scan += 4u;
-            if (!f32_is_finite(sc) || sc < 0.0f) {
+            if (!f32_scale_is_valid(sc)) {
               free(buf);
               return ET_KVQ_ERR_NONFINITE;
             }
             const double dsc = (double)sc;
             for (uint32_t d = 0u; d < hdr_hd; ++d) {
               const uint8_t code = buf[scan++];
+              if (sc == 0.0f && (code & 0x7Fu) != 0u) {
+                free(buf);
+                return ET_KVQ_ERR_CORRUPT;
+              }
               float fv = 0.0f;
               const et_kvq_status dst = dequant_fp8_elem_f32(code, dsc, &fv);
               if (dst != ET_KVQ_OK) {
