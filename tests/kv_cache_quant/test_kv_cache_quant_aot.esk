@@ -1,0 +1,438 @@
+;;; Compiled Eshkol AOT Quantized KV-Cache Engine driver:
+;;; - Appends 32 tokens across 2 layers (H_q=8, H_kv=2, D_h=64) into FP32,
+;;;   INT8_SYM, and FP8_E4M3FN caches (head 1 has realistic channel outliers).
+;;; - Verifies exact 3.76x compression ratio (65536 B -> 17408 B, 64/17).
+;;; - Verifies fused quantized GQA decode matches explicit dequantized attention
+;;;   bitwise (0 mismatched bits, max_err == 0.0), bounded RMSE vs FP32,
+;;;   FP8 beats INT8 on outlier heads, and exact top-1 logit argmax matches FP32
+;;;   across multi-step decode (t = 8, 16, 24, 32).
+;;; - Verifies truncate + re-append consistency and sliding-window decode.
+;;; - Verifies ETKQ1000 SHA-256 snapshot save/reload bitwise identity + tamper
+;;;   and format-mismatch rejection.
+;;; - Exercises negative boundary checks (non-finite K/Q, capacity overflow,
+;;;   invalid format/dims, FP-env trap).
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+(extern f64 c-sqrt f64 :real sqrt)
+
+(extern i32 kvq-create i64 i64 i64 i64 i64 ptr :real et_kvq_aot_create)
+(extern void kvq-destroy ptr :real et_kvq_aot_destroy)
+(extern i32 kvq-reset ptr :real et_kvq_aot_reset)
+(extern i32 kvq-truncate ptr i64 :real et_kvq_aot_truncate)
+
+(extern i64 kvq-layer-seq-len ptr i64 :real et_kvq_aot_layer_seq_len)
+(extern i64 kvq-stat-fp32-bytes ptr :real et_kvq_aot_stat_fp32_bytes)
+(extern i64 kvq-stat-quant-bytes ptr :real et_kvq_aot_stat_quant_bytes)
+(extern f64 kvq-stat-ratio ptr :real et_kvq_aot_stat_compression_ratio)
+
+(extern i32 kvq-set-k ptr i64 i64 f64 :real et_kvq_aot_set_k)
+(extern i32 kvq-set-v ptr i64 i64 f64 :real et_kvq_aot_set_v)
+(extern i32 kvq-set-k-bits ptr i64 i64 i64 :real et_kvq_aot_set_k_bits)
+(extern i32 kvq-append ptr i64 :real et_kvq_aot_append_token)
+
+(extern i32 kvq-copy-deq-fp32 ptr ptr i64 i64 :real et_kvq_aot_copy_dequant_to_fp32)
+
+(extern i32 kvq-set-q ptr i64 i64 f64 :real et_kvq_aot_set_q)
+(extern i32 kvq-set-q-bits ptr i64 i64 i64 :real et_kvq_aot_set_q_bits)
+(extern i32 kvq-decode ptr i64 i64 f64 i64 :real et_kvq_aot_decode_gqa)
+(extern f64 kvq-get-out ptr i64 i64 :real et_kvq_aot_get_out)
+(extern i64 kvq-get-out-bits ptr i64 i64 :real et_kvq_aot_get_out_bits)
+
+(extern i32 kvq-save-snap ptr i64 :real et_kvq_aot_save_snapshot_slot)
+(extern i32 kvq-load-snap ptr i64 :real et_kvq_aot_load_snapshot_slot)
+(extern i32 kvq-tamper-snap i64 i64 :real et_kvq_aot_tamper_snapshot_slot)
+(extern i32 kvq-check-fp-trap ptr i64 i64 f64 :real et_kvq_aot_check_fp_env_trap)
+
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Format & status constants from kv_cache_quant_abi.h.
+(define fmt-fp32 1)
+(define fmt-int8 2)
+(define fmt-fp8 3)
+
+(define status-ok 0)
+(define err-shape -2)
+(define err-unsupported-fmt -3)
+(define err-nonfinite -4)
+(define err-capacity -5)
+(define err-out-of-range -6)
+(define err-checksum -14)
+(define err-format-mismatch -15)
+
+;; Geometry: 2 layers, H_q=8, H_kv=2, D_h=64, T=32.
+(define num-layers 2)
+(define num-q-heads 8)
+(define num-kv-heads 2)
+(define head-dim 64)
+(define seq-len 32)
+(define vocab-size 16)
+(define attn-scale (/ 1.0 (c-sqrt (* 1.0 head-dim))))
+
+(define (require-check label ok)
+  (unless ok
+    (display "KVQ AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-eq label expected actual)
+  (unless (= expected actual)
+    (display "KVQ AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-ctx fmt max-seq)
+  (let ((cell (checked-allocate 8)))
+    (expect-eq "kvq-create" status-ok
+               (kvq-create fmt num-layers num-kv-heads head-dim max-seq
+                           (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+;; Deterministic value generator matching native tests.
+(define (det-val seed idx step)
+  (let ((bucket (- (modulo (+ (* 37 seed) (* 19 idx) (* 7 (quotient idx 3))) 41) 20)))
+    (* step bucket)))
+
+(define (stage-kv-slice ctx layer pos)
+  (do ((h 0 (+ h 1)))
+      ((= h num-kv-heads))
+    (do ((d 0 (+ d 1)))
+        ((= d head-dim))
+      (let* ((kseed (+ 11 (* layer 101) (* pos 7) (* h 29)))
+             (vseed (+ 53 (* layer 131) (* pos 13) (* h 31)))
+             (kv (if (and (= h 1) (= d 0))
+                     (if (= (modulo pos 2) 0) 12.0 -11.5)
+                     (det-val kseed d (if (= h 1) 0.01 0.025))))
+             (vv (if (and (= h 1) (= d 0))
+                     (if (= (modulo pos 3) 0) -12.0 11.0)
+                     (det-val vseed d (if (= h 1) 0.01 0.025)))))
+        (expect-eq "set-k" status-ok (kvq-set-k (ffi-pointer ctx) h d kv))
+        (expect-eq "set-v" status-ok (kvq-set-v (ffi-pointer ctx) h d vv))))))
+
+(define (stage-q ctx seed)
+  (do ((qh 0 (+ qh 1)))
+      ((= qh num-q-heads))
+    (do ((d 0 (+ d 1)))
+        ((= d head-dim))
+      (expect-eq "set-q" status-ok
+                 (kvq-set-q (ffi-pointer ctx) qh d
+                            (det-val (+ seed (* qh 17)) d 0.0625))))))
+
+(define (count-out-bit-mismatches ctx-a ctx-b)
+  (let ((mismatches 0))
+    (do ((qh 0 (+ qh 1)))
+        ((= qh num-q-heads) mismatches)
+      (do ((d 0 (+ d 1)))
+          ((= d head-dim))
+        (unless (= (kvq-get-out-bits (ffi-pointer ctx-a) qh d)
+                   (kvq-get-out-bits (ffi-pointer ctx-b) qh d))
+          (set! mismatches (+ mismatches 1)))))))
+
+(define (head-range-rmse ctx-q ctx-ref qh-start qh-end d-start)
+  (let ((sse 0.0)
+        (cnt 0))
+    (do ((qh qh-start (+ qh 1)))
+        ((= qh qh-end) (c-sqrt (/ sse (* 1.0 cnt))))
+      (do ((d d-start (+ d 1)))
+          ((= d head-dim))
+        (let ((diff (- (kvq-get-out (ffi-pointer ctx-q) qh d)
+                       (kvq-get-out (ffi-pointer ctx-ref) qh d))))
+          (set! sse (+ sse (* diff diff)))
+          (set! cnt (+ cnt 1)))))))
+
+(define (head-range-max-abs ctx-q ctx-ref qh-start qh-end d-start)
+  (let ((mx 0.0))
+    (do ((qh qh-start (+ qh 1)))
+        ((= qh qh-end) mx)
+      (do ((d d-start (+ d 1)))
+          ((= d head-dim))
+        (let ((e (abs (- (kvq-get-out (ffi-pointer ctx-q) qh d)
+                         (kvq-get-out (ffi-pointer ctx-ref) qh d)))))
+          (when (> e mx) (set! mx e)))))))
+
+(define (compute-top1-logit ctx)
+  (let ((best-id 0)
+        (best-val -1000000000.0))
+    (do ((v 0 (+ v 1)))
+        ((= v vocab-size) best-id)
+      (let ((logit 0.0))
+        (do ((qh 0 (+ qh 1)))
+            ((= qh num-q-heads))
+          (do ((d 0 (+ d 1)))
+              ((= d head-dim))
+            (let* ((idx (+ (* qh head-dim) d))
+                   (base-w (det-val (+ 300 (* v 43)) idx 0.05))
+                   (w (if (= (modulo idx vocab-size) v) (+ base-w 0.5) base-w))
+                   (a (kvq-get-out (ffi-pointer ctx) qh d)))
+              (set! logit (+ logit (* w a))))))
+        (when (or (= v 0) (> logit best-val))
+          (set! best-val logit)
+          (set! best-id v))))))
+
+(define (capture-out-bits ctx)
+  (let ((bits (make-vector (* num-q-heads head-dim) 0)))
+    (do ((qh 0 (+ qh 1)))
+        ((= qh num-q-heads) bits)
+      (do ((d 0 (+ d 1)))
+          ((= d head-dim))
+        (vector-set! bits (+ (* qh head-dim) d)
+                     (kvq-get-out-bits (ffi-pointer ctx) qh d))))))
+
+(define (count-vec-bit-mismatches ctx ref-bits)
+  (let ((mismatches 0))
+    (do ((qh 0 (+ qh 1)))
+        ((= qh num-q-heads) mismatches)
+      (do ((d 0 (+ d 1)))
+          ((= d head-dim))
+        (unless (= (kvq-get-out-bits (ffi-pointer ctx) qh d)
+                   (vector-ref ref-bits (+ (* qh head-dim) d)))
+          (set! mismatches (+ mismatches 1)))))))
+
+(define (run-kvq-aot)
+  (let ((c-fp32 (create-ctx fmt-fp32 seq-len))
+        (c-int8 (create-ctx fmt-int8 seq-len))
+        (c-fp8 (create-ctx fmt-fp8 seq-len))
+        (c-deq-int8 (create-ctx fmt-fp32 seq-len))
+        (c-deq-fp8 (create-ctx fmt-fp32 seq-len))
+        (top1-matches 0))
+
+    ;; 1. Append 32 tokens across 2 layers into FP32, INT8_SYM, FP8_E4M3FN,
+    ;;    mirroring dequantized slices into c-deq-int8 and c-deq-fp8.
+    (do ((pos 0 (+ pos 1)))
+        ((= pos seq-len))
+      (do ((l 0 (+ l 1)))
+          ((= l num-layers))
+        (stage-kv-slice c-fp32 l pos)
+        (expect-eq "append-fp32" status-ok (kvq-append (ffi-pointer c-fp32) l))
+        (stage-kv-slice c-int8 l pos)
+        (expect-eq "append-int8" status-ok (kvq-append (ffi-pointer c-int8) l))
+        (stage-kv-slice c-fp8 l pos)
+        (expect-eq "append-fp8" status-ok (kvq-append (ffi-pointer c-fp8) l))
+        (expect-eq "copy-deq-int8" status-ok
+                   (kvq-copy-deq-fp32 (ffi-pointer c-int8)
+                                      (ffi-pointer c-deq-int8) l pos))
+        (expect-eq "copy-deq-fp8" status-ok
+                   (kvq-copy-deq-fp32 (ffi-pointer c-fp8)
+                                      (ffi-pointer c-deq-fp8) l pos)))
+      ;; Multi-step top-1 logit argmax check at t = 8, 16, 24, 32.
+      (when (= (modulo (+ pos 1) 8) 0)
+        (let ((qseed (+ 901 (* pos 11))))
+          (stage-q c-fp32 qseed)
+          (stage-q c-int8 qseed)
+          (stage-q c-fp8 qseed)
+          (expect-eq "step-dec-fp32" status-ok
+                     (kvq-decode (ffi-pointer c-fp32) 0 num-q-heads attn-scale 0))
+          (expect-eq "step-dec-int8" status-ok
+                     (kvq-decode (ffi-pointer c-int8) 0 num-q-heads attn-scale 0))
+          (expect-eq "step-dec-fp8" status-ok
+                     (kvq-decode (ffi-pointer c-fp8) 0 num-q-heads attn-scale 0))
+          (let ((t-fp32 (compute-top1-logit c-fp32))
+                (t-int8 (compute-top1-logit c-int8))
+                (t-fp8 (compute-top1-logit c-fp8)))
+            (expect-eq "top1-int8" t-fp32 t-int8)
+            (expect-eq "top1-fp8" t-fp32 t-fp8)
+            (set! top1-matches (+ top1-matches 1))))))
+
+    ;; 2. Verify exact 3.76x compression stats (65536 B -> 17408 B = 64/17).
+    (let ((fp32-b (kvq-stat-fp32-bytes (ffi-pointer c-fp32)))
+          (int8-b (kvq-stat-quant-bytes (ffi-pointer c-int8)))
+          (fp8-b (kvq-stat-quant-bytes (ffi-pointer c-fp8)))
+          (int8-ratio (kvq-stat-ratio (ffi-pointer c-int8)))
+          (fp8-ratio (kvq-stat-ratio (ffi-pointer c-fp8))))
+      (expect-eq "fp32-bytes" 65536 fp32-b)
+      (expect-eq "int8-bytes" 17408 int8-b)
+      (expect-eq "fp8-bytes" 17408 fp8-b)
+      (require-check "int8 ratio ~3.7647"
+                     (and (> int8-ratio 3.764) (< int8-ratio 3.765)))
+      (require-check "fp8 ratio ~3.7647"
+                     (and (> fp8-ratio 3.764) (< fp8-ratio 3.765)))
+      (display "KVQ AOT COMPRESSION fp32_bytes=") (display fp32-b)
+      (display " int8_bytes=") (display int8-b)
+      (display " fp8_bytes=") (display fp8-b)
+      (display " ratio=") (display fp8-ratio)
+      (display " status=PASS") (newline))
+
+    ;; 3. Bitwise 0.0 parity (fused quantized vs explicit dequantized),
+    ;;    bounded RMSE vs FP32, and FP8 outlier-head advantage.
+    (stage-q c-fp32 4242)
+    (stage-q c-int8 4242)
+    (stage-q c-fp8 4242)
+    (stage-q c-deq-int8 4242)
+    (stage-q c-deq-fp8 4242)
+
+    (expect-eq "dec-l0-fp32" status-ok
+               (kvq-decode (ffi-pointer c-fp32) 0 num-q-heads attn-scale 0))
+    (expect-eq "dec-l0-int8" status-ok
+               (kvq-decode (ffi-pointer c-int8) 0 num-q-heads attn-scale 0))
+    (expect-eq "dec-l0-deq-int8" status-ok
+               (kvq-decode (ffi-pointer c-deq-int8) 0 num-q-heads attn-scale 0))
+    (expect-eq "dec-l0-fp8" status-ok
+               (kvq-decode (ffi-pointer c-fp8) 0 num-q-heads attn-scale 0))
+    (expect-eq "dec-l0-deq-fp8" status-ok
+               (kvq-decode (ffi-pointer c-deq-fp8) 0 num-q-heads attn-scale 0))
+
+    (let ((i8-bits (count-out-bit-mismatches c-int8 c-deq-int8))
+          (f8-bits (count-out-bit-mismatches c-fp8 c-deq-fp8))
+          (i8-norm-rmse (head-range-rmse c-int8 c-fp32 0 4 0))
+          (f8-norm-rmse (head-range-rmse c-fp8 c-fp32 0 4 0))
+          (i8-norm-max (head-range-max-abs c-int8 c-fp32 0 4 0))
+          (f8-norm-max (head-range-max-abs c-fp8 c-fp32 0 4 0))
+          (i8-out-rmse (head-range-rmse c-int8 c-fp32 4 8 1))
+          (f8-out-rmse (head-range-rmse c-fp8 c-fp32 4 8 1))
+          (saved-fp8-full (capture-out-bits c-fp8))
+          (saved-int8-full (capture-out-bits c-int8)))
+      (expect-eq "fused-vs-deq-int8-bits" 0 i8-bits)
+      (expect-eq "fused-vs-deq-fp8-bits" 0 f8-bits)
+      (require-check "int8 norm rmse < 1e-2" (< i8-norm-rmse 0.01))
+      (require-check "fp8 norm rmse < 1e-2" (< f8-norm-rmse 0.01))
+      (require-check "int8 norm max < 0.05" (< i8-norm-max 0.05))
+      (require-check "fp8 norm max < 0.05" (< f8-norm-max 0.05))
+      (require-check "fp8 beats int8 on outlier head" (< f8-out-rmse i8-out-rmse))
+      (expect-eq "top1-steps" 4 top1-matches)
+
+      (display "KVQ AOT DECODE_PARITY int8_deq_bits=0 fp8_deq_bits=0 int8_rmse=")
+      (display i8-norm-rmse)
+      (display " fp8_rmse=") (display f8-norm-rmse)
+      (display " int8_outlier_rmse=") (display i8-out-rmse)
+      (display " fp8_outlier_rmse=") (display f8-out-rmse)
+      (display " top1_steps=") (display top1-matches)
+      (display " status=PASS") (newline)
+
+      ;; 4. Sliding-window quantized decode (window_size = 8) on layer 1.
+      (expect-eq "win-int8" status-ok
+                 (kvq-decode (ffi-pointer c-int8) 1 num-q-heads attn-scale 8))
+      (expect-eq "win-deq-int8" status-ok
+                 (kvq-decode (ffi-pointer c-deq-int8) 1 num-q-heads attn-scale 8))
+      (expect-eq "win-fp8" status-ok
+                 (kvq-decode (ffi-pointer c-fp8) 1 num-q-heads attn-scale 8))
+      (expect-eq "win-deq-fp8" status-ok
+                 (kvq-decode (ffi-pointer c-deq-fp8) 1 num-q-heads attn-scale 8))
+      (expect-eq "win-parity-int8" 0
+                 (count-out-bit-mismatches c-int8 c-deq-int8))
+      (expect-eq "win-parity-fp8" 0
+                 (count-out-bit-mismatches c-fp8 c-deq-fp8))
+      (let ((win-fp8-bits (capture-out-bits c-fp8)))
+        (expect-eq "full-l1-fp8" status-ok
+                   (kvq-decode (ffi-pointer c-fp8) 1 num-q-heads attn-scale 0))
+        (require-check "sliding window differs from full context"
+                       (> (count-vec-bit-mismatches c-fp8 win-fp8-bits) 0)))
+
+      ;; 5. Truncate (32 -> 20) + re-append (20..31) bitwise restoration.
+      (expect-eq "trunc-oob" err-out-of-range
+                 (kvq-truncate (ffi-pointer c-fp8) 33))
+      (expect-eq "trunc-20" status-ok (kvq-truncate (ffi-pointer c-fp8) 20))
+      (expect-eq "len-after-trunc" 20 (kvq-layer-seq-len (ffi-pointer c-fp8) 0))
+      (expect-eq "bytes-after-trunc" 10880
+                 (kvq-stat-quant-bytes (ffi-pointer c-fp8)))
+      (do ((pos 20 (+ pos 1)))
+          ((= pos seq-len))
+        (do ((l 0 (+ l 1)))
+            ((= l num-layers))
+          (stage-kv-slice c-fp8 l pos)
+          (expect-eq "reappend-fp8" status-ok
+                     (kvq-append (ffi-pointer c-fp8) l))))
+      (expect-eq "reapp-dec" status-ok
+                 (kvq-decode (ffi-pointer c-fp8) 0 num-q-heads attn-scale 0))
+      (expect-eq "trunc-reappend-bits" 0
+                 (count-vec-bit-mismatches c-fp8 saved-fp8-full))
+      (display "KVQ AOT TRUNCATE_WINDOW trunc_from=32 trunc_to=20 reappend_bits=0 window=8 window_bits=0 status=PASS")
+      (newline)
+
+      ;; 6. ETKQ1000 SHA-256 Snapshot save/reload bitwise identity + tamper &
+      ;;    format-mismatch rejection.
+      (let ((c-int8-reload (create-ctx fmt-int8 seq-len))
+            (c-fp8-reload (create-ctx fmt-fp8 seq-len)))
+        (expect-eq "save-int8" status-ok
+                   (kvq-save-snap (ffi-pointer c-int8) 0))
+        (expect-eq "save-fp8" status-ok
+                   (kvq-save-snap (ffi-pointer c-fp8) 1))
+        (expect-eq "load-int8" status-ok
+                   (kvq-load-snap (ffi-pointer c-int8-reload) 0))
+        (expect-eq "load-fp8" status-ok
+                   (kvq-load-snap (ffi-pointer c-fp8-reload) 1))
+        (stage-q c-int8-reload 4242)
+        (stage-q c-fp8-reload 4242)
+        (expect-eq "dec-reload-int8" status-ok
+                   (kvq-decode (ffi-pointer c-int8-reload) 0 num-q-heads
+                               attn-scale 0))
+        (expect-eq "dec-reload-fp8" status-ok
+                   (kvq-decode (ffi-pointer c-fp8-reload) 0 num-q-heads
+                               attn-scale 0))
+        (expect-eq "snap-int8-bits" 0
+                   (count-vec-bit-mismatches c-int8-reload saved-int8-full))
+        (expect-eq "snap-fp8-bits" 0
+                   (count-vec-bit-mismatches c-fp8-reload saved-fp8-full))
+
+        ;; Format mismatch: load INT8 snapshot (slot 0) into FP8 cache.
+        (expect-eq "snap-fmt-mismatch" err-format-mismatch
+                   (kvq-load-snap (ffi-pointer c-fp8-reload) 0))
+
+        ;; Tamper 1 payload byte in slot 1 -> ET_KVQ_ERR_CHECKSUM.
+        (expect-eq "snap-tamper" status-ok (kvq-tamper-snap 1 80))
+        (expect-eq "snap-tamper-reject" err-checksum
+                   (kvq-load-snap (ffi-pointer c-fp8-reload) 1))
+
+        (kvq-destroy (ffi-pointer c-int8-reload))
+        (kvq-destroy (ffi-pointer c-fp8-reload))
+        (display "KVQ AOT SNAPSHOT int8_bits=0 fp8_bits=0 mismatch=REJECT tamper=REJECT status=PASS")
+        (newline)))
+
+    ;; 7. Negative boundary checks (non-finite K/Q, capacity overflow,
+    ;;    invalid format/dims, FP-env trap).
+    ;; Capacity overflow on full c-fp8 (already at 32/32).
+    (stage-kv-slice c-fp8 0 0)
+    (expect-eq "neg-cap-full" err-capacity (kvq-append (ffi-pointer c-fp8) 0))
+
+    ;; Reset c-int8 and test non-finite K (+Inf = 0x7F800000).
+    (expect-eq "reset-int8" status-ok (kvq-reset (ffi-pointer c-int8)))
+    (stage-kv-slice c-int8 0 0)
+    (expect-eq "set-k-inf" status-ok
+               (kvq-set-k-bits (ffi-pointer c-int8) 0 0 2139095040))
+    (expect-eq "neg-nonfinite-k" err-nonfinite
+               (kvq-append (ffi-pointer c-int8) 0))
+    (expect-eq "len-unchanged-after-nonfinite" 0
+               (kvq-layer-seq-len (ffi-pointer c-int8) 0))
+
+    ;; Non-finite Q (qNaN = 0x7FC00000) leaves decode rejected.
+    (expect-eq "set-q-nan" status-ok
+               (kvq-set-q-bits (ffi-pointer c-fp8) 0 0 2143289344))
+    (expect-eq "neg-nonfinite-q" err-nonfinite
+               (kvq-decode (ffi-pointer c-fp8) 0 num-q-heads attn-scale 0))
+
+    ;; Invalid format & invalid dims on create.
+    (let ((cell (checked-allocate 8)))
+      (expect-eq "neg-bad-fmt" err-unsupported-fmt
+                 (kvq-create 99 num-layers num-kv-heads head-dim seq-len
+                             (ffi-pointer cell)))
+      (expect-eq "neg-bad-dims" err-shape
+                 (kvq-create fmt-fp8 0 num-kv-heads head-dim seq-len
+                             (ffi-pointer cell)))
+      (release (ffi-pointer cell)))
+
+    ;; Invalid GQA num_q_heads not divisible by num_kv_heads.
+    (stage-q c-fp8 4242)
+    (expect-eq "neg-bad-gqa" err-shape
+               (kvq-decode (ffi-pointer c-fp8) 0 3 attn-scale 0))
+
+    ;; FP-environment trap (FE_TOWARDZERO rejected on append and decode).
+    (stage-kv-slice c-fp8 0 0)
+    (expect-eq "neg-fp-trap" status-ok
+               (kvq-check-fp-trap (ffi-pointer c-fp8) 0 num-q-heads attn-scale))
+
+    (display "KVQ AOT NEGATIVE status=PASS") (newline)
+
+    (kvq-destroy (ffi-pointer c-fp32))
+    (kvq-destroy (ffi-pointer c-int8))
+    (kvq-destroy (ffi-pointer c-fp8))
+    (kvq-destroy (ffi-pointer c-deq-int8))
+    (kvq-destroy (ffi-pointer c-deq-fp8))))
+
+(run-kvq-aot)
