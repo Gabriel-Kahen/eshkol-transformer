@@ -111,26 +111,31 @@ def load_native_codec(lib_path: str | Path | None = None) -> ctypes.CDLL:
     except OSError as error:
         raise InteropError(f"failed to load native IO5 quant codec library {resolved}: {error}") from error
 
-    lib.et_io5_quant_abi_version.argtypes = []
-    lib.et_io5_quant_abi_version.restype = ctypes.c_uint32
-    abi = lib.et_io5_quant_abi_version()
-    require(abi == QUANT_ABI_VERSION_V1_0, f"unexpected native IO5 quant ABI version: {abi:#x}")
+    try:
+        lib.et_io5_quant_abi_version.argtypes = []
+        lib.et_io5_quant_abi_version.restype = ctypes.c_uint32
+        abi = lib.et_io5_quant_abi_version()
+        require(abi == QUANT_ABI_VERSION_V1_0, f"unexpected native IO5 quant ABI version: {abi:#x}")
 
-    lib.et_io5_validate_f32_finite.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
-    lib.et_io5_validate_f32_finite.restype = ctypes.c_uint32
+        lib.et_io5_validate_f32_finite.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
+        lib.et_io5_validate_f32_finite.restype = ctypes.c_uint32
 
-    bulk_args = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
-    for fn_name in (
-        "et_io5_encode_f16",
-        "et_io5_decode_f16",
-        "et_io5_encode_bf16",
-        "et_io5_decode_bf16",
-        "et_io5_quantize_q8_0",
-        "et_io5_dequantize_q8_0",
-    ):
-        fn = getattr(lib, fn_name)
-        fn.argtypes = bulk_args
-        fn.restype = ctypes.c_uint32
+        bulk_args = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t]
+        for fn_name in (
+            "et_io5_encode_f16",
+            "et_io5_decode_f16",
+            "et_io5_encode_bf16",
+            "et_io5_decode_bf16",
+            "et_io5_quantize_q8_0",
+            "et_io5_dequantize_q8_0",
+        ):
+            fn = getattr(lib, fn_name)
+            fn.argtypes = bulk_args
+            fn.restype = ctypes.c_uint32
+    except AttributeError as error:
+        raise InteropError(
+            f"native IO5 quant codec library {resolved} missing required symbol: {error}"
+        ) from error
 
     _NATIVE_LIB_CACHE[key] = lib
     return lib
@@ -199,12 +204,12 @@ def select_gguf_tensor_dtype(shape: tuple[int, ...], storage_dtype: str, q8_fall
     require(q8_fallback in Q8_FALLBACK_DTYPES, "unsupported Q8_0 fallback dtype")
     if storage_dtype == "F16":
         return "F16"
-    # Explicit Q8_0 policy: 1D norms/biases and tensors whose element count is
-    # not divisible by 32 stay in q8_fallback (F32 or F16); never silently pad.
+    # Explicit GGML Q8_0 policy: 1D norms/biases and tensors whose innermost
+    # row dimension (C1 shape[-1] == GGML ne[0]) is not divisible by 32 stay
+    # in q8_fallback (F32 or F16); never silently pad.
     if len(shape) == 1:
         return q8_fallback
-    count = safe.elements(shape)
-    return "Q8_0" if (count > 0 and count % QK8_0 == 0) else q8_fallback
+    return "Q8_0" if (len(shape) >= 2 and shape[-1] > 0 and shape[-1] % QK8_0 == 0) else q8_fallback
 
 
 def _resolve_names(state: State, profile: str | None, scheme: str | None, default_scheme: str) -> tuple[tuple[str, ...], str | None]:
@@ -215,10 +220,26 @@ def _resolve_names(state: State, profile: str | None, scheme: str | None, defaul
     return mapping.mapped_names(state, profile, chosen_scheme), chosen_scheme
 
 
-def _payload_digest(chunks: list[bytes]) -> str:
+def _payload_digest(
+    manifest: str,
+    entries: list[tuple[str, str, tuple[int, ...], bytes]],
+) -> str:
     h = hashlib.sha256()
-    for chunk in chunks:
-        h.update(chunk)
+    manifest_bytes = manifest.encode("utf-8")
+    h.update(b"eshkol.io5.quant.payload.v1\0")
+    h.update(struct.pack("<Q", len(manifest_bytes)))
+    h.update(manifest_bytes)
+    h.update(struct.pack("<Q", len(entries)))
+    for name, dtype, shape, payload in entries:
+        name_bytes = name.encode("utf-8")
+        dtype_bytes = dtype.encode("ascii")
+        h.update(struct.pack("<QQQ", len(name_bytes), len(dtype_bytes), len(shape)))
+        h.update(name_bytes)
+        h.update(dtype_bytes)
+        if shape:
+            h.update(struct.pack("<" + "Q" * len(shape), *shape))
+        h.update(struct.pack("<Q", len(payload)))
+        h.update(payload)
     return h.hexdigest()
 
 
@@ -238,6 +259,7 @@ def encode_quantized_safetensors(
 
     header: dict[str, object] = {}
     payloads: list[bytes] = []
+    digest_entries: list[tuple[str, str, tuple[int, ...], bytes]] = []
     offset = 0
     for name, tensor in zip(names, state.tensors, strict=True):
         count = safe.elements(tensor.shape)
@@ -249,15 +271,17 @@ def encode_quantized_safetensors(
             "data_offsets": (offset, offset + len(encoded)),
         }
         payloads.append(encoded)
+        digest_entries.append((name, storage_dtype, tensor.shape, encoded))
         offset += len(encoded)
 
+    manifest = safe.make_manifest(state, names)
     metadata: dict[str, str] = {
         QUANT_VERSION_KEY: "1.0",
         STORAGE_DTYPE_KEY: storage_dtype,
         LOSSY_KEY: "true",
         SOURCE_DIGEST_KEY: hashlib.sha256(raw_c1).hexdigest(),
-        PAYLOAD_DIGEST_KEY: _payload_digest(payloads),
-        safe.MANIFEST_KEY: safe.make_manifest(state, names),
+        PAYLOAD_DIGEST_KEY: _payload_digest(manifest, digest_entries),
+        safe.MANIFEST_KEY: manifest,
     }
     if profile is not None:
         assert chosen_scheme is not None
@@ -365,15 +389,16 @@ def decode_quantized_safetensors(
                 "IO5 manifest fields")
         entries = manifest_obj["entries"]
         require(type(entries) is list and len(entries) == len(wire_tensors), "IO5 manifest counts")
-        ordered_wire: list[bytes] = []
+        ordered_digest_entries: list[tuple[str, str, tuple[int, ...], bytes]] = []
         seen_names: set[str] = set()
         for entry in entries:
             require(type(entry) is dict and "name" in entry and type(entry["name"]) is str, "IO5 entry fields")
             name = entry["name"]
             require(name in wire_tensors and name not in seen_names, "IO5 tensor name")
             seen_names.add(name)
-            ordered_wire.append(wire_tensors[name][2])
-        require(_payload_digest(ordered_wire) == metadata[PAYLOAD_DIGEST_KEY],
+            dtype_w, shape_w, payload_w = wire_tensors[name]
+            ordered_digest_entries.append((name, dtype_w, shape_w, payload_w))
+        require(_payload_digest(metadata[safe.MANIFEST_KEY], ordered_digest_entries) == metadata[PAYLOAD_DIGEST_KEY],
                 "IO5 quantized safetensors payload SHA-256 mismatch")
 
         decoder = native_decode_f16 if storage_dtype == "F16" else native_decode_bf16
@@ -424,14 +449,16 @@ def _gguf_validate_shape(shape: tuple[int, ...], limits: Limits) -> int:
     return count
 
 
-def _gguf_wire_size(ggml_type: int, count: int, limits: Limits) -> int:
+def _gguf_wire_size(ggml_type: int, shape: tuple[int, ...], count: int, limits: Limits) -> int:
     if ggml_type == GGUF_TYPE_F32:
         size = count * 4
     elif ggml_type == GGUF_TYPE_F16:
         size = count * 2
     elif ggml_type == GGUF_TYPE_Q8_0:
-        require(count > 0 and count % QK8_0 == 0,
-                "GGUF Q8_0 tensor element count must be divisible by 32")
+        require(
+            len(shape) >= 1 and shape[-1] > 0 and shape[-1] % QK8_0 == 0 and count > 0 and count % QK8_0 == 0,
+            "GGUF Q8_0 tensor innermost dimension (ne[0] / shape[-1]) must be divisible by 32",
+        )
         size = (count // QK8_0) * Q8_0_BLOCK_BYTES
     else:
         raise InteropError(f"unsupported GGUF tensor type: {ggml_type}")
@@ -456,7 +483,7 @@ def encode_quantized_gguf(
 
     infos: list[bytes] = []
     padded_payloads: list[bytes] = []
-    raw_payloads: list[bytes] = []
+    digest_entries: list[tuple[str, str, tuple[int, ...], bytes]] = []
     tensor_dtypes: dict[str, str] = {}
     offset = 0
 
@@ -473,11 +500,11 @@ def encode_quantized_gguf(
             wire_data = native_encode_f16(tensor.data, count, lib_path=lib_path)
         else:
             wire_data = native_quantize_q8_0(tensor.data, count, lib_path=lib_path)
-        expected_size = _gguf_wire_size(ggml_type, count, limits)
+        expected_size = _gguf_wire_size(ggml_type, tensor.shape, count, limits)
         require(len(wire_data) == expected_size, "GGUF encoded payload size mismatch")
 
         tensor_dtypes[name] = dtype_name
-        raw_payloads.append(wire_data)
+        digest_entries.append((name, dtype_name, tensor.shape, wire_data))
         infos.append(
             gg.string(name)
             + struct.pack("<I", len(tensor.shape))
@@ -506,7 +533,7 @@ def encode_quantized_gguf(
         LOSSY_KEY: (gg.STRING, "true"),
         TENSOR_DTYPES_KEY: (gg.STRING, dtypes_json),
         SOURCE_DIGEST_KEY: (gg.STRING, hashlib.sha256(raw_c1).hexdigest()),
-        PAYLOAD_DIGEST_KEY: (gg.STRING, _payload_digest(raw_payloads)),
+        PAYLOAD_DIGEST_KEY: (gg.STRING, _payload_digest(manifest, digest_entries)),
         safe.MANIFEST_KEY: (gg.STRING, manifest),
     }
     if storage_dtype == "Q8_0":
@@ -581,7 +608,7 @@ def _decode_quantized_gguf_wire(
         count = _gguf_validate_shape(shape, limits)
         ggml_type = reader.number("I")
         require(ggml_type in GGUF_TYPE_TO_NAME, f"unsupported GGUF tensor type: {ggml_type}")
-        wire_size = _gguf_wire_size(ggml_type, count, limits)
+        wire_size = _gguf_wire_size(ggml_type, shape, count, limits)
         offset = reader.number("Q")
         require(offset % gg.ALIGNMENT == 0, "GGUF tensor offset alignment")
         descriptors[name] = (ggml_type, shape, offset, wire_size)
@@ -617,6 +644,10 @@ def _decode_gguf_payload(ggml_type: int, shape: tuple[int, ...], payload: bytes,
     if ggml_type == GGUF_TYPE_F16:
         return native_decode_f16(payload, count, lib_path=lib_path)
     if ggml_type == GGUF_TYPE_Q8_0:
+        require(
+            len(shape) >= 1 and shape[-1] > 0 and shape[-1] % QK8_0 == 0,
+            "GGUF Q8_0 tensor innermost dimension (ne[0] / shape[-1]) must be divisible by 32",
+        )
         return native_dequantize_q8_0(payload, count, lib_path=lib_path)
     raise InteropError(f"unsupported GGUF tensor type: {ggml_type}")
 
@@ -701,15 +732,16 @@ def decode_quantized_gguf(
                 "IO5 manifest fields")
         entries = manifest_obj["entries"]
         require(type(entries) is list and len(entries) == len(wire_tensors), "IO5 manifest counts")
-        ordered_wire: list[bytes] = []
+        ordered_digest_entries: list[tuple[str, str, tuple[int, ...], bytes]] = []
         seen_names: set[str] = set()
         for entry in entries:
             require(type(entry) is dict and "name" in entry and type(entry["name"]) is str, "IO5 entry fields")
             name = entry["name"]
             require(name in wire_tensors and name not in seen_names, "IO5 tensor name")
             seen_names.add(name)
-            ordered_wire.append(wire_tensors[name][2])
-        require(_payload_digest(ordered_wire) == metadata[PAYLOAD_DIGEST_KEY],
+            ggml_type_w, shape_w, payload_w = wire_tensors[name]
+            ordered_digest_entries.append((name, GGUF_TYPE_TO_NAME[ggml_type_w], shape_w, payload_w))
+        require(_payload_digest(manifest_text, ordered_digest_entries) == metadata[PAYLOAD_DIGEST_KEY],
                 "IO5 quantized GGUF payload SHA-256 mismatch")
 
         named_f32: dict[str, Tensor] = {}

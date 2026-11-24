@@ -9,7 +9,8 @@ and lossy narrow/quantized wire formats:
   C1 checkpoints.
 - **GGUF v3** `F16` (GGML type `1`) and `Q8_0` (GGML type `8`, 34 bytes per 32
   elements), with an explicit non-padding policy for 1D norms/biases and
-  non-multiple-of-32 tensors.
+  tensors whose innermost GGML row dimension (`ne[0]` / C1 `shape[-1]`) is not
+  divisible by 32.
 
 All hot numerical conversions run in reviewed native C11
 (`native/io5_quant_codec.c`, ABI header `include/eshkol_transformer/io5_quant_abi.h`)
@@ -65,7 +66,7 @@ explicitly forbidden in quantized/mixed-precision artifacts.
 | `eshkol.io5.storage_dtype` | `F16` or `BF16` |
 | `eshkol.io5.lossy` | `true` |
 | `eshkol.io5.source_c1_sha256` | Lowercase hex SHA-256 of the source canonical F32 C1 file (provenance only) |
-| `eshkol.io5.payload_sha256` | Lowercase hex SHA-256 of serialized narrow payloads in manifest order |
+| `eshkol.io5.payload_sha256` | Lowercase hex SHA-256 over domain-separated length-framed `eshkol.io5.manifest` and per-tensor `(name, dtype, shape, payload)` entries in manifest order |
 | `eshkol.io5.manifest` | JSON object with `provider`, `entries`, `aliases` |
 | `eshkol.io5.mapping_version`, `eshkol.io5.profile`, `eshkol.io5.scheme` | Present together when mapped with a profile |
 
@@ -77,24 +78,31 @@ explicitly forbidden in quantized/mixed-precision artifacts.
 - `general.file_type = UINT32(1)` (`MOSTLY_F16`) for `F16` exports;
   `general.file_type = UINT32(7)` (`MOSTLY_Q8_0`) and
   `general.quantization_version = UINT32(2)` for `Q8_0` exports.
-- **Explicit `Q8_0` tensor selection policy (zero silent padding)**:
+- **Explicit GGML `Q8_0` tensor selection policy (zero silent padding)**:
   - 1D tensors (norms and biases) stay in the explicit `--q8-fallback` dtype
     (`F32` default, or `F16`).
-  - Rank 2–4 tensors whose element count is divisible by 32 are quantized to
-    `Q8_0` (type `8`).
-  - Rank 2–4 tensors whose element count is not divisible by 32 stay in
-    `--q8-fallback` (`F32` or `F16`) and are never silently padded.
+  - Rank 2–4 tensors whose innermost row dimension (`ne[0]` in GGML order,
+    matching C1 `shape[-1]`) is divisible by 32 are quantized to `Q8_0`
+    (type `8`), ensuring GGML row-aligned blocks (`nb[1] = (ne[0] / 32) * 34`)
+    never cross row boundaries.
+  - Rank 2–4 tensors whose innermost dimension (`ne[0]` / `shape[-1]`) is not
+    divisible by 32 — even when total `prod(shape)` is divisible by 32, e.g.,
+    `(32, 16)` or `(32, 48)` — stay in `--q8-fallback` (`F32` or `F16`) and are
+    never silently padded.
   - `eshkol.io5.tensor_dtypes` records the exact wire dtype (`F32`, `F16`, or
     `Q8_0`) of every tensor; import verifies every wire descriptor against both
-    `eshkol.io5.tensor_dtypes` and the declared policy.
+    `eshkol.io5.tensor_dtypes` and the declared policy, and rejects any GGUF
+    `Q8_0` tensor (IO5 or external) whose `ne[0] % 32 != 0`.
 
 ## Rejection rules
 
 Import and export fail closed (CLI exit code `2`) on:
 
-- Missing native C11 shared library or ABI version mismatch.
-- Truncated or oversize `Q8_0` blocks, non-multiple-of-32 `Q8_0` element counts,
-  and non-finite (`±Inf`, `qNaN`, `sNaN`) `f16` block scales.
+- Missing native C11 shared library, missing required ABI symbols, or ABI
+  version mismatch.
+- Truncated or oversize `Q8_0` blocks, non-multiple-of-32 `Q8_0` innermost
+  dimensions (`ne[0]` / `shape[-1]`) or element counts, and non-finite (`±Inf`,
+  `qNaN`, `sNaN`) `f16` block scales.
 - Non-finite `F32`/`F16`/`BF16` values, `F16` overflow (`|x| > 65504.0`), `BF16`
   infinity-rounding overflow, and `Q8_0` scale overflow (`|x| > 8319008.0`).
 - Unsupported GGUF tensor types (anything outside `0=F32`, `1=F16`, `8=Q8_0`),
@@ -149,13 +157,15 @@ checkpoints (`tests/io5/test_quantized_interchange.py`):
 | `eshkol-m3-v1` | Safetensors `F16` | 10,941 | 8,088 | `4.874e-04` | `4.729e-04` |
 | `eshkol-m3-v1` | Safetensors `BF16` | 10,941 | 8,104 | `3.862e-03` | `3.760e-03` |
 | `eshkol-m3-v1` | GGUF v3 `F16` | 10,941 | 8,000 | `4.874e-04` | `4.729e-04` |
-| `eshkol-m3-v1` | GGUF v3 `Q8_0` (`F32` fallback) | 10,941 | 6,304 | `6.412e-03` | `1.000e+00` (near-zero `q=0`; block `rel_l2 < 1e-2`) |
-| `eshkol-m3-v1` | GGUF v3 `Q8_0` (`F16` fallback) | 10,941 | 6,176 | `6.412e-03` | `1.000e+00` (near-zero `q=0`; block `rel_l2 < 1e-2`) |
-| `eshkol-mod5-v1` (2L) | Safetensors `F16` | 22,764 | 15,104 | `4.883e-04` | `4.774e-04` |
-| `eshkol-mod5-v1` (2L) | Safetensors `BF16` | 22,764 | 15,128 | `3.906e-03` | `3.731e-03` |
-| `eshkol-mod5-v1` (2L) | GGUF v3 `F16` | 22,764 | 14,496 | `4.883e-04` | `4.774e-04` |
-| `eshkol-mod5-v1` (2L) | GGUF v3 `Q8_0` (`F32` fallback) | 22,764 | 10,400 | `7.384e-03` | `1.000e+00` (near-zero `q=0`; block `rel_l2 < 1e-2`) |
-| `eshkol-mod5-v1` (2L) | GGUF v3 `Q8_0` (`F16` fallback) | 22,764 | 10,240 | `7.384e-03` | `1.000e+00` (near-zero `q=0`; block `rel_l2 < 1e-2`) |
+| `eshkol-m3-v1` | GGUF v3 `Q8_0` (`F32` fallback; all `ne[0] < 32`) | 10,941 | 12,448 | `0.000e+00` | `0.000e+00` |
+| `eshkol-m3-v1` | GGUF v3 `Q8_0` (`F16` fallback; all `ne[0] < 32`) | 10,941 | 8,096 | `4.874e-04` | `4.729e-04` |
+| `eshkol-mod5-v1` (2L) | Safetensors `F16` | 85,548 | 46,536 | `4.883e-04` | `4.774e-04` |
+| `eshkol-mod5-v1` (2L) | Safetensors `BF16` | 85,548 | 46,560 | `3.906e-03` | `3.859e-03` |
+| `eshkol-mod5-v1` (2L) | GGUF v3 `F16` | 85,548 | 45,888 | `4.883e-04` | `4.774e-04` |
+| `eshkol-mod5-v1` (2L) | GGUF v3 `Q8_0` (`F32` fallback) | 85,548 | 27,104 | `7.389e-03` | `1.000e+00` (near-zero `q=0`; block `rel_l2 < 1e-2`) |
+| `eshkol-mod5-v1` (2L) | GGUF v3 `Q8_0` (`F16` fallback) | 85,548 | 26,784 | `7.389e-03` | `1.000e+00` (near-zero `q=0`; block `rel_l2 < 1e-2`) |
+| `eshkol-decoder-v1` | GGUF v3 `Q8_0` (`F32` fallback; mixed `ne[0]=32/48`) | 41,603 | 18,912 | `7.384e-03` | `1.000e+00` (near-zero `q=0`; block `rel_l2 < 1e-2`) |
+| `eshkol-decoder-v1` | GGUF v3 `Q8_0` (`F16` fallback; mixed `ne[0]=32/48`) | 41,603 | 15,488 | `7.384e-03` | `1.000e+00` (near-zero `q=0`; block `rel_l2 < 1e-2`) |
 
 ## Limitations and scope
 

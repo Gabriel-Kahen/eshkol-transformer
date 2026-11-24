@@ -52,9 +52,9 @@ def m3_finite_state() -> safe.State:
     return safe.State(PROVIDER, tuple(tensors), ((10, 14),))
 
 
-def mod5_finite_state(*, hidden: int = 16, kv_width: int = 8, inter: int = 24,
+def mod5_finite_state(*, hidden: int = 32, kv_width: int = 16, inter: int = 64,
                       vocab: int = 32, layers: int = 2, tied: bool = True) -> safe.State:
-    """MOD5 fixture where all 2D weight tensors have element counts divisible by 32."""
+    """MOD5 fixture where all 2D weight tensors have GGML ne[0] (C1 shape[-1]) divisible by 32."""
     tensors: list[safe.Tensor] = []
     seed = 100
     for layer in range(layers):
@@ -89,21 +89,22 @@ def mod5_finite_state(*, hidden: int = 16, kv_width: int = 8, inter: int = 24,
 
 
 def decoder_finite_state() -> safe.State:
+    """Decoder fixture mixing ne[0] % 32 == 0 (Q8_0) and prod % 32 == 0 with ne[0] % 32 != 0 (ffn.down (32, 48))."""
     tensors = [
-        finite_tensor("token_embedding.weight", (32, 8), 1),
-        finite_tensor("head.weight", (32, 8), 2),
-        finite_tensor("norm_final.weight", (8,), 3),
-        finite_tensor("norm_final.bias", (8,), 4),
-        finite_tensor("blocks.0.norm1.weight", (8,), 5),
-        finite_tensor("blocks.0.norm2.weight", (8,), 6),
-        finite_tensor("blocks.0.attention.query.weight", (8, 8), 7),
-        finite_tensor("blocks.0.attention.key.weight", (4, 8), 8),
-        finite_tensor("blocks.0.attention.value.weight", (4, 8), 9),
-        finite_tensor("blocks.0.attention.output.weight", (8, 8), 10),
-        finite_tensor("blocks.0.ffn.up.weight", (16, 8), 11),
-        finite_tensor("blocks.0.ffn.down.weight", (8, 16), 12),
-        finite_tensor("blocks.0.ffn.gate.weight", (16, 8), 13),
-        finite_tensor("blocks.0.ffn.gate.bias", (16,), 14),
+        finite_tensor("token_embedding.weight", (32, 32), 1),
+        finite_tensor("head.weight", (32, 32), 2),
+        finite_tensor("norm_final.weight", (32,), 3),
+        finite_tensor("norm_final.bias", (32,), 4),
+        finite_tensor("blocks.0.norm1.weight", (32,), 5),
+        finite_tensor("blocks.0.norm2.weight", (32,), 6),
+        finite_tensor("blocks.0.attention.query.weight", (32, 32), 7),
+        finite_tensor("blocks.0.attention.key.weight", (16, 32), 8),
+        finite_tensor("blocks.0.attention.value.weight", (16, 32), 9),
+        finite_tensor("blocks.0.attention.output.weight", (32, 32), 10),
+        finite_tensor("blocks.0.ffn.up.weight", (48, 32), 11),
+        finite_tensor("blocks.0.ffn.down.weight", (32, 48), 12),
+        finite_tensor("blocks.0.ffn.gate.weight", (48, 32), 13),
+        finite_tensor("blocks.0.ffn.gate.bias", (48,), 14),
     ]
     tensors.sort(key=lambda t: t.path)
     return safe.State(PROVIDER, tuple(tensors), ())
@@ -325,6 +326,8 @@ class QuantizedInterchangeTests(unittest.TestCase):
                         if expected_dtype == "Q8_0":
                             q8_count += 1
                             self.assertEqual(len(c_shape), 2)
+                            self.assertEqual(dims[0] % 32, 0)
+                            self.assertEqual(c_shape[-1] % 32, 0)
                             self.assertEqual(elems % 32, 0)
                             self.assertEqual(len(payload), (elems // 32) * 34)
                             # Inspect every 34-byte Q8_0 block: finite f16 scale + i8 in [-127, 127].
@@ -336,22 +339,31 @@ class QuantizedInterchangeTests(unittest.TestCase):
                                 self.assertTrue(all(-127 <= q <= 127 for q in qs))
                         else:
                             fallback_count += 1
-                            # Either 1D norm/bias OR non-multiple-of-32 2D tensor (no silent padding!).
-                            self.assertTrue(len(c_shape) == 1 or (elems % 32 != 0))
-                    self.assertGreater(q8_count, 0)
+                            # Either 1D norm/bias OR GGML ne[0] (C1 shape[-1]) not divisible by 32 (no silent padding!).
+                            self.assertTrue(len(c_shape) == 1 or (c_shape[-1] % 32 != 0))
                     self.assertGreater(fallback_count, 0)
                     if label == "m3":
-                        # M3 has exactly 4 Q8_0 tensors: ffn.up(32), ffn.down(32), head(1024), token_embedding(1024).
-                        self.assertEqual(q8_count, 4)
-                        self.assertEqual(fallback_count, 11)
+                        # M3 tiny shapes have ne[0] in {4, 8}, so all 15 tensors stay in q8_fallback (no silent padding).
+                        self.assertEqual(q8_count, 0)
+                        self.assertEqual(fallback_count, 15)
                     elif label == "mod5":
-                        # MOD5 has 2*7 + 2 = 16 Q8_0 2D tensors and 2*2 + 1 = 5 1D norms in fallback.
+                        # MOD5 has 2*7 + 2 = 16 Q8_0 2D tensors (all ne[0] in {32, 64}) and 5 1D norms in fallback.
                         self.assertEqual(q8_count, 16)
                         self.assertEqual(fallback_count, 5)
+                    elif label == "decoder":
+                        # Decoder has 8 Q8_0 2D tensors (ne[0]=32), 1 2D fallback (ffn.down (32,48) with prod%32==0 but ne[0]=48),
+                        # plus 5 1D norms/biases in fallback = 6 fallback total.
+                        self.assertEqual(q8_count, 8)
+                        self.assertEqual(fallback_count, 6)
+                        self.assertEqual(dtypes_map["blk.0.ffn_down.weight"], fallback)
 
                     restored = qi.decode_quantized_gguf(encoded, profile=profile, scheme="gguf")
                     parse_golden(restored, expected_provider=PROVIDER.encode("utf-8"))
-                    self.assertNotEqual(restored, src_c1)
+                    if label == "m3" and fallback == "F32":
+                        # Every M3 tensor stayed in F32 fallback because ne[0] < 32.
+                        self.assertEqual(restored, src_c1)
+                    else:
+                        self.assertNotEqual(restored, src_c1)
                     metrics = qi.measure_reconstruction_error(src_c1, restored)
                     # Q8_0 quantization step is ~amax/127 -> half-step error <= ~0.0085 for scale <= 1.88.
                     self.assertLessEqual(metrics["__overall__"]["max_abs"], 0.015)
@@ -359,10 +371,26 @@ class QuantizedInterchangeTests(unittest.TestCase):
                         if path_key == "__overall__":
                             continue
                         self.assertLessEqual(m["rel_l2"], 0.01)
-                    # With F32 fallback, 1D norms/biases must have exact 0.0 error!
+                    # With F32 fallback, 1D norms/biases (and ne[0]%32!=0 tensors) must have exact 0.0 error!
                     if fallback == "F32":
                         self.assertEqual(metrics["norm_final.weight"]["max_abs"], 0.0)
                         self.assertEqual(metrics["blocks.0.norm1.weight"]["max_abs"], 0.0)
+                        if label == "decoder":
+                            self.assertEqual(metrics["blocks.0.ffn.down.weight"]["max_abs"], 0.0)
+
+        # 3. Explicit (32, 16) test: prod(shape)=512 is divisible by 32, but GGML ne[0]=16 is NOT.
+        #    Export MUST fall back (never emit GGML-invalid Q8_0); import MUST reject if declared Q8_0.
+        non_row_aligned_c1 = to_c1(safe.State(PROVIDER, (finite_tensor("w", (32, 16), 99),)))
+        for fb in ("F32", "F16"):
+            enc_fb = qi.encode_quantized_gguf(non_row_aligned_c1, "Q8_0", q8_fallback=fb)
+            meta_fb, rows_fb, _, _ = unpack_quant_gguf(enc_fb)
+            self.assertEqual(len(rows_fb), 1)
+            self.assertEqual(rows_fb[0][1], (16, 32))  # GGML dims = reversed(C1 shape) -> ne[0] = 16
+            self.assertEqual(qi.GGUF_TYPE_TO_NAME[rows_fb[0][2]], fb)
+            self.assertEqual(json.loads(meta_fb[qi.TENSOR_DTYPES_KEY][1]), {"t000000": fb})
+            restored_fb = qi.decode_quantized_gguf(enc_fb)
+            if fb == "F32":
+                self.assertEqual(restored_fb, non_row_aligned_c1)
 
     def test_empty_safetensors_tensor_and_external_imports(self) -> None:
         # Empty (zero-extent) tensor allowed in unmapped safetensors F16/BF16.
@@ -434,6 +462,25 @@ class QuantizedInterchangeTests(unittest.TestCase):
     def test_negative_missing_native_lib_fails_closed(self) -> None:
         with self.assertRaisesRegex(safe.InteropError, "native IO5 quant codec library missing"):
             qi.encode_quantized_safetensors(self.m3_c1, "F16", lib_path=self.root / "nonexistent.so")
+
+        # An unrelated shared object missing the IO5 quant ABI symbols must raise InteropError
+        # (and fail closed with CLI exit code 2, never uncaught AttributeError exit code 1).
+        import _ctypes
+        unrelated_so = Path(_ctypes.__file__)
+        with self.assertRaisesRegex(safe.InteropError, "missing required symbol"):
+            qi.encode_quantized_safetensors(self.m3_c1, "F16", lib_path=unrelated_so)
+
+        src_path = self.root / "badlib_src.c1"
+        dst_path = self.root / "badlib_dst.safetensors"
+        src_path.write_bytes(self.m3_c1)
+        env = dict(os.environ, ESHKOL_IO5_QUANT_LIB=str(unrelated_so))
+        res = subprocess.run(
+            [sys.executable, str(TOOL), "c1-to-safetensors", str(src_path), str(dst_path), "--dtype", "F16"],
+            capture_output=True,
+            env=env,
+        )
+        self.assertEqual(res.returncode, 2)
+        self.assertIn("missing required symbol", res.stderr.decode())
 
     def test_negative_overflow_and_nonfinite_inputs(self) -> None:
         # 1. F16 max boundary (65504.0 accepted, nextafter(65504.0)=0x477fe001 and 65520.0 rejected).
@@ -519,13 +566,21 @@ class QuantizedInterchangeTests(unittest.TestCase):
             with self.assertRaises(safe.InteropError):
                 qi.decode_quantized_gguf(good_raw[:-cut], plain_provider=PROVIDER)
 
-        # 3. Non-multiple-of-32 element count declared as Q8_0 in GGUF.
+        # 3. Non-multiple-of-32 innermost dimension (ne[0]) declared as Q8_0 in GGUF:
+        #    both prod%32!=0 (dims=(16,1)) AND prod%32==0 with ne[0]%32!=0 (dims=(16,32) -> C1 (32,16)).
         raw_bad_count = build_raw_gguf(
             [("general.architecture", gg.STRING, "test")],
             [("w", (16, 1), qi.GGUF_TYPE_Q8_0, 0, good_q8_block)],
         )
         with self.assertRaisesRegex(safe.InteropError, "divisible by 32"):
             qi.decode_quantized_gguf(raw_bad_count, plain_provider=PROVIDER)
+
+        raw_bad_ne0 = build_raw_gguf(
+            [("general.architecture", gg.STRING, "test")],
+            [("w", (16, 32), qi.GGUF_TYPE_Q8_0, 0, good_q8_block * 16)],
+        )
+        with self.assertRaisesRegex(safe.InteropError, "ne\\[0\\].*divisible by 32"):
+            qi.decode_quantized_gguf(raw_bad_ne0, plain_provider=PROVIDER)
 
         # 4. Unsupported GGUF tensor types (Q4_0=2, Q4_1=3, I8=24, F64=28, BF16=30, 0xFFFFFFFF).
         for bad_type in (2, 3, 24, 28, 30, 0xFFFFFFFF):
@@ -587,6 +642,38 @@ class QuantizedInterchangeTests(unittest.TestCase):
         gg_tampered = build_raw_gguf([(k, kind, val) for k, (kind, val) in sorted(meta.items())], tampered_rows)
         with self.assertRaisesRegex(safe.InteropError, "payload SHA-256 mismatch"):
             qi.decode_quantized_gguf(gg_tampered)
+
+        # 1b. Framed payload_sha256 rejects same-byte-size tensor reshape and manifest tampering.
+        header_reshape, data_reshape = unpack_safetensors(st_good)
+        header_reshaped = json.loads(json.dumps(header_reshape))
+        # Reshape (32, 32) -> (16, 64) preserving exact byte count.
+        self.assertEqual(header_reshaped["model.layers.0.self_attn.q_proj.weight"]["shape"], [32, 32])
+        header_reshaped["model.layers.0.self_attn.q_proj.weight"]["shape"] = [16, 64]
+        with self.assertRaisesRegex(safe.InteropError, "payload SHA-256 mismatch"):
+            qi.decode_quantized_safetensors(safetensors_wire(header_reshaped, data_reshape))
+
+        header_manifest_tamper = json.loads(json.dumps(header_reshape))
+        m_obj = json.loads(header_manifest_tamper["__metadata__"][safe.MANIFEST_KEY])
+        m_obj["provider"] = "tampered-provider"
+        header_manifest_tamper["__metadata__"][safe.MANIFEST_KEY] = json.dumps(
+            m_obj, separators=(",", ":"), ensure_ascii=True
+        )
+        with self.assertRaisesRegex(safe.InteropError, "payload SHA-256 mismatch"):
+            qi.decode_quantized_safetensors(safetensors_wire(header_manifest_tamper, data_reshape))
+
+        # GGUF reshape preserving exact byte count: (32, 32) -> (64, 16) (GGML dims (64, 16) -> C1 (16, 64), ne[0]=64).
+        reshaped_rows = []
+        did_reshape = False
+        for name, dims, gtype, off, data in rows:
+            if not did_reshape and name == "blk.0.attn_q.weight":
+                self.assertEqual(dims, (32, 32))
+                dims = (64, 16)
+                did_reshape = True
+            reshaped_rows.append((name, dims, gtype, off, data))
+        self.assertTrue(did_reshape)
+        gg_reshaped = build_raw_gguf([(k, kind, val) for k, (kind, val) in sorted(meta.items())], reshaped_rows)
+        with self.assertRaisesRegex(safe.InteropError, "payload SHA-256 mismatch"):
+            qi.decode_quantized_gguf(gg_reshaped)
 
         # 2. Lossy file carrying lossless c1-sha256 key or lossy != "true" rejected.
         header, data = unpack_safetensors(st_good)
