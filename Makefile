@@ -451,7 +451,8 @@ test-b0-wave45:
 benchmark-wave45:
 	/usr/bin/bash scripts/benchmark-wave45.sh
 
-.PHONY: test-io5-quant test-t2-trainer test-dpo test-spec-decode test-mod5-moe
+.PHONY: test-io5-quant test-t2-trainer test-dpo test-spec-decode test-mod5-moe \
+	test-mod5-mla test-o2-muon test-mod5-adamw
 test-io5-quant:
 	/usr/bin/bash scripts/test-io5-quant.sh
 
@@ -466,6 +467,15 @@ test-spec-decode:
 
 test-mod5-moe:
 	/usr/bin/bash scripts/test-mod5-moe.sh
+
+test-mod5-mla:
+	/usr/bin/bash scripts/test-mod5-mla.sh
+
+test-o2-muon:
+	/usr/bin/bash scripts/test-o2-muon.sh
+
+test-mod5-adamw:
+	/usr/bin/bash scripts/test-mod5-adamw.sh
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
