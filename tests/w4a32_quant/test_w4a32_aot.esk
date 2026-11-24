@@ -1,0 +1,343 @@
+;;; Compiled Eshkol AOT W4A32 INT4 Quantization & Fused Dequant-Matmul Driver.
+;;; Quantizes a 2-layer MLP (64 -> 128 -> 64) in both GGML Q4_0 (G=32) and
+;;; asymmetric Q4_ASYM (G=64), checks exact compression ratios (~7.11x),
+;;; verifies fused W4A32 GEMV (M=1) and GEMM (M=8) parity against dequantized
+;;; F32 matmul (< 1e-5), proves Q4_ASYM reduces error on skewed layer-2 weights,
+;;; persists & reloads ETQ41000 containers across fresh OS processes with exact
+;;; SHA-256 parity, and verifies all negative rejections.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 w4-create i64 i64 i64 i64 i64 i64 ptr :real et_w4a32_aot_create)
+(extern void w4-destroy ptr :real et_w4a32_aot_destroy)
+
+(extern i64 w4-x-count ptr :real et_w4a32_aot_x_count)
+(extern i64 w4-w1-count ptr :real et_w4a32_aot_w1_count)
+(extern i64 w4-w2-count ptr :real et_w4a32_aot_w2_count)
+(extern i64 w4-b1-count ptr :real et_w4a32_aot_b1_count)
+(extern i64 w4-b2-count ptr :real et_w4a32_aot_b2_count)
+(extern i64 w4-y-count ptr i64 :real et_w4a32_aot_y_count)
+(extern i64 w4-f32-bytes ptr :real et_w4a32_aot_f32_weight_bytes)
+(extern i64 w4-packed-bytes ptr :real et_w4a32_aot_packed_weight_bytes)
+
+(extern i32 w4-set-x ptr i64 f64 :real et_w4a32_aot_set_x)
+(extern i32 w4-set-w1 ptr i64 f64 :real et_w4a32_aot_set_w1)
+(extern i32 w4-set-b1 ptr i64 f64 :real et_w4a32_aot_set_b1)
+(extern i32 w4-set-w2 ptr i64 f64 :real et_w4a32_aot_set_w2)
+(extern i32 w4-set-b2 ptr i64 f64 :real et_w4a32_aot_set_b2)
+
+(extern i32 w4-quantize-all ptr :real et_w4a32_aot_quantize_all)
+(extern i32 w4-dequantize-all ptr :real et_w4a32_aot_dequantize_all)
+(extern f64 w4-get-w2 ptr i64 :real et_w4a32_aot_get_w2)
+(extern f64 w4-get-w2-deq ptr i64 :real et_w4a32_aot_get_w2_deq)
+
+(extern i32 w4-mlp-fused ptr i64 :real et_w4a32_aot_mlp_forward_fused)
+(extern i32 w4-mlp-ref ptr i64 :real et_w4a32_aot_mlp_forward_deq_ref)
+(extern f64 w4-get-y-fused ptr i64 :real et_w4a32_aot_get_y_fused)
+(extern f64 w4-get-y-ref ptr i64 :real et_w4a32_aot_get_y_ref)
+
+(extern i32 w4-compute-y-sha256 ptr i64 :real et_w4a32_aot_compute_y_sha256)
+(extern i64 w4-y-sha256-word ptr i64 :real et_w4a32_aot_y_sha256_word)
+(extern i32 w4-compute-packed-sha256 ptr :real et_w4a32_aot_compute_packed_sha256)
+(extern i64 w4-packed-sha256-word ptr i64 :real et_w4a32_aot_packed_sha256_word)
+
+(extern i64 w4-env-phase :real et_w4a32_aot_env_phase)
+(extern i32 w4-save-pair ptr i64 :real et_w4a32_aot_save_env_pair)
+(extern i32 w4-load-pair ptr i64 :real et_w4a32_aot_load_env_pair)
+(extern i32 w4-check-negative ptr i64 i64 :real et_w4a32_aot_check_negative)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; 2-layer MLP dimensions: 64 -> 128 -> 64, prefill M=8, decode M=1.
+(define dim-max-m 8)
+(define dim-gemv-m 1)
+(define dim-in 64)
+(define dim-hidden 128)
+(define dim-out 64)
+
+;; Formats and status codes from w4a32_quant_abi.h.
+(define fmt-q4-0 1)
+(define fmt-q4-asym 2)
+(define status-ok 0)
+(define err-shape -2)
+(define err-alias -4)
+(define err-nonfinite -5)
+(define err-overflow -6)
+(define err-format -8)
+(define err-version -9)
+(define err-truncated -10)
+(define err-checksum -11)
+(define err-symlink -12)
+
+(define (require-check label ok)
+  (unless ok
+    (display "W4A32 AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "W4A32 AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-mlp-ctx fmt group-size)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "w4-create" status-ok
+                   (w4-create dim-max-m dim-in dim-hidden dim-out
+                              fmt group-size (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (det-signed index salt scale)
+  (let ((bucket (- (modulo (+ (* 29 index) (* 13 salt) (quotient index 5)) 37) 18)))
+    (* scale bucket)))
+
+(define (det-skewed index salt base scale)
+  (let ((bucket (modulo (+ (* 19 index) (* 7 salt) (quotient index 3)) 31)))
+    (+ base (* scale bucket))))
+
+(define (populate-mlp ctx)
+  (let ((xn (w4-x-count (ffi-pointer ctx)))
+        (w1n (w4-w1-count (ffi-pointer ctx)))
+        (b1n (w4-b1-count (ffi-pointer ctx)))
+        (w2n (w4-w2-count (ffi-pointer ctx)))
+        (b2n (w4-b2-count (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i xn))
+      (expect-status "set-x" status-ok
+                     (w4-set-x (ffi-pointer ctx) i (det-signed i 11 0.04))))
+    ;; Layer 1: symmetric weight distribution around 0.
+    (do ((i 0 (+ i 1)))
+        ((= i w1n))
+      (expect-status "set-w1" status-ok
+                     (w4-set-w1 (ffi-pointer ctx) i (det-signed i 23 0.025))))
+    (do ((i 0 (+ i 1)))
+        ((= i b1n))
+      (expect-status "set-b1" status-ok
+                     (w4-set-b1 (ffi-pointer ctx) i (det-signed i 31 0.01))))
+    ;; Layer 2: positively skewed weight distribution [0.80, 1.55] where
+    ;; Q4_ASYM achieves much lower reconstruction error than Q4_0.
+    (do ((i 0 (+ i 1)))
+        ((= i w2n))
+      (expect-status "set-w2" status-ok
+                     (w4-set-w2 (ffi-pointer ctx) i
+                                (det-skewed i 41 0.80 0.025))))
+    (do ((i 0 (+ i 1)))
+        ((= i b2n))
+      (expect-status "set-b2" status-ok
+                     (w4-set-b2 (ffi-pointer ctx) i (det-signed i 53 0.015))))))
+
+(define (measure-w2-max-recon-err ctx)
+  (let ((w2n (w4-w2-count (ffi-pointer ctx)))
+        (max-err 0.0))
+    (do ((i 0 (+ i 1)))
+        ((= i w2n) max-err)
+      (let ((d (abs (- (w4-get-w2 (ffi-pointer ctx) i)
+                       (w4-get-w2-deq (ffi-pointer ctx) i)))))
+        (when (> d max-err) (set! max-err d))))))
+
+(define (verify-mlp-parity ctx m label)
+  (expect-status label status-ok (w4-mlp-fused (ffi-pointer ctx) m))
+  (expect-status label status-ok (w4-mlp-ref (ffi-pointer ctx) m))
+  (let ((yn (w4-y-count (ffi-pointer ctx) m))
+        (max-diff 0.0))
+    (do ((i 0 (+ i 1)))
+        ((= i yn) max-diff)
+      (let ((d (abs (- (w4-get-y-fused (ffi-pointer ctx) i)
+                       (w4-get-y-ref (ffi-pointer ctx) i)))))
+        (when (> d max-diff) (set! max-diff d))
+        (require-check "fused vs deq-f32 parity exceeded 1e-5"
+                       (<= d 0.00001))))))
+
+(define (print-digest-line tag w0 w1 w2 w3)
+  (display tag)
+  (display " ") (display w0)
+  (display " ") (display w1)
+  (display " ") (display w2)
+  (display " ") (display w3)
+  (newline))
+
+(define (run-save-phase)
+  (let ((ctx-q4 (create-mlp-ctx fmt-q4-0 32))
+        (ctx-asym (create-mlp-ctx fmt-q4-asym 64)))
+    (populate-mlp ctx-q4)
+    (populate-mlp ctx-asym)
+
+    (expect-status "q4-quantize" status-ok (w4-quantize-all (ffi-pointer ctx-q4)))
+    (expect-status "q4-dequantize" status-ok (w4-dequantize-all (ffi-pointer ctx-q4)))
+    (expect-status "asym-quantize" status-ok (w4-quantize-all (ffi-pointer ctx-asym)))
+    (expect-status "asym-dequantize" status-ok (w4-dequantize-all (ffi-pointer ctx-asym)))
+
+    ;; Verify compression ratios (~7.11x for both Q4_0 G=32 and Q4_ASYM G=64).
+    (let* ((f32-b (w4-f32-bytes (ffi-pointer ctx-q4)))
+           (q4-b (w4-packed-bytes (ffi-pointer ctx-q4)))
+           (asym-b (w4-packed-bytes (ffi-pointer ctx-asym)))
+           (q4-ratio (/ (* 1.0 f32-b) q4-b))
+           (asym-ratio (/ (* 1.0 f32-b) asym-b)))
+      (require-check "q4_0 compression ratio must be > 7.1x"
+                     (and (> q4-ratio 7.10) (< q4-ratio 7.12)))
+      (require-check "q4_asym G=64 compression ratio must be > 7.1x"
+                     (and (> asym-ratio 7.10) (< asym-ratio 7.12)))
+
+      ;; Verify Q4_ASYM reduces error on skewed layer-2 weights vs Q4_0.
+      (let ((q4-w2-err (measure-w2-max-recon-err ctx-q4))
+            (asym-w2-err (measure-w2-max-recon-err ctx-asym)))
+        (require-check "Q4_ASYM must outperform Q4_0 on skewed weights"
+                       (< asym-w2-err (* 0.5 q4-w2-err)))
+
+        ;; Verify fused GEMV (M=1) and GEMM (M=8) parity against dequant F32 matmul.
+        (let ((q4-gemv-err (verify-mlp-parity ctx-q4 dim-gemv-m "q4-gemv"))
+              (q4-gemm-err (verify-mlp-parity ctx-q4 dim-max-m "q4-gemm"))
+              (asym-gemv-err (verify-mlp-parity ctx-asym dim-gemv-m "asym-gemv"))
+              (asym-gemm-err (verify-mlp-parity ctx-asym dim-max-m "asym-gemm")))
+
+          ;; Save ETQ41000 containers for both formats (layers 1 & 2).
+          (expect-status "save-q4-pair" status-ok
+                         (w4-save-pair (ffi-pointer ctx-q4) 0))
+          (expect-status "save-asym-pair" status-ok
+                         (w4-save-pair (ffi-pointer ctx-asym) 1))
+
+          ;; Compute and print SHA-256 digests for cross-process reload proof.
+          (expect-status "q4-packed-sha" status-ok
+                         (w4-compute-packed-sha256 (ffi-pointer ctx-q4)))
+          (expect-status "q4-y-sha" status-ok
+                         (w4-compute-y-sha256 (ffi-pointer ctx-q4) dim-max-m))
+          (expect-status "asym-packed-sha" status-ok
+                         (w4-compute-packed-sha256 (ffi-pointer ctx-asym)))
+          (expect-status "asym-y-sha" status-ok
+                         (w4-compute-y-sha256 (ffi-pointer ctx-asym) dim-max-m))
+
+          (display "W4A32 AOT SAVE f32_bytes=") (display f32-b)
+          (display " q4_bytes=") (display q4-b)
+          (display " q4_ratio=") (display (number->string q4-ratio))
+          (display " asym_bytes=") (display asym-b)
+          (display " asym_ratio=") (display (number->string asym-ratio))
+          (newline)
+          (display "W4A32 AOT PARITY q4_gemv=") (display (number->string q4-gemv-err))
+          (display " q4_gemm=") (display (number->string q4-gemm-err))
+          (display " asym_gemv=") (display (number->string asym-gemv-err))
+          (display " asym_gemm=") (display (number->string asym-gemm-err))
+          (display " q4_skew_err=") (display (number->string q4-w2-err))
+          (display " asym_skew_err=") (display (number->string asym-w2-err))
+          (newline)
+          (print-digest-line
+            "W4A32 AOT Q4_PACKED_SHA256"
+            (w4-packed-sha256-word (ffi-pointer ctx-q4) 0)
+            (w4-packed-sha256-word (ffi-pointer ctx-q4) 1)
+            (w4-packed-sha256-word (ffi-pointer ctx-q4) 2)
+            (w4-packed-sha256-word (ffi-pointer ctx-q4) 3))
+          (print-digest-line
+            "W4A32 AOT Q4_Y_SHA256"
+            (w4-y-sha256-word (ffi-pointer ctx-q4) 0)
+            (w4-y-sha256-word (ffi-pointer ctx-q4) 1)
+            (w4-y-sha256-word (ffi-pointer ctx-q4) 2)
+            (w4-y-sha256-word (ffi-pointer ctx-q4) 3))
+          (print-digest-line
+            "W4A32 AOT ASYM_PACKED_SHA256"
+            (w4-packed-sha256-word (ffi-pointer ctx-asym) 0)
+            (w4-packed-sha256-word (ffi-pointer ctx-asym) 1)
+            (w4-packed-sha256-word (ffi-pointer ctx-asym) 2)
+            (w4-packed-sha256-word (ffi-pointer ctx-asym) 3))
+          (print-digest-line
+            "W4A32 AOT ASYM_Y_SHA256"
+            (w4-y-sha256-word (ffi-pointer ctx-asym) 0)
+            (w4-y-sha256-word (ffi-pointer ctx-asym) 1)
+            (w4-y-sha256-word (ffi-pointer ctx-asym) 2)
+            (w4-y-sha256-word (ffi-pointer ctx-asym) 3)))))
+    (w4-destroy (ffi-pointer ctx-q4))
+    (w4-destroy (ffi-pointer ctx-asym))))
+
+(define (run-reload-phase)
+  (let ((ctx-q4 (create-mlp-ctx fmt-q4-0 32))
+        (ctx-asym (create-mlp-ctx fmt-q4-asym 64)))
+    ;; Populate X and biases (W1/W2 packed weights come ONLY from ETQ41000 disk reload).
+    (populate-mlp ctx-q4)
+    (populate-mlp ctx-asym)
+
+    (expect-status "reload-q4-pair" status-ok
+                   (w4-load-pair (ffi-pointer ctx-q4) 0))
+    (expect-status "reload-asym-pair" status-ok
+                   (w4-load-pair (ffi-pointer ctx-asym) 1))
+    (expect-status "reload-q4-deq" status-ok
+                   (w4-dequantize-all (ffi-pointer ctx-q4)))
+    (expect-status "reload-asym-deq" status-ok
+                   (w4-dequantize-all (ffi-pointer ctx-asym)))
+
+    (let ((q4-gemv-err (verify-mlp-parity ctx-q4 dim-gemv-m "reload-q4-gemv"))
+          (q4-gemm-err (verify-mlp-parity ctx-q4 dim-max-m "reload-q4-gemm"))
+          (asym-gemv-err (verify-mlp-parity ctx-asym dim-gemv-m "reload-asym-gemv"))
+          (asym-gemm-err (verify-mlp-parity ctx-asym dim-max-m "reload-asym-gemm")))
+      (expect-status "reload-q4-packed-sha" status-ok
+                     (w4-compute-packed-sha256 (ffi-pointer ctx-q4)))
+      (expect-status "reload-q4-y-sha" status-ok
+                     (w4-compute-y-sha256 (ffi-pointer ctx-q4) dim-max-m))
+      (expect-status "reload-asym-packed-sha" status-ok
+                     (w4-compute-packed-sha256 (ffi-pointer ctx-asym)))
+      (expect-status "reload-asym-y-sha" status-ok
+                     (w4-compute-y-sha256 (ffi-pointer ctx-asym) dim-max-m))
+
+      (print-digest-line
+        "W4A32 AOT RELOAD_Q4_PACKED_SHA256"
+        (w4-packed-sha256-word (ffi-pointer ctx-q4) 0)
+        (w4-packed-sha256-word (ffi-pointer ctx-q4) 1)
+        (w4-packed-sha256-word (ffi-pointer ctx-q4) 2)
+        (w4-packed-sha256-word (ffi-pointer ctx-q4) 3))
+      (print-digest-line
+        "W4A32 AOT RELOAD_Q4_Y_SHA256"
+        (w4-y-sha256-word (ffi-pointer ctx-q4) 0)
+        (w4-y-sha256-word (ffi-pointer ctx-q4) 1)
+        (w4-y-sha256-word (ffi-pointer ctx-q4) 2)
+        (w4-y-sha256-word (ffi-pointer ctx-q4) 3))
+      (print-digest-line
+        "W4A32 AOT RELOAD_ASYM_PACKED_SHA256"
+        (w4-packed-sha256-word (ffi-pointer ctx-asym) 0)
+        (w4-packed-sha256-word (ffi-pointer ctx-asym) 1)
+        (w4-packed-sha256-word (ffi-pointer ctx-asym) 2)
+        (w4-packed-sha256-word (ffi-pointer ctx-asym) 3))
+      (print-digest-line
+        "W4A32 AOT RELOAD_ASYM_Y_SHA256"
+        (w4-y-sha256-word (ffi-pointer ctx-asym) 0)
+        (w4-y-sha256-word (ffi-pointer ctx-asym) 1)
+        (w4-y-sha256-word (ffi-pointer ctx-asym) 2)
+        (w4-y-sha256-word (ffi-pointer ctx-asym) 3))
+      (display "W4A32 AOT RELOAD q4_gemv=") (display (number->string q4-gemv-err))
+      (display " q4_gemm=") (display (number->string q4-gemm-err))
+      (display " asym_gemv=") (display (number->string asym-gemv-err))
+      (display " asym_gemm=") (display (number->string asym-gemm-err))
+      (display " parity=PASS") (newline))
+
+    ;; Negative checks across container tamper, symlink, format, shape,
+    ;; scale overflow, non-finite scale/X, and buffer aliasing.
+    (expect-status "neg-checksum" err-checksum (w4-check-negative (ffi-pointer ctx-q4) 0 1))
+    (expect-status "neg-truncated" err-truncated (w4-check-negative (ffi-pointer ctx-q4) 0 2))
+    (expect-status "neg-magic" err-format (w4-check-negative (ffi-pointer ctx-q4) 0 3))
+    (expect-status "neg-version" err-version (w4-check-negative (ffi-pointer ctx-q4) 0 4))
+    (expect-status "neg-symlink" err-symlink (w4-check-negative (ffi-pointer ctx-q4) 0 5))
+    (expect-status "neg-wrong-fmt" err-format (w4-check-negative (ffi-pointer ctx-q4) 0 6))
+    (expect-status "neg-wrong-shape" err-shape (w4-check-negative (ffi-pointer ctx-q4) 0 7))
+    (expect-status "neg-k-mod-32" err-shape (w4-check-negative (ffi-pointer ctx-q4) 0 8))
+    (expect-status "neg-f16-overflow" err-overflow (w4-check-negative (ffi-pointer ctx-q4) 0 9))
+    (expect-status "neg-nonfinite-scale" err-nonfinite (w4-check-negative (ffi-pointer ctx-q4) 0 10))
+    (expect-status "neg-nonfinite-x" err-nonfinite (w4-check-negative (ffi-pointer ctx-q4) 0 11))
+    (expect-status "neg-alias" err-alias (w4-check-negative (ffi-pointer ctx-q4) 0 12))
+    (display "W4A32 AOT NEGATIVE checks=12 PASS") (newline)
+
+    (w4-destroy (ffi-pointer ctx-q4))
+    (w4-destroy (ffi-pointer ctx-asym))))
+
+(let ((phase (w4-env-phase)))
+  (cond
+    ((= phase 0) (run-save-phase) (run-reload-phase))
+    ((= phase 1) (run-save-phase))
+    ((= phase 2) (run-reload-phase))
+    (else (require-check "invalid W4A32_AOT_PHASE" #f))))
