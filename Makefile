@@ -461,7 +461,8 @@ benchmark-wave5:
 	test-mod5-mla test-o2-muon test-mod5-adamw test-mod5-generate \
 	test-paged-kv test-constrained-decode test-w4a32-quant \
 	test-grpo test-rope-yarn test-continuous-batch \
-	test-fp8-gemm test-ring-attn test-e2e-lifecycle
+	test-fp8-gemm test-ring-attn test-e2e-lifecycle \
+	test-pipeline-1f1b test-tensor-parallel test-mamba-ssm
 test-io5-quant:
 	/usr/bin/bash scripts/test-io5-quant.sh
 
@@ -515,6 +516,15 @@ test-ring-attn:
 
 test-e2e-lifecycle:
 	/usr/bin/bash scripts/test-e2e-lifecycle.sh
+
+test-pipeline-1f1b:
+	/usr/bin/bash scripts/test-pipeline-1f1b.sh
+
+test-tensor-parallel:
+	/usr/bin/bash scripts/test-tensor-parallel.sh
+
+test-mamba-ssm:
+	/usr/bin/bash scripts/test-mamba-ssm.sh
 
 test-c2: configure
 	/usr/bin/bash scripts/test-c2.sh
