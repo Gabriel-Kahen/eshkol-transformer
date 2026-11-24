@@ -1,0 +1,312 @@
+;;; Compiled Eshkol AOT Continuous Batching & Chunked-Prefill Inference Scheduler
+;;; driver: simulates arriving workloads with long chunked prompts, short prompts,
+;;; tight KV-block preemption + recovery, mid-flight cancellation, EOS early-stop,
+;;; exact per-step KV conservation invariants, and negative fail-closed checks.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 cb-create i64 i64 i64 i64 i64 i64 ptr :real et_cb_aot_create)
+(extern void cb-destroy ptr :real et_cb_aot_destroy)
+
+(extern i32 cb-enqueue ptr i64 i64 i64 i64 :real et_cb_aot_enqueue)
+(extern i32 cb-cancel ptr i64 :real et_cb_aot_cancel)
+(extern i32 cb-step-plan ptr :real et_cb_aot_step_plan)
+(extern i32 cb-commit-begin ptr :real et_cb_aot_commit_begin)
+(extern i32 cb-commit-set-eos ptr i64 i64 :real et_cb_aot_commit_set_eos)
+(extern i32 cb-commit-set-raw ptr i64 i64 i64 i64 :real et_cb_aot_commit_set_raw)
+(extern i32 cb-step-commit ptr i64 i64 :real et_cb_aot_step_commit)
+(extern i32 cb-verify-invariants ptr :real et_cb_aot_verify_invariants)
+
+(extern i64 cb-plan-step ptr :real et_cb_aot_plan_step_index)
+(extern i64 cb-plan-entries ptr :real et_cb_aot_plan_entry_count)
+(extern i64 cb-plan-tokens ptr :real et_cb_aot_plan_total_tokens)
+(extern i64 cb-plan-prefill-tokens ptr :real et_cb_aot_plan_prefill_tokens)
+(extern i64 cb-plan-decode-tokens ptr :real et_cb_aot_plan_decode_tokens)
+(extern i64 cb-plan-preempted ptr :real et_cb_aot_plan_preempted_count)
+(extern i64 cb-plan-used-blocks ptr :real et_cb_aot_plan_used_blocks)
+(extern i64 cb-plan-free-blocks ptr :real et_cb_aot_plan_free_blocks)
+
+(extern i64 cb-entry-req-id ptr i64 :real et_cb_aot_plan_entry_req_id)
+(extern i64 cb-entry-chunk ptr i64 :real et_cb_aot_plan_entry_chunk_tokens)
+(extern i64 cb-entry-produces ptr i64 :real et_cb_aot_plan_entry_produces_token)
+
+(extern i64 cb-current-step ptr :real et_cb_aot_current_step)
+(extern i64 cb-running-count ptr :real et_cb_aot_running_count)
+(extern i64 cb-waiting-count ptr :real et_cb_aot_waiting_count)
+(extern i64 cb-finished-count ptr :real et_cb_aot_finished_count)
+(extern i64 cb-cancelled-count ptr :real et_cb_aot_cancelled_count)
+(extern i64 cb-used-blocks ptr :real et_cb_aot_used_blocks)
+(extern i64 cb-free-blocks ptr :real et_cb_aot_free_blocks)
+(extern i64 cb-total-preemptions ptr :real et_cb_aot_total_preemptions)
+(extern i64 cb-total-generated ptr :real et_cb_aot_total_generated_tokens)
+(extern i64 cb-total-scheduled ptr :real et_cb_aot_total_scheduled_tokens)
+
+(extern i64 cb-req-state ptr i64 :real et_cb_aot_req_state)
+(extern i64 cb-req-generated ptr i64 :real et_cb_aot_req_generated_tokens)
+(extern i64 cb-req-ttft ptr i64 :real et_cb_aot_req_ttft_steps)
+(extern i64 cb-req-completion ptr i64 :real et_cb_aot_req_completion_step)
+(extern i64 cb-req-preempts ptr i64 :real et_cb_aot_req_preempt_count)
+(extern i64 cb-req-eos ptr i64 :real et_cb_aot_req_eos_stopped)
+(extern i64 cb-req-blocks ptr i64 :real et_cb_aot_req_allocated_blocks)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Status codes from continuous_batch_abi.h.
+(define status-ok 0)
+(define err-argument -1)
+(define err-config -2)
+(define err-too-large -3)
+(define err-duplicate-id -4)
+(define err-not-found -7)
+(define err-already-terminal -8)
+(define err-plan-pending -9)
+(define err-no-pending-plan -10)
+(define err-commit-mismatch -11)
+
+;; Policies and states.
+(define policy-decode-first 0)
+(define policy-prefill-first 1)
+(define state-finished 4)
+(define state-cancelled 5)
+
+(define (require-check label ok)
+  (unless ok
+    (display "CB AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "CB AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-sched max-run max-wait max-tok kv-blocks blk-sz policy)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "cb-create" status-ok
+                   (cb-create max-run max-wait max-tok kv-blocks blk-sz policy
+                              (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (run-workload policy-name policy-id emit-steps)
+  (let* ((max-run 3)
+         (max-wait 16)
+         (max-tok 8)
+         (kv-blocks 6)
+         (blk-sz 4)
+         (ctx (create-sched max-run max-wait max-tok kv-blocks blk-sz policy-id)))
+    ;; Step 0 arrivals: long prompt (15), short prompt (3, EOS at gen=2), medium prompt (7, low prio).
+    (expect-status "enqueue-101" status-ok (cb-enqueue (ffi-pointer ctx) 101 15 3 2))
+    (expect-status "enqueue-102" status-ok (cb-enqueue (ffi-pointer ctx) 102 3 5 1))
+    (expect-status "enqueue-103" status-ok (cb-enqueue (ffi-pointer ctx) 103 7 4 0))
+
+    (let ((done 0)
+          (guard 0))
+      (do ()
+          ((or (= done 1) (> guard 120)))
+        (let ((step (cb-current-step (ffi-pointer ctx))))
+          ;; Mid-flight arrivals at steps 2 and 3.
+          (when (= step 2)
+            (expect-status "enqueue-104" status-ok (cb-enqueue (ffi-pointer ctx) 104 8 4 0)))
+          (when (= step 3)
+            (expect-status "enqueue-105" status-ok (cb-enqueue (ffi-pointer ctx) 105 11 2 1)))
+          ;; Mid-flight cancellation of request 104 at step 4 + double-cancel check.
+          (when (= step 4)
+            (expect-status "cancel-104" status-ok (cb-cancel (ffi-pointer ctx) 104))
+            (expect-status "double-cancel-104" err-already-terminal
+                           (cb-cancel (ffi-pointer ctx) 104)))
+
+          (if (and (> step 4)
+                   (= (cb-running-count (ffi-pointer ctx)) 0)
+                   (= (cb-waiting-count (ffi-pointer ctx)) 0))
+              (set! done 1)
+              (begin
+                (expect-status "step-plan" status-ok (cb-step-plan (ffi-pointer ctx)))
+                (expect-status "inv-post-plan" status-ok
+                               (cb-verify-invariants (ffi-pointer ctx)))
+                (let ((pstep (cb-plan-step (ffi-pointer ctx)))
+                      (n (cb-plan-entries (ffi-pointer ctx)))
+                      (toks (cb-plan-tokens (ffi-pointer ctx)))
+                      (ptoks (cb-plan-prefill-tokens (ffi-pointer ctx)))
+                      (dtoks (cb-plan-decode-tokens (ffi-pointer ctx)))
+                      (preempts (cb-plan-preempted (ffi-pointer ctx)))
+                      (used (cb-plan-used-blocks (ffi-pointer ctx)))
+                      (freeb (cb-plan-free-blocks (ffi-pointer ctx))))
+                  (require-check "step index match" (= pstep step))
+                  (require-check "non-empty progress" (> n 0))
+                  (require-check "token budget obeyed" (<= toks max-tok))
+                  (require-check "tok sum split" (= (+ ptoks dtoks) toks))
+                  (require-check "kv conservation post-plan" (= (+ used freeb) kv-blocks))
+                  (require-check "running bound" (<= (cb-running-count (ffi-pointer ctx)) max-run))
+
+                  (expect-status "commit-begin" status-ok
+                                 (cb-commit-begin (ffi-pointer ctx)))
+                  ;; Trigger EOS early-stop on request 102 on its 2nd generated token.
+                  (do ((i 0 (+ i 1)))
+                      ((= i n))
+                    (let ((rid (cb-entry-req-id (ffi-pointer ctx) i))
+                          (prod (cb-entry-produces (ffi-pointer ctx) i)))
+                      (when (and (= rid 102)
+                                 (= prod 1)
+                                 (= (cb-req-generated (ffi-pointer ctx) 102) 1))
+                        (expect-status "set-eos-102" status-ok
+                                       (cb-commit-set-eos (ffi-pointer ctx) i 1)))))
+
+                  (expect-status "step-commit" status-ok
+                                 (cb-step-commit (ffi-pointer ctx) step n))
+                  (expect-status "inv-post-commit" status-ok
+                                 (cb-verify-invariants (ffi-pointer ctx)))
+                  (let ((post-used (cb-used-blocks (ffi-pointer ctx)))
+                        (post-free (cb-free-blocks (ffi-pointer ctx))))
+                    (require-check "kv conservation post-commit"
+                                   (= (+ post-used post-free) kv-blocks))
+                    (when (= emit-steps 1)
+                      (display "CB AOT STEP ") (display step)
+                      (display " entries=") (display n)
+                      (display " toks=") (display toks)
+                      (display " prefill=") (display ptoks)
+                      (display " decode=") (display dtoks)
+                      (display " preempts=") (display preempts)
+                      (display " used_kv=") (display post-used)
+                      (display " free_kv=") (display post-free)
+                      (newline))))))
+          (set! guard (+ guard 1))))
+      (require-check "workload drained without deadlock" (= done 1)))
+
+    (require-check "finished count == 4" (= (cb-finished-count (ffi-pointer ctx)) 4))
+    (require-check "cancelled count == 1" (= (cb-cancelled-count (ffi-pointer ctx)) 1))
+    (require-check "zero leaked kv blocks"
+                   (and (= (cb-used-blocks (ffi-pointer ctx)) 0)
+                        (= (cb-free-blocks (ffi-pointer ctx)) kv-blocks)))
+    (require-check "preemption occurred" (> (cb-total-preemptions (ffi-pointer ctx)) 0))
+    (require-check "total generated tokens == 11"
+                   (= (cb-total-generated (ffi-pointer ctx)) 11))
+
+    ;; Verify exact per-request terminal states, generated tokens, EOS, and 0 held blocks.
+    (require-check "req 101 finished" (= (cb-req-state (ffi-pointer ctx) 101) state-finished))
+    (require-check "req 101 gen==3" (= (cb-req-generated (ffi-pointer ctx) 101) 3))
+    (require-check "req 101 blocks==0" (= (cb-req-blocks (ffi-pointer ctx) 101) 0))
+
+    (require-check "req 102 finished EOS"
+                   (and (= (cb-req-state (ffi-pointer ctx) 102) state-finished)
+                        (= (cb-req-generated (ffi-pointer ctx) 102) 2)
+                        (= (cb-req-eos (ffi-pointer ctx) 102) 1)))
+    (require-check "req 103 finished"
+                   (and (= (cb-req-state (ffi-pointer ctx) 103) state-finished)
+                        (= (cb-req-generated (ffi-pointer ctx) 103) 4)
+                        (> (cb-req-preempts (ffi-pointer ctx) 103) 0)))
+    (require-check "req 104 cancelled"
+                   (and (= (cb-req-state (ffi-pointer ctx) 104) state-cancelled)
+                        (= (cb-req-blocks (ffi-pointer ctx) 104) 0)))
+    (require-check "req 105 finished"
+                   (and (= (cb-req-state (ffi-pointer ctx) 105) state-finished)
+                        (= (cb-req-generated (ffi-pointer ctx) 105) 2)))
+
+    (when (= emit-steps 1)
+      (do ((idx 0 (+ idx 1)))
+          ((= idx 5))
+        (let ((rid (+ 101 idx)))
+          (display "CB AOT REQ ") (display rid)
+          (display " state=") (display (cb-req-state (ffi-pointer ctx) rid))
+          (display " gen=") (display (cb-req-generated (ffi-pointer ctx) rid))
+          (display " ttft=") (display (cb-req-ttft (ffi-pointer ctx) rid))
+          (display " done_step=") (display (cb-req-completion (ffi-pointer ctx) rid))
+          (display " preempts=") (display (cb-req-preempts (ffi-pointer ctx) rid))
+          (display " eos=") (display (cb-req-eos (ffi-pointer ctx) rid))
+          (newline))))
+
+    (display "CB AOT SUMMARY policy=") (display policy-name)
+    (display " steps=") (display (cb-current-step (ffi-pointer ctx)))
+    (display " finished=") (display (cb-finished-count (ffi-pointer ctx)))
+    (display " cancelled=") (display (cb-cancelled-count (ffi-pointer ctx)))
+    (display " preemptions=") (display (cb-total-preemptions (ffi-pointer ctx)))
+    (display " generated=") (display (cb-total-generated (ffi-pointer ctx)))
+    (display " scheduled=") (display (cb-total-scheduled (ffi-pointer ctx)))
+    (display " free_kv=") (display (cb-free-blocks (ffi-pointer ctx)))
+    (newline)
+
+    (cb-destroy (ffi-pointer ctx))))
+
+(define (run-negative-checks)
+  ;; Invalid config checks.
+  (let ((cell (checked-allocate 8)))
+    (expect-status "bad-max-run" err-config
+                   (cb-create 0 16 8 6 4 0 (ffi-pointer cell)))
+    (expect-status "bad-max-run-hi" err-config
+                   (cb-create 65 16 8 6 4 0 (ffi-pointer cell)))
+    (expect-status "bad-tokens" err-config
+                   (cb-create 2 16 0 6 4 0 (ffi-pointer cell)))
+    (expect-status "bad-kv" err-config
+                   (cb-create 2 16 8 4097 4 0 (ffi-pointer cell)))
+    (expect-status "bad-block-size" err-config
+                   (cb-create 2 16 8 6 0 0 (ffi-pointer cell)))
+    (expect-status "bad-policy" err-config
+                   (cb-create 2 16 8 6 4 9 (ffi-pointer cell)))
+    (release (ffi-pointer cell)))
+
+  (let ((ctx (create-sched 2 4 6 4 4 policy-decode-first)))
+    ;; Oversized request (capacity = 4*4 = 16; prompt=17 or prompt+gen-1=17).
+    (expect-status "oversized-prompt" err-too-large
+                   (cb-enqueue (ffi-pointer ctx) 1 17 1 0))
+    (expect-status "oversized-total" err-too-large
+                   (cb-enqueue (ffi-pointer ctx) 1 12 6 0))
+    ;; Valid enqueue + duplicate ID rejection.
+    (expect-status "valid-enqueue" status-ok
+                   (cb-enqueue (ffi-pointer ctx) 1 10 2 0))
+    (expect-status "duplicate-id" err-duplicate-id
+                   (cb-enqueue (ffi-pointer ctx) 1 4 2 0))
+    ;; Commit with no pending plan.
+    (expect-status "no-pending-plan" err-no-pending-plan
+                   (cb-step-commit (ffi-pointer ctx) 0 0))
+    ;; Unknown cancel.
+    (expect-status "unknown-cancel" err-not-found
+                   (cb-cancel (ffi-pointer ctx) 999))
+
+    ;; Plan step 0 (chunk 6 of 10, produces=0).
+    (expect-status "neg-plan" status-ok (cb-step-plan (ffi-pointer ctx)))
+    (expect-status "double-plan" err-plan-pending (cb-step-plan (ffi-pointer ctx)))
+    (expect-status "cancel-in-plan" err-plan-pending (cb-cancel (ffi-pointer ctx) 1))
+
+    ;; Commit mismatches (wrong step, wrong count, wrong id, wrong gen, eos on non-final).
+    (expect-status "commit-begin" status-ok (cb-commit-begin (ffi-pointer ctx)))
+    (expect-status "wrong-step" err-commit-mismatch
+                   (cb-step-commit (ffi-pointer ctx) 1 1))
+    (expect-status "wrong-count" err-commit-mismatch
+                   (cb-step-commit (ffi-pointer ctx) 0 0))
+    (expect-status "set-raw-id" status-ok
+                   (cb-commit-set-raw (ffi-pointer ctx) 0 2 0 0))
+    (expect-status "wrong-id" err-commit-mismatch
+                   (cb-step-commit (ffi-pointer ctx) 0 1))
+    (expect-status "set-raw-gen" status-ok
+                   (cb-commit-set-raw (ffi-pointer ctx) 0 1 1 0))
+    (expect-status "wrong-gen" err-commit-mismatch
+                   (cb-step-commit (ffi-pointer ctx) 0 1))
+    (expect-status "set-raw-eos" status-ok
+                   (cb-commit-set-raw (ffi-pointer ctx) 0 1 0 1))
+    (expect-status "eos-non-output" err-commit-mismatch
+                   (cb-step-commit (ffi-pointer ctx) 0 1))
+
+    ;; Restore valid commit -> succeeds cleanly!
+    (expect-status "restore-commit" status-ok (cb-commit-begin (ffi-pointer ctx)))
+    (expect-status "valid-commit" status-ok (cb-step-commit (ffi-pointer ctx) 0 1))
+    (expect-status "cancel-after-commit" status-ok (cb-cancel (ffi-pointer ctx) 1))
+    (expect-status "double-cancel" err-already-terminal (cb-cancel (ffi-pointer ctx) 1))
+    (expect-status "inv-final" status-ok (cb-verify-invariants (ffi-pointer ctx)))
+    (require-check "neg kv clean" (= (cb-free-blocks (ffi-pointer ctx)) 4))
+    (cb-destroy (ffi-pointer ctx)))
+  (display "CB AOT NEGATIVE PASS")
+  (newline))
+
+(run-workload "DECODE_FIRST_CHUNKED_PREFILL" policy-decode-first 1)
+(run-workload "PREFILL_FIRST_CHUNKED" policy-prefill-first 0)
+(run-negative-checks)
