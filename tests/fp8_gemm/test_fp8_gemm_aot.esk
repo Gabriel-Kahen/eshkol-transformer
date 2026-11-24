@@ -1,0 +1,555 @@
+;;; Compiled Eshkol AOT verification for OCP FP8 (E4M3FN & E5M2) Codec,
+;;; Delayed-Scaling Amax History Manager, and DeepSeek-V3 Block-Scaled W8A8 GEMM.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+;; Buffer marshaling helpers (alignment-safe).
+(extern void store-f32 ptr i64 f64 :real et_fp8_aot_store_f32)
+(extern void store-f32-bits ptr i64 i64 :real et_fp8_aot_store_f32_bits)
+(extern f64 load-f32 ptr i64 :real et_fp8_aot_load_f32)
+(extern i64 load-f32-bits ptr i64 :real et_fp8_aot_load_f32_bits)
+(extern void store-u8 ptr i64 i64 :real et_fp8_aot_store_u8)
+(extern i64 load-u8 ptr i64 :real et_fp8_aot_load_u8)
+(extern i64 delayed-state-bytes :real et_fp8_aot_delayed_scale_state_bytes)
+
+;; OCP FP8 E4M3FN & E5M2 scalar and bulk codecs.
+(extern i32 e4m3-encode-scalar f64 i64 ptr :real et_fp8_aot_e4m3_encode_scalar)
+(extern i32 e4m3-encode-scalar-bits i64 i64 ptr :real et_fp8_aot_e4m3_encode_scalar_bits)
+(extern i32 e4m3-decode-scalar i64 ptr :real et_fp8_aot_e4m3_decode_scalar)
+(extern i32 e4m3-encode ptr i64 i64 ptr :real et_fp8_aot_e4m3_encode)
+(extern i32 e4m3-decode ptr i64 ptr :real et_fp8_aot_e4m3_decode)
+
+(extern i32 e5m2-encode-scalar f64 i64 ptr :real et_fp8_aot_e5m2_encode_scalar)
+(extern i32 e5m2-encode-scalar-bits i64 i64 ptr :real et_fp8_aot_e5m2_encode_scalar_bits)
+(extern i32 e5m2-decode-scalar i64 ptr :real et_fp8_aot_e5m2_decode_scalar)
+(extern i32 e5m2-encode ptr i64 i64 ptr :real et_fp8_aot_e5m2_encode)
+(extern i32 e5m2-decode ptr i64 ptr :real et_fp8_aot_e5m2_decode)
+
+;; Delayed-scaling amax history manager.
+(extern i32 delayed-init ptr i64 i64 i64 f64 f64 f64 :real et_fp8_aot_delayed_scale_init)
+(extern i32 delayed-update ptr f64 :real et_fp8_aot_delayed_scale_update)
+(extern i32 delayed-compute ptr ptr ptr :real et_fp8_aot_delayed_scale_compute)
+
+;; Block-scaled W8A8 E4M3FN quantization, dequantization, per-tensor baseline, GEMM & STE.
+(extern i32 block-quantize ptr i64 i64 i64 i64 ptr ptr :real et_fp8_aot_block_quantize_e4m3)
+(extern i32 block-dequantize ptr ptr i64 i64 i64 i64 ptr :real et_fp8_aot_block_dequantize_e4m3)
+(extern i32 per-tensor-quantize ptr i64 ptr ptr :real et_fp8_aot_per_tensor_quantize_e4m3)
+(extern i32 block-gemm i64 i64 i64 i64 i64 ptr ptr ptr ptr ptr ptr
+        :real et_fp8_aot_block_gemm_e4m3)
+(extern i32 block-gemm-bwd i64 i64 i64 i64 i64 ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_fp8_aot_block_gemm_e4m3_backward)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Status & enum constants from fp8_gemm_abi.h.
+(define status-ok 0)
+(define err-invalid -1)
+(define err-nonfinite -2)
+(define err-overflow -3)
+(define err-unsupported-block -5)
+(define err-shape -6)
+(define err-alias -7)
+
+(define fmt-e4m3fn 1)
+(define mode-saturate 0)
+(define mode-reject 1)
+
+(define (require-check label ok)
+  (unless ok
+    (display "FP8 AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "FP8 AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-alloc bytes)
+  (let ((p (allocate bytes)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (abs-f64 x)
+  (if (< x 0.0) (- 0.0 x) x))
+
+;; 1. Exhaustive 256-codepoint E4M3FN & E5M2 decode/re-encode invariants + RNE checks.
+(define (verify-exhaustive-codecs)
+  (let ((f-cell (checked-alloc 4))
+        (u-cell (checked-alloc 1))
+        (e4-finite 0)
+        (e4-reject 0)
+        (e5-finite 0)
+        (e5-reject 0))
+    ;; E4M3FN: 0x7F (127) and 0xFF (255) are NaN; all other 254 round-trip bit-exact.
+    (do ((c 0 (+ c 1)))
+        ((= c 256))
+      (store-f32 (ffi-pointer f-cell) 0 999.5)
+      (let ((st (e4m3-decode-scalar c (ffi-pointer f-cell))))
+        (if (or (= c 127) (= c 255))
+            (begin
+              (expect-status "e4m3 nan reject" err-nonfinite st)
+              (require-check "e4m3 nan preserves output"
+                             (= (load-f32 (ffi-pointer f-cell) 0) 999.5))
+              (set! e4-reject (+ e4-reject 1)))
+            (begin
+              (expect-status "e4m3 finite decode" status-ok st)
+              (let ((bits (load-f32-bits (ffi-pointer f-cell) 0)))
+                (expect-status "e4m3 roundtrip encode" status-ok
+                               (e4m3-encode-scalar-bits bits mode-reject
+                                                        (ffi-pointer u-cell)))
+                (require-check "e4m3 exact codepoint match"
+                               (= (load-u8 (ffi-pointer u-cell) 0) c)))
+              (set! e4-finite (+ e4-finite 1))))))
+    (require-check "e4m3 counts" (and (= e4-finite 254) (= e4-reject 2)))
+
+    ;; Verify E4M3FN landmarks: 0x7E == 448.0, 0x01 == 0.001953125, 0x80 == -0.0.
+    (expect-status "e4m3 max" status-ok (e4m3-decode-scalar 126 (ffi-pointer f-cell)))
+    (require-check "e4m3 max=448" (= (load-f32 (ffi-pointer f-cell) 0) 448.0))
+    (expect-status "e4m3 min subnormal" status-ok
+                   (e4m3-decode-scalar 1 (ffi-pointer f-cell)))
+    (require-check "e4m3 min subnormal=2^-9"
+                   (= (load-f32 (ffi-pointer f-cell) 0) 0.001953125))
+    (expect-status "e4m3 neg zero" status-ok
+                   (e4m3-decode-scalar 128 (ffi-pointer f-cell)))
+    (require-check "e4m3 neg zero bits"
+                   (= (load-f32-bits (ffi-pointer f-cell) 0) 2147483648))
+
+    ;; E5M2: 0x7C..0x7F (124..127) and 0xFC..0xFF (252..255) are Inf/NaN; 248 finite.
+    (do ((c 0 (+ c 1)))
+        ((= c 256))
+      (store-f32 (ffi-pointer f-cell) 0 777.5)
+      (let ((st (e5m2-decode-scalar c (ffi-pointer f-cell))))
+        (if (or (and (>= c 124) (<= c 127))
+                (and (>= c 252) (<= c 255)))
+            (begin
+              (expect-status "e5m2 inf/nan reject" err-nonfinite st)
+              (require-check "e5m2 inf/nan preserves output"
+                             (= (load-f32 (ffi-pointer f-cell) 0) 777.5))
+              (set! e5-reject (+ e5-reject 1)))
+            (begin
+              (expect-status "e5m2 finite decode" status-ok st)
+              (let ((bits (load-f32-bits (ffi-pointer f-cell) 0)))
+                (expect-status "e5m2 roundtrip encode" status-ok
+                               (e5m2-encode-scalar-bits bits mode-reject
+                                                        (ffi-pointer u-cell)))
+                (require-check "e5m2 exact codepoint match"
+                               (= (load-u8 (ffi-pointer u-cell) 0) c)))
+              (set! e5-finite (+ e5-finite 1))))))
+    (require-check "e5m2 counts" (and (= e5-finite 248) (= e5-reject 8)))
+
+    ;; Verify E5M2 max=57344.0 and RNE tie-to-even boundaries.
+    (expect-status "e5m2 max" status-ok (e5m2-decode-scalar 123 (ffi-pointer f-cell)))
+    (require-check "e5m2 max=57344" (= (load-f32 (ffi-pointer f-cell) 0) 57344.0))
+
+    ;; E4M3FN 464.0 ties to even 448.0 (0x7E); 465.0 saturates to 0x7E or rejects.
+    (expect-status "e4m3 464 tie-even" status-ok
+                   (e4m3-encode-scalar 464.0 mode-reject (ffi-pointer u-cell)))
+    (require-check "e4m3 464 -> 0x7E" (= (load-u8 (ffi-pointer u-cell) 0) 126))
+    (expect-status "e4m3 465 sat" status-ok
+                   (e4m3-encode-scalar 465.0 mode-saturate (ffi-pointer u-cell)))
+    (require-check "e4m3 465 sat -> 0x7E" (= (load-u8 (ffi-pointer u-cell) 0) 126))
+    (store-u8 (ffi-pointer u-cell) 0 42)
+    (expect-status "e4m3 465 rej" err-overflow
+                   (e4m3-encode-scalar 465.0 mode-reject (ffi-pointer u-cell)))
+    (require-check "e4m3 465 rej untouched" (= (load-u8 (ffi-pointer u-cell) 0) 42))
+
+    ;; E5M2 61440.0 ties to Inf -> saturates to 0x7B (123) or rejects.
+    (expect-status "e5m2 61440 sat" status-ok
+                   (e5m2-encode-scalar 61440.0 mode-saturate (ffi-pointer u-cell)))
+    (require-check "e5m2 61440 sat -> 0x7B" (= (load-u8 (ffi-pointer u-cell) 0) 123))
+    (expect-status "e5m2 61440 rej" err-overflow
+                   (e5m2-encode-scalar 61440.0 mode-reject (ffi-pointer u-cell)))
+
+    (release (ffi-pointer f-cell))
+    (release (ffi-pointer u-cell))
+    (display "FP8 AOT CODEC e4m3_finite=254 e4m3_reject=2 e5m2_finite=248 e5m2_reject=8 PASS")
+    (newline)))
+
+;; 2. Delayed-scaling amax window updates across 10 steps (history_len=4, margin=1).
+(define (verify-delayed-scaling)
+  (let* ((state (checked-alloc (delayed-state-bytes)))
+         (sc-cell (checked-alloc 4))
+         (am-cell (checked-alloc 4))
+         (inputs (checked-alloc (* 10 4)))
+         (exp-amax (checked-alloc (* 10 4)))
+         (exp-scale (checked-alloc (* 10 4))))
+    ;; 10 steps: zero -> 2 -> spike 112 -> 8 -> 4 -> 2 (spike still in 4-window!) ->
+    ;;           1 (spike evicted -> amax=8) -> 0.5 (amax=4) -> 0 (amax=2) -> 56 (amax=56).
+    (store-f32 (ffi-pointer inputs) 0 0.0)
+    (store-f32 (ffi-pointer inputs) 1 2.0)
+    (store-f32 (ffi-pointer inputs) 2 112.0)
+    (store-f32 (ffi-pointer inputs) 3 8.0)
+    (store-f32 (ffi-pointer inputs) 4 4.0)
+    (store-f32 (ffi-pointer inputs) 5 2.0)
+    (store-f32 (ffi-pointer inputs) 6 1.0)
+    (store-f32 (ffi-pointer inputs) 7 0.5)
+    (store-f32 (ffi-pointer inputs) 8 0.0)
+    (store-f32 (ffi-pointer inputs) 9 56.0)
+
+    (store-f32 (ffi-pointer exp-amax) 0 0.0)
+    (store-f32 (ffi-pointer exp-amax) 1 2.0)
+    (store-f32 (ffi-pointer exp-amax) 2 112.0)
+    (store-f32 (ffi-pointer exp-amax) 3 112.0)
+    (store-f32 (ffi-pointer exp-amax) 4 112.0)
+    (store-f32 (ffi-pointer exp-amax) 5 112.0)
+    (store-f32 (ffi-pointer exp-amax) 6 8.0)
+    (store-f32 (ffi-pointer exp-amax) 7 4.0)
+    (store-f32 (ffi-pointer exp-amax) 8 2.0)
+    (store-f32 (ffi-pointer exp-amax) 9 56.0)
+
+    ;; scale = clamp((448.0 / max(hist_amax, 1e-6)) * 0.5, 1e-4, 65536.0)
+    (store-f32 (ffi-pointer exp-scale) 0 65536.0)
+    (store-f32 (ffi-pointer exp-scale) 1 112.0)
+    (store-f32 (ffi-pointer exp-scale) 2 2.0)
+    (store-f32 (ffi-pointer exp-scale) 3 2.0)
+    (store-f32 (ffi-pointer exp-scale) 4 2.0)
+    (store-f32 (ffi-pointer exp-scale) 5 2.0)
+    (store-f32 (ffi-pointer exp-scale) 6 28.0)
+    (store-f32 (ffi-pointer exp-scale) 7 56.0)
+    (store-f32 (ffi-pointer exp-scale) 8 112.0)
+    (store-f32 (ffi-pointer exp-scale) 9 4.0)
+
+    (expect-status "delayed-init" status-ok
+                   (delayed-init (ffi-pointer state) fmt-e4m3fn 4 1
+                                 0.000001 0.0001 65536.0))
+    (do ((step 0 (+ step 1)))
+        ((= step 10))
+      (let ((obs (load-f32 (ffi-pointer inputs) step))
+            (ea (load-f32 (ffi-pointer exp-amax) step))
+            (es (load-f32 (ffi-pointer exp-scale) step)))
+        (expect-status "delayed-update" status-ok
+                       (delayed-update (ffi-pointer state) obs))
+        (expect-status "delayed-compute" status-ok
+                       (delayed-compute (ffi-pointer state)
+                                        (ffi-pointer sc-cell)
+                                        (ffi-pointer am-cell)))
+        (let ((got-sc (load-f32 (ffi-pointer sc-cell) 0))
+              (got-am (load-f32 (ffi-pointer am-cell) 0)))
+          (require-check "delayed amax exact" (<= (abs-f64 (- got-am ea)) 0.000001))
+          (require-check "delayed scale exact" (<= (abs-f64 (- got-sc es)) 0.000001)))))
+
+    (let ((final-sc (load-f32 (ffi-pointer sc-cell) 0))
+          (final-am (load-f32 (ffi-pointer am-cell) 0)))
+      (display "FP8 AOT DELAYED_SCALE steps=10 history=4 margin=1 final_amax=")
+      (display final-am)
+      (display " final_scale=")
+      (display final-sc)
+      (display " PASS")
+      (newline))
+
+    (release (ffi-pointer state))
+    (release (ffi-pointer sc-cell))
+    (release (ffi-pointer am-cell))
+    (release (ffi-pointer inputs))
+    (release (ffi-pointer exp-amax))
+    (release (ffi-pointer exp-scale))))
+
+;; 3. Block-scaled W8A8 GEMM parity, outlier accuracy vs per-tensor, and STE FD check.
+(define (det-bucket idx salt)
+  (- (modulo (+ (* 31 idx) (* 17 salt) (quotient idx 5)) 33) 16))
+
+(define (det-val idx salt)
+  (* 0.015625 (det-bucket idx salt)))
+
+(define (verify-block-gemm)
+  (let* ((M 8) (N 16) (K 64) (BK 16) (KB 4)
+         (x-buf (checked-alloc (* M K 4)))
+         (w-buf (checked-alloc (* N K 4)))
+         (b-buf (checked-alloc (* N 4)))
+         (y-f32 (checked-alloc (* M N 4)))
+         (xq-blk (checked-alloc (* M K)))
+         (sx-blk (checked-alloc (* M KB 4)))
+         (wq-blk (checked-alloc (* N K)))
+         (sw-blk (checked-alloc (* N KB 4)))
+         (x-deq (checked-alloc (* M K 4)))
+         (w-deq (checked-alloc (* N K 4)))
+         (y-blk (checked-alloc (* M N 4)))
+         (y-blk-tile (checked-alloc (* M N 4)))
+         (sw-tile (checked-alloc (* 1 KB 4)))
+         (xq-pt (checked-alloc (* M K)))
+         (wq-pt (checked-alloc (* N K)))
+         (sx-pt (checked-alloc 4))
+         (sw-pt (checked-alloc 4))
+         (x-pt-deq (checked-alloc (* M K 4)))
+         (w-pt-deq (checked-alloc (* N K 4)))
+         (dy-buf (checked-alloc (* M N 4)))
+         (dx-buf (checked-alloc (* M K 4)))
+         (dw-buf (checked-alloc (* N K 4)))
+         (db-buf (checked-alloc (* N 4))))
+
+    ;; Populate outlier-heavy X[8, 64], normal W[16, 64], bias[16], dY[8, 16].
+    (do ((m 0 (+ m 1)))
+        ((= m M))
+      (do ((k 0 (+ k 1)))
+          ((= k K))
+        (let* ((idx (+ (* m K) k))
+               (v (if (and (= k 0) (= m 0))
+                      224.0
+                      (* 0.0003 (det-bucket idx 13)))))
+          (store-f32 (ffi-pointer x-buf) idx v))))
+
+    (do ((n 0 (+ n 1)))
+        ((= n N))
+      (store-f32 (ffi-pointer b-buf) n (* 0.25 (- (modulo n 5) 2)))
+      (do ((k 0 (+ k 1)))
+          ((= k K))
+        (let* ((idx (+ (* n K) k))
+               (v (cond ((= k 0) (if (= (modulo n 2) 0) 0.03125 -0.03125))
+                        ((= k 1) 2.0)
+                        (else (* 0.125 (det-bucket idx 29))))))
+          (store-f32 (ffi-pointer w-buf) idx v))))
+
+    (do ((i 0 (+ i 1)))
+        ((= i (* M N)))
+      (store-f32 (ffi-pointer dy-buf) i (det-val i 41)))
+
+    ;; Full f32 reference Y_f32 = X @ W^T + bias.
+    (do ((m 0 (+ m 1)))
+        ((= m M))
+      (do ((n 0 (+ n 1)))
+          ((= n N))
+        (let ((acc (load-f32 (ffi-pointer b-buf) n)))
+          (do ((k 0 (+ k 1)))
+              ((= k K))
+            (set! acc (+ acc (* (load-f32 (ffi-pointer x-buf) (+ (* m K) k))
+                                (load-f32 (ffi-pointer w-buf) (+ (* n K) k))))))
+          (store-f32 (ffi-pointer y-f32) (+ (* m N) n) acc))))
+
+    ;; Block-scaled W8A8 (1x16 activation scales, 1x16 weight scales).
+    (expect-status "block-quant X" status-ok
+                   (block-quantize (ffi-pointer x-buf) M K 1 BK
+                                   (ffi-pointer xq-blk) (ffi-pointer sx-blk)))
+    (expect-status "block-quant W bn=1" status-ok
+                   (block-quantize (ffi-pointer w-buf) N K 1 BK
+                                   (ffi-pointer wq-blk) (ffi-pointer sw-blk)))
+    (expect-status "block-dequant X" status-ok
+                   (block-dequantize (ffi-pointer xq-blk) (ffi-pointer sx-blk)
+                                     M K 1 BK (ffi-pointer x-deq)))
+    (expect-status "block-dequant W" status-ok
+                   (block-dequantize (ffi-pointer wq-blk) (ffi-pointer sw-blk)
+                                     N K 1 BK (ffi-pointer w-deq)))
+    (expect-status "block-gemm bn=1" status-ok
+                   (block-gemm M N K BK 1
+                               (ffi-pointer xq-blk) (ffi-pointer sx-blk)
+                               (ffi-pointer wq-blk) (ffi-pointer sw-blk)
+                               (ffi-pointer b-buf) (ffi-pointer y-blk)))
+
+    ;; Also test DeepSeek-V3 16x16 weight tile (block_n = 16).
+    (expect-status "block-quant W bn=16" status-ok
+                   (block-quantize (ffi-pointer w-buf) N K 16 BK
+                                   (ffi-pointer wq-blk) (ffi-pointer sw-tile)))
+    (expect-status "block-gemm bn=16" status-ok
+                   (block-gemm M N K BK 16
+                               (ffi-pointer xq-blk) (ffi-pointer sx-blk)
+                               (ffi-pointer wq-blk) (ffi-pointer sw-tile)
+                               (ffi-pointer b-buf) (ffi-pointer y-blk-tile)))
+
+    ;; Restore bn=1 weight quant for parity + STE backward checks.
+    (expect-status "block-quant W bn=1 restore" status-ok
+                   (block-quantize (ffi-pointer w-buf) N K 1 BK
+                                   (ffi-pointer wq-blk) (ffi-pointer sw-blk)))
+
+    ;; Per-tensor FP8 baseline.
+    (expect-status "pt-quant X" status-ok
+                   (per-tensor-quantize (ffi-pointer x-buf) (* M K)
+                                        (ffi-pointer xq-pt) (ffi-pointer sx-pt)))
+    (expect-status "pt-quant W" status-ok
+                   (per-tensor-quantize (ffi-pointer w-buf) (* N K)
+                                        (ffi-pointer wq-pt) (ffi-pointer sw-pt)))
+    (expect-status "pt-dequant X" status-ok
+                   (e4m3-decode (ffi-pointer xq-pt) (* M K) (ffi-pointer x-pt-deq)))
+    (expect-status "pt-dequant W" status-ok
+                   (e4m3-decode (ffi-pointer wq-pt) (* N K) (ffi-pointer w-pt-deq)))
+
+    (let ((parity-max 0.0)
+          (blk-f32-max 0.0)
+          (pt-f32-max 0.0)
+          (sx0 (load-f32 (ffi-pointer sx-pt) 0))
+          (sw0 (load-f32 (ffi-pointer sw-pt) 0)))
+      (do ((m 0 (+ m 1)))
+          ((= m M))
+        (do ((n 0 (+ n 1)))
+            ((= n N))
+          (let ((deq-ref (load-f32 (ffi-pointer b-buf) n))
+                (pt-acc (load-f32 (ffi-pointer b-buf) n)))
+            (do ((k 0 (+ k 1)))
+                ((= k K))
+              (set! deq-ref (+ deq-ref
+                               (* (load-f32 (ffi-pointer x-deq) (+ (* m K) k))
+                                  (load-f32 (ffi-pointer w-deq) (+ (* n K) k)))))
+              (set! pt-acc (+ pt-acc
+                              (* (* (load-f32 (ffi-pointer x-pt-deq) (+ (* m K) k)) sx0)
+                                 (* (load-f32 (ffi-pointer w-pt-deq) (+ (* n K) k)) sw0)))))
+            (let* ((yb (load-f32 (ffi-pointer y-blk) (+ (* m N) n)))
+                   (yf (load-f32 (ffi-pointer y-f32) (+ (* m N) n)))
+                   (pe (abs-f64 (- yb deq-ref)))
+                   (be (abs-f64 (- yb yf)))
+                   (pte (abs-f64 (- pt-acc yf))))
+              (when (> pe parity-max) (set! parity-max pe))
+              (when (> be blk-f32-max) (set! blk-f32-max be))
+              (when (> pte pt-f32-max) (set! pt-f32-max pte))))))
+      (require-check "block GEMM parity <= 1e-6" (<= parity-max 0.000001))
+      (require-check "block FP8 beats per-tensor FP8 on outliers"
+                     (< blk-f32-max (* 0.5 pt-f32-max)))
+
+      ;; STE backward + central finite-difference check in Eshkol.
+      (expect-status "block-gemm-bwd" status-ok
+                     (block-gemm-bwd M N K BK 1
+                                     (ffi-pointer dy-buf)
+                                     (ffi-pointer xq-blk) (ffi-pointer sx-blk)
+                                     (ffi-pointer wq-blk) (ffi-pointer sw-blk)
+                                     (ffi-pointer dx-buf) (ffi-pointer dw-buf)
+                                     (ffi-pointer db-buf)))
+      (let ((fd-max 0.0)
+            (eps 0.001)
+            (checked 0))
+        ;; Spot-check dX[m, k] via central FD.
+        (do ((m 0 (+ m 2)))
+            ((>= m M))
+          (do ((k 0 (+ k 8)))
+              ((>= k K))
+            (let ((lp 0.0) (lm 0.0)
+                  (xv (load-f32 (ffi-pointer x-deq) (+ (* m K) k))))
+              (do ((n 0 (+ n 1)))
+                  ((= n N))
+                (let ((dyv (load-f32 (ffi-pointer dy-buf) (+ (* m N) n)))
+                      (wv (load-f32 (ffi-pointer w-deq) (+ (* n K) k))))
+                  (set! lp (+ lp (* dyv (* (+ xv eps) wv))))
+                  (set! lm (+ lm (* dyv (* (- xv eps) wv))))))
+              (let* ((fd (/ (- lp lm) (* 2.0 eps)))
+                     (err (abs-f64 (- (load-f32 (ffi-pointer dx-buf) (+ (* m K) k)) fd))))
+                (when (> err fd-max) (set! fd-max err))
+                (set! checked (+ checked 1))))))
+        ;; Spot-check dBias[n] via central FD.
+        (do ((n 0 (+ n 1)))
+            ((= n N))
+          (let ((lp 0.0) (lm 0.0)
+                (bv (load-f32 (ffi-pointer b-buf) n)))
+            (do ((m 0 (+ m 1)))
+                ((= m M))
+              (let ((dyv (load-f32 (ffi-pointer dy-buf) (+ (* m N) n))))
+                (set! lp (+ lp (* dyv (+ bv eps))))
+                (set! lm (+ lm (* dyv (- bv eps))))))
+            (let* ((fd (/ (- lp lm) (* 2.0 eps)))
+                   (err (abs-f64 (- (load-f32 (ffi-pointer db-buf) n) fd))))
+              (when (> err fd-max) (set! fd-max err))
+              (set! checked (+ checked 1)))))
+        (require-check "STE FD max_abs_err <= 1e-4" (<= fd-max 0.0001))
+
+        (display "FP8 AOT GEMM parity_max_err=") (display parity-max)
+        (display " block_vs_f32=") (display blk-f32-max)
+        (display " pertensor_vs_f32=") (display pt-f32-max)
+        (display " ste_fd_checked=") (display checked)
+        (display " ste_fd_max_err=") (display fd-max)
+        (display " PASS")
+        (newline)))
+
+    (release (ffi-pointer x-buf))
+    (release (ffi-pointer w-buf))
+    (release (ffi-pointer b-buf))
+    (release (ffi-pointer y-f32))
+    (release (ffi-pointer xq-blk))
+    (release (ffi-pointer sx-blk))
+    (release (ffi-pointer wq-blk))
+    (release (ffi-pointer sw-blk))
+    (release (ffi-pointer x-deq))
+    (release (ffi-pointer w-deq))
+    (release (ffi-pointer y-blk))
+    (release (ffi-pointer y-blk-tile))
+    (release (ffi-pointer sw-tile))
+    (release (ffi-pointer xq-pt))
+    (release (ffi-pointer wq-pt))
+    (release (ffi-pointer sx-pt))
+    (release (ffi-pointer sw-pt))
+    (release (ffi-pointer x-pt-deq))
+    (release (ffi-pointer w-pt-deq))
+    (release (ffi-pointer dy-buf))
+    (release (ffi-pointer dx-buf))
+    (release (ffi-pointer dw-buf))
+    (release (ffi-pointer db-buf))))
+
+;; 4. Negative rejections with untouched output sentinels.
+(define (verify-negative-rejections)
+  (let* ((f-in (checked-alloc 16))
+         (u-in (checked-alloc 32))
+         (u-out (checked-alloc 32))
+         (s-buf (checked-alloc 16))
+         (y-out (checked-alloc 16)))
+    ;; Non-finite f32 (+Inf 0x7F800000 and qNaN 0x7FC00000) rejected on encode.
+    (store-f32 (ffi-pointer f-in) 0 1.0)
+    (store-f32-bits (ffi-pointer f-in) 1 2139095040) ; +Inf
+    (store-u8 (ffi-pointer u-out) 0 171)
+    (store-u8 (ffi-pointer u-out) 1 205)
+    (expect-status "encode +Inf reject" err-nonfinite
+                   (e4m3-encode (ffi-pointer f-in) 2 mode-saturate (ffi-pointer u-out)))
+    (require-check "encode +Inf sentinel 0" (= (load-u8 (ffi-pointer u-out) 0) 171))
+    (require-check "encode +Inf sentinel 1" (= (load-u8 (ffi-pointer u-out) 1) 205))
+
+    (store-f32-bits (ffi-pointer f-in) 1 2143289344) ; qNaN
+    (expect-status "encode qNaN reject" err-nonfinite
+                   (e5m2-encode (ffi-pointer f-in) 2 mode-saturate (ffi-pointer u-out)))
+    (require-check "encode qNaN sentinel" (= (load-u8 (ffi-pointer u-out) 0) 171))
+
+    ;; Overflow in REJECT mode leaves output untouched.
+    (store-f32 (ffi-pointer f-in) 1 500.0)
+    (expect-status "bulk overflow reject" err-overflow
+                   (e4m3-encode (ffi-pointer f-in) 2 mode-reject (ffi-pointer u-out)))
+    (require-check "bulk overflow sentinel" (= (load-u8 (ffi-pointer u-out) 0) 171))
+
+    ;; NaN/Inf FP8 codes in bulk decode leave output untouched.
+    (store-u8 (ffi-pointer u-in) 0 56)  ; 1.0
+    (store-u8 (ffi-pointer u-in) 1 127) ; 0x7F NaN
+    (store-f32 (ffi-pointer y-out) 0 123.25)
+    (store-f32 (ffi-pointer y-out) 1 456.75)
+    (expect-status "bulk decode e4m3 nan" err-nonfinite
+                   (e4m3-decode (ffi-pointer u-in) 2 (ffi-pointer y-out)))
+    (require-check "bulk decode sentinel" (= (load-f32 (ffi-pointer y-out) 0) 123.25))
+
+    (store-u8 (ffi-pointer u-in) 1 124) ; 0x7C Inf in E5M2
+    (expect-status "bulk decode e5m2 inf" err-nonfinite
+                   (e5m2-decode (ffi-pointer u-in) 2 (ffi-pointer y-out)))
+    (require-check "bulk decode e5m2 sentinel" (= (load-f32 (ffi-pointer y-out) 0) 123.25))
+
+    ;; GEMM negative rejections: non-multiple K, unsupported block_k, aliasing.
+    (do ((i 0 (+ i 1)))
+        ((= i 32))
+      (store-u8 (ffi-pointer u-in) i 56))
+    (store-f32 (ffi-pointer s-buf) 0 1.0)
+    (store-f32 (ffi-pointer s-buf) 1 1.0)
+    (expect-status "gemm non-multiple K" err-shape
+                   (block-gemm 1 1 24 16 1
+                               (ffi-pointer u-in) (ffi-pointer s-buf)
+                               (ffi-pointer u-in) (ffi-pointer s-buf)
+                               (ptr-add (ffi-pointer s-buf) 0)
+                               (ffi-pointer y-out)))
+    (require-check "gemm bad-K sentinel" (= (load-f32 (ffi-pointer y-out) 0) 123.25))
+
+    (expect-status "gemm unsupported block_k" err-unsupported-block
+                   (block-gemm 1 1 16 8 1
+                               (ffi-pointer u-in) (ffi-pointer s-buf)
+                               (ffi-pointer u-in) (ffi-pointer s-buf)
+                               (ffi-pointer s-buf) (ffi-pointer y-out)))
+    (require-check "gemm bad-block sentinel" (= (load-f32 (ffi-pointer y-out) 0) 123.25))
+
+    (expect-status "gemm aliasing Y==S_x" err-alias
+                   (block-gemm 1 1 16 16 1
+                               (ffi-pointer u-in) (ffi-pointer s-buf)
+                               (ffi-pointer u-in) (ffi-pointer s-buf)
+                               (ffi-pointer s-buf) (ffi-pointer s-buf)))
+
+    (release (ffi-pointer f-in))
+    (release (ffi-pointer u-in))
+    (release (ffi-pointer u-out))
+    (release (ffi-pointer s-buf))
+    (release (ffi-pointer y-out))
+    (display "FP8 AOT NEGATIVE PASS")
+    (newline)))
+
+(verify-exhaustive-codecs)
+(verify-delayed-scaling)
+(verify-block-gemm)
+(verify-negative-rejections)
