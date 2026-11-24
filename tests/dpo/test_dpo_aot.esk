@@ -1,0 +1,555 @@
+;;; Compiled Eshkol AOT DPO post-training alignment driver.
+;;; Runs 12 DPO alignment steps on a linear policy head initialized from a
+;;; strictly frozen reference head, verifying:
+;;;   1. Frozen reference weight SHA-256 and exact f32 bit patterns stay 100%
+;;;      bit-identical across every alignment step;
+;;;   2. Central finite-difference gradient checks pass on both policy logits
+;;;      (with exact zero gradients on masked prompt prefixes) and policy head
+;;;      weights/biases;
+;;;   3. DPO loss strictly decreases across all 12 steps;
+;;;   4. Chosen-vs-rejected reward margin strictly increases across all 12 steps;
+;;;   5. Preference accuracy climbs from 0.0 (init tie) to 1.0;
+;;;   6. cDPO (label_smoothing=0.1) and reference-free mode execute cleanly;
+;;;   7. Malformed calls reject cleanly while preserving poisoned output sentinels.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 dpo-create i64 i64 i64 i64 f64 f64 i64 ptr :real et_dpo_aot_create)
+(extern void dpo-destroy ptr :real et_dpo_aot_destroy)
+(extern i32 dpo-set-hyperparams ptr f64 f64 i64 :real et_dpo_aot_set_hyperparams)
+
+(extern i64 dpo-logit-count ptr :real et_dpo_aot_logit_count)
+(extern i64 dpo-token-count ptr :real et_dpo_aot_token_count)
+(extern i64 dpo-hidden-count ptr :real et_dpo_aot_hidden_count)
+(extern i64 dpo-weight-count ptr :real et_dpo_aot_weight_count)
+(extern i64 dpo-bias-count ptr :real et_dpo_aot_bias_count)
+
+(extern i32 dpo-set-pi-w ptr i64 f64 :real et_dpo_aot_set_policy_chosen_logit)
+(extern i32 dpo-set-pi-l ptr i64 f64 :real et_dpo_aot_set_policy_rejected_logit)
+(extern f64 dpo-get-pi-w ptr i64 :real et_dpo_aot_get_policy_chosen_logit)
+(extern f64 dpo-get-pi-l ptr i64 :real et_dpo_aot_get_policy_rejected_logit)
+(extern f64 dpo-get-dw-logit ptr i64 :real et_dpo_aot_get_d_logit_chosen)
+(extern f64 dpo-get-dl-logit ptr i64 :real et_dpo_aot_get_d_logit_rejected)
+(extern i64 dpo-dw-logit-bits ptr i64 :real et_dpo_aot_d_logit_chosen_bits)
+(extern i64 dpo-dl-logit-bits ptr i64 :real et_dpo_aot_d_logit_rejected_bits)
+(extern i32 dpo-poison-grads ptr f64 :real et_dpo_aot_poison_grads)
+
+(extern i32 dpo-set-tgt-w ptr i64 i64 :real et_dpo_aot_set_chosen_target)
+(extern i32 dpo-set-tgt-l ptr i64 i64 :real et_dpo_aot_set_rejected_target)
+(extern i32 dpo-set-mask-w ptr i64 i64 :real et_dpo_aot_set_chosen_mask)
+(extern i32 dpo-set-mask-l ptr i64 i64 :real et_dpo_aot_set_rejected_mask)
+
+(extern i32 dpo-set-h-w ptr i64 f64 :real et_dpo_aot_set_hidden_chosen)
+(extern i32 dpo-set-h-l ptr i64 f64 :real et_dpo_aot_set_hidden_rejected)
+(extern i32 dpo-set-ref-w ptr i64 f64 :real et_dpo_aot_set_ref_weight)
+(extern i32 dpo-set-ref-b ptr i64 f64 :real et_dpo_aot_set_ref_bias)
+(extern i32 dpo-set-pol-w ptr i64 f64 :real et_dpo_aot_set_policy_weight)
+(extern i32 dpo-set-pol-b ptr i64 f64 :real et_dpo_aot_set_policy_bias)
+(extern f64 dpo-get-pol-w ptr i64 :real et_dpo_aot_get_policy_weight)
+(extern f64 dpo-get-pol-b ptr i64 :real et_dpo_aot_get_policy_bias)
+(extern f64 dpo-get-d-pol-w ptr i64 :real et_dpo_aot_get_d_policy_weight)
+(extern f64 dpo-get-d-pol-b ptr i64 :real et_dpo_aot_get_d_policy_bias)
+(extern i64 dpo-ref-w-bits ptr i64 :real et_dpo_aot_ref_weight_bits)
+(extern i64 dpo-ref-b-bits ptr i64 :real et_dpo_aot_ref_bias_bits)
+
+(extern i32 dpo-init-from-ref ptr :real et_dpo_aot_init_policy_from_ref)
+(extern i32 dpo-project-policy ptr :real et_dpo_aot_project_policy_logits)
+(extern i32 dpo-head-backward ptr :real et_dpo_aot_head_backward)
+
+(extern i32 dpo-forward ptr :real et_dpo_aot_forward)
+(extern i32 dpo-forward-backward ptr :real et_dpo_aot_forward_backward)
+
+(extern f64 dpo-mean-loss ptr :real et_dpo_aot_mean_loss)
+(extern f64 dpo-chosen-reward ptr :real et_dpo_aot_chosen_reward_mean)
+(extern f64 dpo-rejected-reward ptr :real et_dpo_aot_rejected_reward_mean)
+(extern f64 dpo-reward-margin ptr :real et_dpo_aot_reward_margin_mean)
+(extern f64 dpo-pref-acc ptr :real et_dpo_aot_preference_accuracy)
+
+(extern i32 dpo-compute-ref-sha256 ptr :real et_dpo_aot_compute_ref_sha256)
+(extern i64 dpo-ref-sha256-word ptr i64 :real et_dpo_aot_ref_sha256_word)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Post-training alignment configuration.
+(define dim-b 4)
+(define dim-t 6)
+(define dim-v 12)
+(define dim-d 8)
+(define prompt-len 2)
+(define dpo-beta 0.5)
+(define dpo-eps 0.0)
+(define align-steps 12)
+(define learning-rate 0.4)
+
+;; Expected ABI status codes from dpo_alignment_abi.h.
+(define status-ok 0)
+(define err-arg -1)
+(define err-shape -2)
+(define err-nonfinite -5)
+(define err-mask -7)
+(define err-target -8)
+
+(define (require-check label ok)
+  (unless ok
+    (display "DPO AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "DPO AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-ctx)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "dpo-create" status-ok
+                   (dpo-create dim-b dim-t dim-v dim-d dpo-beta dpo-eps 0
+                               (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null context" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (det-val index salt scale)
+  (let ((bucket (- (modulo (+ (* 31 index) (* 17 salt) (quotient index 3)) 37) 18)))
+    (* scale bucket)))
+
+(define (populate-dataset-and-ref ctx)
+  (let ((hn (dpo-hidden-count (ffi-pointer ctx)))
+        (wn (dpo-weight-count (ffi-pointer ctx)))
+        (bn (dpo-bias-count (ffi-pointer ctx))))
+    ;; Hidden representations for chosen and rejected continuations.
+    (do ((i 0 (+ i 1)))
+        ((= i hn))
+      (expect-status "set-h-w" status-ok
+                     (dpo-set-h-w (ffi-pointer ctx) i (det-val i 11 0.0625)))
+      (expect-status "set-h-l" status-ok
+                     (dpo-set-h-l (ffi-pointer ctx) i (det-val i 29 0.0625))))
+    ;; Frozen reference LM head weights and biases.
+    (do ((i 0 (+ i 1)))
+        ((= i wn))
+      (expect-status "set-ref-w" status-ok
+                     (dpo-set-ref-w (ffi-pointer ctx) i (det-val i 19 0.03125))))
+    (do ((i 0 (+ i 1)))
+        ((= i bn))
+      (expect-status "set-ref-b" status-ok
+                     (dpo-set-ref-b (ffi-pointer ctx) i (det-val i 41 0.015625))))
+    ;; Prompt prefix (t < prompt-len -> mask 0) and distinct chosen/rejected response targets.
+    (do ((b 0 (+ b 1)))
+        ((= b dim-b))
+      (do ((t 0 (+ t 1)))
+          ((= t dim-t))
+        (let ((bt (+ (* b dim-t) t))
+              (m (if (< t prompt-len) 0 1))
+              (tw (modulo (+ (* b 3) t 1) dim-v))
+              (tl (modulo (+ (* b 3) t 6) dim-v)))
+          (expect-status "set-mask-w" status-ok
+                         (dpo-set-mask-w (ffi-pointer ctx) bt m))
+          (expect-status "set-mask-l" status-ok
+                         (dpo-set-mask-l (ffi-pointer ctx) bt m))
+          (expect-status "set-tgt-w" status-ok
+                         (dpo-set-tgt-w (ffi-pointer ctx) bt tw))
+          (expect-status "set-tgt-l" status-ok
+                         (dpo-set-tgt-l (ffi-pointer ctx) bt tl)))))))
+
+(define (capture-ref-sha ctx)
+  (expect-status "compute-ref-sha" status-ok
+                 (dpo-compute-ref-sha256 (ffi-pointer ctx)))
+  (let ((words (make-vector 4 0)))
+    (do ((i 0 (+ i 1)))
+        ((= i 4) words)
+      (vector-set! words i (dpo-ref-sha256-word (ffi-pointer ctx) i)))))
+
+(define (capture-ref-w-bits ctx)
+  (let* ((wn (dpo-weight-count (ffi-pointer ctx)))
+         (bits (make-vector wn 0)))
+    (do ((i 0 (+ i 1)))
+        ((= i wn) bits)
+      (vector-set! bits i (dpo-ref-w-bits (ffi-pointer ctx) i)))))
+
+(define (capture-ref-b-bits ctx)
+  (let* ((bn (dpo-bias-count (ffi-pointer ctx)))
+         (bits (make-vector bn 0)))
+    (do ((i 0 (+ i 1)))
+        ((= i bn) bits)
+      (vector-set! bits i (dpo-ref-b-bits (ffi-pointer ctx) i)))))
+
+(define (verify-ref-frozen ctx ref-sha ref-w-bits ref-b-bits)
+  (expect-status "recompute-ref-sha" status-ok
+                 (dpo-compute-ref-sha256 (ffi-pointer ctx)))
+  (do ((i 0 (+ i 1)))
+      ((= i 4))
+    (require-check "frozen ref SHA-256 mutated"
+                   (= (vector-ref ref-sha i)
+                      (dpo-ref-sha256-word (ffi-pointer ctx) i))))
+  (let ((wn (dpo-weight-count (ffi-pointer ctx)))
+        (bn (dpo-bias-count (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i wn))
+      (require-check "frozen ref weight bit mutated"
+                     (= (vector-ref ref-w-bits i)
+                        (dpo-ref-w-bits (ffi-pointer ctx) i))))
+    (do ((i 0 (+ i 1)))
+        ((= i bn))
+      (require-check "frozen ref bias bit mutated"
+                     (= (vector-ref ref-b-bits i)
+                        (dpo-ref-b-bits (ffi-pointer ctx) i))))))
+
+(define (verify-masked-grads-zero ctx)
+  (do ((b 0 (+ b 1)))
+      ((= b dim-b))
+    (do ((t 0 (+ t 1)))
+        ((= t prompt-len))
+      (let ((base (* (+ (* b dim-t) t) dim-v)))
+        (do ((v 0 (+ v 1)))
+            ((= v dim-v))
+          (require-check "masked chosen grad non-zero"
+                         (= 0 (dpo-dw-logit-bits (ffi-pointer ctx) (+ base v))))
+          (require-check "masked rejected grad non-zero"
+                         (= 0 (dpo-dl-logit-bits (ffi-pointer ctx) (+ base v)))))))))
+
+(define (check-fd-chosen-logit ctx idx)
+  (let ((orig (dpo-get-pi-w (ffi-pointer ctx) idx))
+        (analytic (dpo-get-dw-logit (ffi-pointer ctx) idx))
+        (step 0.001953125))
+    (expect-status "fd-lw-plus" status-ok
+                   (dpo-set-pi-w (ffi-pointer ctx) idx (+ orig step)))
+    (expect-status "fd-lw-fwd-plus" status-ok (dpo-forward (ffi-pointer ctx)))
+    (let ((plus (dpo-mean-loss (ffi-pointer ctx))))
+      (expect-status "fd-lw-minus" status-ok
+                     (dpo-set-pi-w (ffi-pointer ctx) idx (- orig step)))
+      (expect-status "fd-lw-fwd-minus" status-ok (dpo-forward (ffi-pointer ctx)))
+      (let* ((minus (dpo-mean-loss (ffi-pointer ctx)))
+             (num (/ (- plus minus) (* 2.0 step))))
+        (expect-status "fd-lw-restore" status-ok
+                       (dpo-set-pi-w (ffi-pointer ctx) idx orig))
+        (require-check "chosen logit FD failed"
+                       (<= (abs (- analytic num))
+                           (+ 0.00001 (* 0.001 (abs num)))))))))
+
+(define (check-fd-rejected-logit ctx idx)
+  (let ((orig (dpo-get-pi-l (ffi-pointer ctx) idx))
+        (analytic (dpo-get-dl-logit (ffi-pointer ctx) idx))
+        (step 0.001953125))
+    (expect-status "fd-ll-plus" status-ok
+                   (dpo-set-pi-l (ffi-pointer ctx) idx (+ orig step)))
+    (expect-status "fd-ll-fwd-plus" status-ok (dpo-forward (ffi-pointer ctx)))
+    (let ((plus (dpo-mean-loss (ffi-pointer ctx))))
+      (expect-status "fd-ll-minus" status-ok
+                     (dpo-set-pi-l (ffi-pointer ctx) idx (- orig step)))
+      (expect-status "fd-ll-fwd-minus" status-ok (dpo-forward (ffi-pointer ctx)))
+      (let* ((minus (dpo-mean-loss (ffi-pointer ctx)))
+             (num (/ (- plus minus) (* 2.0 step))))
+        (expect-status "fd-ll-restore" status-ok
+                       (dpo-set-pi-l (ffi-pointer ctx) idx orig))
+        (require-check "rejected logit FD failed"
+                       (<= (abs (- analytic num))
+                           (+ 0.00001 (* 0.001 (abs num)))))))))
+
+(define (eval-head-loss ctx)
+  (expect-status "fd-head-project" status-ok
+                 (dpo-project-policy (ffi-pointer ctx)))
+  (expect-status "fd-head-fwd" status-ok (dpo-forward (ffi-pointer ctx)))
+  (dpo-mean-loss (ffi-pointer ctx)))
+
+(define (check-fd-policy-weight ctx idx)
+  (let ((orig (dpo-get-pol-w (ffi-pointer ctx) idx))
+        (analytic (dpo-get-d-pol-w (ffi-pointer ctx) idx))
+        (step 0.001953125))
+    (expect-status "fd-w-plus" status-ok
+                   (dpo-set-pol-w (ffi-pointer ctx) idx (+ orig step)))
+    (let ((plus (eval-head-loss ctx)))
+      (expect-status "fd-w-minus" status-ok
+                     (dpo-set-pol-w (ffi-pointer ctx) idx (- orig step)))
+      (let* ((minus (eval-head-loss ctx))
+             (num (/ (- plus minus) (* 2.0 step))))
+        (expect-status "fd-w-restore" status-ok
+                       (dpo-set-pol-w (ffi-pointer ctx) idx orig))
+        (expect-status "fd-w-reproject" status-ok
+                       (dpo-project-policy (ffi-pointer ctx)))
+        (require-check "policy weight FD failed"
+                       (<= (abs (- analytic num))
+                           (+ 0.00002 (* 0.005 (abs num)))))))))
+
+(define (check-fd-policy-bias ctx idx)
+  (let ((orig (dpo-get-pol-b (ffi-pointer ctx) idx))
+        (analytic (dpo-get-d-pol-b (ffi-pointer ctx) idx))
+        (step 0.001953125))
+    (expect-status "fd-b-plus" status-ok
+                   (dpo-set-pol-b (ffi-pointer ctx) idx (+ orig step)))
+    (let ((plus (eval-head-loss ctx)))
+      (expect-status "fd-b-minus" status-ok
+                     (dpo-set-pol-b (ffi-pointer ctx) idx (- orig step)))
+      (let* ((minus (eval-head-loss ctx))
+             (num (/ (- plus minus) (* 2.0 step))))
+        (expect-status "fd-b-restore" status-ok
+                       (dpo-set-pol-b (ffi-pointer ctx) idx orig))
+        (expect-status "fd-b-reproject" status-ok
+                       (dpo-project-policy (ffi-pointer ctx)))
+        (require-check "policy bias FD failed"
+                       (<= (abs (- analytic num))
+                           (+ 0.00002 (* 0.005 (abs num)))))))))
+
+(define (sgd-step-policy ctx lr)
+  (let ((wn (dpo-weight-count (ffi-pointer ctx)))
+        (bn (dpo-bias-count (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i wn))
+      (let ((next-w (- (dpo-get-pol-w (ffi-pointer ctx) i)
+                       (* lr (dpo-get-d-pol-w (ffi-pointer ctx) i)))))
+        (expect-status "update-pol-w" status-ok
+                       (dpo-set-pol-w (ffi-pointer ctx) i next-w))))
+    (do ((i 0 (+ i 1)))
+        ((= i bn))
+      (let ((next-b (- (dpo-get-pol-b (ffi-pointer ctx) i)
+                       (* lr (dpo-get-d-pol-b (ffi-pointer ctx) i)))))
+        (expect-status "update-pol-b" status-ok
+                       (dpo-set-pol-b (ffi-pointer ctx) i next-b))))))
+
+(define (print-step step loss margin rw rl acc)
+  (display "DPO AOT STEP ") (display step)
+  (display " loss=") (display (number->string loss))
+  (display " margin=") (display (number->string margin))
+  (display " r_w=") (display (number->string rw))
+  (display " r_l=") (display (number->string rl))
+  (display " acc=") (display (number->string acc))
+  (newline))
+
+(define (verify-poison-intact ctx sentinel-bits)
+  (let ((ln (dpo-logit-count (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i ln))
+      (require-check "chosen grad sentinel clobbered"
+                     (= sentinel-bits (dpo-dw-logit-bits (ffi-pointer ctx) i)))
+      (require-check "rejected grad sentinel clobbered"
+                     (= sentinel-bits (dpo-dl-logit-bits (ffi-pointer ctx) i))))))
+
+(define (run-malformed-checks ctx)
+  ;; Poison gradients with 123.5f (IEEE-754 bits 0x42f70000 = 1123483648).
+  (expect-status "poison-grads" status-ok
+                 (dpo-poison-grads (ffi-pointer ctx) 123.5))
+  (let ((sbits (dpo-dw-logit-bits (ffi-pointer ctx) 0)))
+    (require-check "sentinel bits zero" (not (= sbits 0)))
+
+    ;; 1. Invalid beta <= 0
+    (expect-status "set-bad-beta" status-ok
+                   (dpo-set-hyperparams (ffi-pointer ctx) 0.0 0.0 0))
+    (expect-status "reject-zero-beta" err-arg
+                   (dpo-forward-backward (ffi-pointer ctx)))
+    (verify-poison-intact ctx sbits)
+
+    ;; 2. Invalid label_smoothing >= 0.5
+    (expect-status "set-bad-eps" status-ok
+                   (dpo-set-hyperparams (ffi-pointer ctx) 0.5 0.5 0))
+    (expect-status "reject-bad-eps" err-arg
+                   (dpo-forward-backward (ffi-pointer ctx)))
+    (verify-poison-intact ctx sbits)
+
+    ;; 3. Invalid reference_free toggle
+    (expect-status "set-bad-ref-free" status-ok
+                   (dpo-set-hyperparams (ffi-pointer ctx) 0.5 0.0 2))
+    (expect-status "reject-bad-ref-free" err-arg
+                   (dpo-forward-backward (ffi-pointer ctx)))
+    (verify-poison-intact ctx sbits)
+
+    ;; Restore valid hyperparams.
+    (expect-status "restore-hyperparams" status-ok
+                   (dpo-set-hyperparams (ffi-pointer ctx) dpo-beta dpo-eps 0))
+
+    ;; 4. Invalid mask > 1
+    (expect-status "set-bad-mask" status-ok
+                   (dpo-set-mask-w (ffi-pointer ctx) 2 2))
+    (expect-status "reject-bad-mask" err-mask
+                   (dpo-forward-backward (ffi-pointer ctx)))
+    (verify-poison-intact ctx sbits)
+    (expect-status "restore-mask" status-ok
+                   (dpo-set-mask-w (ffi-pointer ctx) 2 1))
+
+    ;; 5. All-zero sequence mask on batch 0
+    (do ((t 0 (+ t 1)))
+        ((= t dim-t))
+      (expect-status "zero-mask-b0" status-ok
+                     (dpo-set-mask-l (ffi-pointer ctx) t 0)))
+    (expect-status "reject-all-zero-mask" err-mask
+                   (dpo-forward-backward (ffi-pointer ctx)))
+    (verify-poison-intact ctx sbits)
+    (do ((t 0 (+ t 1)))
+        ((= t dim-t))
+      (expect-status "restore-mask-b0" status-ok
+                     (dpo-set-mask-l (ffi-pointer ctx) t
+                                     (if (< t prompt-len) 0 1))))
+
+    ;; 6. Out-of-range target (< 0 and >= V)
+    (expect-status "set-neg-tgt" status-ok
+                   (dpo-set-tgt-w (ffi-pointer ctx) 0 -1))
+    (expect-status "reject-neg-tgt" err-target
+                   (dpo-forward-backward (ffi-pointer ctx)))
+    (verify-poison-intact ctx sbits)
+    (expect-status "set-oob-tgt" status-ok
+                   (dpo-set-tgt-w (ffi-pointer ctx) 0 dim-v))
+    (expect-status "reject-oob-tgt" err-target
+                   (dpo-forward-backward (ffi-pointer ctx)))
+    (verify-poison-intact ctx sbits)
+    (expect-status "restore-tgt" status-ok
+                   (dpo-set-tgt-w (ffi-pointer ctx) 0 1))
+
+    ;; 7. Non-finite logit (1e300 overflows binary32 to +Inf)
+    (let ((orig (dpo-get-pi-w (ffi-pointer ctx) 0)))
+      (expect-status "set-inf-logit" status-ok
+                     (dpo-set-pi-w (ffi-pointer ctx) 0 1e300))
+      (expect-status "reject-inf-logit" err-nonfinite
+                     (dpo-forward-backward (ffi-pointer ctx)))
+      (verify-poison-intact ctx sbits)
+      (expect-status "restore-logit" status-ok
+                     (dpo-set-pi-w (ffi-pointer ctx) 0 orig)))
+
+    ;; 8. Invalid create shape
+    (let ((cell (checked-allocate 8)))
+      (expect-status "reject-bad-create-v" err-shape
+                     (dpo-create 1 2 1 4 0.5 0.0 0 (ffi-pointer cell)))
+      (release (ffi-pointer cell)))))
+
+(define (run-alignment)
+  (let* ((ctx (create-ctx))
+         (wn (dpo-weight-count (ffi-pointer ctx)))
+         (bn (dpo-bias-count (ffi-pointer ctx))))
+    (populate-dataset-and-ref ctx)
+    (let ((ref-sha (capture-ref-sha ctx))
+          (ref-w-bits (capture-ref-w-bits ctx))
+          (ref-b-bits (capture-ref-b-bits ctx)))
+      ;; Initialize policy head as exact copy of frozen reference head.
+      (expect-status "init-from-ref" status-ok
+                     (dpo-init-from-ref (ffi-pointer ctx)))
+      (expect-status "step0-fb" status-ok
+                     (dpo-forward-backward (ffi-pointer ctx)))
+      (expect-status "step0-head-bwd" status-ok
+                     (dpo-head-backward (ffi-pointer ctx)))
+      (verify-masked-grads-zero ctx)
+      (verify-ref-frozen ctx ref-sha ref-w-bits ref-b-bits)
+
+      ;; Step 0: policy == ref -> loss == ln(2), margin == 0, acc == 0.
+      (let ((init-loss (dpo-mean-loss (ffi-pointer ctx)))
+            (init-margin (dpo-reward-margin (ffi-pointer ctx)))
+            (init-rw (dpo-chosen-reward (ffi-pointer ctx)))
+            (init-rl (dpo-rejected-reward (ffi-pointer ctx)))
+            (init-acc (dpo-pref-acc (ffi-pointer ctx)))
+            (prev-loss 0.0)
+            (prev-margin 0.0)
+            (final-acc 0.0))
+        (require-check "step 0 loss != ln(2)"
+                       (<= (abs (- init-loss 0.6931471805599453)) 1e-12))
+        (require-check "step 0 margin != 0" (= init-margin 0.0))
+        (require-check "step 0 acc != 0" (= init-acc 0.0))
+
+        ;; Step 0 central FD checks on logits (active + masked) and head params.
+        (check-fd-chosen-logit ctx 0)
+        (check-fd-chosen-logit ctx (* prompt-len dim-v))
+        (check-fd-rejected-logit ctx (+ (* prompt-len dim-v) 3))
+        (check-fd-policy-weight ctx 0)
+        (check-fd-policy-weight ctx (quotient wn 2))
+        (check-fd-policy-bias ctx 0)
+
+        ;; Restore step 0 state cleanly before gradient descent.
+        (expect-status "step0-re-fb" status-ok
+                       (dpo-forward-backward (ffi-pointer ctx)))
+        (expect-status "step0-re-head-bwd" status-ok
+                       (dpo-head-backward (ffi-pointer ctx)))
+
+        (print-step 0 init-loss init-margin init-rw init-rl init-acc)
+        (set! prev-loss init-loss)
+        (set! prev-margin init-margin)
+        (set! final-acc init-acc)
+
+        (do ((step 1 (+ step 1)))
+            ((> step align-steps))
+          (sgd-step-policy ctx learning-rate)
+          (expect-status "step-project" status-ok
+                         (dpo-project-policy (ffi-pointer ctx)))
+          (expect-status "step-fb" status-ok
+                         (dpo-forward-backward (ffi-pointer ctx)))
+          (expect-status "step-head-bwd" status-ok
+                         (dpo-head-backward (ffi-pointer ctx)))
+          (verify-masked-grads-zero ctx)
+          (verify-ref-frozen ctx ref-sha ref-w-bits ref-b-bits)
+
+          (let ((curr-loss (dpo-mean-loss (ffi-pointer ctx)))
+                (curr-margin (dpo-reward-margin (ffi-pointer ctx)))
+                (curr-rw (dpo-chosen-reward (ffi-pointer ctx)))
+                (curr-rl (dpo-rejected-reward (ffi-pointer ctx)))
+                (curr-acc (dpo-pref-acc (ffi-pointer ctx))))
+            (require-check "loss failed to strictly decrease"
+                           (and (> curr-loss 0.0) (< curr-loss prev-loss)))
+            (require-check "reward margin failed to strictly increase"
+                           (> curr-margin prev-margin))
+            ;; Step 1 FD checks at non-zero reward margin.
+            (when (= step 1)
+              (check-fd-chosen-logit ctx (+ (* (+ dim-t prompt-len) dim-v) 1))
+              (check-fd-rejected-logit ctx (+ (* (+ dim-t prompt-len) dim-v) 5))
+              (check-fd-policy-weight ctx (- wn 1))
+              (check-fd-policy-bias ctx (- bn 1))
+              (expect-status "step1-re-fb" status-ok
+                             (dpo-forward-backward (ffi-pointer ctx)))
+              (expect-status "step1-re-head-bwd" status-ok
+                             (dpo-head-backward (ffi-pointer ctx))))
+            (print-step step curr-loss curr-margin curr-rw curr-rl curr-acc)
+            (set! prev-loss curr-loss)
+            (set! prev-margin curr-margin)
+            (set! final-acc curr-acc)))
+
+        (require-check "final preference accuracy did not reach 1.0"
+                       (= final-acc 1.0))
+
+        ;; Verify cDPO (label_smoothing=0.1) and reference-free modes on trained policy.
+        (expect-status "set-cdpo" status-ok
+                       (dpo-set-hyperparams (ffi-pointer ctx) dpo-beta 0.1 0))
+        (expect-status "cdpo-fb" status-ok
+                       (dpo-forward-backward (ffi-pointer ctx)))
+        (let ((cdpo-loss (dpo-mean-loss (ffi-pointer ctx)))
+              (cdpo-acc (dpo-pref-acc (ffi-pointer ctx))))
+          (require-check "cDPO loss invalid" (> cdpo-loss 0.0))
+          (require-check "cDPO acc != 1.0" (= cdpo-acc 1.0))
+          (expect-status "set-ref-free" status-ok
+                         (dpo-set-hyperparams (ffi-pointer ctx) dpo-beta 0.0 1))
+          (expect-status "ref-free-fb" status-ok
+                         (dpo-forward-backward (ffi-pointer ctx)))
+          (let ((rf-loss (dpo-mean-loss (ffi-pointer ctx))))
+            (require-check "ref-free loss invalid" (> rf-loss 0.0))
+            (display "DPO AOT MODES cdpo_loss=")
+            (display (number->string cdpo-loss))
+            (display " ref_free_loss=")
+            (display (number->string rf-loss))
+            (newline)))
+
+        (verify-ref-frozen ctx ref-sha ref-w-bits ref-b-bits)
+        (display "DPO AOT RESULT steps=12 initial_loss=")
+        (display (number->string init-loss))
+        (display " final_loss=")
+        (display (number->string prev-loss))
+        (display " initial_margin=")
+        (display (number->string init-margin))
+        (display " final_margin=")
+        (display (number->string prev-margin))
+        (display " final_acc=")
+        (display (number->string final-acc))
+        (display " ref_frozen=PASS grad_checks=10")
+        (newline)
+        (display "DPO AOT REF_SHA256 ")
+        (display (vector-ref ref-sha 0)) (display " ")
+        (display (vector-ref ref-sha 1)) (display " ")
+        (display (vector-ref ref-sha 2)) (display " ")
+        (display (vector-ref ref-sha 3)) (newline)
+
+        (run-malformed-checks ctx)
+        (verify-ref-frozen ctx ref-sha ref-w-bits ref-b-bits)
+        (display "DPO AOT NEGATIVE PASS") (newline)
+        (dpo-destroy (ffi-pointer ctx))))))
+
+(run-alignment)
