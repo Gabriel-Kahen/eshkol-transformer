@@ -3353,7 +3353,7 @@ publication, public G2 and continuation remain pending.
 | MOD5 | RMSNorm/SwiGLU/GQA/MQA/ALiBi/sliding-window model variants | M3 | Per-variant parity and training smoke tests | planned |
 | DIST5 | Data-parallel training and collective abstraction | TR3, K1 | Multi-process deterministic smoke and failure handling | planned |
 | EVAL5 | External evaluation adapters and contamination checks | E3, T2 | Reproducible benchmark manifests | planned |
-| DOC5 | [Corpus-to-model tutorial](DOC5_CORPUS_TO_MODEL_TUTORIAL.md) and [API reference](DOC5_API_REFERENCE.md) | CLI3, DATA4 | The current-main candidate documents corpus preparation, one CPU-f32 training update, checkpoint inspection, evaluation and one-byte generation. The pinned Ubuntu 22.04/LLVM 21 walkthrough passed for `efac8654`: 42 API rows, 32 DATA4 source checks, the CLI3 cross-command chain, 10 installed DATA4 tests and the integrated recipe. Independent review remains pending. | review |
+| DOC5 | [Corpus-to-model tutorial](DOC5_CORPUS_TO_MODEL_TUTORIAL.md) and [API reference](DOC5_API_REFERENCE.md) | CLI3, DATA4 | The current-main candidate documents corpus preparation, one CPU-f32 training update, checkpoint inspection, evaluation and one-byte generation. The pinned Ubuntu 22.04/LLVM 21 walkthrough passed for `efac8654`: 42 API rows, 32 DATA4 source checks, the CLI3 cross-command chain, 10 installed DATA4 tests and the integrated recipe. Independent review found a skipped-row defect; the checker now rejects malformed source cells, and the supported source check passes. | review |
 
 ## Orchestrator rules
 
