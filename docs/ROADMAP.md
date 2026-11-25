@@ -757,7 +757,10 @@ The single-build CI candidate passes the production gate's fresh executable to
 the cross-command gate and checks its SHA-256 before and after the command
 witness. The standalone cross-command entry still builds fresh. The supported
 reuse-path cross-command test passed in 9.670 seconds with the verified retained
-CLI3 binary. Hosted timing remains pending.
+CLI3 binary. Independent review passed at `c05167a2`. A fresh local build
+of the same production source on Ubuntu 22.04/LLVM 21 took 11m45s at
+`63aec93d`, which measures the removed build phase. Hosted suite timing
+and artifact upload remain pending.
 Draft PR #202's first hosted run `38256561519` stopped at Q0 Python isolation
 because the D1 facade staging helper was under `scripts/`. The unchanged
 development-only helper now resides under `tests/cli3/`, with its build and
