@@ -1,0 +1,115 @@
+name: Wave 5 tooling diagnostic (non-admission)
+on:
+  workflow_call:
+    inputs:
+      expected_head:
+        description: Exact 40-hex branch commit to test
+        required: true
+        type: string
+      expected_tree:
+        description: Exact 40-hex Git tree to test
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: wave5-tooling-heavy
+  cancel-in-progress: false
+jobs:
+  tooling:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    env:
+      CC: clang-21
+      CXX: clang++-21
+      ESHKOL_CXX_COMPILER: clang++-21
+      LLVM_CONFIG_EXECUTABLE: llvm-config-21
+      ESHKOL_JOBS: '2'
+    steps:
+      - name: Reserve diagnostic evidence
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          root="$RUNNER_TEMP/wave5-tooling-diagnostic"
+          test ! -e "$root" && test ! -L "$root"
+          mkdir -m 0700 "$root"
+          printf 'state\treserved\nrun_id\t%s\nrun_attempt\t%s\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > "$root/workflow-status.tsv"
+          df -h "$RUNNER_TEMP" > "$root/initial-disk.txt"
+          grep '^MemAvailable:' /proc/meminfo > "$root/initial-memory.txt"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Authenticate exact branch head and tree
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          EXPECTED_HEAD: ${{ inputs.expected_head }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          root="$RUNNER_TEMP/wave5-tooling-diagnostic"
+          [[ "$GITHUB_REF" == refs/heads/codex/wave5-tooling-* ]]
+          [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_SHA" == "$EXPECTED_HEAD" ]]
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_HEAD" ]]
+          [[ "$(git rev-parse 'HEAD^{tree}')" == "$EXPECTED_TREE" ]]
+          [[ -z "$(git status --porcelain --untracked-files=all)" ]]
+          printf 'ref\t%s\nhead\t%s\ntree\t%s\n' \
+            "$GITHUB_REF" "$EXPECTED_HEAD" "$EXPECTED_TREE" \
+            > "$root/identity.tsv"
+      - name: Install supported host dependencies
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          root="$RUNNER_TEMP/wave5-tooling-diagnostic"
+          {
+            wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+            gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+            sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+            echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+            sudo apt-get update -o Acquire::Retries=5
+            sudo apt-get install -y \
+              build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
+              ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
+              libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
+              ripgrep time
+            test "$(llvm-config-21 --version)" = '21.1.8'
+          } > "$root/dependencies.stdout" 2> "$root/dependencies.stderr"
+      - name: Restore pinned Eshkol toolchain
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .deps
+          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
+      - name: Build pinned toolchain
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          root="$RUNNER_TEMP/wave5-tooling-diagnostic"
+          memory_kib="$(awk '$1 == "MemAvailable:" { print $2 }' /proc/meminfo)"
+          disk_bytes="$(df -B1 --output=avail "$RUNNER_TEMP" | tail -n 1 | tr -d '[:space:]')"
+          printf 'memory_available_kib\t%s\ndisk_available_bytes\t%s\n' \
+            "$memory_kib" "$disk_bytes" > "$root/preflight.tsv"
+          test "$memory_kib" -ge $((8 * 1024 * 1024))
+          test "$disk_bytes" -ge $((6 * 1024 * 1024 * 1024))
+          make toolchain > "$root/toolchain.stdout" 2> "$root/toolchain.stderr"
+      - name: Run six focused leaf gates
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          /usr/bin/bash scripts/run-wave5-tooling-diagnostic.sh \
+            "$RUNNER_TEMP/wave5-tooling-diagnostic"
+      - name: Seal partial or complete evidence
+        if: always()
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          PREVIOUS_JOB_STATUS: ${{ job.status }}
+        run: |
+          root="$RUNNER_TEMP/wave5-tooling-diagnostic"
+          test -d "$root" && test ! -L "$root"
+          printf 'workflow_status_before_upload\t%s\n' "$PREVIOUS_JOB_STATUS" \
+            >> "$root/workflow-status.tsv"
+          (cd "$root" && find . -type f ! -path './SHA256SUMS' -print0 | \
+            LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$root/SHA256SUMS"
+          (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
+      - name: Upload diagnostic-only evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wave5-tooling-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/wave5-tooling-diagnostic/
+          if-no-files-found: error
+          retention-days: 30

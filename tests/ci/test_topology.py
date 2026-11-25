@@ -160,9 +160,9 @@ class TopologyTests(unittest.TestCase):
     def test_manual_attention_mode_cannot_bypass_full_ci_or_weaken_evidence(self):
         mutations = (
             ("        default: false\n", "        default: true\n"),
-            ("    if: ${{ github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic }}\n", ""),
-            ("    if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) }}\n", "    if: ${{ always() }}\n"),
-            ("    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic }}\n", "    if: ${{ always() }}\n"),
+            ("    if: ${{ github.event_name != 'workflow_dispatch' || (!inputs.wave5_tooling_diagnostic && inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) || (inputs.wave5_tooling_diagnostic && (inputs.attention_supported_diagnostic || inputs.data4_installed_diagnostic)) }}\n", ""),
+            ("    if: ${{ always() && (github.event_name != 'workflow_dispatch' || (!inputs.wave5_tooling_diagnostic && inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic)) }}\n", "    if: ${{ always() }}\n"),
+            ("    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic && !inputs.wave5_tooling_diagnostic }}\n", "    if: ${{ always() }}\n"),
             ("refs/heads/codex/b0-attention-supported-v2-20261116", "refs/heads/main"),
             ('test "$GITHUB_SHA" = "$EXPECTED_HEAD"', ":"),
             ("make benchmark-attention-supported 2>&1", "make benchmark-attention 2>&1"),

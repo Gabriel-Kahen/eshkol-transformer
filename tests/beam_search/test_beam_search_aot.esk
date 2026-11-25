@@ -1,0 +1,465 @@
+;;; Deterministic Beam Search & Logit-Processor Engine compiled Eshkol AOT test:
+;;;   - B=1 vs B=4 on trap-logits graph (proving B=1 greedy equivalence and B=4
+;;;     recovering the strictly higher-scoring global optimum)
+;;;   - Exact no_repeat_ngram_size=2 and 3 eliminating loops on cyclic logits
+;;;   - min_new_tokens EOS suppression + Wu et al. (2016) length penalty ranking
+;;;     shift (alpha=0.0 short winner vs alpha=1.5 long winner)
+;;;   - Negative fail-closed rejections (all-masked, NaN/+Inf, invalid B/V/ngram,
+;;;     rep_penalty<1, min>max, misaligned ptr, aliasing, state errors) with
+;;;     sentinel preservation
+;;; Compiled with: eshkol-run --strict-types --optimize 0 --no-stdlib
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+;; Beam Search Eshkol AOT bridge
+(extern i64 beam-config-bytes :real et_beam_aot_config_bytes)
+(extern i64 beam-state-bytes :real et_beam_aot_state_bytes)
+(extern i64 beam-hyp-bytes :real et_beam_aot_hyp_bytes)
+(extern i32 beam-set-config ptr i64 i64 i64 i64 i64 i64 i64 f64 f64
+        :real et_beam_aot_set_config)
+(extern i32 beam-init ptr ptr ptr i64 :real et_beam_aot_init)
+(extern i32 beam-step ptr ptr i64 :real et_beam_aot_step)
+(extern i32 beam-finalize ptr ptr i64 ptr :real et_beam_aot_finalize)
+(extern i64 beam-active-count ptr :real et_beam_aot_active_count)
+(extern i64 beam-finished-count ptr :real et_beam_aot_finished_count)
+(extern i64 beam-steps-done ptr :real et_beam_aot_steps_done)
+(extern i64 beam-is-done ptr :real et_beam_aot_is_done)
+(extern i64 beam-stopped-early ptr :real et_beam_aot_stopped_early)
+(extern i64 beam-active-len ptr i64 :real et_beam_aot_active_len)
+(extern i64 beam-active-token ptr i64 i64 :real et_beam_aot_active_token)
+(extern f64 beam-active-log-prob ptr i64 :real et_beam_aot_active_log_prob)
+(extern i64 beam-hyp-seq-len ptr i64 :real et_beam_aot_hyp_seq_len)
+(extern i64 beam-hyp-gen-len ptr i64 :real et_beam_aot_hyp_gen_len)
+(extern i64 beam-hyp-finished ptr i64 :real et_beam_aot_hyp_finished)
+(extern i64 beam-hyp-token ptr i64 i64 :real et_beam_aot_hyp_token)
+(extern f64 beam-hyp-sum-log-prob ptr i64 :real et_beam_aot_hyp_sum_log_prob)
+(extern f64 beam-hyp-score ptr i64 :real et_beam_aot_hyp_score)
+(extern i32 beam-apply-rep-penalty ptr i64 i64 f64 ptr ptr
+        :real et_beam_aot_apply_rep_penalty)
+(extern i32 beam-apply-no-repeat-ngram ptr i64 i64 i64 ptr ptr
+        :real et_beam_aot_apply_no_repeat_ngram)
+(extern i32 beam-apply-min-length i64 i64 i64 i64 ptr ptr
+        :real et_beam_aot_apply_min_length)
+(extern i32 beam-log-softmax i64 ptr ptr :real et_beam_aot_log_softmax)
+(extern i32 beam-store-u32-checked ptr i64 i64 i64 :real et_beam_aot_store_u32)
+(extern i64 beam-load-u32-checked ptr i64 i64 :real et_beam_aot_load_u32)
+(extern i64 beam-load-i64-checked ptr i64 i64 :real et_beam_aot_load_i64)
+(extern i32 beam-store-f64-checked ptr i64 i64 f64 :real et_beam_aot_store_f64)
+(extern f64 beam-load-f64-checked ptr i64 i64 :real et_beam_aot_load_f64)
+(extern f64 beam-nan-f64 :real et_beam_aot_nan_f64)
+(extern f64 beam-pos-inf-f64 :real et_beam_aot_pos_inf_f64)
+(extern f64 beam-neg-inf-f64 :real et_beam_aot_neg_inf_f64)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define (expect-status label expected actual)
+  (unless (= actual expected)
+    (display label) (display " expected ") (display expected)
+    (display ", got ") (display actual) (newline) (exit 1)))
+
+(define (require-check label ok)
+  (unless ok (display label) (newline) (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "BEAM_SEARCH AOT allocation failed"
+                   (not (= (ptr->usize p) 0)))
+    p))
+
+;; Allocate reusable aligned buffers.
+(define cfg-buf (checked-allocate (beam-config-bytes)))
+(define state-buf (checked-allocate (beam-state-bytes)))
+(define (state-done?)
+  (= (beam-is-done (ffi-pointer state-buf)) 1))
+(define hyps-buf (checked-allocate (* 8 (beam-hyp-bytes))))
+(define count-buf (checked-allocate 8))
+(define prompt-buf (checked-allocate (* 4 16)))
+(define logits-buf (checked-allocate (* 8 8 16)))
+(define proc-in-buf (checked-allocate (* 8 16)))
+(define proc-out-buf (checked-allocate (* 8 16)))
+
+(define (beam-buffer-bytes buf)
+  (cond
+    ((= (ptr->usize buf) (ptr->usize count-buf)) 8)
+    ((= (ptr->usize buf) (ptr->usize prompt-buf)) (* 4 16))
+    ((= (ptr->usize buf) (ptr->usize logits-buf)) (* 8 8 16))
+    ((= (ptr->usize buf) (ptr->usize proc-in-buf)) (* 8 16))
+    ((= (ptr->usize buf) (ptr->usize proc-out-buf)) (* 8 16))
+    (else 0)))
+
+(define (beam-store-u32 buf index value)
+  (expect-status "AOT checked u32 store" 0
+                 (beam-store-u32-checked buf (beam-buffer-bytes buf)
+                                         index value)))
+(define (beam-load-u32 buf index)
+  (beam-load-u32-checked buf (beam-buffer-bytes buf) index))
+(define (beam-load-i64 buf index)
+  (beam-load-i64-checked buf (beam-buffer-bytes buf) index))
+(define (beam-store-f64 buf index value)
+  (expect-status "AOT checked f64 store" 0
+                 (beam-store-f64-checked buf (beam-buffer-bytes buf)
+                                         index value)))
+(define (beam-load-f64 buf index)
+  (beam-load-f64-checked buf (beam-buffer-bytes buf) index))
+
+;; Fill row b (vocab V) with a constant value.
+(define (fill-row buf row vocab val)
+  (do ((v 0 (+ v 1)))
+      ((= v vocab))
+    (beam-store-f64 (ffi-pointer buf) (+ (* row vocab) v) val)))
+
+;; Trap-logits tree (V=8, EOS=0, prompt=[1]).
+(define (emit-trap-row row slen last-tok)
+  (cond
+    ((and (= slen 1) (= last-tok 1))
+     (fill-row logits-buf row 8 -6.0)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 8) 2) 1.2)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 8) 3) 0.9))
+    ((= last-tok 2)
+     (fill-row logits-buf row 8 0.0)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 8) 4) 0.2))
+    ((= last-tok 4)
+     (fill-row logits-buf row 8 0.0))
+    ((= last-tok 3)
+     (fill-row logits-buf row 8 -4.0)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 8) 5) 8.0))
+    ((= last-tok 5)
+     (fill-row logits-buf row 8 -4.0)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 8) 6) 8.0))
+    ((= last-tok 6)
+     (fill-row logits-buf row 8 -4.0)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 8) 0) 8.0))
+    (else
+     (fill-row logits-buf row 8 0.0)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 8) 0) 0.5))))
+
+(define (run-trap-beam num-beams)
+  (beam-store-u32 (ffi-pointer prompt-buf) 0 1)
+  (expect-status "trap set-config" 0
+                 (beam-set-config (ffi-pointer cfg-buf)
+                                  num-beams 8 0 4 0 0 1 0.0 1.0))
+  (expect-status "trap init" 0
+                 (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                            (ffi-pointer prompt-buf) 1))
+  (do ()
+      ((state-done?))
+    (let ((na (beam-active-count (ffi-pointer state-buf))))
+      (do ((b 0 (+ b 1)))
+          ((= b na))
+        (let* ((slen (beam-active-len (ffi-pointer state-buf) b))
+               (last-tok (beam-active-token (ffi-pointer state-buf) b (- slen 1))))
+          (emit-trap-row b slen last-tok)))
+      (expect-status "trap step" 0
+                     (beam-step (ffi-pointer state-buf)
+                                (ffi-pointer logits-buf) na))))
+  (expect-status "trap finalize" 0
+                 (beam-finalize (ffi-pointer state-buf) (ffi-pointer hyps-buf)
+                                num-beams (ffi-pointer count-buf))))
+
+;; 1. Trap-logits test: B=1 (greedy) vs B=4 (global optimum).
+(define (test-trap-tree)
+  (run-trap-beam 1)
+  (let ((c1 (beam-load-i64 (ffi-pointer count-buf) 0))
+        (len1 (beam-hyp-seq-len (ffi-pointer hyps-buf) 0))
+        (lp1 (beam-hyp-sum-log-prob (ffi-pointer hyps-buf) 0)))
+    (require-check "trap B=1 count" (= c1 1))
+    (require-check "trap B=1 seq [1,2,4,0]"
+                   (and (= len1 4)
+                        (= (beam-hyp-token (ffi-pointer hyps-buf) 0 0) 1)
+                        (= (beam-hyp-token (ffi-pointer hyps-buf) 0 1) 2)
+                        (= (beam-hyp-token (ffi-pointer hyps-buf) 0 2) 4)
+                        (= (beam-hyp-token (ffi-pointer hyps-buf) 0 3) 0)))
+    (run-trap-beam 4)
+    (let ((c4 (beam-load-i64 (ffi-pointer count-buf) 0))
+          (len4 (beam-hyp-seq-len (ffi-pointer hyps-buf) 0))
+          (lp4 (beam-hyp-sum-log-prob (ffi-pointer hyps-buf) 0)))
+      (require-check "trap B=4 count" (= c4 4))
+      (require-check "trap B=4 seq [1,3,5,6,0]"
+                     (and (= len4 5)
+                          (= (beam-hyp-token (ffi-pointer hyps-buf) 0 0) 1)
+                          (= (beam-hyp-token (ffi-pointer hyps-buf) 0 1) 3)
+                          (= (beam-hyp-token (ffi-pointer hyps-buf) 0 2) 5)
+                          (= (beam-hyp-token (ffi-pointer hyps-buf) 0 3) 6)
+                          (= (beam-hyp-token (ffi-pointer hyps-buf) 0 4) 0)))
+      (require-check "trap B=4 strictly beats B=1 by > 3.5 nats"
+                     (> lp4 (+ lp1 3.5)))
+      (display "BEAM_SEARCH AOT TRAP b1_len=") (display len1)
+      (display " b4_len=") (display len4)
+      (display " gain_gt_3p5=1 PASS") (newline))))
+
+;; Cyclic logits (V=8, EOS=0, prompt=[1,2]).
+(define (emit-cyclic-row row last-tok)
+  (let ((base (* row 8)))
+    (beam-store-f64 (ffi-pointer logits-buf) (+ base 0) -8.0)
+    (beam-store-f64 (ffi-pointer logits-buf) (+ base 1) -1.0)
+    (beam-store-f64 (ffi-pointer logits-buf) (+ base 2) -1.0)
+    (beam-store-f64 (ffi-pointer logits-buf) (+ base 3) -1.0)
+    (beam-store-f64 (ffi-pointer logits-buf) (+ base 4) 2.0)
+    (beam-store-f64 (ffi-pointer logits-buf) (+ base 5) 1.5)
+    (beam-store-f64 (ffi-pointer logits-buf) (+ base 6) 1.0)
+    (beam-store-f64 (ffi-pointer logits-buf) (+ base 7) 0.5)
+    (cond
+      ((= last-tok 1) (beam-store-f64 (ffi-pointer logits-buf) (+ base 2) 6.0))
+      ((= last-tok 2) (beam-store-f64 (ffi-pointer logits-buf) (+ base 3) 6.0))
+      ((= last-tok 3) (beam-store-f64 (ffi-pointer logits-buf) (+ base 1) 6.0))
+      ((= last-tok 4) (beam-store-f64 (ffi-pointer logits-buf) (+ base 1) 5.5))
+      ((= last-tok 5) (beam-store-f64 (ffi-pointer logits-buf) (+ base 2) 5.5))
+      ((= last-tok 6) (beam-store-f64 (ffi-pointer logits-buf) (+ base 3) 5.5))
+      (else (beam-store-f64 (ffi-pointer logits-buf) (+ base 1) 5.0)))))
+
+;; Check whether hypothesis hyp-idx contains any repeated N-gram.
+(define (hyp-ngram-match hyp-idx i j n)
+  (do ((k 0 (+ k 1))
+       (eq 1))
+      ((or (= k n) (= eq 0)) eq)
+    (unless (= (beam-hyp-token (ffi-pointer hyps-buf) hyp-idx (+ i k))
+               (beam-hyp-token (ffi-pointer hyps-buf) hyp-idx (+ j k)))
+      (set! eq 0))))
+
+(define (hyp-has-repeated-ngram hyp-idx n)
+  (let ((slen (beam-hyp-seq-len (ffi-pointer hyps-buf) hyp-idx)))
+    (do ((i 0 (+ i 1))
+         (found 0))
+        ((or (> (+ i n) slen) (= found 1)) found)
+      (do ((j (+ i 1) (+ j 1)))
+          ((or (> (+ j n) slen) (= found 1)))
+        (when (= (hyp-ngram-match hyp-idx i j n) 1)
+          (set! found 1))))))
+
+;; 2. No-repeat N-gram (N=0 loops; N=2 and N=3 have zero repeated N-grams).
+(define (run-cyclic ngram-size)
+  (beam-store-u32 (ffi-pointer prompt-buf) 0 1)
+  (beam-store-u32 (ffi-pointer prompt-buf) 1 2)
+  (expect-status "cyclic set-config" 0
+                 (beam-set-config (ffi-pointer cfg-buf)
+                                  4 8 0 8 8 ngram-size 0 0.0 1.0))
+  (expect-status "cyclic init" 0
+                 (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                            (ffi-pointer prompt-buf) 2))
+  (do ()
+      ((state-done?))
+    (let ((na (beam-active-count (ffi-pointer state-buf))))
+      (do ((b 0 (+ b 1)))
+          ((= b na))
+        (let* ((slen (beam-active-len (ffi-pointer state-buf) b))
+               (last-tok (beam-active-token (ffi-pointer state-buf) b (- slen 1))))
+          (emit-cyclic-row b last-tok)))
+      (expect-status "cyclic step" 0
+                     (beam-step (ffi-pointer state-buf)
+                                (ffi-pointer logits-buf) na))))
+  (expect-status "cyclic finalize" 0
+                 (beam-finalize (ffi-pointer state-buf) (ffi-pointer hyps-buf)
+                                4 (ffi-pointer count-buf))))
+
+(define (test-ngram-blocking)
+  (run-cyclic 0)
+  (require-check "cyclic N=0 repeats 2-grams" (= (hyp-has-repeated-ngram 0 2) 1))
+  (require-check "cyclic N=0 repeats 3-grams" (= (hyp-has-repeated-ngram 0 3) 1))
+
+  (run-cyclic 2)
+  (let ((c2 (beam-load-i64 (ffi-pointer count-buf) 0)))
+    (require-check "cyclic N=2 count=4" (= c2 4))
+    (do ((i 0 (+ i 1)))
+        ((= i c2))
+      (require-check "cyclic N=2 zero repeated bigrams"
+                     (= (hyp-has-repeated-ngram i 2) 0))))
+
+  (run-cyclic 3)
+  (let ((c3 (beam-load-i64 (ffi-pointer count-buf) 0)))
+    (require-check "cyclic N=3 count=4" (= c3 4))
+    (do ((i 0 (+ i 1)))
+        ((= i c3))
+      (require-check "cyclic N=3 zero repeated trigrams"
+                     (= (hyp-has-repeated-ngram i 3) 0))))
+
+  (display "BEAM_SEARCH AOT NGRAM n0_loops=1 n2_repeats=0 n3_repeats=0 PASS")
+  (newline))
+
+;; 3. Min-length EOS suppression + Wu length penalty shift (alpha=0.0 vs 1.5).
+(define (emit-wu-row row slen last-tok)
+  (fill-row logits-buf row 6 -10.0)
+  (cond
+    ((and (= slen 1) (= last-tok 1))
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 6) 2) 0.0)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 6) 3) -0.2))
+    ((= last-tok 2)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 6) 0) 10.0))
+    ((= last-tok 3)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 6) 4) 10.0))
+    ((= last-tok 4)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 6) 5) 10.0))
+    ((= last-tok 5)
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 6) 2) 10.0))
+    (else
+     (beam-store-f64 (ffi-pointer logits-buf) (+ (* row 6) 0) 10.0))))
+
+(define (run-wu alpha)
+  (beam-store-u32 (ffi-pointer prompt-buf) 0 1)
+  (expect-status "wu set-config" 0
+                 (beam-set-config (ffi-pointer cfg-buf)
+                                  4 6 0 5 0 0 0 alpha 1.0))
+  (expect-status "wu init" 0
+                 (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                            (ffi-pointer prompt-buf) 1))
+  (do ()
+      ((state-done?))
+    (let ((na (beam-active-count (ffi-pointer state-buf))))
+      (do ((b 0 (+ b 1)))
+          ((= b na))
+        (let* ((slen (beam-active-len (ffi-pointer state-buf) b))
+               (last-tok (beam-active-token (ffi-pointer state-buf) b (- slen 1))))
+          (emit-wu-row b slen last-tok)))
+      (expect-status "wu step" 0
+                     (beam-step (ffi-pointer state-buf)
+                                (ffi-pointer logits-buf) na))))
+  (expect-status "wu finalize" 0
+                 (beam-finalize (ffi-pointer state-buf) (ffi-pointer hyps-buf)
+                                4 (ffi-pointer count-buf))))
+
+(define (test-minlen-and-wu)
+  ;; Min-length EOS suppression: EOS has logit +10.0 every step, min_new=4 -> gen_len=5.
+  (beam-store-u32 (ffi-pointer prompt-buf) 0 1)
+  (expect-status "minlen set-config" 0
+                 (beam-set-config (ffi-pointer cfg-buf)
+                                  2 4 0 6 4 0 1 0.0 1.0))
+  (expect-status "minlen init" 0
+                 (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                            (ffi-pointer prompt-buf) 1))
+  (do ()
+      ((state-done?))
+    (let ((na (beam-active-count (ffi-pointer state-buf))))
+      (do ((b 0 (+ b 1)))
+          ((= b na))
+        (let ((base (* b 4)))
+          (beam-store-f64 (ffi-pointer logits-buf) (+ base 0) 10.0)
+          (beam-store-f64 (ffi-pointer logits-buf) (+ base 1) -2.0)
+          (beam-store-f64 (ffi-pointer logits-buf) (+ base 2) 2.0)
+          (beam-store-f64 (ffi-pointer logits-buf) (+ base 3) 1.0)))
+      (expect-status "minlen step" 0
+                     (beam-step (ffi-pointer state-buf)
+                                (ffi-pointer logits-buf) na))))
+  (expect-status "minlen finalize" 0
+                 (beam-finalize (ffi-pointer state-buf) (ffi-pointer hyps-buf)
+                                2 (ffi-pointer count-buf)))
+  (let ((ml-gen (beam-hyp-gen-len (ffi-pointer hyps-buf) 0))
+        (ml-fin (beam-hyp-finished (ffi-pointer hyps-buf) 0)))
+    (require-check "minlen gen_len==5 and finished==1"
+                   (and (= ml-gen 5) (= ml-fin 1)))
+
+    ;; Wu length penalty ranking shift: alpha=0.0 -> short (gen_len=2);
+    ;; alpha=1.5 -> long (gen_len=5).
+    (run-wu 0.0)
+    (let ((a0-gen (beam-hyp-gen-len (ffi-pointer hyps-buf) 0))
+          (a0-tok1 (beam-hyp-token (ffi-pointer hyps-buf) 0 1)))
+      (require-check "wu alpha=0.0 selects short [1,2,0]"
+                     (and (= a0-gen 2) (= a0-tok1 2)))
+      (run-wu 1.5)
+      (let ((a15-gen (beam-hyp-gen-len (ffi-pointer hyps-buf) 0))
+            (a15-tok1 (beam-hyp-token (ffi-pointer hyps-buf) 0 1)))
+        (require-check "wu alpha=1.5 selects long [1,3,4,5,2,0]"
+                       (and (= a15-gen 5) (= a15-tok1 3)))
+        (display "BEAM_SEARCH AOT MINLEN_WU minlen_gen=") (display ml-gen)
+        (display " a0_gen=") (display a0-gen)
+        (display " a15_gen=") (display a15-gen)
+        (display " PASS") (newline)))))
+
+;; 4. Negative fail-closed rejections + sentinel preservation.
+(define (test-negative-cases)
+  (let ((sentinel 777.25)
+        (nan-v (beam-nan-f64))
+        (pinf-v (beam-pos-inf-f64))
+        (ninf-v (beam-neg-inf-f64)))
+    (fill-row proc-out-buf 0 6 sentinel)
+
+    ;; All-masked logits -> ET_BEAM_ERR_NO_VALID_TOKENS (-3)
+    (fill-row proc-in-buf 0 6 ninf-v)
+    (expect-status "reject all-masked log_softmax" -3
+                   (beam-log-softmax 6 (ffi-pointer proc-in-buf)
+                                     (ffi-pointer proc-out-buf)))
+
+    ;; Non-finite logits (NaN and +Inf) -> ET_BEAM_ERR_NONFINITE (-2)
+    (fill-row proc-in-buf 0 6 1.0)
+    (beam-store-f64 (ffi-pointer proc-in-buf) 2 nan-v)
+    (expect-status "reject NaN logits" -2
+                   (beam-log-softmax 6 (ffi-pointer proc-in-buf)
+                                     (ffi-pointer proc-out-buf)))
+    (beam-store-f64 (ffi-pointer proc-in-buf) 2 pinf-v)
+    (expect-status "reject +Inf logits" -2
+                   (beam-apply-min-length 0 2 0 6 (ffi-pointer proc-in-buf)
+                                          (ffi-pointer proc-out-buf)))
+
+    ;; Partial aliasing -> ET_BEAM_ERR_ALIASING (-4)
+    (fill-row proc-in-buf 0 8 1.0)
+    (expect-status "reject partial aliasing" -4
+                   (beam-log-softmax 4 (ffi-pointer proc-in-buf)
+                                     (ptr-add proc-in-buf 8)))
+
+    ;; Misaligned output pointer -> ET_BEAM_ERR_INVALID_ARG (-1)
+    (expect-status "reject misaligned out" -1
+                   (beam-log-softmax 4 (ffi-pointer proc-in-buf)
+                                     (ptr-add proc-out-buf 1)))
+
+    ;; Invalid B=0 (-1), B=9 (-7), V=1 (-1), ngram=1 (-1), rep<1 (-1), min>max (-1)
+    (beam-store-u32 (ffi-pointer prompt-buf) 0 1)
+    (expect-status "set B=0" 0
+                   (beam-set-config (ffi-pointer cfg-buf) 0 8 0 4 0 0 1 0.0 1.0))
+    (expect-status "reject B=0" -1
+                   (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                              (ffi-pointer prompt-buf) 1))
+
+    (expect-status "set B=9" 0
+                   (beam-set-config (ffi-pointer cfg-buf) 9 8 0 4 0 0 1 0.0 1.0))
+    (expect-status "reject B=9" -7
+                   (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                              (ffi-pointer prompt-buf) 1))
+
+    (expect-status "set V=1" 0
+                   (beam-set-config (ffi-pointer cfg-buf) 2 1 0 4 0 0 1 0.0 1.0))
+    (expect-status "reject V=1" -1
+                   (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                              (ffi-pointer prompt-buf) 1))
+
+    (expect-status "set ngram=1" 0
+                   (beam-set-config (ffi-pointer cfg-buf) 2 8 0 4 0 1 1 0.0 1.0))
+    (expect-status "reject ngram=1" -1
+                   (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                              (ffi-pointer prompt-buf) 1))
+
+    (expect-status "set rep<1" 0
+                   (beam-set-config (ffi-pointer cfg-buf) 2 8 0 4 0 0 1 0.0 0.5))
+    (expect-status "reject rep<1" -1
+                   (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                              (ffi-pointer prompt-buf) 1))
+
+    (expect-status "set min>max" 0
+                   (beam-set-config (ffi-pointer cfg-buf) 2 8 0 3 4 0 1 0.0 1.0))
+    (expect-status "reject min>max" -1
+                   (beam-init (ffi-pointer state-buf) (ffi-pointer cfg-buf)
+                              (ffi-pointer prompt-buf) 1))
+
+    ;; Verify sentinel output untouched after all rejections.
+    (do ((i 0 (+ i 1)))
+        ((= i 6))
+      (require-check "sentinel preserved"
+                     (= (beam-load-f64 (ffi-pointer proc-out-buf) i) sentinel)))
+
+    (display "BEAM_SEARCH AOT NEGATIVE PASS") (newline)))
+
+(test-trap-tree)
+(test-ngram-blocking)
+(test-minlen-and-wu)
+(test-negative-cases)
+(display "BEAM_SEARCH AOT SUMMARY PASS") (newline)
+
+(release proc-out-buf)
+(release proc-in-buf)
+(release logits-buf)
+(release prompt-buf)
+(release count-buf)
+(release hyps-buf)
+(release state-buf)
+(release cfg-buf)

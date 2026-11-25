@@ -1,0 +1,288 @@
+;;; Compiled Eshkol AOT Constrained Decoding / Grammar-Guided Logit Masking Driver.
+;;; Compiles multi-field JSON object schema {"answer":<enum>,"score":<int>,"ok":<bool>}
+;;; and exact literal-choices enum grammar, runs greedy & adversarial-logit decoding
+;;; loops in Eshkol, verifies 100% schema adherence + EOS termination + artifact
+;;; SHA-256 roundtrip + negative rejections (dead-end DFA, illegal advance, NaN/Inf).
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+(extern i32 put-byte i32 :real putchar)
+
+(extern i32 cd-create-json ptr :real et_cd_aot_create_json_schema)
+(extern i32 cd-create-enum ptr :real et_cd_aot_create_enum_grammar)
+(extern void cd-destroy ptr :real et_cd_aot_destroy)
+
+(extern i64 cd-vocab-size ptr :real et_cd_aot_vocab_size)
+(extern i64 cd-eos-id ptr :real et_cd_aot_eos_token_id)
+(extern i64 cd-num-states ptr :real et_cd_aot_num_states)
+(extern i64 cd-live-states ptr :real et_cd_aot_live_states)
+(extern i64 cd-is-finished ptr :real et_cd_aot_is_finished)
+(extern i64 cd-find-tag ptr i64 :real et_cd_aot_find_token_by_tag)
+
+(extern i32 cd-reset ptr :real et_cd_aot_reset)
+(extern i32 cd-set-logit ptr i64 f64 :real et_cd_aot_set_logit)
+(extern i32 cd-apply-mask ptr :real et_cd_aot_apply_mask)
+(extern i64 cd-masked-allowed ptr i64 :real et_cd_aot_masked_is_allowed)
+(extern f64 cd-get-masked ptr i64 :real et_cd_aot_get_masked_logit)
+(extern i32 cd-advance ptr i64 :real et_cd_aot_advance_token)
+
+(extern i64 cd-out-len ptr :real et_cd_aot_output_len)
+(extern i64 cd-out-byte ptr i64 :real et_cd_aot_output_byte)
+(extern i64 cd-out-accepted ptr :real et_cd_aot_output_accepted_by_dfa)
+
+(extern i32 cd-verify-artifact ptr :real et_cd_aot_verify_artifact_roundtrip)
+(extern i64 cd-artifact-sha-word ptr i64 :real et_cd_aot_artifact_sha256_word)
+
+(extern i32 cd-check-dead-end :real et_cd_aot_check_dead_end_dfa)
+(extern i32 cd-check-illegal ptr i64 :real et_cd_aot_check_illegal_advance)
+(extern i32 cd-check-nan ptr :real et_cd_aot_check_nan_logit_preserves_output)
+(extern i32 cd-check-inf ptr :real et_cd_aot_check_inf_logit_preserves_output)
+(extern i32 cd-check-dead-mask ptr :real et_cd_aot_check_dead_state_mask)
+(extern i32 cd-check-tamper ptr :real et_cd_aot_check_tampered_artifact)
+
+;; Reify raw addresses at extern call sites on the pinned LLVM backend.
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+;; Status constants from constrained_decode_abi.h.
+(define status-ok 0)
+(define err-empty-language -3)
+(define err-illegal-token -5)
+(define err-nonfinite -6)
+(define err-state -7)
+(define err-checksum -13)
+
+;; Multi-byte vocabulary tag IDs from constrained_decode_eshkol_bridge.c.
+(define tag-eos 0)
+(define tag-open-answer 1)   ;; "{\"answer\":\""
+(define tag-yes 2)           ;; "yes"
+(define tag-no 3)            ;; "no"
+(define tag-maybe 4)         ;; "maybe"
+(define tag-score-key 5)     ;; "\",\"score\":"
+(define tag-ok-key 6)        ;; ",\"ok\":"
+(define tag-true 7)          ;; "true"
+(define tag-false 8)         ;; "false"
+(define tag-42 9)            ;; "42"
+(define tag-neg42 10)        ;; "-42"
+(define tag-invalid 11)      ;; "INVALID{{"
+(define tag-broken 12)       ;; "\"\"broken"
+(define tag-007 13)          ;; "007"
+(define tag-null 14)         ;; "null"
+(define tag-true-close 15)   ;; "true}"
+(define tag-false-close 16)  ;; "false}"
+
+(define (require-check label ok)
+  (unless ok
+    (display "CD AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "CD AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (create-json-ctx)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "create-json" status-ok (cd-create-json (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null json ctx" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (create-enum-ctx)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "create-enum" status-ok (cd-create-enum (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null enum ctx" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (clear-logits ctx base-val)
+  (let ((v (cd-vocab-size (ffi-pointer ctx))))
+    (do ((t 0 (+ t 1)))
+        ((= t v))
+      (expect-status "set-logit" status-ok
+                     (cd-set-logit (ffi-pointer ctx) t base-val)))))
+
+(define (boost-tag ctx tag val)
+  (let ((tid (cd-find-tag (ffi-pointer ctx) tag)))
+    (require-check "valid tag" (>= tid 0))
+    (expect-status "boost-tag" status-ok
+                   (cd-set-logit (ffi-pointer ctx) tid val))))
+
+(define (pick-argmax-allowed ctx)
+  (let ((v (cd-vocab-size (ffi-pointer ctx)))
+        (best-id -1)
+        (best-val -1000000000.0))
+    (do ((t 0 (+ t 1)))
+        ((= t v) best-id)
+      (when (= (cd-masked-allowed (ffi-pointer ctx) t) 1)
+        (let ((val (cd-get-masked (ffi-pointer ctx) t)))
+          (when (or (= best-id -1) (> val best-val))
+            (set! best-id t)
+            (set! best-val val)))))))
+
+(define (print-output-bytes ctx)
+  (let ((n (cd-out-len (ffi-pointer ctx))))
+    (do ((i 0 (+ i 1)))
+        ((= i n))
+      (put-byte (cd-out-byte (ffi-pointer ctx) i)))))
+
+(define (print-digest-line tag ctx)
+  (display tag)
+  (do ((i 0 (+ i 1)))
+      ((= i 4))
+    (display " ")
+    (display (cd-artifact-sha-word (ffi-pointer ctx) i)))
+  (newline))
+
+;; Run a constrained generation loop with configurable preference + adversarial logits.
+;; mode 1: greedy clean preferences -> {"answer":"yes","score":42,"ok":true}
+;; mode 2: adversarial invalid logits (+100 on INVALID{{, +99 on ""broken, +98 on 007,
+;;         +97 on null) -> proves constrained masking blocks every invalid token and
+;;         produces {"answer":"maybe","score":-42,"ok":false}
+;; mode 3: byte-only fallback preference (disfavoring multi-byte tokens) under
+;;         adversarial spikes -> {"answer":"no","score":0,"ok":true}
+(define (run-json-scenario ctx mode label)
+  (expect-status "reset" status-ok (cd-reset (ffi-pointer ctx)))
+  (require-check "reset invalidates mask"
+                 (= (cd-masked-allowed (ffi-pointer ctx) 0) 0))
+  (let ((steps 0)
+        (adv-blocked 0)
+        (invalid-tid (cd-find-tag (ffi-pointer ctx) tag-invalid))
+        (max-steps 64))
+    (do ()
+        ((or (= (cd-is-finished (ptr-add ctx 0)) 1) (>= steps max-steps)))
+      (clear-logits ctx -5.0)
+      (cond
+        ((= mode 1)
+         (boost-tag ctx tag-open-answer 10.0)
+         (boost-tag ctx tag-yes 9.0)
+         (boost-tag ctx tag-score-key 9.0)
+         (boost-tag ctx tag-42 9.0)
+         (boost-tag ctx tag-ok-key 9.0)
+         (boost-tag ctx tag-true-close 9.0)
+         (boost-tag ctx tag-eos 8.0))
+        ((= mode 2)
+         ;; Huge adversarial logits on invalid tokens: unconstrained argmax ALWAYS fails!
+         (boost-tag ctx tag-invalid 100.0)
+         (boost-tag ctx tag-broken 99.0)
+         (boost-tag ctx tag-null 97.0)
+         ;; At step 3 (start of integer field), also spike "007" (illegal leading zero!).
+         (when (= steps 3)
+           (boost-tag ctx tag-007 98.0))
+         ;; Secondary preferences among valid tokens.
+         (boost-tag ctx tag-open-answer 12.0)
+         (boost-tag ctx tag-maybe 11.0)
+         (boost-tag ctx tag-score-key 11.0)
+         (boost-tag ctx tag-neg42 11.0)
+         (boost-tag ctx tag-ok-key 12.0)
+         (boost-tag ctx tag-false-close 11.0)
+         (boost-tag ctx tag-eos 10.0))
+        (else
+         ;; Adversarial spikes + single-byte-only preferences (multi-byte tokens at -10).
+         (clear-logits ctx 1.0)
+         (do ((tag 1 (+ tag 1)))
+             ((> tag 16))
+           (boost-tag ctx tag -10.0))
+         (boost-tag ctx tag-invalid 120.0)
+         (boost-tag ctx tag-broken 115.0)
+         ;; Prefer 'n' (110+100=210), 'o' (111+100=211), '0' (48+100=148), 't' (116+100=216), EOS.
+         (boost-tag ctx 210 5.0)
+         (boost-tag ctx 211 5.0)
+         (boost-tag ctx 148 5.0)
+         (boost-tag ctx 216 5.0)
+         (boost-tag ctx tag-eos 20.0)))
+
+      (expect-status "apply-mask" status-ok (cd-apply-mask (ffi-pointer ctx)))
+      ;; Verify adversarial token INVALID{{ is ALWAYS masked out!
+      (require-check "INVALID{{ must never be allowed"
+                     (= (cd-masked-allowed (ffi-pointer ctx) invalid-tid) 0))
+      (when (or (= mode 2) (= mode 3))
+        (set! adv-blocked (+ adv-blocked 1)))
+
+      (let ((chosen (pick-argmax-allowed ctx)))
+        (require-check "argmax found allowed token" (>= chosen 0))
+        (expect-status "advance-token" status-ok
+                       (cd-advance (ffi-pointer ctx) chosen))
+        (require-check "advance invalidates mask"
+                       (= (cd-masked-allowed (ffi-pointer ctx) chosen) 0))
+        (set! steps (+ steps 1))))
+
+    (require-check "terminated at EOS" (= (cd-is-finished (ffi-pointer ctx)) 1))
+    (require-check "output accepted by DFA"
+                   (= (cd-out-accepted (ffi-pointer ctx)) 1))
+    (display "CD AOT JSON ") (display label)
+    (display " steps=") (display steps)
+    (display " adv_blocked=") (display adv-blocked)
+    (display " payload=")
+    (print-output-bytes ctx)
+    (newline)))
+
+(define (run-enum-scenario)
+  (let ((ctx (create-enum-ctx)))
+    (expect-status "enum-reset" status-ok (cd-reset (ffi-pointer ctx)))
+    (let ((steps 0)
+          (invalid-tid (cd-find-tag (ffi-pointer ctx) tag-invalid)))
+      (do ()
+          ((or (= (cd-is-finished (ptr-add ctx 0)) 1) (>= steps 16)))
+        (clear-logits ctx -5.0)
+        (boost-tag ctx tag-invalid 100.0)
+        (boost-tag ctx tag-broken 99.0)
+        (boost-tag ctx tag-maybe 15.0)
+        (boost-tag ctx tag-yes 10.0)
+        (boost-tag ctx tag-eos 20.0)
+        (expect-status "enum-mask" status-ok (cd-apply-mask (ffi-pointer ctx)))
+        (require-check "enum blocks INVALID{{"
+                       (= (cd-masked-allowed (ffi-pointer ctx) invalid-tid) 0))
+        (let ((chosen (pick-argmax-allowed ctx)))
+          (require-check "enum argmax" (>= chosen 0))
+          (expect-status "enum-advance" status-ok
+                         (cd-advance (ffi-pointer ctx) chosen))
+          (set! steps (+ steps 1))))
+      (require-check "enum finished" (= (cd-is-finished (ffi-pointer ctx)) 1))
+      (require-check "enum accepted" (= (cd-out-accepted (ffi-pointer ctx)) 1))
+      (display "CD AOT ENUM steps=") (display steps) (display " payload=")
+      (print-output-bytes ctx)
+      (newline)
+      (cd-destroy (ffi-pointer ctx)))))
+
+(define (run-negative-checks ctx)
+  (expect-status "reset-neg" status-ok (cd-reset (ffi-pointer ctx)))
+  (expect-status "dead-end-dfa" err-empty-language (cd-check-dead-end))
+  (expect-status "illegal-invalid-tok" err-illegal-token
+                 (cd-check-illegal (ffi-pointer ctx)
+                                   (cd-find-tag (ffi-pointer ctx) tag-invalid)))
+  (expect-status "illegal-premature-eos" err-illegal-token
+                 (cd-check-illegal (ffi-pointer ctx)
+                                   (cd-eos-id (ffi-pointer ctx))))
+  (expect-status "nan-logit-preserves" err-nonfinite
+                 (cd-check-nan (ffi-pointer ctx)))
+  (expect-status "inf-logit-preserves" err-nonfinite
+                 (cd-check-inf (ffi-pointer ctx)))
+  (expect-status "dead-state-mask" err-state
+                 (cd-check-dead-mask (ffi-pointer ctx)))
+  (expect-status "tampered-artifact" err-checksum
+                 (cd-check-tamper (ffi-pointer ctx)))
+  (display "CD AOT NEGATIVE PASS") (newline))
+
+;; Main entry point.
+(let ((ctx (create-json-ctx)))
+  (require-check "all json states live"
+                 (= (cd-num-states (ffi-pointer ctx))
+                    (cd-live-states (ffi-pointer ctx))))
+  (expect-status "artifact-roundtrip" status-ok
+                 (cd-verify-artifact (ffi-pointer ctx)))
+  (print-digest-line "CD AOT ARTIFACT_SHA256" ctx)
+  (run-json-scenario ctx 1 "greedy")
+  (run-json-scenario ctx 2 "adversarial_multi")
+  (run-json-scenario ctx 3 "adversarial_byte")
+  (run-enum-scenario)
+  (run-negative-checks ctx)
+  (cd-destroy (ffi-pointer ctx)))

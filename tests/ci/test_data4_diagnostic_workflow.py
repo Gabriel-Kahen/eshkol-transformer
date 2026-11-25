@@ -18,7 +18,7 @@ class Data4DiagnosticWorkflowTests(unittest.TestCase):
         self.assertIn("      data4_expected_tree:\n", ci)
         entries = jobs(ci)
         self.assertEqual(field(entries["data4-diagnostic"], 4, "if"),
-                         "${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic && !inputs.attention_supported_diagnostic }}")
+                         "${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic && !inputs.attention_supported_diagnostic && !inputs.wave5_tooling_diagnostic }}")
         self.assertIn("      expected_head: ${{ inputs.data4_expected_head }}\n",
                       entries["data4-diagnostic"])
         self.assertIn("      expected_tree: ${{ inputs.data4_expected_tree }}\n",
