@@ -1,7 +1,21 @@
-# DATA4-B installed report slice
+# DATA4 installed report
 
-Status: command, reader, and focused diagnostic source/tests independently
-reviewed. [Supported installed diagnostic 43935284566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43935284566)
+The DATA4-C manifest binding passed the current-main local installed gate at
+`3d0c4e31`/tree `ed76cd95` in the pinned Ubuntu 22.04/LLVM 21.1.8
+container. The gate took 14:43.79 with 6,110,504 KiB peak RSS and zero swaps.
+All 42 source checks and all 13 installed tests passed. The source closure,
+native source closure, public strings, package exports, and undefined symbol
+manifests matched byte-for-byte; the package's defined-symbol check also
+passed. The retained local receipt at
+`/home/gabe/.codex/evidence/eshkol-transformer/data4-c-current-main-3d0c4e31/installed/SHA256SUMS`
+verifies, including its clean exact head/tree and package scratch artifacts.
+Independent source-and-test review found no blocking defect. Hosted validation
+and admission remain pending. The earlier clean `a5f9b38f` gate took 13:20.06
+with 5,791,748 KiB peak RSS and passed the same 42 source and 13 installed
+checks.
+
+The earlier DATA4-B command, reader, and focused diagnostic source/tests
+were independently reviewed. [Supported installed diagnostic 43935284566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43935284566)
 passed at `2e656717`/tree `c99df006`: 32 DATA4 source checks, the exact CLI3
 package/manifest gate, and all 9 installed command tests. The downloaded outer
 and inner SHA256SUMS verify. The temporary binary was hashed on the runner but
@@ -30,16 +44,19 @@ are required canonical unsigned decimal integers with
 existing build-only DATA4 prepare/write seam in CLI3's trusted T2/D1 aggregate.
 It leaves `corpus build` and the installed public library API unchanged.
 
-On success, `prepare` writes DATA4-A's exact version-1 report bytes to
-`DIRECTORY/data4-report.tsv` and prints the existing D1 corpus summary JSON.
-The report is written after D1's manifest commit through the already linked C1
-checked no-replace atomic writer. A sidecar observed by `file-exists?` is
+On success, `prepare` writes a [version 2.0 report](DATA4_CORPUS_SLICE.md)
+to `DIRECTORY/data4-report.tsv` and prints the existing D1 corpus summary JSON.
+After D1 commits, CLI3 reads the complete `DIRECTORY/manifest.etm` through the
+checked no-follow reader with a 1 MiB limit. It places
+`manifest-sha256<TAB><64 lowercase hex>` immediately after `total-tokens`.
+The report checksum covers that field. The existing C1 checked no-replace
+atomic writer publishes the report. A sidecar observed by `file-exists?` is
 rejected before D1 publication. That Eshkol predicate may not observe a dangling
 symlink; C1's no-replace publication still rejects the symlink but may do so
-after D1 commits. A pre-rename report write failure returns CLI3 I/O status 13
-with empty stdout and says `corpus published; report not published by this
-invocation`. For an ordinary write failure with no preexisting path, the sidecar
-is absent; a conflicting preexisting path may remain. A post-rename C1
+after D1 commits. A checked manifest read failure, including a manifest over
+1 MiB, or a pre-rename report write failure returns CLI3 I/O status 13 with
+empty stdout and says `corpus published; report not published by this invocation`.
+A conflicting preexisting sidecar may remain. A post-rename C1
 directory sync/close failure returns status 13 with empty stdout and says
 `corpus published; report visible with uncertain durability`. The D1 directory
 and sidecar are separate publication units. D1 has no fsync guarantee; no joint
@@ -47,20 +64,29 @@ atomicity or crash durability is claimed. A crash between D1 commit and sidecar
 publication can leave a valid corpus without its report.
 
 `report-validate` fully validates D1 under CLI3's 1 MiB manifest/shard and
-65,536 token limits, then reads at most 32,768 report bytes through the checked
-no-follow file reader. It accepts only canonical printable ASCII, tab and LF,
-with exact field order/count, decimal spellings, source-ID grammar and
+65,536 token limits, then reads the manifest and at most 32,768 report bytes
+through the checked no-follow file reader. It accepts canonical printable
+ASCII, tab and LF, with exact field order/count, decimal spellings, source-ID grammar and
 uniqueness, ordinal sequence, filter/duplicate status consistency, bounded
 counts and byte totals, exact SHA-256 checksum, and tokenizer fingerprint,
 vocabulary, shard limit/count and token count equal to the D1 summary. It
-returns the ordinary D1 summary JSON. It does not re-read raw source files,
-reconstruct document boundaries, or bind report bytes to a particular D1
-manifest digest. A report swapped between different corpora with the same
-aggregate D1 summary may validate. The negative gate requires a mismatched
-summary swap to fail; manifest-byte binding remains a later reviewed contract.
+requires the report's manifest digest to match SHA-256 of every byte in the
+manifest and returns the ordinary D1 summary JSON. The trusted directory must
+stay stable across validation and the subsequent reads. Validation uses the
+D1 artifacts and report only. Raw source revalidation and document boundary
+reconstruction are outside this contract.
+
+A missing, malformed, or mismatched manifest digest produces `corrupt-data`
+with exit 12, including a validly checksummed report swapped between corpora
+whose D1 summaries are identical. The reader accepts version 2.0. Legacy
+version 1.0 and other unsupported versions produce `version-mismatch` with
+exit 11. For a v1.0 report, rerun `corpus prepare` with the original inputs
+and options in a fresh directory to produce the bound report. There is no
+in-place upgrade.
 
 The required CLI3 production gate exercises installed positive and malformed,
-tampered, mismatched-summary, usage, and pre/post-rename C1 failure cases. The
+tampered, same-summary swap, legacy-version, usage, post-commit manifest-read,
+and pre/post-rename C1 failure cases. The
 DATA4 source gate exercises the pure report reader with generated report bytes.
 The CLI3 package source closure adds the two DATA4 private Eshkol files and a
 successor-only DATA4 command extension. The predecessor CLI3 source and formatter
