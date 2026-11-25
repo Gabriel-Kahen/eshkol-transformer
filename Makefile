@@ -24,7 +24,7 @@ SHELL := /usr/bin/bash
 	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e3-native-frame \
 	test-e3-native-parity test-e3-private-package test-e3-private-runtime \
 	test-e1 test-e1b \
-	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
+	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-mp4 test-n2 test-n3k \
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
@@ -262,6 +262,9 @@ test-ci-data4-after-build:
 
 test-ci-topology:
 	/usr/bin/bash scripts/check-ci-topology.sh
+
+test-mp4:
+	/usr/bin/bash scripts/test-mp4.sh
 
 test-a0: build
 	/usr/bin/bash scripts/check_a0_api_contract.sh

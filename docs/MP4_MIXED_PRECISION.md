@@ -117,6 +117,11 @@ finite round trips and rejection of every infinity and NaN during widening.
 An independent Python test used exact rational rounding and standard-library
 binary16 conversions to cross-check 55,690 casts through native K1 dispatch.
 
+The explicit opt-in Make entry is
+`CC=clang-21 CXX=clang++-21 MP4_ASAN_DETECT_LEAKS=1 make test-mp4`;
+it runs the same focused gate and is outside the default `make test`,
+shared full-coverage matrix, and required CI evidence inventory.
+
 The momentum-training smoke uses narrow storage for the working weights and
 scaled gradients, and f32 for the master weights and optimizer state. Each
 format accepts 12 updates and skips one injected overflow with master weights
