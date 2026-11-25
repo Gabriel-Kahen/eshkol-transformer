@@ -66,6 +66,24 @@ cp "${scratch}/first.c2" "${scratch}/in-place.c2"
   --checkpoint "${scratch}/in-place.c2" --resume "${scratch}/in-place.c2" \
   --max-updates 1 --force >"${scratch}/in-place.json"
 cmp "${scratch}/in-place.c2" "${scratch}/uninterrupted.c2"
+"${binary}" pretrain --config "${scratch}/config.json" \
+  --tokenizer "${scratch}/byte.t1" --train-corpus "${scratch}/train" \
+  --checkpoint "${scratch}/four.c2" --max-updates 4 \
+  >"${scratch}/four.json"
+"${binary}" pretrain --config "${scratch}/config.json" \
+  --tokenizer "${scratch}/byte.t1" --train-corpus "${scratch}/train" \
+  --checkpoint "${scratch}/resumed-three.c2" --resume "${scratch}/first.c2" \
+  --max-updates 3 >"${scratch}/resumed-three.json"
+"${binary}" pretrain --config "${scratch}/config.json" \
+  --tokenizer "${scratch}/byte.t1" --train-corpus "${scratch}/train" \
+  --checkpoint "${scratch}/chain-three.c2" --resume "${scratch}/resumed.c2" \
+  --max-updates 1 >"${scratch}/chain-three.json"
+"${binary}" pretrain --config "${scratch}/config.json" \
+  --tokenizer "${scratch}/byte.t1" --train-corpus "${scratch}/train" \
+  --checkpoint "${scratch}/chain-four.c2" --resume "${scratch}/chain-three.c2" \
+  --max-updates 1 >"${scratch}/chain-four.json"
+cmp "${scratch}/four.c2" "${scratch}/resumed-three.c2"
+cmp "${scratch}/four.c2" "${scratch}/chain-four.c2"
 
 python3 - "${scratch}" <<'PY'
 import json
@@ -99,7 +117,26 @@ weighted = (4 * f32(first['loss_f32_bits']) +
 expected_loss_bits = struct.pack('>f', weighted).hex()
 assert whole['loss_f32_bits'] == expected_loss_bits
 assert evaluation['tokens'] > 0 and evaluation['batches'] > 0
-for record in (first, resumed, whole, evaluation):
+records = [first, resumed, whole, evaluation]
+for name, updates, tokens, epochs, total_tokens, total_updates, total_epochs in (
+        ('first', 1, 4, 0, 4, 1, 0),
+        ('resumed', 1, 3, 1, 7, 2, 1),
+        ('uninterrupted', 2, 7, 1, 7, 2, 1),
+        ('in-place', 1, 3, 1, 7, 2, 1),
+        ('chain-three', 1, 3, 0, 10, 3, 1),
+        ('chain-four', 1, 4, 1, 14, 4, 2),
+        ('resumed-three', 3, 10, 2, 14, 4, 2),
+        ('four', 4, 14, 2, 14, 4, 2)):
+    record = json.loads((root / f'{name}.json').read_text())
+    records.append(record)
+    assert record['artifact'] == 'checkpoint', name
+    assert (record['updates'], record['tokens'], record['epochs']) == (
+        updates, tokens, epochs), name
+    # C2 1.0 header offsets 184, 192, 200: cumulative counters.
+    checkpoint = (root / f'{name}.c2').read_bytes()
+    assert struct.unpack_from('<QQQ', checkpoint, 184) == (
+        total_tokens, total_updates, total_epochs), name
+for record in records:
     for key in ('loss_f32_bits', 'mask_weight_f32_bits'):
         assert re.fullmatch(r'[0-9a-f]{8}', record[key]), (key, record[key])
 PY
