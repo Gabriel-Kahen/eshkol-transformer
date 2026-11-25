@@ -215,6 +215,38 @@ run_json prepare "${cli}" corpus prepare \
 run_json report-validate "${cli}" corpus report-validate \
   --input-directory "${cli_root}/prepared-train"
 cmp "${scratch}/prepare.json" "${scratch}/report-validate.json"
+python3 - "${cli_root}/prepared-train" <<'PYREPORT'
+from pathlib import Path
+import hashlib
+import sys
+corpus = Path(sys.argv[1])
+report = (corpus / 'data4-report.tsv').read_bytes()
+prefix, checksum = report.rsplit(b'checksum\t', 1)
+assert checksum == hashlib.sha256(prefix).hexdigest().encode() + b'\n'
+lines = prefix.splitlines()
+assert lines[1] == b'version\t2\t0'
+assert lines[15] == (b'manifest-sha256\t' + hashlib.sha256(
+    (corpus / 'manifest.etm').read_bytes()).hexdigest().encode())
+PYREPORT
+printf '\032\033\034\035\036\037' >"${cli_root}/other-train.txt"
+mkdir "${cli_root}/other-prepared-train"
+run_json other-prepare "${cli}" corpus prepare \
+  --tokenizer "${cli_root}/byte.t1" --source "train=${cli_root}/other-train.txt" \
+  --minimum-bytes 6 --maximum-bytes 6 \
+  --output-directory "${cli_root}/other-prepared-train" --shard-token-limit 4
+cmp "${scratch}/prepare.json" "${scratch}/other-prepare.json"
+! cmp -s "${cli_root}/prepared-train/manifest.etm" \
+  "${cli_root}/other-prepared-train/manifest.etm" ||
+  die 'DOC5 same-summary corpora unexpectedly have identical manifest bytes'
+cp "${cli_root}/prepared-train/data4-report.tsv" \
+  "${cli_root}/other-prepared-train/data4-report.tsv"
+status=0
+"${cli}" corpus report-validate \
+  --input-directory "${cli_root}/other-prepared-train" \
+  >"${scratch}/swapped-report.stdout" 2>"${scratch}/swapped-report.stderr" || status=$?
+[[ ${status} == 12 && ! -s "${scratch}/swapped-report.stdout" ]] &&
+  grep -q 'category="corrupt-data"' "${scratch}/swapped-report.stderr" ||
+  die 'DOC5 same-summary report swap was not rejected as corrupt-data'
 run_json pretrain "${cli}" pretrain --config "${cli_root}/config.json" \
   --tokenizer "${cli_root}/byte.t1" --train-corpus "${cli_root}/prepared-train" \
   --checkpoint "${cli_root}/prepared-first.c2" --max-updates 1

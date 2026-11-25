@@ -76,13 +76,15 @@ mkdir "$scratch/train" "$scratch/heldout"
   --prompt-hex 41 --sampling greedy --seed 1729
 ```
 
-The prepared training corpus has six byte tokens in two D1 shards. The v1.0
-`data4-report.tsv` records source selection and an aggregate checksum.
-`report-validate` checks the report and D1 summary, but does not bind the
-report to the manifest digest; a same-summary report swap can pass. DATA4
-publishes the D1 corpus and report as separate units, so an interrupted
-publication can leave a corpus without its sidecar. Preserve original inputs
-if the report needs regeneration.
+The prepared training corpus has six byte tokens in two D1 shards. The v2.0
+`data4-report.tsv` records source selection, the SHA-256 of every byte in
+`manifest.etm`, and a checksum over the report prefix. `report-validate`
+checks the report against the validated D1 summary and exact manifest bytes;
+even a report from another corpus with the same summary is rejected. Legacy
+v1.0 reports are rejected with `version-mismatch`. DATA4 publishes the D1
+corpus and report as separate units, so an interrupted publication can leave
+a corpus without its sidecar. Preserve the original inputs and options to
+regenerate a v2.0 report in a fresh directory if needed.
 
 The C2 checkpoint holds fixed-profile CPU-f32 training state; it is distinct
 from the C1 logical-parameter format used by IO5. This run establishes one

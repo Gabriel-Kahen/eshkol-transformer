@@ -1,7 +1,8 @@
 # Eshkol Transformer API reference
 
-Source baseline `8d185344f3abaacb2fdd5ff75743f0ff02a92ab2`. Paths and commands
-are relative to the checkout root. Eshkol facades need the corresponding
+Integration baseline `8d185344f3abaacb2fdd5ff75743f0ff02a92ab2`, with
+the DATA4-C and DOC5 candidate changes. Paths and commands are relative to
+the checkout root. Eshkol facades need the corresponding
 linked package. Native providers advertise supported operations and shapes
 through K1. Check the capability before dispatch and follow each contract's
 ownership and release rules.
@@ -62,7 +63,7 @@ or shell command for the indicated component.
 | Component | Source | Key symbols or commands | Gate | Scope |
 | --- | --- | --- | --- | --- |
 | DATA4 | `internal/data4/lib/data4_corpus.esk` | `data4-corpus-prepare`, `data4-corpus-write!` | `make test-ci-data4-after-build`, `bash scripts/test-data4-source.sh`, `bash scripts/test-data4-native.sh` | Private bounded byte filtering, exact deduplication and document provenance over T2/D1. |
-| DATA4 | `internal/data4/lib/data4_report_reader.esk` | `data4-report-validate` | `make test-ci-data4-after-build` | Canonical v1.0 aggregate report validation. It does not bind report bytes to a D1 manifest digest. |
+| DATA4 | `internal/data4/lib/data4_report_reader.esk` | `data4-report-validate` | `make test-ci-data4-after-build` | Canonical v2.0 report validation against the D1 summary and exact manifest bytes; v1.0 is rejected. |
 | DATA4 / CLI3 | `native/cli3_data4_extension.esk` | `corpus prepare`, `corpus report-validate`, `data4-report.tsv` | `make test-ci-cli3-after-build`, `bash scripts/test-cli3-data4-installed.sh` | Installed authoring and validation. D1 corpus and report sidecar publish separately. |
 
 ## Build and validation
