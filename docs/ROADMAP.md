@@ -741,11 +741,11 @@ The current-main CLI3-B test fixture now checks canonical C2 bytes after four
 uninterrupted updates against fresh-process `1+3` and `1+1+1+1` resumes. It
 checks invocation-delta JSON and documented C2 header token/update/epoch
 counters at each checkpoint while retaining the existing two-update and
-malformed/mismatch cases. The focused script passed in the pinned, network-off
-Ubuntu image using the verified merged-main CLI artifact (source `f0f56a8`,
-unchanged production CLI3-B sources relative to this checkout). This is a
-fixed-profile witness; a current-main rebuild and independent review remain
-the next integration gates.
+malformed/mismatch cases. Independent review passed for candidate `63aec93d`.
+A fresh build of that candidate passed on the pinned network-disabled Ubuntu
+22.04/LLVM 21 environment, and the new executable passed `test-cli3-b.sh`.
+This remains a fixed-profile continuation witness. Integration and hosted
+validation remain pending.
 
 The [D1 corpus validate command slice](CLI3_CORPUS_VALIDATE.md) is staged from
 `93ea6258` on this current-main source union. It adds a standalone Eshkol-native
