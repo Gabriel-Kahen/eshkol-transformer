@@ -19,8 +19,8 @@ FULL_COVERAGE = WORKFLOW.with_name("full-coverage.yml")
 
 class WorkflowGateTests(unittest.TestCase):
     def test_io5_discovery_includes_mapping_and_native_witness(self):
-        suite = unittest.defaultTestLoader.discover(str(WORKFLOW.parents[2] / "tests/io5"),
-                                                    pattern="test_*.py")
+        suite = unittest.TestLoader().discover(str(WORKFLOW.parents[2] / "tests/io5"),
+                                               pattern="test_*.py")
 
         def test_ids(group):
             for case in group:
