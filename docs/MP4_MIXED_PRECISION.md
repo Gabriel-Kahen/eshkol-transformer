@@ -121,6 +121,13 @@ The explicit opt-in Make entry is
 `CC=clang-21 CXX=clang++-21 MP4_ASAN_DETECT_LEAKS=1 make test-mp4`;
 it runs the same focused gate and is outside the default `make test`,
 shared full-coverage matrix, and required CI evidence inventory.
+An isolated-worktree rerun of that gate on source `4ad7dbbc` passed in the
+same image on 2026-11-25, including the 55,690-cast oracle, both exhaustive
+storage sweeps, the overflow-recovery smoke, ASan/UBSan/LSan, Q0, and CI
+topology. The Make gate took 5.43 seconds with 170,104 KiB peak RSS. Its
+sealed log is
+`/home/gabe/.codex/evidence/eshkol-transformer/mp4-standalone-4ad7dbbc-20261125/SHA256SUMS`
+(SHA-256 `b73e058d79defe2271a4b17f6f5d63cffa6e5ffdd71c6a21bca64b5e539a5739`).
 
 The momentum-training smoke uses narrow storage for the working weights and
 scaled gradients, and f32 for the master weights and optimizer state. Each
