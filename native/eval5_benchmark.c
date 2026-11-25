@@ -721,6 +721,47 @@ static int hex_value(unsigned char c) {
   return -1;
 }
 
+et_eval5_status et_eval5_bind_tokenizer_identity(
+    const uint8_t *tokenizer_fingerprint, size_t tokenizer_length,
+    uint32_t tokenizer_vocab_size,
+    const uint8_t *corpus_fingerprint, size_t corpus_length,
+    uint32_t corpus_vocab_size,
+    uint8_t out_sha256[ET_EVAL5_SHA256_BYTES]) {
+  static const char t1_prefix[] = "sha256:eshkol-byte-tokenizer-v1:";
+  static const char t2_prefix[] = "sha256:eshkol-bpe-tokenizer-v1:";
+  size_t prefix_length = 0;
+  uint32_t max_vocab_size = 0;
+  uint8_t digest[ET_EVAL5_SHA256_BYTES];
+  if (tokenizer_fingerprint == NULL || corpus_fingerprint == NULL ||
+      out_sha256 == NULL)
+    return ET_EVAL5_ERR_ARGUMENT;
+  if (tokenizer_length == sizeof(t1_prefix) - 1u + 64u &&
+      memcmp(tokenizer_fingerprint, t1_prefix, sizeof(t1_prefix) - 1u) == 0) {
+    prefix_length = sizeof(t1_prefix) - 1u;
+    max_vocab_size = 4352u;
+  } else if (tokenizer_length == sizeof(t2_prefix) - 1u + 64u &&
+             memcmp(tokenizer_fingerprint, t2_prefix, sizeof(t2_prefix) - 1u) == 0) {
+    prefix_length = sizeof(t2_prefix) - 1u;
+    max_vocab_size = 4608u;
+  } else {
+    return ET_EVAL5_ERR_FORMAT;
+  }
+  if (tokenizer_vocab_size < 256u || tokenizer_vocab_size > max_vocab_size)
+    return ET_EVAL5_ERR_FORMAT;
+  for (size_t i = 0; i < ET_EVAL5_SHA256_BYTES; ++i) {
+    int hi = hex_value(tokenizer_fingerprint[prefix_length + 2u * i]);
+    int lo = hex_value(tokenizer_fingerprint[prefix_length + 2u * i + 1u]);
+    if (hi < 0 || lo < 0) return ET_EVAL5_ERR_FORMAT;
+    digest[i] = (uint8_t)((hi << 4) | lo);
+  }
+  if (corpus_vocab_size != tokenizer_vocab_size ||
+      corpus_length != tokenizer_length ||
+      memcmp(corpus_fingerprint, tokenizer_fingerprint, tokenizer_length) != 0)
+    return ET_EVAL5_ERR_IDENTITY;
+  memcpy(out_sha256, digest, sizeof(digest));
+  return ET_EVAL5_OK;
+}
+
 static int parse_digest(text_span value, uint8_t out[32]) {
   if (value.size != 64) return 0;
   for (size_t i = 0; i < ET_EVAL5_SHA256_BYTES; ++i) {

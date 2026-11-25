@@ -29,7 +29,8 @@ enum {
   ET_EVAL5_ERR_CHECKSUM = -9,
   ET_EVAL5_ERR_VERSION = -10,
   ET_EVAL5_ERR_IO = -11,
-  ET_EVAL5_ERR_FP_ENV = -12
+  ET_EVAL5_ERR_FP_ENV = -12,
+  ET_EVAL5_ERR_IDENTITY = -13
 };
 
 enum {
@@ -107,6 +108,19 @@ typedef struct {
   uint64_t total_count;
   double accuracy;
 } et_eval5_mc_metrics;
+
+/* Accept only canonical T1/T2 public fingerprints, require an exact match
+ * with the authenticated D1 corpus summary, including vocabulary size, and
+ * decode the identity digest into the manifest's tokenizer_sha256 field.
+ * Both input spans have explicit
+ * lengths; failure leaves out_sha256 untouched. The caller must obtain both
+ * fingerprints from their validated owners in the same evaluation run. */
+et_eval5_status et_eval5_bind_tokenizer_identity(
+    const uint8_t *tokenizer_fingerprint, size_t tokenizer_length,
+    uint32_t tokenizer_vocab_size,
+    const uint8_t *corpus_fingerprint, size_t corpus_length,
+    uint32_t corpus_vocab_size,
+    uint8_t out_sha256[ET_EVAL5_SHA256_BYTES]);
 
 /* byte_count is the number of original bytes represented by the target
  * tokens. Metrics and the audit require round-to-nearest floating point
