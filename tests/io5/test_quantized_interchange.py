@@ -476,6 +476,20 @@ class QuantizedInterchangeTests(unittest.TestCase):
         with self.assertRaisesRegex(safe.InteropError, "native IO5 quant codec library missing"):
             qi.encode_quantized_safetensors(self.m3_c1, "F16", lib_path=self.root / "nonexistent.so")
 
+        # Zero-tensor states still require the native ABI on both directions.
+        empty_c1 = to_c1(safe.State(PROVIDER, ()))
+        missing = self.root / "nonexistent.so"
+        for encode, decode, dtype in (
+            (qi.encode_quantized_safetensors, qi.decode_quantized_safetensors, "F16"),
+            (qi.encode_quantized_gguf, qi.decode_quantized_gguf, "Q8_0"),
+        ):
+            with self.subTest(dtype=dtype):
+                wire = encode(empty_c1, dtype)
+                with self.assertRaisesRegex(safe.InteropError, "native IO5 quant codec library missing"):
+                    encode(empty_c1, dtype, lib_path=missing)
+                with self.assertRaisesRegex(safe.InteropError, "native IO5 quant codec library missing"):
+                    decode(wire, lib_path=missing)
+
         # An unrelated shared object missing the IO5 quant ABI symbols must raise InteropError
         # (and fail closed with CLI exit code 2, never uncaught AttributeError exit code 1).
         unrelated_so = self.root / "unrelated.so"
@@ -677,6 +691,42 @@ class QuantizedInterchangeTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(safe.InteropError, "payload SHA-256 mismatch"):
             qi.decode_quantized_safetensors(safetensors_wire(header_manifest_tamper, data_reshape))
+
+        # Even a rehashed malformed manifest must fail as a data error, never
+        # raise from mapped-name traversal before C1 state validation.
+        malformed_header = json.loads(json.dumps(header_reshape))
+        malformed_manifest = json.loads(malformed_header["__metadata__"][safe.MANIFEST_KEY])
+        malformed_manifest["entries"][0]["path"] = []
+        manifest_text = json.dumps(malformed_manifest, separators=(",", ":"), ensure_ascii=True)
+        malformed_header["__metadata__"][safe.MANIFEST_KEY] = manifest_text
+        descriptors = malformed_header
+        payloads = {
+            name: (desc["dtype"], tuple(desc["shape"]), data_reshape[desc["data_offsets"][0]:desc["data_offsets"][1]])
+            for name, desc in descriptors.items() if name != "__metadata__"
+        }
+        digest_entries = [(entry["name"], *payloads[entry["name"]]) for entry in malformed_manifest["entries"]]
+        malformed_header["__metadata__"][qi.PAYLOAD_DIGEST_KEY] = qi._payload_digest(manifest_text, digest_entries)
+        with self.assertRaisesRegex(safe.InteropError, "path segment count"):
+            qi.decode_quantized_safetensors(safetensors_wire(malformed_header, data_reshape))
+
+        malformed_gguf_meta = dict(meta)
+        gguf_manifest = json.loads(malformed_gguf_meta[safe.MANIFEST_KEY][1])
+        gguf_manifest["entries"][0]["path"] = []
+        gguf_manifest_text = json.dumps(gguf_manifest, separators=(",", ":"), ensure_ascii=True)
+        malformed_gguf_meta[safe.MANIFEST_KEY] = (gg.STRING, gguf_manifest_text)
+        gguf_payloads = {
+            name: (qi.GGUF_TYPE_TO_NAME[gtype], tuple(reversed(dims)), payload)
+            for name, dims, gtype, _, payload in rows
+        }
+        gguf_digest_entries = [(entry["name"], *gguf_payloads[entry["name"]]) for entry in gguf_manifest["entries"]]
+        malformed_gguf_meta[qi.PAYLOAD_DIGEST_KEY] = (
+            gg.STRING, qi._payload_digest(gguf_manifest_text, gguf_digest_entries)
+        )
+        malformed_gguf = build_raw_gguf(
+            [(key, kind, value) for key, (kind, value) in sorted(malformed_gguf_meta.items())], rows
+        )
+        with self.assertRaisesRegex(safe.InteropError, "path segment count"):
+            qi.decode_quantized_gguf(malformed_gguf)
 
         # GGUF reshape preserving exact byte count: (32, 32) -> (64, 16) (GGML dims (64, 16) -> C1 (16, 64), ne[0]=64).
         reshaped_rows = []

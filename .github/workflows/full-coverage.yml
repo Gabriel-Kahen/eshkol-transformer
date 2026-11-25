@@ -228,7 +228,9 @@ jobs:
           IO5_GGUF_REFERENCE_PYTHON="$RUNNER_TEMP/io5-reference/bin/python" \
           IO5_GGUF_NATIVE_REQUIRED=1 \
           IO5_GGUF_NATIVE_PREFIX="$RUNNER_TEMP/io5-ggml/prefix" \
-          IO5_GGUF_NATIVE_CC=clang-21 make test-io5-gguf
+          IO5_GGML_SOURCE_ARCHIVE="$RUNNER_TEMP/io5-ggml/ggml.tar.gz" \
+          IO5_GGUF_NATIVE_CC=clang-21 \
+          IO5_GGUF_NATIVE_CXX=clang++-21 make test-io5-gguf
 
   evidence:
     name: Suite evidence

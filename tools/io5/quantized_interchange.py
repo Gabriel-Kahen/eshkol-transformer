@@ -254,6 +254,7 @@ def encode_quantized_safetensors(
 ) -> bytes:
     require(storage_dtype in SAFETENSORS_STORAGE_DTYPES, "unsupported safetensors quantized dtype: require F16 or BF16")
     state = safe.decode_c1(raw_c1, limits)
+    load_native_codec(lib_path)
     names, chosen_scheme = _resolve_names(state, profile, scheme, "huggingface")
     encoder = native_encode_f16 if storage_dtype == "F16" else native_encode_bf16
 
@@ -354,6 +355,7 @@ def decode_quantized_safetensors(
     lib_path: str | Path | None = None,
 ) -> bytes:
     wire_tensors, metadata = _decode_quantized_safetensors_wire(raw, limits)
+    load_native_codec(lib_path)
     reserved = mapping.io5_fields(metadata)
     if reserved:
         require(not external and plain_provider is None and provider is None and not tie,
@@ -408,13 +410,14 @@ def decode_quantized_safetensors(
             named_f32[name] = Tensor((name,), "parameter", shape_tuple, f32_bytes)
 
         state, names = safe.state_from_manifest(metadata[safe.MANIFEST_KEY], named_f32, limits)
+        encoded = safe.encode_c1(state, limits)
         expected_names = (
             mapping.synthetic_names(state)
             if selected_profile is None
             else mapping.mapped_names(state, selected_profile, selected_scheme)
         )
         require(names == expected_names, "IO5 manifest tensor names do not match selected mapping")
-        return safe.encode_c1(state, limits)
+        return encoded
 
     # Non-IO5 external/plain import.
     named_f32 = {}
@@ -430,8 +433,9 @@ def decode_quantized_safetensors(
         safe.text_bytes(provider, 127, "explicit external provider")
         assert provider is not None
         state = mapping.plain_state(named_f32, profile, scheme, provider, tie)
+        encoded = safe.encode_c1(state, limits)
         mapping.mapped_names(state, profile, scheme)
-        return safe.encode_c1(state, limits)
+        return encoded
 
     require(plain_provider is not None and profile is None and scheme is None and provider is None and not tie,
             "plain quantized safetensors requires explicit --plain-provider or --external")
@@ -479,6 +483,7 @@ def encode_quantized_gguf(
     require(storage_dtype in GGUF_STORAGE_DTYPES, "unsupported GGUF quantized dtype: require F16 or Q8_0")
     require(q8_fallback in Q8_FALLBACK_DTYPES, "unsupported Q8_0 fallback dtype: require F32 or F16")
     state = safe.decode_c1(raw_c1, limits)
+    load_native_codec(lib_path)
     names, chosen_scheme = _resolve_names(state, profile, scheme, "gguf")
 
     infos: list[bytes] = []
@@ -665,6 +670,7 @@ def decode_quantized_gguf(
     lib_path: str | Path | None = None,
 ) -> bytes:
     wire_tensors, metadata = _decode_quantized_gguf_wire(raw, limits)
+    load_native_codec(lib_path)
     reserved = mapping.io5_fields(metadata)
     if reserved:
         require(not external and plain_provider is None and provider is None and not tie,
@@ -750,13 +756,14 @@ def decode_quantized_gguf(
             named_f32[name] = Tensor((name,), "parameter", shape, f32_bytes)
 
         state, names = safe.state_from_manifest(manifest_text, named_f32, limits)
+        encoded = safe.encode_c1(state, limits)
         expected_names = (
             mapping.synthetic_names(state)
             if selected_profile is None
             else mapping.mapped_names(state, selected_profile, selected_scheme)
         )
         require(names == expected_names, "IO5 manifest tensor names do not match selected mapping")
-        return safe.encode_c1(state, limits)
+        return encoded
 
     # Non-IO5 external/plain import.
     named_f32 = {}
@@ -771,8 +778,9 @@ def decode_quantized_gguf(
         safe.text_bytes(provider, 127, "explicit external provider")
         assert provider is not None
         state = mapping.plain_state(named_f32, profile, scheme, provider, tie)
+        encoded = safe.encode_c1(state, limits)
         mapping.mapped_names(state, profile, scheme)
-        return safe.encode_c1(state, limits)
+        return encoded
 
     require(plain_provider is not None and profile is None and scheme is None and provider is None and not tie,
             "plain quantized GGUF requires explicit --plain-provider or --external")

@@ -1,5 +1,6 @@
 #include "eshkol_transformer/io5_quant_abi.h"
 
+#include <fenv.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -268,6 +269,27 @@ static void test_bulk_narrow_and_unaligned(void) {
 }
 
 static void test_q8_0_roundtrip_and_edges(void) {
+  /* The caller's rounding mode cannot change the wire scale or quants. */
+  float rounding_block[32] = {0};
+  rounding_block[0] = 127.06201934814453f;
+  rounding_block[1] = 63.5f;
+  uint8_t nearest[34], downward[34];
+  const int original_rounding = fegetround();
+  CHECK(original_rounding != -1 && fesetround(FE_TONEAREST) == 0,
+        "select nearest rounding mode");
+  CHECK(et_io5_quantize_q8_0(rounding_block, sizeof(rounding_block), nearest,
+                             sizeof(nearest), 32u) == ET_IO5_QUANT_OK,
+        "Q8_0 nearest rounding mode");
+  CHECK(nearest[0] == 0x01u && nearest[1] == 0x3cu,
+        "Q8_0 exact F16 scale midpoint rounds upward");
+  CHECK(fesetround(FE_DOWNWARD) == 0, "select downward rounding mode");
+  CHECK(et_io5_quantize_q8_0(rounding_block, sizeof(rounding_block), downward,
+                             sizeof(downward), 32u) == ET_IO5_QUANT_OK,
+        "Q8_0 downward rounding mode");
+  CHECK(memcmp(nearest, downward, sizeof(nearest)) == 0,
+        "Q8_0 wire bytes independent of caller rounding mode");
+  CHECK(fesetround(original_rounding) == 0, "restore caller rounding mode");
+
   /* 1. Multi-block Q8_0 round-trip with varied dynamic ranges and zero block. */
   float x[128];
   /* Block 0: linear ramp in [-2.0, 2.0]. */

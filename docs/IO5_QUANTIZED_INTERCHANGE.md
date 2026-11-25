@@ -44,6 +44,8 @@ validates every element/block before writing any destination bytes.
     and `qs[0..31] = 0`. Blocks with `max(|x|) / 127.0 > 65504.0` reject with
     `ET_IO5_QUANT_ERR_OVERFLOW`. Non-zero finite scales compute
     `q = clamp(rne(x / f16_to_f32(d)), -127, 127)`.
+    Exact F16 midpoint and integer-quant thresholds make the wire result
+    independent of the caller's floating-point rounding mode.
   - Dequantization: validates every block's `f16` scale is finite before writing
     outputs, then computes `x_hat = f16_to_f32(d) * (float)qs[i]`.
   - Rejects `element_count == 0`, non-multiple-of-32 `element_count`, mismatched
@@ -128,20 +130,25 @@ python3 tools/io5/quantized_interchange.py gguf-to-c1 model_q8.gguf restored_q8.
 
 ## Focused validation evidence
 
-The merged-main candidate was tested locally with Clang 22.1.8:
+The stacked candidate was tested locally with Clang 22.1.8 and a separate
+Ubuntu 22.04 LLVM 21.1.8 container for the native and GGML checks:
 
 - `CC=clang CXX=clang++ bash scripts/test-io5-quant.sh`: deterministic static
   and shared library rebuilds, export/import symbol audit, C++17 header/linkage,
   allocation-guarded C11 numerical tests, ASan/UBSan/LSan, and eight Python
   interchange groups passed. The static and shared library SHA-256 values were
-  `7106fe717816c02468bcab6529d94cb660a62cdf32a00cc5cbfb6f2f11c01a52`
-  and `80b0edb5e89915f774388282827064fb4f7500c12067d992d7739bbfe65975e2`.
+  `df68378a7a040bc01a56866b684e6f2d702c0fd36610c128a8e7b85fbbbe5f7f`
+  and `ee06b71662f5e6efbfe248a6030568784b0019353d84f7cc12e86f2c9db59153`
+  for the final Clang 22 tree. The LLVM 21 archive/shared hashes were
+  `7e1fcfe52fcf4affc9b1c7562fd56e7321c14004b9c759d4586c1366c0b254bc`
+  and `771ab9265bf2cc5cb56822e59876561e61077ffee52f437ce201fd5567cae90f`.
 - `scripts/test-io5-q8-ggml-decoder.sh` passed against the source-pinned GGML
   decoder: all 192 F32 output bits across six raw Q8_0 blocks agreed. The
   witness checks native GGUF type, shape and 204 payload bytes. It does not
   claim encoder bit identity.
-- `IO5_GGUF_REFERENCE_PYTHON=... IO5_GGUF_NATIVE_PREFIX=... bash
-  scripts/test-io5-gguf.sh` passed all 42 IO5 and five Python-isolation groups
+- `IO5_GGUF_REFERENCE_PYTHON=... IO5_GGUF_NATIVE_PREFIX=...
+  IO5_GGML_SOURCE_ARCHIVE=... bash scripts/test-io5-gguf.sh` passed all 42
+  IO5 and five Python-isolation groups
   with pinned `gguf==0.19.0`, `numpy==2.5.4`, `safetensors==0.6.2`, and the
   selected GGML native reader/writer. These checks include the existing
   lossless IO5 regression suite.

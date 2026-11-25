@@ -272,7 +272,9 @@ def check(root, overrides=None):
         'IO5_GGUF_REFERENCE_PYTHON="$RUNNER_TEMP/io5-reference/bin/python" \\',
         'IO5_GGUF_NATIVE_REQUIRED=1 \\',
         'IO5_GGUF_NATIVE_PREFIX="$RUNNER_TEMP/io5-ggml/prefix" \\',
-        'IO5_GGUF_NATIVE_CC=clang-21 make test-io5-gguf']
+        'IO5_GGML_SOURCE_ARCHIVE="$RUNNER_TEMP/io5-ggml/ggml.tar.gz" \\',
+        'IO5_GGUF_NATIVE_CC=clang-21 \\',
+        'IO5_GGUF_NATIVE_CXX=clang++-21 make test-io5-gguf']
     native_prepare = read("scripts/prepare-io5-ggml-native.sh")
     for required in ("417a024b4fb6bc3116d41af7c067166a039bdf12",
                      "eb2fb2d60331e78de996f4fd3f9cee955cfcab2546b7ad64100444730f39ede7",
@@ -344,9 +346,21 @@ def check(root, overrides=None):
     targets = recipes(make)
     assert re.search(r"^test-io5-gguf:\s*$", make, re.M)
     assert targets["test-io5-gguf"] == ["/usr/bin/bash scripts/test-io5-gguf.sh"]
-    assert "bash scripts/test-io5.sh" in read("scripts/test-io5-gguf.sh")
+    io5_gate = read("scripts/test-io5-gguf.sh")
+    for required in (
+        'export CC="${IO5_GGUF_NATIVE_CC:-clang}"',
+        'export CXX="${IO5_GGUF_NATIVE_CXX:-clang++}"',
+        'bash scripts/build-io5-quant.sh',
+        'export IO5_QUANT_REQUIRED=1',
+        'export ESHKOL_IO5_QUANT_LIB="${io5_root}/build/io5_quant/libeshkol_transformer_io5_quant.so"',
+        'bash scripts/test-io5.sh',
+        'if [[ "${IO5_GGUF_NATIVE_REQUIRED:-0}" == 1 || -n "${IO5_GGUF_NATIVE_PREFIX:-}${IO5_GGML_SOURCE_ARCHIVE:-}" ]]; then',
+        'bash scripts/test-io5-q8-ggml-decoder.sh',
+    ):
+        assert required in io5_gate
     assert '"${IO5_REFERENCE_PYTHON:-python3}" -m unittest discover -s tests/io5 -p \'test_*.py\' -v' in read("scripts/test-io5.sh")
     assert "class ModelMappingTests(unittest.TestCase):" in read("tests/io5/test_model_mapping.py")
+    assert "class QuantizedInterchangeTests(unittest.TestCase):" in read("tests/io5/test_quantized_interchange.py")
     assert targets["test-ci-dataset-resources-after-build"] == [
         "/usr/bin/bash scripts/test-d2.sh --phase resources"]
     assert targets["test-ci-m3-after-build"] == [

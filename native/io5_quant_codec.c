@@ -148,21 +148,25 @@ static et_io5_quant_status bf16_to_f32_internal(uint16_t bits, uint32_t *out) {
   return ET_IO5_QUANT_OK;
 }
 
-static int8_t round_nearest_even_clamp_i8(double value) {
+static int8_t round_nearest_even_clamp_i8(double value, double scale) {
   const int neg = value < 0.0;
-  double mag = neg ? -value : value;
-  if (mag >= 127.0) {
+  const double mag = neg ? -value : value;
+  if (mag >= 127.0 * scale) {
     return neg ? (int8_t)-127 : (int8_t)127;
   }
-  int32_t k = (int32_t)mag;
-  const double rem = mag - (double)k;
-  if (rem > 0.5 || (rem == 0.5 && (k & 1) != 0)) {
-    ++k;
+  int32_t lo = 0;
+  int32_t hi = 127;
+  while (lo < hi) {
+    const int32_t mid = lo + (hi - lo) / 2;
+    /* F32 input, F16 scale and this half-integer product are exact in F64. */
+    const double boundary = ((double)mid + 0.5) * scale;
+    if (mag > boundary || (mag == boundary && (mid & 1) != 0)) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
   }
-  if (k > 127) {
-    k = 127;
-  }
-  return neg ? (int8_t)(-k) : (int8_t)k;
+  return neg ? (int8_t)(-lo) : (int8_t)lo;
 }
 
 uint32_t et_io5_quant_abi_version(void) {
@@ -374,8 +378,29 @@ static et_io5_quant_status compute_q8_block_scale(const uint8_t *in_blk,
     return ET_IO5_QUANT_OK;
   }
   const double amax = (double)f32_from_bits(max_abs_bits);
-  const float d_f32 = (float)(amax / 127.0);
-  return f32_to_f16_internal(bits_from_f32(d_f32), out_d_f16);
+  if (amax > 65504.0 * 127.0) {
+    return ET_IO5_QUANT_ERR_OVERFLOW;
+  }
+  uint16_t lo = 0u;
+  uint16_t hi = UINT16_C(0x7bff);
+  while (lo < hi) {
+    const uint16_t mid = (uint16_t)(lo + (hi - lo) / 2u);
+    uint32_t low_bits = 0u;
+    uint32_t high_bits = 0u;
+    (void)f16_to_f32_internal(mid, &low_bits);
+    (void)f16_to_f32_internal((uint16_t)(mid + 1u), &high_bits);
+    /* Both F16 values, their midpoint and multiplication by 127 are exact
+     * in F64, so the tie decision does not depend on the caller's fenv. */
+    const double boundary =
+        ((double)f32_from_bits(low_bits) + (double)f32_from_bits(high_bits)) * 63.5;
+    if (amax > boundary || (amax == boundary && (mid & 1u) != 0u)) {
+      lo = (uint16_t)(mid + 1u);
+    } else {
+      hi = mid;
+    }
+  }
+  *out_d_f16 = lo;
+  return ET_IO5_QUANT_OK;
 }
 
 et_io5_quant_status et_io5_quantize_q8_0(const void *src_f32_le,
@@ -427,7 +452,7 @@ et_io5_quant_status et_io5_quantize_q8_0(const void *src_f32_le,
       const double d_stored = (double)f32_from_bits(d_f32_bits);
       for (size_t i = 0u; i < ET_IO5_QK8_0; ++i) {
         const double x = (double)f32_from_bits(load_le32(in_blk + i * 4u));
-        const int8_t q = round_nearest_even_clamp_i8(x / d_stored);
+        const int8_t q = round_nearest_even_clamp_i8(x, d_stored);
         out_blk[2u + i] = (uint8_t)q;
       }
     }
