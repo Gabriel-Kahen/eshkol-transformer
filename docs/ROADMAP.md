@@ -753,6 +753,11 @@ passed the compiled D1 and command gate; this does not establish full CLI3
 acceptance. The required CLI3 suite's
 production-generate and cross-command gates now retain evidence in separate
 directories so their identically named output files cannot overwrite each other.
+The single-build CI candidate passes the production gate's fresh executable to
+the cross-command gate and checks its SHA-256 before and after the command
+witness. The standalone cross-command entry still builds fresh. The supported
+reuse-path cross-command test passed in 9.670 seconds with the verified retained
+CLI3 binary. Hosted timing remains pending.
 Draft PR #202's first hosted run `38256561519` stopped at Q0 Python isolation
 because the D1 facade staging helper was under `scripts/`. The unchanged
 development-only helper now resides under `tests/cli3/`, with its build and

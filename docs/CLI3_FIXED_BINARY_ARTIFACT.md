@@ -16,13 +16,17 @@ and categorical `80` one-byte generation; all eight output hashes verified.
 
 The required `cli3-commands` suite builds `eshkol-transformer` through the
 production root, checks its package manifests, and exercises tokenizer, corpus,
-one-update pretrain, one-byte generate, and cross-command behavior. After both
-existing gates pass, `package-cli3-binary.sh` copies **that tested executable**
+one-update pretrain, one-byte generate, and cross-command behavior. Both gates
+test the same freshly built executable in separate scratch directories. A
+standalone cross-command run still builds its own executable. After both gates
+pass, `package-cli3-binary.sh` copies **that tested executable**
 from the production gate's disk-backed scratch directory into a new artifact
 directory outside the checkout. Packaging does not compile another executable.
 
 The production gate hashes its executable before the first command test and
-checks that receipt again after its last test. The packager rechecks the exact
+checks that receipt again after its last test. The cross-command gate checks the
+same receipt before running commands and before publishing its pass marker.
+The packager rechecks the exact
 path and digest before copying and compares the installed copy byte for byte.
 The artifact carries a path-neutral `metadata/tested-binary.sha256` receipt
 for that pre-test digest, both completed gate PASS receipts, and the production
