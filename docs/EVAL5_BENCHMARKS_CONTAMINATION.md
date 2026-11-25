@@ -72,9 +72,18 @@ and split identifiers, a positive context length, and the requested sample
 cap. A zero cap denotes the full split. Provide the SHA-256 digests of the
 training and evaluation datasets. For a sharded dataset, use the digest of
 the canonical shard inventory that binds shard contents and order. Supply
-the tokenizer fingerprint and checkpoint or model digest from the same
-evaluation run. The audit summary covers the supplied audit corpus, which
-can include the full evaluation split when the scoring run is capped.
+the tokenizer identity digest and checkpoint or model digest from the same
+evaluation run. For an accepted T1 or T2 tokenizer, `tokenizer_sha256` is the
+32 bytes decoded from the 64-hex-digit suffix of its validated public
+fingerprint (`sha256:eshkol-byte-tokenizer-v1:...` or
+`sha256:eshkol-bpe-tokenizer-v1:...`), not SHA-256 of the 95-byte fingerprint
+text. The suffix is already domain separated by the tokenizer format. The
+runner must still compare the complete public fingerprint with the D1 shard
+identity before scoring; this standalone library cannot establish that link.
+For any other tokenizer, the runner must define and verify a canonical
+tokenizer identity digest before using this field. The audit summary covers
+the supplied audit corpus, which can include the full evaluation split when
+the scoring run is capped.
 
 The document starts with the two LF-terminated lines `EVAL5_MANIFEST_V1`
 and `version=1.0`. The remaining keys follow the fixed order below. Every
