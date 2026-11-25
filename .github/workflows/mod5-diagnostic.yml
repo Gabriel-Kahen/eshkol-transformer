@@ -1,0 +1,133 @@
+name: MOD5/MP4/PA4-Wider provider diagnostic (non-admission)
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mod5-diagnostic.yml
+      - Makefile
+      - include/eshkol_transformer/mod5_primitives_abi.h
+      - include/eshkol_transformer/mp4_mixed_precision_abi.h
+      - include/eshkol_transformer/pa4_wider_attention_abi.h
+      - native/mod5_primitives_provider.c
+      - native/mp4_mixed_precision_provider.c
+      - native/pa4_wider_attention_provider.c
+      - scripts/build-mod5.sh
+      - scripts/build-mp4.sh
+      - scripts/build-pa4-wider.sh
+      - scripts/test-mod5.sh
+      - scripts/test-mp4.sh
+      - scripts/test-pa4-wider.sh
+      - tests/mod5/**
+      - tests/mp4/**
+      - tests/pa4_wider/**
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Exact 40-character commit SHA to test
+        required: true
+        type: string
+      expected_tree:
+        description: Exact 40-character Git tree to test
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mod5-cpu-f32-diagnostic-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  provider:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'codex/mod5-') }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      CC: clang-21
+      CXX: clang++-21
+      MOD5_ASAN_DETECT_LEAKS: '1'
+    steps:
+      - name: Reserve diagnostic evidence
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          root="$RUNNER_TEMP/mod5-diagnostic"
+          test ! -e "$root" && test ! -L "$root"
+          mkdir -m 0700 "$root"
+          printf 'run_id\t%s\nrun_attempt\t%s\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > "$root/status.tsv"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Authenticate exact source
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || inputs.expected_head }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          root="$RUNNER_TEMP/mod5-diagnostic"
+          [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$GITHUB_SHA" == "$EXPECTED_HEAD" ]]
+            [[ "$(git rev-parse 'HEAD^{tree}')" == "$EXPECTED_TREE" ]]
+          else
+            [[ "$EVENT_NAME" == pull_request && -z "$EXPECTED_TREE" ]]
+            EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          fi
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_HEAD" ]]
+          [[ -z "$(git status --porcelain --untracked-files=all)" ]]
+          printf 'ref\t%s\nhead\t%s\ntree\t%s\n' \
+            "$GITHUB_REF" "$EXPECTED_HEAD" "$EXPECTED_TREE" > "$root/identity.tsv"
+      - name: Install pinned compiler
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          root="$RUNNER_TEMP/mod5-diagnostic"
+          {
+            wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+            gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+            sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+            echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+            sudo apt-get update -o Acquire::Retries=5
+            sudo apt-get install -y build-essential clang-21 llvm-21 git make python3
+            clang-21 --version | head -1 | grep -F 'version 21.1.8'
+            clang++-21 --version | head -1 | grep -F 'version 21.1.8'
+          } > "$root/dependencies.stdout" 2> "$root/dependencies.stderr"
+      - name: Run opt-in MOD5 provider gate
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          make test-mod5 > "$RUNNER_TEMP/mod5-diagnostic/gate.stdout" \
+            2> "$RUNNER_TEMP/mod5-diagnostic/gate.stderr"
+      - name: Run opt-in MP4 provider gate
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          MP4_ASAN_DETECT_LEAKS: '1'
+        run: |
+          make test-mp4 > "$RUNNER_TEMP/mod5-diagnostic/mp4-gate.stdout" \
+            2> "$RUNNER_TEMP/mod5-diagnostic/mp4-gate.stderr"
+      - name: Run opt-in PA4-Wider provider gate
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          make test-pa4-wider > "$RUNNER_TEMP/mod5-diagnostic/pa4-wider-gate.stdout" \
+            2> "$RUNNER_TEMP/mod5-diagnostic/pa4-wider-gate.stderr"
+      - name: Seal diagnostic evidence
+        if: always()
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          PREVIOUS_JOB_STATUS: ${{ job.status }}
+        run: |
+          root="$RUNNER_TEMP/mod5-diagnostic"
+          test -d "$root" && test ! -L "$root"
+          printf 'job_status_before_upload\t%s\n' "$PREVIOUS_JOB_STATUS" >> "$root/status.tsv"
+          (cd "$root" && find . -type f ! -path './SHA256SUMS' -print0 | \
+            LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$root/SHA256SUMS"
+          (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mod5-cpu-f32-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/mod5-diagnostic/
+          if-no-files-found: error
+          retention-days: 30
