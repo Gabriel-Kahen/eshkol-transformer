@@ -763,6 +763,9 @@ stopped before installed runtime: the pinned Eshkol runner does not emit a
 depfile for executable output. The source-only repair obtains each app or
 standalone command import graph from an object-mode compile before producing
 its executable. Exact-head hosted and compiled validation remain pending.
+The CLI3 app-link candidate links the same object that produced the audited
+depfile. A pinned Ubuntu 22.04/LLVM 21 fixture linked an audited object and
+an explicit archive successfully. Full CLI3 runtime and timing remain to be verified.
 Run `38270239683` at `d17e1961` passed topology and built the source-composed
 CLI3 package, then its command job failed after the build without identifying
 the failing assertion: the production-generate driver retained redirected
