@@ -18,6 +18,36 @@ FULL_COVERAGE = WORKFLOW.with_name("full-coverage.yml")
 
 
 class WorkflowGateTests(unittest.TestCase):
+    def test_io5_discovery_includes_mapping_and_native_witness(self):
+        suite = unittest.defaultTestLoader.discover(str(WORKFLOW.parents[2] / "tests/io5"),
+                                                    pattern="test_*.py")
+
+        def test_ids(group):
+            for case in group:
+                if isinstance(case, unittest.TestSuite):
+                    yield from test_ids(case)
+                else:
+                    yield case.id()
+
+        ids = set(test_ids(suite))
+        mapping = {name.rsplit(".", 1)[-1] for name in ids
+                   if name.startswith("test_model_mapping.ModelMappingTests.")}
+        self.assertEqual(mapping, {
+            "test_cli_atomic_publication_modes_and_failed_overwrite",
+            "test_decoder_multilayer_swiglu_rmsnorm_round_trips",
+            "test_exact_shard_budget_count_and_oversize_singletons",
+            "test_external_formats_require_explicit_selection_and_validate_ties",
+            "test_independent_gguf_reference",
+            "test_independent_safetensors_reference",
+            "test_invalid_index_schema_json_paths_and_checksums",
+            "test_invalid_profiles_paths_shapes_and_layer_rosters",
+            "test_m3_exact_roster_and_all_bitwise_round_trips",
+            "test_metadata_names_are_bound_to_paths_and_reject_coincidences",
+            "test_shard_checksums_symlinks_missing_files_and_disjoint_coverage",
+            "test_unmapped_shards_preserve_arbitrary_paths_kinds_and_empty_state",
+        })
+        self.assertIn("test_gguf_native.NativeGGUFTests.test_existing_native_reader_and_writer", ids)
+
     def test_evidence_requires_both_compiled_and_io5_success(self):
         evidence = jobs(FULL_COVERAGE.read_text())["evidence"]
         commands = run(steps(evidence)["Require complete coverage and record tested tree"])
