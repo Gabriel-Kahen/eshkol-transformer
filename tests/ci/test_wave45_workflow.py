@@ -51,15 +51,17 @@ def extract_wave45_makefile_targets(makefile_text: str) -> list[str]:
     return re.findall(r"^([a-z0-9-]+):(?!=)", section, re.M)
 
 
-def parse_matrix_shards(workflow_text: str) -> list[tuple[str, list[str]]]:
-    """Parse (shard_name, [target, ...]) entries from wave45-matrix."""
+def parse_matrix_shards(workflow_text: str) -> list[tuple[str, int, list[str]]]:
+    """Parse (shard_name, timeout_minutes, [target, ...]) entries from wave45-matrix."""
     matrix_job = jobs(workflow_text)["wave45-matrix"]
     entries = re.findall(
-        r"^          - shard: ([a-z0-9-]+)\n            targets: '([^']*)'$",
+        r"^          - shard: ([a-z0-9-]+)\n"
+        r"            timeout: ([0-9]+)\n"
+        r"            targets: '([^']*)'$",
         matrix_job,
         re.M,
     )
-    return [(shard, targets.split()) for shard, targets in entries]
+    return [(shard, int(timeout), targets.split()) for shard, timeout, targets in entries]
 
 
 def parse_dispatch_shard_options(workflow_text: str) -> list[str]:
@@ -128,12 +130,17 @@ class Wave45WorkflowTests(unittest.TestCase):
     def test_exact_wave45_target_partition_and_makefile_alignment(self) -> None:
         self.assertGreaterEqual(len(self.shards), 8)
         self.assertLessEqual(len(self.shards), 10)
-        shard_names = [name for name, _ in self.shards]
+        shard_names = [name for name, _, _ in self.shards]
         self.assertEqual(len(shard_names), len(set(shard_names)), "Duplicate shard names")
 
         covered: list[str] = []
-        for shard_name, targets in self.shards:
+        for shard_name, timeout, targets in self.shards:
             self.assertTrue(targets, f"Shard {shard_name} must not be empty")
+            self.assertGreaterEqual(
+                timeout,
+                75,
+                f"Shard {shard_name} timeout {timeout}m is below 75m cold-toolchain floor",
+            )
             covered.extend(targets)
 
         counts = Counter(covered)
@@ -186,43 +193,99 @@ class Wave45WorkflowTests(unittest.TestCase):
             )
 
     def test_dispatch_options_and_static_validator_match_shards(self) -> None:
-        shard_names = [name for name, _ in self.shards]
+        shard_names = [name for name, _, _ in self.shards]
         options = parse_dispatch_shard_options(self.workflow_text)
         self.assertEqual(options, ["all"] + shard_names)
 
-        validate_step = steps(self.workflow_jobs["static-guards"])[
-            "Validate shard dispatch input"
-        ]
+        static_job = self.workflow_jobs["static-guards"]
+        self.assertEqual(
+            field(static_job, 6, "shard"),
+            "${{ steps.validate_shard.outputs.shard }}",
+        )
+        validate_step = steps(static_job)["Validate shard dispatch input"]
+        self.assertEqual(field(validate_step, 8, "id"), "validate_shard")
+        # Must pass raw inputs.shard without coalescing empty string to 'all'.
+        self.assertEqual(
+            field(validate_step, 10, "REQUESTED_SHARD"),
+            "${{ inputs.shard }}",
+        )
+        self.assertNotIn("inputs.shard ||", self.workflow_text)
+
+        # Downstream jobs must consume only the validated output, never raw inputs.shard.
+        matrix_job = self.workflow_jobs["wave45-matrix"]
+        gate_job = self.workflow_jobs["wave45-gate"]
+        self.assertNotIn("inputs.shard", matrix_job)
+        self.assertNotIn("inputs.shard", gate_job)
+        for step_name, step_body in steps(matrix_job).items():
+            step_if = field(step_body, 8, "if")
+            self.assertIn(
+                "needs.static-guards.outputs.shard == 'all' || "
+                "needs.static-guards.outputs.shard == matrix.shard",
+                step_if,
+                f"Step {step_name} must gate on validated static-guards output",
+            )
+        gate_step = steps(gate_job)["Require static guards and matrix success"]
+        self.assertEqual(
+            field(gate_step, 10, "REQUESTED_SHARD"),
+            "${{ needs.static-guards.outputs.shard }}",
+        )
+
         validate_lines = "\n".join(run(validate_step))
         expected_case = "|".join(["all"] + shard_names) + ")"
         self.assertIn(expected_case, validate_lines)
 
-        for requested in ["all"] + shard_names:
-            proc = subprocess.run(
-                ["/usr/bin/bash", "-euo", "pipefail", "-c", validate_lines],
-                env={
-                    **os.environ,
-                    "EVENT_NAME": "workflow_dispatch",
-                    "REQUESTED_SHARD": requested,
-                },
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-        for bad_shard in ("unknown-shard", "", "core-wave4;true"):
-            proc = subprocess.run(
-                ["/usr/bin/bash", "-euo", "pipefail", "-c", validate_lines],
-                env={
-                    **os.environ,
-                    "EVENT_NAME": "workflow_dispatch",
-                    "REQUESTED_SHARD": bad_shard,
-                },
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertNotEqual(proc.returncode, 0, f"Invalid shard accepted: {bad_shard!r}")
+        with tempfile.TemporaryDirectory() as tmp:
+            gh_out = Path(tmp) / "github_output.txt"
+            for requested in ["all"] + shard_names:
+                gh_out.write_text("", encoding="utf-8")
+                proc = subprocess.run(
+                    ["/usr/bin/bash", "-euo", "pipefail", "-c", validate_lines],
+                    env={
+                        **os.environ,
+                        "EVENT_NAME": "workflow_dispatch",
+                        "REQUESTED_SHARD": requested,
+                        "GITHUB_OUTPUT": str(gh_out),
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertEqual(gh_out.read_text(encoding="utf-8"), f"shard={requested}\n")
+
+            for event_name in ("pull_request", "push"):
+                gh_out.write_text("", encoding="utf-8")
+                proc = subprocess.run(
+                    ["/usr/bin/bash", "-euo", "pipefail", "-c", validate_lines],
+                    env={
+                        **os.environ,
+                        "EVENT_NAME": event_name,
+                        "REQUESTED_SHARD": "",
+                        "GITHUB_OUTPUT": str(gh_out),
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertEqual(gh_out.read_text(encoding="utf-8"), "shard=all\n")
+
+            for bad_shard in ("unknown-shard", "", "core-wave4;true"):
+                gh_out.write_text("", encoding="utf-8")
+                proc = subprocess.run(
+                    ["/usr/bin/bash", "-euo", "pipefail", "-c", validate_lines],
+                    env={
+                        **os.environ,
+                        "EVENT_NAME": "workflow_dispatch",
+                        "REQUESTED_SHARD": bad_shard,
+                        "GITHUB_OUTPUT": str(gh_out),
+                    },
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(proc.returncode, 0, f"Invalid shard accepted: {bad_shard!r}")
+                self.assertEqual(gh_out.read_text(encoding="utf-8"), "")
 
     def test_triggers_permissions_and_concurrency(self) -> None:
         header = self.workflow_text.split("\njobs:\n", 1)[0]
@@ -280,8 +343,16 @@ class Wave45WorkflowTests(unittest.TestCase):
 
         matrix_job = self.workflow_jobs["wave45-matrix"]
         self.assertEqual(field(matrix_job, 4, "needs"), "static-guards")
-        self.assertEqual(field(matrix_job, 4, "timeout-minutes"), "60")
+        self.assertEqual(field(matrix_job, 4, "timeout-minutes"), "${{ matrix.timeout }}")
         self.assertEqual(field(matrix_job, 6, "fail-fast"), "false")
+
+        timeouts_by_shard = {name: timeout for name, timeout, _ in self.shards}
+        for heavy_shard in ("interop-eval-e2e", "benchmarks-docs"):
+            self.assertGreaterEqual(
+                timeouts_by_shard[heavy_shard],
+                105,
+                f"Heavy shard {heavy_shard} requires >= 105m budget",
+            )
 
         for env_key, env_val in {
             "CC": "clang-21",
@@ -289,6 +360,13 @@ class Wave45WorkflowTests(unittest.TestCase):
             "ESHKOL_CXX_COMPILER": "clang++-21",
             "LLVM_CONFIG_EXECUTABLE": "llvm-config-21",
             "ESHKOL_JOBS": "'2'",
+            "MP4_ASAN_DETECT_LEAKS": "'1'",
+            "AC4_ASAN_DETECT_LEAKS": "'1'",
+            "AMD4_ASAN_DETECT_LEAKS": "'1'",
+            "WAVE4_COMPOSED_ASAN_DETECT_LEAKS": "'1'",
+            "MOD5_ASAN_DETECT_LEAKS": "'1'",
+            "DIST5_ASAN_DETECT_LEAKS": "'1'",
+            "EVAL5_ASAN_DETECT_LEAKS": "'1'",
         }.items():
             self.assertEqual(field(matrix_job, 6, env_key), env_val)
 
@@ -340,6 +418,11 @@ class Wave45WorkflowTests(unittest.TestCase):
                     f"{job_name}/{step_name} must use strict bash shell",
                 )
                 script = "\n".join(run(step_body)) + "\n"
+                self.assertNotIn(
+                    "${{",
+                    script,
+                    f"{job_name}/{step_name} must pass GitHub expressions via env:, not inside run:",
+                )
                 proc = subprocess.run(
                     ["/usr/bin/bash", "-n"],
                     input=script,
@@ -380,6 +463,22 @@ class Wave45WorkflowTests(unittest.TestCase):
                     )
                     expected_ok = static_res == "success" and matrix_res == "success"
                     self.assertEqual(proc.returncode == 0, expected_ok)
+            # Empty REQUESTED_SHARD must fail closed even when both jobs succeeded.
+            proc = subprocess.run(
+                ["/usr/bin/bash", "-euo", "pipefail", "-c", command],
+                env={
+                    **os.environ,
+                    "STATIC_RESULT": "success",
+                    "MATRIX_RESULT": "success",
+                    "EVENT_NAME": "workflow_dispatch",
+                    "REQUESTED_SHARD": "",
+                    "GITHUB_STEP_SUMMARY": str(summary),
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0, "Gate must reject empty REQUESTED_SHARD")
 
     def test_shard_runner_records_logs_and_fails_on_target_error(self) -> None:
         matrix_steps = steps(self.workflow_jobs["wave45-matrix"])

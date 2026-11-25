@@ -58,24 +58,32 @@ jobs:
     name: Static guards
     runs-on: ubuntu-22.04
     timeout-minutes: 5
+    outputs:
+      shard: ${{ steps.validate_shard.outputs.shard }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Validate shard dispatch input
+        id: validate_shard
         env:
           EVENT_NAME: ${{ github.event_name }}
-          REQUESTED_SHARD: ${{ inputs.shard || 'all' }}
+          REQUESTED_SHARD: ${{ inputs.shard }}
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
             case "$REQUESTED_SHARD" in
-              all|core-wave4|wave4-backend-composed|mod5-variants|mod5-sequence-moe-mla|serving-kv-decode|quantization|optimizers-finetune-alignment|distributed|interop-eval-e2e|benchmarks-docs) ;;
+              all|core-wave4|wave4-backend-composed|mod5-variants|mod5-sequence-moe-mla|serving-kv-decode|quantization|optimizers-finetune-alignment|distributed|interop-eval-e2e|benchmarks-docs)
+                validated="$REQUESTED_SHARD"
+                ;;
               *)
                 echo "Invalid shard dispatch input: $REQUESTED_SHARD" >&2
                 exit 1
                 ;;
             esac
+          else
+            validated=all
           fi
+          printf 'shard=%s\n' "$validated" >> "$GITHUB_OUTPUT"
 
       - name: Run Python isolation and CI topology guards
         shell: /usr/bin/bash -euo pipefail {0}
@@ -88,30 +96,40 @@ jobs:
     name: Wave 4/5 / ${{ matrix.shard }}
     needs: static-guards
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - shard: core-wave4
+            timeout: 75
             targets: 'test-mp4 test-mp4-aot test-pa4-wider test-pa4-wider-aot test-ac4 test-ac4-aot'
           - shard: wave4-backend-composed
+            timeout: 75
             targets: 'test-amd4 test-amd4-aot test-wave4-composed test-wave4-composed-aot test-data4-pipeline test-t2-trainer'
           - shard: mod5-variants
+            timeout: 75
             targets: 'test-mod5 test-mod5-aot test-mod5-rope test-rope-yarn test-unigram-tok test-mtp-head'
           - shard: mod5-sequence-moe-mla
+            timeout: 75
             targets: 'test-mod5-moe test-mod5-mla test-flash-attn2 test-ring-attn test-mamba-ssm'
           - shard: serving-kv-decode
+            timeout: 75
             targets: 'test-mod5-generate test-spec-decode test-paged-kv test-radix-kv test-continuous-batch test-constrained-decode test-beam-search'
           - shard: quantization
+            timeout: 75
             targets: 'test-io5-quant test-w4a32-quant test-fp8-gemm test-qlora-nf4 test-kv-cache-quant'
           - shard: optimizers-finetune-alignment
+            timeout: 75
             targets: 'test-mod5-adamw test-o2-muon test-lora test-multi-lora-sgmv test-dpo test-grpo test-ppo-rlhf'
           - shard: distributed
+            timeout: 75
             targets: 'test-dist5 test-dist5-aot test-pipeline-1f1b test-tensor-parallel test-fsdp-zero test-hybrid-mesh'
           - shard: interop-eval-e2e
+            timeout: 120
             targets: 'test-io5 test-io5-gguf test-io5-live-c1 test-mod5-e2e test-eval5 test-eval5-aot test-e2e-lifecycle'
           - shard: benchmarks-docs
+            timeout: 120
             targets: 'test-b0-wave45 test-b0-wave5 test-doc5 test-doc5-wave45'
     env:
       CC: clang-21
@@ -119,9 +137,16 @@ jobs:
       ESHKOL_CXX_COMPILER: clang++-21
       LLVM_CONFIG_EXECUTABLE: llvm-config-21
       ESHKOL_JOBS: '2'
+      MP4_ASAN_DETECT_LEAKS: '1'
+      AC4_ASAN_DETECT_LEAKS: '1'
+      AMD4_ASAN_DETECT_LEAKS: '1'
+      WAVE4_COMPOSED_ASAN_DETECT_LEAKS: '1'
+      MOD5_ASAN_DETECT_LEAKS: '1'
+      DIST5_ASAN_DETECT_LEAKS: '1'
+      EVAL5_ASAN_DETECT_LEAKS: '1'
     steps:
       - name: Reserve shard evidence
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard }}
+        if: ${{ needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard }}
         env:
           SHARD_NAME: ${{ matrix.shard }}
         shell: /usr/bin/bash -euo pipefail {0}
@@ -134,11 +159,11 @@ jobs:
             "$SHARD_NAME" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > "$root/workflow-status.tsv"
 
       - name: Checkout repository
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard }}
+        if: ${{ needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Record commit and tree identity
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard }}
+        if: ${{ needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard }}
         env:
           SHARD_NAME: ${{ matrix.shard }}
         shell: /usr/bin/bash -euo pipefail {0}
@@ -151,7 +176,7 @@ jobs:
             > "$root/identity.tsv"
 
       - name: Install supported host dependencies
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard }}
+        if: ${{ needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard }}
         env:
           SHARD_NAME: ${{ matrix.shard }}
         shell: /usr/bin/bash -euo pipefail {0}
@@ -172,14 +197,14 @@ jobs:
           } > "$root/dependencies.stdout" 2> "$root/dependencies.stderr"
 
       - name: Restore pinned Eshkol toolchain
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard }}
+        if: ${{ needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard }}
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: .deps
           key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
 
       - name: Build pinned Eshkol toolchain
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard }}
+        if: ${{ needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard }}
         env:
           SHARD_NAME: ${{ matrix.shard }}
         shell: /usr/bin/bash -euo pipefail {0}
@@ -188,7 +213,7 @@ jobs:
           make toolchain > "$root/toolchain.stdout" 2> "$root/toolchain.stderr"
 
       - name: Run Wave 4/5 shard targets
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard }}
+        if: ${{ needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard }}
         env:
           SHARD_NAME: ${{ matrix.shard }}
           SHARD_TARGETS: ${{ matrix.targets }}
@@ -221,7 +246,7 @@ jobs:
           test "$failed" -eq 0
 
       - name: Seal shard evidence
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard) }}
+        if: ${{ always() && (needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard) }}
         env:
           SHARD_NAME: ${{ matrix.shard }}
           PREVIOUS_JOB_STATUS: ${{ job.status }}
@@ -236,7 +261,7 @@ jobs:
           (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
 
       - name: Upload shard evidence
-        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.shard == 'all' || inputs.shard == matrix.shard) }}
+        if: ${{ always() && (needs.static-guards.outputs.shard == 'all' || needs.static-guards.outputs.shard == matrix.shard) }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: wave45-evidence-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -256,11 +281,12 @@ jobs:
           STATIC_RESULT: ${{ needs.static-guards.result }}
           MATRIX_RESULT: ${{ needs.wave45-matrix.result }}
           EVENT_NAME: ${{ github.event_name }}
-          REQUESTED_SHARD: ${{ inputs.shard || 'all' }}
+          REQUESTED_SHARD: ${{ needs.static-guards.outputs.shard }}
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
           test "$STATIC_RESULT" = success
           test "$MATRIX_RESULT" = success
+          test -n "$REQUESTED_SHARD"
           if [[ "$EVENT_NAME" == workflow_dispatch && "$REQUESTED_SHARD" != all ]]; then
             echo "Wave 4/5 single-shard dispatch passed: ${REQUESTED_SHARD} (partial run, not full Wave 4/5 admission)." >> "$GITHUB_STEP_SUMMARY"
           else
