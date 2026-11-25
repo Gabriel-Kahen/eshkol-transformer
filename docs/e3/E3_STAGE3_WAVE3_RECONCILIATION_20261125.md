@@ -8,13 +8,15 @@ test source retain the PR #223 blobs. The launcher changes only its shared
 heavy-build lock and the conservative host qualification check below; the
 source pin, tracked digest, PR #216 ancestry, OCI image digest, dependency
 identity, read-only mounts, cgroup caps, custody and admission checks remain.
-The separate #221 and #218/#226 branches are not incorporated here.
+The E3 leaf was reviewed separately from #221 and #218/#226.
 
 ## Fail-closed preflight
 
-Freeze and review a clean commit and tree before invoking the launcher. Under
-`/home/gabe/.cache/eshkol-transformer-orchestration-build.lock`, the launcher
-rechecks that exact HEAD/tree, clean tracked source digest, and ancestry from
+Freeze and review a clean commit and tree, then invoke the launcher directly.
+It acquires `/home/gabe/.cache/eshkol-transformer-orchestration-build.lock`
+followed by `/tmp/eshkol-transformer-heavy-build.lock` and holds both through
+container cleanup. Under both locks it rechecks the exact HEAD/tree, clean
+tracked source digest, and ancestry from
 `70220bbe0d27a9a8110deeedaf873055f11ca9a6`. It requires the existing
 read-only fe9 dependency bundle and Q0 Python environment. It records a fresh
 host resource snapshot in the evidence directory and aborts **before Docker

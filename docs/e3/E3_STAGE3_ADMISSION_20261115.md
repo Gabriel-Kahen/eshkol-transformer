@@ -47,8 +47,9 @@ After source review, freeze a clean commit/tree and invoke:
 python3 scripts/launch-e3-r1-stage3-compiled.py COMMIT TREE /home/gabe/.cache/et-e3-admission-20261115-evidence/stage3
 ```
 
-The launcher serializes on
-`/home/gabe/.cache/eshkol-transformer-orchestration-build.lock`.
+The launcher acquires `/home/gabe/.cache/eshkol-transformer-orchestration-build.lock`
+followed by `/tmp/eshkol-transformer-heavy-build.lock` and holds both
+through container cleanup. Invoke the launcher directly to acquire both.
 `TMPDIR=/out/tmp` and every generated artifact reside in the `/home` evidence
 directory. A lock-time check requires
 at least 32 GiB free on that actual scratch filesystem. The source/common Git,

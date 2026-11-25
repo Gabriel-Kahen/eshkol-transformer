@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Host-only f31 launcher; retain the shared build lock until the CID is gone."""
+"""Host-only f31 launcher; retain both shared build locks until the CID is gone."""
 import argparse
+from contextlib import contextmanager, ExitStack
 import fcntl
 import hashlib
 import json
@@ -9,11 +10,15 @@ from pathlib import Path
 import re
 import secrets
 import signal
+import stat
 import subprocess
 import time
 
 SOURCE = Path(__file__).resolve().parents[1]
-LOCK = Path('/home/gabe/.cache/eshkol-transformer-orchestration-build.lock')
+BUILD_LOCKS = (
+    Path('/home/gabe/.cache/eshkol-transformer-orchestration-build.lock'),
+    Path('/tmp/eshkol-transformer-heavy-build.lock'),
+)
 DEPS = Path('/home/gabe/.codex/evidence/eshkol-transformer/e3-r1-stage8-ce-gate-124cb36c-20261014-b/deps')
 VENV = Path('/home/gabe/.codex/venvs/eshkol-oracle-py3146')
 IMAGE = 'sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6'
@@ -188,6 +193,26 @@ def stop_child(child):
         child.wait()
 
 
+@contextmanager
+def build_locks():
+    with ExitStack() as locks:
+        identities = set()
+        for path in BUILD_LOCKS:
+            try:
+                fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             0o600)
+            except OSError as error:
+                raise SystemExit(f'cannot open build lock {path}: {error}') from error
+            locks.callback(os.close, fd)
+            metadata = os.fstat(fd)
+            identity = (metadata.st_dev, metadata.st_ino)
+            if not stat.S_ISREG(metadata.st_mode) or identity in identities:
+                raise SystemExit(f'build lock must be a distinct regular file: {path}')
+            identities.add(identity)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('expected_head', help='reviewed gate commit SHA-1')
@@ -202,14 +227,13 @@ def main():
             evidence.resolve().is_relative_to(SOURCE.resolve()) or
             not evidence.resolve().is_relative_to(Path('/home'))):
         parser.error('evidence must be a fresh absolute /home path outside the source tree')
-    if LOCK.is_symlink() or not DEPS.is_dir() or not (VENV / 'bin/python').is_file():
-        parser.error('lock or pinned dependency mount is missing')
+    if not DEPS.is_dir() or not (VENV / 'bin/python').is_file():
+        parser.error('pinned dependency mount is missing')
 
     run_id = secrets.token_hex(16)
     name = f'e3-r1-stage3-{args.expected_head[:8]}-{run_id[:8]}'
     source_digest = tracked_digest()
-    with LOCK.open('a+b') as held:
-        fcntl.flock(held, fcntl.LOCK_EX)
+    with build_locks():
         if (git('rev-parse', 'HEAD') != args.expected_head or
                 git('rev-parse', 'HEAD^{tree}') != args.expected_tree or
                 git('status', '--porcelain') or tracked_digest() != source_digest or

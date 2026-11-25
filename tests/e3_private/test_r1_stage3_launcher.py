@@ -1,6 +1,8 @@
 """Host-only custody tests; Docker and the compiled gate are never launched."""
+import fcntl
 import importlib.util
 import json
+import os
 from pathlib import Path
 import signal
 import subprocess
@@ -22,10 +24,39 @@ def container(running=False, label='owned', exit_code=0):
 
 
 class Stage3LauncherCustodyTest(unittest.TestCase):
-    def test_gate_uses_shared_orchestration_lock(self):
-        self.assertEqual(
-            LAUNCHER.LOCK,
-            Path('/home/gabe/.cache/eshkol-transformer-orchestration-build.lock'))
+    def test_gate_uses_both_shared_locks_in_order(self):
+        self.assertEqual(LAUNCHER.BUILD_LOCKS, (
+            Path('/home/gabe/.cache/eshkol-transformer-orchestration-build.lock'),
+            Path('/tmp/eshkol-transformer-heavy-build.lock'),
+        ))
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / name for name in ('outer.lock', 'legacy.lock'))
+            with mock.patch.object(LAUNCHER, 'BUILD_LOCKS', paths), \
+                    mock.patch.object(fcntl, 'flock', wraps=fcntl.flock) as acquire:
+                with LAUNCHER.build_locks():
+                    self.assertEqual([os.fstat(call.args[0]).st_ino
+                                      for call in acquire.call_args_list],
+                                     [path.stat().st_ino for path in paths])
+                    for path in paths:
+                        with path.open('r+b') as competing_lock:
+                            with self.assertRaises(BlockingIOError):
+                                fcntl.flock(competing_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                for path in paths:
+                    with path.open('r+b') as competing_lock:
+                        fcntl.flock(competing_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def test_gate_releases_outer_lock_when_legacy_alias_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outer = Path(directory) / 'outer.lock'
+            outer.touch()
+            alias = Path(directory) / 'legacy.lock'
+            os.link(outer, alias)
+            with mock.patch.object(LAUNCHER, 'BUILD_LOCKS', (outer, alias)):
+                with self.assertRaisesRegex(SystemExit, 'distinct regular file'):
+                    with LAUNCHER.build_locks():
+                        self.fail('an aliased legacy lock was acquired')
+            with outer.open('r+b') as competing_lock:
+                fcntl.flock(competing_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def test_host_qualification_preserves_all_four_floors(self):
         with tempfile.TemporaryDirectory() as directory:
