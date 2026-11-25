@@ -194,3 +194,7 @@ The existing IO5 test harness discovers the generated-fixture mapping tests.
 GGUF and NumPy reference interpreter for `make test-io5-gguf`. The upstream
 checks skip explicitly when the corresponding package is absent. The external
 packages are used only in these development tests.
+
+The native GGML witness also reads and rewrites a mapped decoder file. It checks
+the literal names, reversed dimensions and F32 bytes through GGML, then checks
+that the rewritten file restores the complete C1 bytes and head/embedding tie.
