@@ -1,0 +1,87 @@
+# From a byte corpus to a fixed-profile model
+
+This guide uses the installed CLI3 commands on the pinned CPU lane. It prepares
+a DATA4 corpus, trains one update, inspects the C2 checkpoint, evaluates it,
+and generates one byte. The [API reference](DOC5_API_REFERENCE.md) identifies
+the public and bounded source entry points; the [DATA4 installed contract](DATA4_INSTALLED_REPORT.md)
+describes report and publication limits.
+
+## Pinned environment
+
+Use the `eshkol-r0-debug:20260928` image with the Eshkol cache configured at
+`/tc/src` and `/tc/build`. The lock in `toolchain/eshkol.lock` pins Ubuntu
+22.04 x86-64, LLVM/Clang 21.1.8, and Eshkol
+`fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`. From a transformer checkout:
+
+```bash
+repo=$(pwd -P)
+repo_git=$(git rev-parse --path-format=absolute --git-common-dir)
+toolchain_cache=/absolute/path/to/eshkol-fe9dfd52-ubuntu22
+docker run --rm --network none \
+  -v "$repo:$repo:ro" -v "$repo_git:$repo_git:ro" -w "$repo" \
+  -v "$toolchain_cache:/tc:ro" \
+  -e ESHKOL_SOURCE_DIR=/tc/src -e ESHKOL_BUILD_DIR=/tc/build \
+  -e CC=clang-21 -e CXX=clang++-21 \
+  eshkol-r0-debug:20260928 bash -ec '
+    git config --global --add safe.directory "*"
+    bash scripts/test-doc5-walkthrough.sh
+  '
+```
+
+The runner checks every API row, tutorial repository path, and referenced Make
+target. It copies tracked sources into a disposable directory, builds CLI3,
+runs the existing cross-command gate and installed DATA4 command tests, then
+executes the integrated recipe below. A source-only check is available as
+`bash scripts/test-doc5-walkthrough.sh --check-source`; it does not establish
+the executable walkthrough.
+
+## Prepare, train, evaluate, and generate
+
+In a disposable checkout with the same pinned toolchain, build the CLI3
+executable. The [cross-command gate](../scripts/test-cli3-cross-command-chain.sh)
+uses the same config and bytes, and checks the output and rejection contracts.
+
+```bash
+scratch=$(mktemp -d)
+TMPDIR="$scratch" CLI3_COMPILER_TIMEOUT_SECONDS=1200 \
+  bash scripts/build-cli3.sh "$scratch/cli3"
+cli="$scratch/cli3/eshkol-transformer"
+cat >"$scratch/config.json" <<'JSON'
+{"config-schema-major":1,"config-schema-minor":0,"model.context-length":2,"model.hidden-size":4,"model.layer-count":1,"model.query-head-count":2,"model.vocabulary-size":256,"run.seed":1729,"training.accumulation-steps":2}
+JSON
+printf '\003\305\051\007\013\023' >"$scratch/train.txt"
+printf '\024\025\026\027\030\031' >"$scratch/heldout.txt"
+"$cli" tokenizer byte --config "$scratch/config.json" --output "$scratch/byte.t1"
+mkdir "$scratch/train" "$scratch/heldout"
+"$cli" corpus prepare --tokenizer "$scratch/byte.t1" \
+  --source "train=$scratch/train.txt" --minimum-bytes 6 --maximum-bytes 6 \
+  --output-directory "$scratch/train" --shard-token-limit 4
+"$cli" corpus report-validate --input-directory "$scratch/train"
+"$cli" corpus build --tokenizer "$scratch/byte.t1" \
+  --document "$scratch/heldout.txt" --output-directory "$scratch/heldout" \
+  --shard-token-limit 4
+"$cli" pretrain --config "$scratch/config.json" --tokenizer "$scratch/byte.t1" \
+  --train-corpus "$scratch/train" --checkpoint "$scratch/first.c2" --max-updates 1
+"$cli" checkpoint inspect --input "$scratch/first.c2"
+"$cli" evaluate --config "$scratch/config.json" --tokenizer "$scratch/byte.t1" \
+  --train-corpus "$scratch/train" --validation-corpus "$scratch/heldout" \
+  --checkpoint "$scratch/first.c2"
+"$cli" generate --config "$scratch/config.json" --tokenizer "$scratch/byte.t1" \
+  --train-corpus "$scratch/train" --checkpoint "$scratch/first.c2" \
+  --prompt-hex 41 --sampling greedy --seed 1729
+```
+
+The prepared training corpus has six byte tokens in two D1 shards. The v1.0
+`data4-report.tsv` records source selection and an aggregate checksum.
+`report-validate` checks the report and D1 summary, but does not bind the
+report to the manifest digest; a same-summary report swap can pass. DATA4
+publishes the D1 corpus and report as separate units, so an interrupted
+publication can leave a corpus without its sidecar. Preserve original inputs
+if the report needs regeneration.
+
+The C2 checkpoint holds fixed-profile CPU-f32 training state; it is distinct
+from the C1 logical-parameter format used by IO5. This run establishes one
+update, evaluation and one-byte generation for the context-two byte-tokenizer
+profile. It does not establish a general model trainer, longer generation,
+GPU execution, or CPU-v1 release admission. See the [roadmap](ROADMAP.md) for
+their separate gates. Remove the scratch directory when finished.
