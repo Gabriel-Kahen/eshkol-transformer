@@ -177,6 +177,9 @@ static void test_invalid_audit(void) {
   CHECK(et_eval5_audit_contamination(&document, 1, &huge_bytes, 1, &config,
                                     &index, 1, &summary) == ET_EVAL5_ERR_OVERFLOW);
   config.ngram_mode = ET_EVAL5_NGRAM_TOKENS;
+  const et_eval5_document invalid_token_mode_bytes = {NULL, 1, &token, 1};
+  CHECK(et_eval5_audit_contamination(NULL, 0, &invalid_token_mode_bytes, 1,
+                                    &config, &index, 1, &summary) == ET_EVAL5_ERR_ARGUMENT);
   CHECK(et_eval5_audit_contamination(NULL, 0, &huge_tokens, 1, &config,
                                     &index, 1, &summary) == ET_EVAL5_ERR_OVERFLOW);
   CHECK(et_eval5_audit_contamination(NULL, 0, &invalid_tokens, 1, &config,
@@ -187,6 +190,8 @@ static void test_invalid_audit(void) {
       {ET_EVAL5_NGRAM_BYTES, 2, 2, 0.0, 1.0}, {ET_EVAL5_NGRAM_BYTES, 2, 0, NAN, 1.0},
       {ET_EVAL5_NGRAM_BYTES, 2, 0, 0.0, INFINITY}, {ET_EVAL5_NGRAM_BYTES, 2, 0, 1.1, 1.0},
       {ET_EVAL5_NGRAM_BYTES, 2, 0, 0.0, -0.1},
+      {ET_EVAL5_NGRAM_BYTES, 2, 0, -0.0, 1.0},
+      {ET_EVAL5_NGRAM_BYTES, 2, 0, 0.0, -0.0},
   };
   for (size_t i = 0; i < COUNT(bad); ++i) {
     CHECK(et_eval5_audit_contamination(NULL, 0, &document, 1, &bad[i],
