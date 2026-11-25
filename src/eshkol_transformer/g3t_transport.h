@@ -52,6 +52,11 @@ int64_t et_g3t_private_committed_save_copy_v1(
 #endif
 int64_t et_g3t_private_generator_close_v1(void *context);
 int64_t et_g3t_private_call_acquire_v1(void *context, int64_t call_kind);
+#ifdef ET_G3R_REPLAYED_P1_G1_PRIVATE
+/* Source-private one-token continuation from an authentic committed P1. */
+int64_t et_g3t_private_replayed_p1_g1_preflight_v1(void *generator);
+int64_t et_g3t_private_replayed_p1_g1_acquire_v1(void *generator);
+#endif
 int64_t et_g3t_private_call_abort_v1(void *context);
 #ifdef ET_G3T_PREFILL_SAMPLE_PRIVATE
 void *et_g3t_private_input_from_token_v1(int64_t token);

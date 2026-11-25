@@ -1,0 +1,110 @@
+;;; Source-private generated G1 call from an authentic idle manual P1 commit.
+;;; Uses the existing G3-T registry and final output owner; no C2/public route.
+(extern i64 g3r-native-replay-preflight ptr
+        :real et_g3t_private_replayed_p1_g1_preflight_v1)
+(extern i64 g3r-native-replay-acquire ptr
+        :real et_g3t_private_replayed_p1_g1_acquire_v1)
+
+(define (g3r-replay-tokenizer-live entry operation)
+  (let* ((tokenizer (vector-ref entry 6))
+         (found (t1-private-entry tokenizer)))
+    (if (not (and (pair? found) (eq? (car found) tokenizer)
+                  (pair? (cdr found)) (null? (cdr (cdr found)))
+                  (let ((core (car (cdr found))))
+                    (and (t1-core-tokenizer? core)
+                         (eq? (vector-ref core 1) 'raw)
+                         (null? (vector-ref core 2))
+                         (null? (vector-ref core 3))
+                         (null? (vector-ref core 4))
+                         (= (t1-tokenizer-core-vocab-size core) 256)
+                         (string? (vector-ref core 6))
+                         (string=? (vector-ref core 6)
+                           "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704")))))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-R replay tokenizer binding changed"))
+    #t))
+
+(define (g3r-replay-call-acquire generator-entry)
+  (let ((operation 'g3r-replay-call-acquire))
+    (if (not (eq? (vector-ref m3-call-state 0) #t))
+        (g3t-fail-raw 'invalid-state operation 2
+                      "G3-R replay requires the shared M3 guard"))
+    (let* ((model-entry (vector-ref generator-entry 5))
+           (shell (vector 'g3r-replay-call-private))
+           (entry (vector shell 'call 'pending (vector-ref generator-entry 3)
+                          generator-entry model-entry
+                          (vector-ref generator-entry 6) #f #f #f #f #f)))
+      (if (not (eq? (g3t-model-entry-live
+                     (vector-ref model-entry 0) operation #f)
+                   model-entry))
+          (g3t-fail-raw 'invalid-state operation 2
+                        "G3-R replay model binding changed"))
+      (if (not (and (eq? (vector-ref generator-entry 9) #f)
+                    (eq? (vector-ref model-entry 10) #f)))
+          (g3t-fail-raw 'invalid-state operation 2
+                        "G3-R generator or model already has a call"))
+      (vector-set! g3t-registry 0
+                   (cons entry (vector-ref g3t-registry 0)))
+      (if (not (= 0 (g3r-native-replay-acquire
+                       (vector-ref generator-entry 3))))
+          (begin (g3t-prefill-dead! entry)
+                 (g3t-native-fail-raw operation)))
+      (vector-set! generator-entry 9 entry)
+      (vector-set! model-entry 10 entry)
+      (vector-set! entry 2 'live)
+      (vector-set! m3-call-state 0 entry)
+      shell)))
+
+(define (g3r-private-replayed-p1-g1! generator)
+  (let ((operation 'g3r-private-replayed-p1-g1!))
+    (m3-call operation
+      (let ((generator-entry (g3t-generator-find generator operation)))
+        (if (not (and (vector? generator-entry)
+                      (= (vector-length generator-entry) 12)
+                      (eq? (vector-ref generator-entry 1) 'generator)
+                      (eq? (vector-ref generator-entry 2) 'live)
+                      (eq? (vector-ref generator-entry 11) 'diagnostic-c2)))
+            (g3t-fail-raw 'invalid-state operation 2
+                          "G3-R replay requires a live diagnostic-C2 generator"))
+        (g3r-replay-tokenizer-live generator-entry operation)
+        (if (not (= 1 (vector-ref (vector-ref generator-entry 7) 5)))
+            (g3t-fail-raw 'invalid-argument operation 3
+                          "G3-R replay requires budget one"))
+        (if (not (= 0 (g3r-native-replay-preflight
+                       (vector-ref generator-entry 3))))
+            (g3t-native-fail-raw operation))
+        (let ((call #f))
+          (guard (caught
+                   (#t (if call
+                           (let ((entry (g3t-prefill-entry call 'call operation)))
+                             (if (eq? (vector-ref entry 2) 'live)
+                                 (g3t-call-abort call))))
+                       (raise caught)))
+            (set! call (g3r-replay-call-acquire generator-entry))
+            (let ((output (g3t-output-reserve call 1)))
+              (g3t-sample call)
+              (g3t-frame-begin call #f 2)
+              (g3t-role-step call 0)
+              (g3t-role-step call 1)
+              (g3t-role-step call 2)
+              (g3t-role-step call 3)
+              (g3t-role-step call 4)
+              (g3t-role-step call 5)
+              (g3t-role-step call 6)
+              (g3t-role-step call 7)
+              (g3t-role-step call 8)
+              (g3t-role-step call 9)
+              (g3t-role-step call 10)
+              (g3t-role-step call 11)
+              (g3t-role-step call 12)
+              (g3t-role-step call 13)
+              (g3t-role-step call 14)
+              (g3t-role-step call 15)
+              (g3t-role-step call 16)
+              (g3t-role-step call 17)
+              (g3t-role-step call 18)
+              (g3t-role-step call 19)
+              (g3t-role-step call 20)
+              (g3t-output-prepare call output)
+              (g3t-t1-decode-output! call output)
+              (g3t-final-commit! call output))))))))

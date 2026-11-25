@@ -49,7 +49,7 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
     def test_exact_driver_inverse_and_first_call_boundary(self) -> None:
         base, mutant = BASE.read_text(), MUTANT.read_text()
         self.assertEqual(sha(BASE),
-                         "44d64a8bd96d48ae3faea18d437fb5ee4934016da7f75a3011c666bd0a35be09")
+                         "5c2d5dcd28219e5977e574a75c983366b7fcd243e6ba100a5c9b0eee1ed9c97d")
         self.assertEqual(transform(base), mutant)
         self.assertEqual(transform(mutant, reverse=True), base)
         measured = mutant.index("(- (e3-test-region-used) region-before)")
@@ -67,7 +67,7 @@ class FirstEvaluationMutantTuple(unittest.TestCase):
 
     def test_normal_inputs_unchanged_and_manifests_exact(self) -> None:
         self.assertEqual(sha(ROOT / "src/eshkol_transformer/e3_frame.c"),
-                         "8d238ed79b0b14d74b8ed454e328bcc22da46e766e4d70a59482763ef18b8857")
+                         "248e9149ed6a4c3042800c713c7783738e5b506fd8825379b6bb846252d50e33")
         digest = hashlib.sha256()
         originals = sorted(PRIVATE.glob("retention_package_*.txt"))
         self.assertEqual(len(originals), 11)

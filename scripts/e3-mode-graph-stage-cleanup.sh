@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Private mode/graph and retention build staging and cleanup helpers.
+# Private mode/graph, retention and fault build staging and cleanup helpers.
 e3_retention_generated_stage() {
   local object=$1 stage gate generated
   stage="$(dirname -- "${object}")"
@@ -9,6 +9,19 @@ e3_retention_generated_stage() {
      -d "${stage}" && ! -L "${stage}" && -O "${stage}" &&
      -d "${gate}" && ! -L "${gate}" && -O "${gate}" ]] || return 1
   generated="${gate}/.e3-retention-generated"
+  [[ ! -e "${generated}" && ! -L "${generated}" ]] || return 1
+  printf '%s\n' "${generated}"
+}
+
+e3_fault_generated_stage() {
+  local object=$1 stage gate generated
+  stage="$(dirname -- "${object}")"
+  gate="$(dirname -- "${stage}")"
+  [[ "$(basename -- "${object}")" == e3_fault_package.o &&
+     "$(basename -- "${stage}")" =~ ^\.e3-fault\.[[:alnum:]]{6}$ &&
+     -d "${stage}" && ! -L "${stage}" && -O "${stage}" &&
+     -d "${gate}" && ! -L "${gate}" && -O "${gate}" ]] || return 1
+  generated="${gate}/.e3-fault-generated"
   [[ ! -e "${generated}" && ! -L "${generated}" ]] || return 1
   printf '%s\n' "${generated}"
 }

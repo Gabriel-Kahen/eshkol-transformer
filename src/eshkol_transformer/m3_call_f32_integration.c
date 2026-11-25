@@ -235,9 +235,13 @@ static void m3_call_drain(et_g3t_model_pins_internal *pins, size_t count) {
   memset(pins, 0, sizeof(*pins));
 }
 
-int32_t et_g3t_model_pins_begin_internal(
+static int32_t m3_call_g3t_begin(
     et_f32_parameter *const parameters[14], const void *const identities[14],
-    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error) {
+    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error,
+    size_t fail_before) {
+#if !defined(ET_M3_CALL_TESTING) && !defined(ET_E3_PARTIAL_PIN_TESTING)
+  (void)fail_before;
+#endif
   const char *operation = "m3-call-pins-begin";
   if (!m3_call_error_safe(error, pins, parameters, identities))
     return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
@@ -269,8 +273,12 @@ int32_t et_g3t_model_pins_begin_internal(
   m3_call_test_release_count = 0;
 #endif
   for (size_t i = 0; i < M3_CALL_PIN_COUNT; ++i) {
+#if defined(ET_M3_CALL_TESTING) || defined(ET_E3_PARTIAL_PIN_TESTING)
+    if (i == fail_before
 #ifdef ET_M3_CALL_TESTING
-    if (i == m3_call_test_fail_after) {
+        || i == m3_call_test_fail_after
+#endif
+        ) {
       /* Inject only between indivisible acquisitions; preserve the first error. */
       if (pins->self != pins || pins->held_mask != (uint16_t)((1u << i) - 1u) ||
           m3_call_preflight(pins->parameters, pins->identities, pins, error, i, 1)) abort();
@@ -287,6 +295,29 @@ int32_t et_g3t_model_pins_begin_internal(
   }
   return m3_call_report(M3_CALL_OK, error, operation);
 }
+
+int32_t et_g3t_model_pins_begin_internal(
+    et_f32_parameter *const parameters[14], const void *const identities[14],
+    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error) {
+  return m3_call_g3t_begin(parameters, identities, pins, error, SIZE_MAX);
+}
+
+#ifdef ET_E3_PARTIAL_PIN_TESTING
+int32_t et_g3t_model_pins_begin_fail_before_internal(
+    et_f32_parameter *const parameters[14], const void *const identities[14],
+    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error,
+    size_t fail_before);
+int32_t et_g3t_model_pins_begin_fail_before_internal(
+    et_f32_parameter *const parameters[14], const void *const identities[14],
+    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error,
+    size_t fail_before) {
+  if (fail_before >= M3_CALL_PIN_COUNT)
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+        ET_F32_TENSOR_CODE_INVALID_SHAPE, "m3-call-pins-begin",
+        "test pin index is out of range");
+  return m3_call_g3t_begin(parameters, identities, pins, error, fail_before);
+}
+#endif
 
 int32_t et_g3t_model_pins_check_internal(
     const et_g3t_model_pins_internal *pins, et_f32_tensor_error *error) {
@@ -530,7 +561,10 @@ static void m3_call_record_drain(m3_call_pin_record *record, size_t count) {
 static int32_t m3_call_record_begin(
     et_f32_parameter *const parameters[14], const void *const identities[14],
     m3_call_pin_record *record, et_f32_tensor_error *error,
-    const m3_call_pin_profile *profile) {
+    const m3_call_pin_profile *profile, size_t fail_before) {
+#if !defined(ET_M3_CALL_TESTING) && !defined(ET_E3_PARTIAL_PIN_TESTING)
+  (void)fail_before;
+#endif
   const char *operation = profile->begin_operation;
   if (!m3_call_record_error_safe(error, record, parameters, identities))
     return ET_F32_TENSOR_ERROR_INVALID_ARGUMENT;
@@ -570,8 +604,12 @@ static int32_t m3_call_record_begin(
   m3_call_test_release_count = 0;
 #endif
   for (size_t i = 0; i < M3_CALL_PIN_COUNT; ++i) {
+#if defined(ET_M3_CALL_TESTING) || defined(ET_E3_PARTIAL_PIN_TESTING)
+    if (i == fail_before
 #ifdef ET_M3_CALL_TESTING
-    if (i == m3_call_test_fail_after) {
+        || i == m3_call_test_fail_after
+#endif
+        ) {
       if (m3_call_record_self(record) != record->storage ||
           *record->held_mask != (uint16_t)((1u << i) - 1u) ||
           m3_call_record_preflight(record->parameters, record->identities,
@@ -627,8 +665,23 @@ int32_t et_g3t_model_pins_begin_internal(
     et_g3t_model_pins_internal *pins, et_f32_tensor_error *error) {
   m3_call_pin_record record = m3_call_g3t_record(pins);
   return m3_call_record_begin(parameters, identities, &record, error,
-                              &m3_call_g3t_profile);
+                              &m3_call_g3t_profile, SIZE_MAX);
 }
+
+#ifdef ET_E3_PARTIAL_PIN_TESTING
+int32_t et_g3t_model_pins_begin_fail_before_internal(
+    et_f32_parameter *const parameters[14], const void *const identities[14],
+    et_g3t_model_pins_internal *pins, et_f32_tensor_error *error,
+    size_t fail_before) {
+  if (fail_before >= M3_CALL_PIN_COUNT)
+    return set_error(error, ET_F32_TENSOR_ERROR_INVALID_ARGUMENT,
+        ET_F32_TENSOR_CODE_INVALID_SHAPE, m3_call_g3t_profile.begin_operation,
+        "test pin index is out of range");
+  m3_call_pin_record record = m3_call_g3t_record(pins);
+  return m3_call_record_begin(parameters, identities, &record, error,
+                              &m3_call_g3t_profile, fail_before);
+}
+#endif
 
 int32_t et_g3t_model_pins_check_internal(
     const et_g3t_model_pins_internal *pins, et_f32_tensor_error *error) {
@@ -647,7 +700,7 @@ int32_t et_g3c4_model_pins_begin_internal(
     et_g3c4_model_pins_internal *pins, et_f32_tensor_error *error) {
   m3_call_pin_record record = m3_call_g3c4_record(pins);
   return m3_call_record_begin(parameters, identities, &record, error,
-                              &m3_call_g3c4_profile);
+                              &m3_call_g3c4_profile, SIZE_MAX);
 }
 
 int32_t et_g3c4_model_pins_check_internal(
