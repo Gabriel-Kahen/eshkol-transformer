@@ -184,6 +184,7 @@ docs/g3/G3_C4_P2_G2_TERMINAL_CARRIERS_LEAF.md
 include/eshkol_transformer/a2_attention_abi.h
 include/eshkol_transformer/g3n_primitives_abi.h
 include/eshkol_transformer/n2_primitives_abi.h
+include/eshkol_transformer/pa4_attention_candidate.h
 internal/c1/lib/c1_sha256.esk
 internal/c1/lib/transformer/checkpoint_internal.esk
 internal/c1/lib/transformer/persistence_policy_internal.esk

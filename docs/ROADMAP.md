@@ -3594,6 +3594,18 @@ publication, public G2 and continuation remain pending.
   actual terminal close, public G2, trained-G2 sanitizer acceptance and
   save/reload remain open.
 
+  Wave 3 source reconciliation replays both published leaves onto `4ff24845`
+  without changing their Eshkol source, fixtures, or native shim. The carrier
+  closure additionally records `pa4_attention_candidate.h`, included by the
+  Wave 3 A2 provider. Both static mutation checkers, Q0 isolation, and the
+  call-entry source check pass; an independent source-and-test review found no
+  issue in this bounded replay. The earlier compiled seals have different
+  inputs and do not qualify this tree. The next gate is fresh pinned normal,
+  repeat, and sanitizer runs of both terminal-pending-anchor and terminal-
+  carriers scripts under the shared heavy-build lock, with exact-tree source,
+  compiler, runtime, resource, and output seals. No compiled Wave 3 result or
+  terminal composition is claimed here.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
