@@ -14,6 +14,7 @@ SHELL := /usr/bin/bash
 	test-ci-tokenizer-bpe-after-build \
 	test-ci-tokenizer-bpe-boundary-after-build test-ci-dataset-after-build \
 	test-ci-dataset-resources-after-build test-ci-data4-after-build \
+	test-doc5-source test-doc5 \
 	test-ci-topology \
 	test-a0 test-a2 test-b0 test-c1 test-c2 test-c2-codec test-c2-core \
 	test-c2-checkpoint-inspect test-c2-checkpoint-load test-c2-checkpoint-save \
@@ -97,6 +98,12 @@ build-ci-dataset: configure
 
 test: build
 	$(MAKE) test-after-build
+
+test-doc5-source:
+	/usr/bin/bash scripts/test-doc5-walkthrough.sh --check-source
+
+test-doc5:
+	/usr/bin/bash scripts/test-doc5-walkthrough.sh
 
 test-after-build:
 	/usr/bin/bash scripts/test.sh
