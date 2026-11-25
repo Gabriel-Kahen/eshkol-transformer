@@ -3335,6 +3335,15 @@ publication, public G2 and continuation remain pending.
   are prerequisites; Eshkol implementation and compiled same-call proof remain
   pending. No public G2 or continuation acceptance is claimed.
 
+### Standalone speculative decoding candidate
+
+The opt-in [speculative decoding ABI](SPECULATIVE_DECODING.md) accepts bounded
+draft tokens and precomputed draft/target logits, verifies greedy equality or
+stochastic rejection sampling, and returns emitted tokens plus explicit RNG
+state. Its deterministic mock witness checks verifier behavior on precomputed
+rows. Live draft/target model execution, KV-cache rollback/commit, and measured
+throughput are separate prerequisites before generator integration.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

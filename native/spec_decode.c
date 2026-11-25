@@ -458,7 +458,8 @@ et_spec_status et_spec_verify_greedy_v1(
   st = validate_vocab(vocab_size);
   if (st != ET_SPEC_OK)
     return st;
-  if (out_capacity < horizon + 1u)
+  if (out_capacity < horizon + 1u ||
+      (uint64_t)out_capacity > (uint64_t)SIZE_MAX / sizeof(uint32_t))
     return ET_SPEC_ERR_BOUNDS;
 
   const size_t target_rows = (size_t)horizon + 1u;
@@ -547,7 +548,8 @@ et_spec_status et_spec_verify_sample_v1(
   st = validate_vocab(vocab_size);
   if (st != ET_SPEC_OK)
     return st;
-  if (out_capacity < horizon + 1u)
+  if (out_capacity < horizon + 1u ||
+      (uint64_t)out_capacity > (uint64_t)SIZE_MAX / sizeof(uint32_t))
     return ET_SPEC_ERR_BOUNDS;
   if (rng_in->counter > UINT64_MAX - (uint64_t)(horizon + 1u))
     return ET_SPEC_ERR_BOUNDS;

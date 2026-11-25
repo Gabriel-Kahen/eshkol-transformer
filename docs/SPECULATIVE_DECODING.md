@@ -121,6 +121,9 @@ $$P_{\text{spec}}(v) = q(v) \min\!\left(1, \frac{p(v)}{q(v)}\right) + (1 - \alph
 All inputs (including draft tokens and all rows beyond any early rejection or
 EOS position) are validated upfront before any output write. On any error
 status, every output buffer remains byte-for-byte unchanged.
+The core C ABI carries unsigned 64-bit RNG counters. The Eshkol AOT bridge
+uses signed 64-bit arguments and accessors, so it rejects a starting counter
+that could produce an unrepresentable next counter on a successful call.
 
 ## Verification results (pinned container `eshkol-r0-debug:20260928`)
 
@@ -167,7 +170,7 @@ toolchain via `bash scripts/test-spec-decode.sh`:
     `stochastic` (`emitted=7, eos_hit=1, PASS`).
   - Negative/non-finite rejections with telemetry preservation: `SPEC AOT NEGATIVE PASS`.
   - Two fresh compilations produced byte-identical ELFs and byte-identical stdout:
-    `SHA-256 = a5e7c2947c9d80b7271bf984c565c0ed7e9b3fdc1779e321ae4663d8a81490d4`.
+    `SHA-256 = 45f47170cfa0d4713fa01fc95a4742585995afbbe3231ce8154ac9ab495ab58f`.
 
 ## Scope and limitations
 
@@ -176,3 +179,7 @@ toolchain via `bash scripts/test-spec-decode.sh`:
 - Does not claim GPU execution, KV-cache rollback integration, or production
   throughput benchmarks; model KV-cache truncation/commit around accepted prefix
   lengths remains the responsibility of downstream generation orchestration.
+- The AOT witness uses deterministic mock draft and target logits assembled
+  before verification. Its `target_calls` count represents those synthetic
+  batches; it does not measure live model calls or establish a cache rollback
+  witness.

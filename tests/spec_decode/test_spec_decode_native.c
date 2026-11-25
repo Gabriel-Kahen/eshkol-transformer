@@ -750,6 +750,18 @@ static void test_bridge_native(void) {
                                   0) == ET_SPEC_OK);
   CHECK(et_spec_aot_accepted_count(ctx) == 4);
   CHECK(et_spec_aot_next_counter(ctx) == 5);
+  CHECK(et_spec_aot_verify_sample(ctx, 0.8, 4, 0.9, ET_SPEC_AOT_NO_EOS,
+                                  123, INT64_MAX - 4) == ET_SPEC_ERR_BOUNDS);
+  CHECK(et_spec_aot_next_counter(ctx) == 5);
+  CHECK(et_spec_aot_sample_row(ctx, 1, 0, 0.8, 4, 0.9, 123,
+                               INT64_MAX) == ET_SPEC_ERR_BOUNDS);
+  CHECK(et_spec_aot_sampled_next_counter(ctx) == -1);
+  CHECK(et_spec_aot_sample_row(ctx, 1, 0, 0.8, 4, 0.9, 123,
+                               INT64_MAX - 1) == ET_SPEC_OK);
+  CHECK(et_spec_aot_sampled_next_counter(ctx) == INT64_MAX);
+  CHECK(et_spec_aot_sample_row(ctx, 1, 0, 0.0, 4, 0.9, 123,
+                               INT64_MAX) == ET_SPEC_OK);
+  CHECK(et_spec_aot_sampled_next_counter(ctx) == INT64_MAX);
   /* Failure atomicity on bridge: non-finite logit rejected, prior telemetry kept. */
   CHECK(et_spec_aot_set_target_logit(ctx, 4, 0, 1.0e300) == ET_SPEC_OK);
   CHECK(et_spec_aot_verify_sample(ctx, 0.8, 4, 0.9, ET_SPEC_AOT_NO_EOS, 123,

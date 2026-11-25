@@ -182,6 +182,10 @@ int32_t et_spec_aot_verify_sample(et_spec_aot_context *ctx, double temperature,
     return (int32_t)ET_SPEC_ERR_PARAM;
   if (counter < 0)
     return (int32_t)ET_SPEC_ERR_BOUNDS;
+  /* The AOT ABI exposes counters as signed i64. Reserve the maximum number
+   * of draws so every successful result remains representable to callers. */
+  if (counter > INT64_MAX - (int64_t)ctx->horizon - 1)
+    return (int32_t)ET_SPEC_ERR_BOUNDS;
 
   const et_spec_sampling_params_v1 params = {
       .temperature = temperature,
@@ -252,6 +256,8 @@ int32_t et_spec_aot_sample_row(et_spec_aot_context *ctx,
   if (!decode_top_k(top_k, &k_param))
     return (int32_t)ET_SPEC_ERR_PARAM;
   if (counter < 0)
+    return (int32_t)ET_SPEC_ERR_BOUNDS;
+  if (temperature > 0.0 && counter == INT64_MAX)
     return (int32_t)ET_SPEC_ERR_BOUNDS;
 
   const float *base =
