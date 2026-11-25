@@ -59,6 +59,7 @@ struct et_cd_aot_ctx {
   size_t token_lens[AOT_VOCAB_SIZE];
   float logits[AOT_VOCAB_SIZE];
   float masked_logits[AOT_VOCAB_SIZE];
+  uint32_t mask_valid;
   uint16_t cur_state;
   uint32_t finished;
   uint8_t output[AOT_MAX_OUTPUT_BYTES];
@@ -225,6 +226,7 @@ int32_t et_cd_aot_reset(et_cd_aot_ctx *ctx) {
   ctx->cur_state = info.start_state;
   ctx->finished = 0u;
   ctx->output_len = 0u;
+  ctx->mask_valid = 0u;
   memset(ctx->logits, 0, sizeof(ctx->logits));
   memset(ctx->masked_logits, 0, sizeof(ctx->masked_logits));
   return ET_CD_OK;
@@ -235,25 +237,32 @@ int32_t et_cd_aot_set_logit(et_cd_aot_ctx *ctx, int64_t token_id,
   if (ctx == NULL || token_id < 0 || token_id >= (int64_t)AOT_VOCAB_SIZE)
     return ET_CD_ERR_ARGUMENT;
   ctx->logits[(uint32_t)token_id] = (float)value;
+  ctx->mask_valid = 0u;
   return ET_CD_OK;
 }
 
 int32_t et_cd_aot_apply_mask(et_cd_aot_ctx *ctx) {
   if (ctx == NULL)
     return ET_CD_ERR_ARGUMENT;
-  return et_cd_apply_logit_mask_v1(ctx->index, ctx->cur_state, ctx->logits,
-                                   ctx->masked_logits);
+  ctx->mask_valid = 0u;
+  const et_cd_status st = et_cd_apply_logit_mask_v1(
+      ctx->index, ctx->cur_state, ctx->logits, ctx->masked_logits);
+  if (st == ET_CD_OK)
+    ctx->mask_valid = 1u;
+  return st;
 }
 
 int64_t et_cd_aot_masked_is_allowed(const et_cd_aot_ctx *ctx,
                                     int64_t token_id) {
-  if (ctx == NULL || token_id < 0 || token_id >= (int64_t)AOT_VOCAB_SIZE)
+  if (ctx == NULL || !ctx->mask_valid || token_id < 0 ||
+      token_id >= (int64_t)AOT_VOCAB_SIZE)
     return 0;
   return isfinite(ctx->masked_logits[(uint32_t)token_id]) ? 1 : 0;
 }
 
 double et_cd_aot_get_masked_logit(const et_cd_aot_ctx *ctx, int64_t token_id) {
-  if (ctx == NULL || token_id < 0 || token_id >= (int64_t)AOT_VOCAB_SIZE)
+  if (ctx == NULL || !ctx->mask_valid || token_id < 0 ||
+      token_id >= (int64_t)AOT_VOCAB_SIZE)
     return 0.0;
   return (double)ctx->masked_logits[(uint32_t)token_id];
 }
@@ -279,6 +288,7 @@ int32_t et_cd_aot_advance_token(et_cd_aot_ctx *ctx, int64_t token_id) {
   }
   ctx->cur_state = next_state;
   ctx->finished = is_finished;
+  ctx->mask_valid = 0u;
   return ET_CD_OK;
 }
 

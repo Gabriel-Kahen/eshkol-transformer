@@ -34,7 +34,9 @@ int64_t et_cd_aot_find_token_by_tag(const et_cd_aot_ctx *ctx, int64_t tag_id);
 /* Reset generation state and accumulated output buffer. */
 int32_t et_cd_aot_reset(et_cd_aot_ctx *ctx);
 
-/* Per-step logit setup, masking, inspection, and token advance. */
+/* Per-step logit setup, masking, inspection, and token advance. Mask inspection
+ * reports no allowed token until a successful apply for the current logits and
+ * state; reset, set_logit, and advance invalidate the prior mask. */
 int32_t et_cd_aot_set_logit(et_cd_aot_ctx *ctx, int64_t token_id, double value);
 int32_t et_cd_aot_apply_mask(et_cd_aot_ctx *ctx);
 int64_t et_cd_aot_masked_is_allowed(const et_cd_aot_ctx *ctx, int64_t token_id);

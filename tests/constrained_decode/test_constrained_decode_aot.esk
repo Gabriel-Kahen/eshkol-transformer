@@ -151,6 +151,8 @@
 ;;         adversarial spikes -> {"answer":"no","score":0,"ok":true}
 (define (run-json-scenario ctx mode label)
   (expect-status "reset" status-ok (cd-reset (ffi-pointer ctx)))
+  (require-check "reset invalidates mask"
+                 (= (cd-masked-allowed (ffi-pointer ctx) 0) 0))
   (let ((steps 0)
         (adv-blocked 0)
         (invalid-tid (cd-find-tag (ffi-pointer ctx) tag-invalid))
@@ -209,6 +211,8 @@
         (require-check "argmax found allowed token" (>= chosen 0))
         (expect-status "advance-token" status-ok
                        (cd-advance (ffi-pointer ctx) chosen))
+        (require-check "advance invalidates mask"
+                       (= (cd-masked-allowed (ffi-pointer ctx) chosen) 0))
         (set! steps (+ steps 1))))
 
     (require-check "terminated at EOS" (= (cd-is-finished (ffi-pointer ctx)) 1))

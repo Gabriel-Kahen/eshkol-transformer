@@ -3354,6 +3354,7 @@ publication, public G2 and continuation remain pending.
 | DIST5 | Data-parallel training and collective abstraction | TR3, K1 | Multi-process deterministic smoke and failure handling | planned |
 | EVAL5 | External evaluation adapters and contamination checks | E3, T2 | Reproducible benchmark manifests | planned |
 | DOC5 | Tutorials, API reference and from-scratch corpus-to-model guide | CLI3 | Fresh-environment walkthrough succeeds | planned |
+| CD5 | [Bounded constrained decoding DFA and flat JSON schema engine](CONSTRAINED_DECODING_FSA.md) | Standalone core; T2/G3 contracts for later dispatch | Isolated current-main candidate adds the byte DFA, co-accessibility pruning, token masks, checksummed grammar artifact, native negatives, independent oracle, and strict AOT driver. Its pinned native, sanitizer, 64-trajectory oracle, and dual fresh strict AOT gates pass; independent source-and-test review found no blocker. Tokenizer/model dispatch, public generation, hosted CI, and integration admission remain pending. | review |
 
 ## Orchestrator rules
 
