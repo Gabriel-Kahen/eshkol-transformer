@@ -168,9 +168,8 @@ static int aliases_table(span target, table views, size_t max_count,
     count = max_count;
   for (size_t i = 0; i < count; ++i) {
     const et_kernel_tensor_view_v1 *view = view_at(views, i);
-    if (view->struct_size < ET_KERNEL_TENSOR_VIEW_V1_0_SIZE ||
-        view->struct_size > views.stride)
-      continue;
+    /* The full v1.0 prefix is in the addressable table span even when its
+       advertised struct_size is malformed. Its buffers remain borrowed. */
     if (overlaps(target, shape_span(view->shape, view->rank)) ||
         overlaps_text(target, view->dtype) ||
         overlaps_text(target, view->device) ||
@@ -196,16 +195,9 @@ static int aliases_call(span target, const et_kernel_call_v1 *call,
       !aligned_span(call, _Alignof(et_kernel_call_v1), call->struct_size))
     return 0;
   const et_kernel_request_v1 *request = call->request;
-  size_t input_limit = 7u;
-  if (request != NULL &&
-      aligned_span(request, _Alignof(et_kernel_request_v1), sizeof(size_t)) &&
-      request->struct_size >= ET_KERNEL_REQUEST_V1_0_SIZE &&
-      aligned_span(request, _Alignof(et_kernel_request_v1),
-                   request->struct_size) &&
-      exact_text(request->operation, operations[FORWARD]))
-    input_limit = 6u;
   if (overlaps_text(target, call->capability) ||
-      aliases_table(target, input_table(call), input_limit, include_data) ||
+      aliases_table(target, input_table(call), ET_KERNEL_MAX_TENSORS,
+                    include_data) ||
       aliases_table(target, output_table(call), ET_KERNEL_MAX_TENSORS,
                     include_data))
     return 1;
