@@ -89,7 +89,7 @@ Both runtime hot-path entry points perform **zero heap allocations** (enforced u
 
 ## 5. Verification Evidence
 
-Verified inside container `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, pinned Eshkol toolchain):
+The historical `304ace600` source was verified inside container `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, pinned Eshkol toolchain). The extracted core implementation, public ABI, build and test scripts, and Python oracle retain those exact source blobs. The current-main candidate also changes the test-only AOT bridge and focused tests; its archive and ELF hashes require fresh validation. Historical results:
 
 - **Deterministic archives & symbol audit** (`scripts/build-constrained-decode.sh`): PASS
   - `libeshkol_transformer_constrained_decode.a` SHA-256: `34c3a28426cf73f9174c6012c67384e63dafbf98353d22842791390a55c2b6b6`
@@ -105,6 +105,8 @@ Verified inside container `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, 
   - AOT ELF SHA-256: `2e50581973ac9cc159b34cf48fcf8108be6ac1505abac6ec3b56dc431bb89fa3`
   - Verified greedy JSON (`{"answer":"yes","score":42,"ok":true}`), adversarial multi-byte JSON (`{"answer":"maybe","score":-42,"ok":false}`, 7/7 steps blocked adversarial spikes), adversarial byte-only JSON (`{"answer":"no","score":0,"ok":true}`, 36/36 steps blocked adversarial spikes), exact enum grammar (`maybe`), `ETCD1000` roundtrip SHA-256, and all negative rejections (`EMPTY_LANGUAGE`, `ILLEGAL_TOKEN`, `NONFINITE` NaN/+Inf with output preservation, `STATE`, `CHECKSUM`).
 - **Repository gates**: `tests/q0/test_python_isolation.py` (5/5 OK) and `scripts/check-ci-topology.sh` (PASS).
+
+Current-main extraction from `8d185344` was rerun in the pinned container after adding one-over input and output-sentinel negatives plus AOT mask invalidation. `bash scripts/test-constrained-decode.sh` passes deterministic archives and symbol audit (core SHA-256 unchanged at `34c3a28426cf73f9174c6012c67384e63dafbf98353d22842791390a55c2b6b6`; bridge SHA-256 `a38119b90a54324f94cb3ff601a2db985e889f1e529a1eba4e2fb92b75d53f9d`), C++17 linkage, native C11 `-O2` and ASan/UBSan/LSan, the 64-trajectory independent Python oracle, and two byte-identical strict AOT ELFs and stdout (ELF SHA-256 `c26ac68b7457f1519ebb70127095828ac5bf4c8d40fac15efd4e77b9a254fae2`). Repository Python isolation (5/5) and CI topology checks pass. Independent source-and-test review found no blocker. Hosted CI and integration admission have not run for this candidate.
 
 ## 6. Measured Limitations and Unsupported Cases
 

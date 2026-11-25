@@ -267,6 +267,80 @@ static void test_flat_json_schema(void) {
         ET_CD_ERR_SCHEMA);
 }
 
+/* Reject one-over bounds before reading input arrays or publishing handles. */
+static void test_bounded_input_failures(void) {
+  et_cd_dfa *dfa_out = (et_cd_dfa *)(uintptr_t)0x1;
+  const uint8_t *choice[1] = {(const uint8_t *)"x"};
+  const size_t choice_len[1] = {1u};
+  CHECK(et_cd_dfa_compile_literal_choices(
+            choice, choice_len, ET_CD_MAX_CHOICES + 1u, &dfa_out) ==
+        ET_CD_ERR_LIMIT);
+  CHECK(dfa_out == (et_cd_dfa *)(uintptr_t)0x1);
+
+  const size_t too_long_choice[1] = {ET_CD_MAX_CHOICE_BYTES + 1u};
+  CHECK(et_cd_dfa_compile_literal_choices(choice, too_long_choice, 1u,
+                                          &dfa_out) == ET_CD_ERR_LIMIT);
+  CHECK(dfa_out == (et_cd_dfa *)(uintptr_t)0x1);
+
+  const et_cd_json_field_spec field = {
+      "x", ET_CD_JSON_STRING, NULL, 0u};
+  CHECK(et_cd_dfa_compile_flat_json_schema(
+            &field, ET_CD_MAX_SCHEMA_FIELDS + 1u, &dfa_out) ==
+        ET_CD_ERR_LIMIT);
+  CHECK(dfa_out == (et_cd_dfa *)(uintptr_t)0x1);
+
+  char long_key[ET_CD_MAX_KEY_BYTES + 2u];
+  memset(long_key, 'k', sizeof(long_key) - 1u);
+  long_key[sizeof(long_key) - 1u] = '\0';
+  const et_cd_json_field_spec long_key_field = {
+      long_key, ET_CD_JSON_STRING, NULL, 0u};
+  CHECK(et_cd_dfa_compile_flat_json_schema(&long_key_field, 1u, &dfa_out) ==
+        ET_CD_ERR_LIMIT);
+  CHECK(dfa_out == (et_cd_dfa *)(uintptr_t)0x1);
+
+  const char *enum_choice[1] = {"x"};
+  const et_cd_json_field_spec too_many_enum = {
+      "x", ET_CD_JSON_ENUM, enum_choice, ET_CD_MAX_CHOICES + 1u};
+  CHECK(et_cd_dfa_compile_flat_json_schema(&too_many_enum, 1u, &dfa_out) ==
+        ET_CD_ERR_LIMIT);
+  CHECK(dfa_out == (et_cd_dfa *)(uintptr_t)0x1);
+
+  char long_enum[ET_CD_MAX_CHOICE_BYTES + 2u];
+  memset(long_enum, 'x', sizeof(long_enum) - 1u);
+  long_enum[sizeof(long_enum) - 1u] = '\0';
+  const char *long_enum_choice[1] = {long_enum};
+  const et_cd_json_field_spec long_enum_field = {
+      "x", ET_CD_JSON_ENUM, long_enum_choice, 1u};
+  CHECK(et_cd_dfa_compile_flat_json_schema(&long_enum_field, 1u, &dfa_out) ==
+        ET_CD_ERR_LIMIT);
+  CHECK(dfa_out == (et_cd_dfa *)(uintptr_t)0x1);
+
+  et_cd_dfa *dfa = NULL;
+  CHECK(et_cd_dfa_compile_literal_choices(choice, choice_len, 1u, &dfa) ==
+        ET_CD_OK);
+  const uint8_t *token[2] = {(const uint8_t *)"x", NULL};
+  const size_t token_len[2] = {1u, 0u};
+  et_cd_vocab_index *index_out = (et_cd_vocab_index *)(uintptr_t)0x1;
+  CHECK(et_cd_vocab_index_build(dfa, token, token_len,
+                                ET_CD_MAX_VOCAB_SIZE + 1u, 1u,
+                                &index_out) == ET_CD_ERR_LIMIT);
+  CHECK(index_out == (et_cd_vocab_index *)(uintptr_t)0x1);
+
+  const size_t too_long_token[2] = {ET_CD_MAX_TOKEN_BYTES + 1u, 0u};
+  CHECK(et_cd_vocab_index_build(dfa, token, too_long_token, 2u, 1u,
+                                &index_out) == ET_CD_ERR_LIMIT);
+  CHECK(index_out == (et_cd_vocab_index *)(uintptr_t)0x1);
+
+  const uint8_t *missing_token[2] = {NULL, NULL};
+  CHECK(et_cd_vocab_index_build(dfa, missing_token, token_len, 2u, 1u,
+                                &index_out) == ET_CD_ERR_ARGUMENT);
+  CHECK(index_out == (et_cd_vocab_index *)(uintptr_t)0x1);
+  CHECK(et_cd_vocab_index_build(dfa, token, token_len, 2u, 2u,
+                                &index_out) == ET_CD_ERR_ARGUMENT);
+  CHECK(index_out == (et_cd_vocab_index *)(uintptr_t)0x1);
+  et_cd_dfa_destroy(dfa);
+}
+
 /* ---- Test 4: Vocab Index, Zero-Alloc Hot Path, Bit-Exactness, Errors ---- */
 
 static void test_hot_path_and_negatives(void) {
@@ -700,6 +774,7 @@ int main(int argc, char **argv) {
   test_coaccessibility_pruning();
   test_literal_choices();
   test_flat_json_schema();
+  test_bounded_input_failures();
   test_hot_path_and_negatives();
   test_artifact_io();
 
