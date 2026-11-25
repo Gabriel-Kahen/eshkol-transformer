@@ -101,6 +101,17 @@ Historical `60093c6e` evidence was recorded offline in
 `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, pinned Eshkol toolchain
 `/tc`). Current extracted-tree validation is tracked separately:
 
+On current-main extraction `fe4c0aa60`/tree `c0d6d9d4`,
+`scripts/test-data4-pipeline.sh` passed in the pinned offline Ubuntu 22.04,
+LLVM 21.1.8 container with the verified `fe9dfd52` Eshkol compiler. The gate
+passed deterministic normal and sanitized archives, C++17 linkage, normal and
+ASan/UBSan/LSan native parity, 3/3 independent Python oracle checks, and two
+fresh byte-identical Eshkol AOT ELFs with matching output. The normal and
+sanitized archive SHA-256 values were `8e840fa5ef93d1d6` and
+`7a7e9355074eafe3` (prefixes); the AOT ELF SHA-256 was
+`7685b2bfd974aa2db44310c5f6c822936b4110b54a2d595b678594772b5411f9`.
+This is local candidate evidence, not hosted CI or integration acceptance.
+
 - `scripts/build-data4-pipeline.sh` (normal): deterministic archive SHA-256
   `283b70ffe455b72720a948dc32178fac6692c4a1f197a0be4899262b6f63bcd6`, 26/26 exact
   symbols, C++17 header check PASS.

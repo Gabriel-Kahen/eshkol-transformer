@@ -3349,7 +3349,9 @@ The separate [native quality-filtering candidate](DATA4_CORPUS_PIPELINE.md)
 adds strict UTF-8, quality and repetition filters, and optional MinHash/LSH
 near deduplication with exact Jaccard confirmation. It is opt-in and has no
 contract yet to feed its kept documents into the accepted T2/D1 path. Its
-report is distinct from the installed DATA4-A version-1 report.
+report is distinct from the installed DATA4-A version-1 report. Exact extracted
+source `fe4c0aa60` passed the pinned local native, sanitizer, oracle and bounded
+AOT gate; hosted CI and integration review remain pending.
 
 ## Wave 5 — ecosystem expansion
 
