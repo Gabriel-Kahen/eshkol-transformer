@@ -75,9 +75,9 @@ the canonical shard inventory that binds shard contents and order. Supply
 the tokenizer identity digest and checkpoint or model digest from the same
 evaluation run. For an accepted T1 or T2 tokenizer, `tokenizer_sha256` is the
 32 bytes decoded from the 64-hex-digit suffix of its validated public
-fingerprint (`sha256:eshkol-byte-tokenizer-v1:...` or
-`sha256:eshkol-bpe-tokenizer-v1:...`), not SHA-256 of the 95-byte fingerprint
-text. The suffix is already domain separated by the tokenizer format. The
+fingerprint. T1 uses `sha256:eshkol-byte-tokenizer-v1:...` (96 bytes), and T2
+uses `sha256:eshkol-bpe-tokenizer-v1:...` (95 bytes).
+The suffix is already domain separated by the tokenizer format. The
 runner must still compare the complete public fingerprint with the D1 shard
 identity before scoring; this standalone library cannot establish that link.
 For any other tokenizer, the runner must define and verify a canonical
