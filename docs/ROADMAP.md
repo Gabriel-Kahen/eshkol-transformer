@@ -2478,9 +2478,11 @@ input/seal checks, locked resource rechecks, exclusive claims, owned-container
 custody and complete output/artifact validation. Its focused controls are
 source-level evidence only; 34 focused control/oracle and Q0 tests pass on the
 reconciled source. The historical `aece425d` preparations are sealed but stale
-for this tree; fresh preparations repinned to the final composed tree,
-independent recipe/seal review, and resource-qualified generated replay/SAVE
-runs remain required. G3/C2 generated runtime and E3 §9 admission remain **HOLD**.
+for this tree. Two [fresh frozen-tree preparations](G3R_C2_FROZEN_PREPARATIONS_20261125.md)
+are now sealed at `4d319644`/tree `19506579` and independently reviewed;
+neither was claimed or run. Resource-qualified generated replay/SAVE runs and
+independent runtime-result review remain required. G3/C2 generated runtime
+and E3 §9 admission remain **HOLD**.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
