@@ -179,9 +179,21 @@ schema. Error storage remains separate from descriptors and tensor payloads.
 ## Validation results and scope
 
 Run `bash scripts/build-mod5.sh` to build and audit the deterministic archive.
-Run `bash scripts/test-mod5.sh` for the focused suite. The scripts default to
+Run `make test-mod5` for the focused opt-in repo gate (which calls
+`scripts/test-mod5.sh`). The scripts default to
 `clang` and `clang++` and honor `CC` and `CXX`. Set
 `MOD5_ASAN_DETECT_LEAKS=1` on lanes that support LeakSanitizer.
+
+The `MOD5 CPU-f32 diagnostic (non-admission)` workflow runs that same target
+on Ubuntu 22.04 x86-64 with Clang/Clang++ 21.1.8 and LeakSanitizer. It runs
+on a `codex/mod5-*` pull request changing MOD5 provider or test files, testing
+the exact PR head rather than GitHub's synthetic merge commit. Once this
+workflow exists on the default branch, it can also be manually dispatched on
+a candidate branch with its exact 40-character commit and tree as
+`expected_head` and `expected_tree`; a mismatch fails before compilation.
+The workflow uploads SHA-256-sealed available logs, including partial evidence
+on failure. It does not change the default K1 resolver, enroll MOD5 in
+the required full-suite inventory, or establish live model integration.
 
 The focused suite passed with Clang 21.1.8 on Ubuntu 22.04 x86-64, including
 C++17 linkage, ASan, UBSan, LSan, Python isolation, and CI topology. It covers all 16 exact
