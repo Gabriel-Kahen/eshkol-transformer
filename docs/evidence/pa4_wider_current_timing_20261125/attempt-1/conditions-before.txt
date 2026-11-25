@@ -1,0 +1,43 @@
+2026-11-25T21:49:38+00:00
+63a1d9f7a0fe473c7dff25ce82f63d2001c0062e
+3677bdd350ce0766cc9480b407182b5716c7cce6
+## codex/pa4-wider-current-timing-20261125
+100644 blob ba223d55cb57bce89d0d0c70dfabb9b0f6092d8e	native/pa4_wider_attention_provider.c
+100755 blob a4c8e17e5071207c57c7fc713893be8e995c82f5	scripts/build-pa4-wider.sh
+100644 blob 80402d11b951b3fc6721491b18c1a3002881a14b	tests/pa4_wider/bench_pa4_wider.c
+100644 blob 4bc41e41bbb8a5b303d03e326fff4205a7e2ef76	tests/pa4_wider/fixture.h
+cf4b6b3f8b96cbaa827560c8ca2ce48bc62b5cfb0d0de156b9e626658f5e5c7c  native/pa4_wider_attention_provider.c
+a46630eea09c4ff132580fad7bc2098f9b2f1735398b1ab08d5c954b5d8f6768  tests/pa4_wider/bench_pa4_wider.c
+9f0eee34f32c96b0ee096f2b484f5cdd0d303ae27a9d2193250f525ab0a8e114  tests/pa4_wider/fixture.h
+f2c665ee7d922847923a7363db056be7d75eec1155d8728ba6d10c412ff157b5  scripts/build-pa4-wider.sh
+sha256:68e2e292a255c9b42206e2298d12770aea7594ff9b82219460cb27ee28dbdc99 [eshkol-r0-debug@sha256:68e2e292a255c9b42206e2298d12770aea7594ff9b82219460cb27ee28dbdc99]
+Linux gabelinux 7.2.7-1-cachyos #1 SMP PREEMPT_DYNAMIC Thu, 24 Sep 2026 10:44:37 +0000 x86_64 GNU/Linux
+CPU(s):                                  16
+Model name:                              AMD Ryzen 7 3700X 8-Core Processor
+Thread(s) per core:                      2
+Core(s) per socket:                      8
+NUMA node0 CPU(s):                       0-15
+CPU CORE ONLINE
+  0    0    yes
+  1    1    yes
+  2    2    yes
+  3    3    yes
+  4    4    yes
+  5    5    yes
+  6    6    yes
+  7    7    yes
+  8    0    yes
+  9    1    yes
+ 10    2    yes
+ 11    3    yes
+ 12    4    yes
+ 13    5    yes
+ 14    6    yes
+ 15    7    yes
+7.99 6.79 6.36 6/4727 3668689
+cpu6 3139684 117844 1727948 64057430 693667 264400 91022 0 0 0
+cpu14 2156448 53225 998351 66287778 304995 136069 44951 0 0 0
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+VERSION_ID="22.04"
+Ubuntu clang version 21.1.8 (++20251221032842+2078da43e25a-1~exp1~20251221153008.77)
+Cpus_allowed_list:	6

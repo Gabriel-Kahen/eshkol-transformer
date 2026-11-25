@@ -221,10 +221,42 @@ re-verified the full conformance, sanitizer, and 864-sample benchmark suite in
 The subsequent malformed ABI-prefix and borrowed-buffer closure passed
 36,016 paired comparisons and 1,404 central gradient checks in both regular
 and ASan/UBSan/LSan builds with Clang 21.1.8, plus the archive symbol audit
-and C++17 linkage check. The timing table above predates that closure. A
-current-source benchmark was not completed because the shared measurement
-lock remained occupied; these timings are not a performance claim for the
-focused integration candidate.
+and C++17 linkage check. The timing table above predates that closure. At
+that stage the shared measurement lock remained occupied, so no current-source
+timing was available. The run below closes that evidence gap.
+
+### Current-source paired timing
+
+The unchanged qualified source at `63a1d9f7` (tree `3677bdd3`) was measured
+under the orchestration and historical heavy-build locks with the same six
+shapes and AB/BA benchmark. Ubuntu 22.04.5/Clang 21.1.8 compiled the provider
+and harness at `-O2 -ffp-contract=off` in the pinned image. Docker restricted
+the run to CPU 6. All 432 pairs and 864 output-verified timed samples passed.
+The [sealed raw log, commands, source hashes, host accounting, and analysis](evidence/pa4_wider_current_timing_20261125/README.md)
+are part of this candidate.
+
+The table gives **reference / online** lower median nanoseconds per iteration.
+Each case has 12 alternating AB/BA pairs; every pair favored online. The
+online/reference ratio across all pairs ranged from 0.281660 to 0.705148.
+The full per-case AB and BA ranges are in the [sealed summary](evidence/pa4_wider_current_timing_20261125/summary.json).
+
+| Shape | Forward dispatch | Forward invoke | Backward dispatch | Backward invoke | Joint dispatch | Joint invoke |
+|---|---:|---:|---:|---:|---:|---:|
+| `[1,4,2,8,8,8]` | 4362.39 / 2900.32 | 3252.58 / 1824.97 | 7543.45 / 4358.79 | 5898.22 / 2720.28 | 12139.48 / 7393.96 | 9278.44 / 4608.46 |
+| `[1,4,2,16,16,16]` | 25025.69 / 14578.22 | 23031.30 / 13156.42 | 40444.41 / 20340.88 | 38231.21 / 18241.59 | 64875.27 / 34777.94 | 82564.20 / 41177.90 |
+| `[1,4,2,32,32,16]` | 94935.43 / 53953.00 | 92321.87 / 51697.21 | 153354.02 / 75705.66 | 150352.52 / 72241.48 | 247929.88 / 129918.36 | 242634.70 / 124223.33 |
+| `[1,4,2,64,64,16]` | 366975.15 / 208084.40 | 365502.35 / 203785.83 | 597738.39 / 292733.08 | 589633.28 / 287271.19 | 961340.23 / 500125.16 | 957642.50 / 492950.82 |
+| `[2,4,2,16,32,16]` | 128956.63 / 74486.35 | 126677.00 / 72135.98 | 210837.44 / 101576.26 | 208074.38 / 97790.67 | 339094.13 / 176395.94 | 336032.42 / 171006.00 |
+| `[1,4,1,32,32,16]` | 95419.96 / 53791.09 | 92804.38 / 51591.61 | 154186.40 / 75095.21 | 151962.68 / 72875.18 | 248555.27 / 129317.01 | 242986.98 / 124606.95 |
+
+At T=64, the local joint dispatch and invoke lower medians were 47.98% and
+48.52% lower for online. Host load averaged 7.56 before and 7.37 after on 16
+logical CPUs; the benchmark received 99% job CPU over 15.81 seconds. CPU 14,
+the SMT sibling, was 95.91% idle between snapshots, but short interference
+and frequency changes remain possible. One T=64 backward-invoke pair had a
+reference timing outlier; no samples were discarded. These measurements
+support the paired direction on this fixed recipe. Absolute latency and
+training throughput remain unqualified. Default PA4 and PR #244 are unchanged.
 
 ### Reproduce
 

@@ -1,0 +1,707 @@
+2026-11-25T21:49:55+00:00
+7.56 6.77 6.36 4/4725 3672247
+cpu6 3139874 117846 1728048 64058832 693710 264410 91026 0 0 0
+cpu14 2156520 53226 998403 66289390 305007 136074 44953 0 0 0
+      2       2   6  0.0 kthreadd
+     54      54   6  0.0 cpuhp/6
+     55      55   6  0.0 idle_inject/6
+     56      56   6  0.0 migration/6
+     57      57   6  0.0 ksoftirqd/6
+     59      59   6  0.0 kworker/6:0H-kblockd
+    116     116   6  0.0 kdevtmpfs
+    117     117   6  0.0 kworker/R-inet_frag_wq
+    118     118   6  0.0 rcu_tasks_kthread
+    119     119   6  0.0 rcu_tasks_rude_kthread
+    120     120   6  0.0 kauditd
+    140     140   6  0.0 watchdogd
+    145     145   6  0.0 kworker/R-kthrotld
+    149     149   6  0.0 irq/30-aerdrv
+    153     153   6  0.0 scsi_eh_0
+    154     154   6  0.0 kworker/R-scsi_tmf_0
+    155     155   6  0.0 scsi_eh_1
+    156     156   6  0.0 kworker/R-scsi_tmf_1
+    158     158   6  0.0 kworker/R-scsi_tmf_2
+    160     160   6  0.0 kworker/R-scsi_tmf_3
+    166     166   6  0.0 scsi_eh_4
+    167     167   6  0.0 kworker/R-scsi_tmf_4
+    169     169   6  0.0 kworker/R-scsi_tmf_5
+    170     170   6  0.0 scsi_eh_6
+    171     171   6  0.0 kworker/R-scsi_tmf_6
+    173     173   6  0.0 kworker/R-scsi_tmf_7
+    175     175   6  0.0 kworker/R-scsi_tmf_8
+    176     176   6  0.0 scsi_eh_9
+    177     177   6  0.0 kworker/R-scsi_tmf_9
+    197     197   6  0.0 irq/27-ACPI:Event
+    296     296   6  0.0 scsi_eh_10
+    297     297   6  0.0 kworker/R-scsi_tmf_10
+    298     298   6  0.0 kworker/R-nvme-wq
+    300     300   6  0.0 kworker/R-nvme-reset-wq
+    301     301   6  0.0 kworker/R-nvme-delete-wq
+    302     302   6  0.0 kworker/R-nvme-auth-wq
+    403     403   6  0.0 kworker/6:1H-kblockd
+    710     710   6  0.0 irq/134-iwlwifi:queue_7
+    736     736   6  0.0 systemd-timesyn
+    935     946   6  0.0 tailscaled
+    935     973   6  0.0 tailscaled
+   1005    1029   6  0.0 rootlesskit
+   1005    1318   6  0.0 rootlesskit
+   1005    6026   6  0.0 rootlesskit
+   1005 1566219   6  0.0 rootlesskit
+   1027    1160   6  0.0 Xorg:traceq0
+   1038    1052   6  0.0 exe
+   1038 1104477   6  0.0 exe
+   1081    4262   6  0.0 dockerd
+   1081    4414   6  0.0 dockerd
+   1081    4481   6  0.0 dockerd
+   1081    4733   6  0.0 dockerd
+   1081 3672174   6  0.0 dockerd
+   1127    1130   6  0.0 containerd
+   1127    1135   6  0.0 containerd
+   1127   36800   6  0.0 containerd
+   1127   36806   6  0.0 containerd
+   1127  894608   6  0.0 containerd
+   1127  894609   6  0.0 containerd
+   1127  894612   6  0.0 containerd
+   1293    1297   6  0.0 gmain
+   1909    1915   6  0.0 containerd-shim
+   1979    1979   6  0.0 docker-init
+   1997    2006   6  0.0 containerd-shim
+   2045    2052   6  0.0 containerd-shim
+   2167    2173   6  0.0 docker-proxy
+   2347    2354   6  0.0 containerd-shim
+   2419    2980   6  0.0 python
+   2419    2981   6  0.0 python
+   2419    2982   6  0.0 python
+   2419    2983   6  0.0 python
+   2445    2930   6  0.0 uvicorn
+   2445    2932   6  0.0 uvicorn
+   2456    2456   6  0.0 containerd-shim
+   2456    2464   6  0.0 containerd-shim
+   2456    2465   6  0.0 containerd-shim
+   2675    2675   6  0.0 containerd-shim
+   2675    2682   6  0.0 containerd-shim
+   2675    2683   6  0.0 containerd-shim
+   2675    2684   6  0.0 containerd-shim
+   2701    2701   6  0.0 tini
+   2723    2724   6  0.0 docker-proxy
+   2723    2727   6  0.0 docker-proxy
+   2723    2728   6  0.0 docker-proxy
+   2776    2779   6  0.0 containerd-shim
+   2776  517692   6  0.0 containerd-shim
+   2830    2834   6  0.0 containerd-shim
+   2880    2882   6  0.0 docker-proxy
+   2880    2884   6  0.0 docker-proxy
+   2880    2886   6  0.0 docker-proxy
+   2920    2924   6  0.0 docker-proxy
+   2920    2925   6  0.0 docker-proxy
+   2942    2945   6  0.0 containerd-shim
+   2942    2947   6  0.0 containerd-shim
+   3149    3149   6  0.0 postgres
+   3169    3179   6  0.0 containerd-shim
+   3206    4470   6  0.0 MailHog
+   3206    4476   6  0.0 MailHog
+   3206   52274   6  0.0 MailHog
+   3220    3225   6  0.0 containerd-shim
+   3331    3345   6  0.0 containerd-shim
+   3424    3429   6  0.0 containerd-shim
+   3424    3431   6  0.0 containerd-shim
+   3440    3505   6  0.0 node-V8Worker
+   3440    4133   6  0.0 libuv-worker
+   3470    3470   6  0.0 minio
+   3470    4913   6  0.0 minio
+   3493    3498   6  0.0 containerd-shim
+   3493    3500   6  0.0 containerd-shim
+   3493    3501   6  0.0 containerd-shim
+   3493 3300380   6  0.0 containerd-shim
+   3550    3555   6  0.0 containerd-shim
+   3552    5191   6  0.0 grafana
+   3617    3620   6  0.0 containerd-shim
+   3617    3621   6  0.0 containerd-shim
+   3617    6622   6  0.0 containerd-shim
+   3617  168577   6  0.0 containerd-shim
+   3734    3744   6  0.0 containerd-shim
+   3794 1256374   6  0.0 containerd-shim
+   3900    3908   6  0.0 containerd-shim
+   4003    4011   6  0.0 containerd-shim
+   4089    4097   6  0.0 SignalInspector
+   4266    4266   6  0.0 docker-proxy
+   4266    4272   6  0.0 docker-proxy
+   4325    4329   6  0.0 docker-proxy
+   4325    4333   6  0.0 docker-proxy
+   4437    4510   6  0.0 V8Worker
+   4440    4444   6  0.0 docker-proxy
+   4700    4705   6  0.0 docker-proxy
+   4715    5598   6  0.0 uvicorn
+   4738    4738   6  0.0 postgres
+   4786    4788   6  0.0 docker-proxy
+   4813    4821   6  0.0 esbuild
+   4813    6164   6  0.0 esbuild
+   4905    4907   6  0.0 DelayedTaskSche
+   5006    5008   6  0.0 esbuild
+   5006    5009   6  0.0 esbuild
+   5023    5056   6  0.0 esbuild
+   5023  475780   6  0.0 esbuild
+   5054    5059   6  0.0 docker-proxy
+   5164    5164   6  0.0 tail
+   5174    5174   6  0.0 freshclam
+   5176    8801   6  0.0 clamd
+   5178   87614   6  0.0 esbuild
+   5178  497875   6  0.0 esbuild
+   5233    5236   6  0.0 gpx_grafana_ela
+   5233    5243   6  0.0 gpx_grafana_ela
+   5233 1002785   6  0.0 gpx_grafana_ela
+   5273    5278   6  0.0 gpx_grafana_pos
+   5354    5354   6  0.0 gpx_grafana-pyr
+   5354    5361   6  0.0 gpx_grafana-pyr
+   5354   26514   6  0.0 gpx_grafana-pyr
+   5354  780388   6  0.0 gpx_grafana-pyr
+   5396    5396   6  0.0 gpx_grafana-jae
+   5396    5397   6  0.0 gpx_grafana-jae
+   5396    5398   6  0.0 gpx_grafana-jae
+   5396    5399   6  0.0 gpx_grafana-jae
+   5396    5405   6  0.0 gpx_grafana-jae
+   5396    5406   6  0.0 gpx_grafana-jae
+   5433    5492   6  0.0 gpx_grafana-lok
+   5507    5507   6  0.0 gpx_grafana-mss
+   5507    5511   6  0.0 gpx_grafana-mss
+   5507    5514   6  0.0 gpx_grafana-mss
+   5517    5524   6  0.0 gpx_grafana-mys
+   5537    5538   6  0.0 gpx_grafana-ope
+   5537    5539   6  0.0 gpx_grafana-ope
+   5537    5547   6  0.0 gpx_grafana-ope
+   5583    5592   6  0.0 gpx_grafana-pro
+   5583 3516628   6  0.0 gpx_grafana-pro
+   5606    5629   6  0.0 gpx_grafana_clo
+   5700  796135   6  0.0 gpx_grafana-tem
+   6331    6479   6  0.0 G1 Conc#0
+   6331    6599   6  0.0 Service Thread
+   6331    7006   6  0.0 gmain
+   6331    7858   6  0.0 crosspaste:gl0
+   6331 1531970   6  0.0 DefaultDispatch
+   6345  205288   6  0.0 vicinae-se:sh1
+   6345 1389412   6  0.0 vicina:traceq0
+   6345 1389416   6  0.0 vicinae-:gdrv0
+   6345 1389417   6  0.0 vicinae-se:gl0
+   6351    6378   6  0.0 gmain
+   6351    6396   6  0.0 pool-spawner
+   6351   46727   6  0.0 pool-4
+   6402    6402   6  0.3 qs
+   6402    6533   6  0.0 qs:cs0
+   6624    6671   6  0.0 xdg-de:sh_opt0
+   6636    6718   6  0.0 WaylandEventThr
+   6714    6715   6  0.0 async-io
+   7971 3671206   6  0.0 Thread-25497
+   8307    8450   6  0.0 nvhttp
+   8307    8451   6  0.0 confighttp
+   8307    8461   6  0.0 pool-spawner
+   8350    8355   6  0.0 node-V8Worker
+   8761    8763   6  0.0 gpx_grafana-zip
+   8761    8798   6  0.0 gpx_grafana-zip
+  45786   45793   6  0.0 gdbus
+  45786   45815   6  0.0 cleanup
+ 165646  165646   6  0.1 coolercontrold
+ 318868  318868   6  0.0 postgres
+ 318888  318888   6  0.0 postgres
+ 342776  690538   6  0.0 tokio-rt-worker
+ 436736  436840   6  0.0 WaylandEventThr
+ 436736  436895   6  0.0 qs:sh_opt0
+ 436736  437113   6  0.0 qs:traceq0
+ 436736  437115   6  0.0 qs:gl0
+ 436736  437116   6  0.0 qs:traceq0
+ 436736  437117   6  0.0 qs:gdrv0
+ 436736  437118   6  0.0 qs:gl0
+ 690268  690284   6  0.0 tokio-rt-worker
+ 795058  795093   6  0.0 llama-server
+ 795058  795095   6  0.0 llama-server
+ 799273  799301   6  0.0 cuda-EvtHandlr
+ 955932  955933   6  0.0 chrome_crashpad
+1075984 1075994   6  0.0 HangWatcher
+1075984 1076099   6  0.0 ThreadPoolForeg
+1376117 1376211   6  0.0 pool-spawner
+1491439 1491439   6  0.0 kworker/R-wg-crypt-gabe
+1491451 1491451   6  0.0 napi/gabe-0
+1494678 2098846   6  0.0 containerd-shim
+1498639 1498642   6  0.0 containerd-shim
+1498639 1498650   6  0.0 containerd-shim
+1498639 1498725   6  0.0 containerd-shim
+1498718 1498722   6  0.0 docker-proxy
+1498732 1498734   6  0.0 DelayedTaskSche
+1498732 1498736   6  0.0 V8Worker
+1498740 1498746   6  0.0 SignalInspector
+1498748 1498752   6  0.0 esbuild
+1498748 1498764   6  0.0 esbuild
+1498748 1498765   6  0.0 esbuild
+1510671 1510679   6  0.0 G1 Main Marker
+1510671 1510684   6  0.0 VM Periodic Tas
+1510671 1516739   6  0.0 Netty Epoll Ser
+1510671 1520091   6  0.0 Netty Epoll Ser
+1607765 1607765   6  0.0 codex-code-mode
+1607765 1607774   6  0.0 V8 DefaultWorke
+1607765 1607780   6  0.0 V8 DefaultWorke
+1610491 1610569   6  0.0 sandbox_ipc_thr
+1610491 1610983   6  0.0 HangWatcher
+1610491 1610990   6  0.0 D-Bus thread
+1610491 1611000   6  0.0 pool-spawner
+1610491 1611001   6  0.0 gmain
+1610491 1611008   6  0.0 ThreadPoolForeg
+1610491 1611014   6  0.0 VideoCaptureThr
+1610572 1610572   6  0.0 ChatGPT
+1611015 1611015   6  1.2 ChatGPT
+1611015 1611066   6  0.0 ThreadPoolServi
+1611015 1611068   6  0.0 ThreadPoolPrese
+1611015 1611674   6  0.0 ChatGP:traceq0
+1611015 2444376   6  0.0 ChatGPT:sh2
+1611015 2444378   6  0.0 ChatGPT:sh4
+1611017 1611017   6  0.0 ChatGPT
+1611017 1611033   6  0.0 inotify_reader
+1611017 1769498   6  0.0 ThreadPoolForeg
+1611686 1611693   6  0.3 tokio-rt-worker
+1611686 1611819   6  0.2 notify-rs inoti
+1611686 1625640   6  0.0 codex-child-rea
+1611686 3522356   6  0.0 tokio-rt-worker
+1611887 1611903   6  0.0 V8Worker
+1611887 1613012   6  0.0 ChatGPT
+1612144 1612159   6  0.0 ThreadPoolServi
+1616215 1616239   6  0.0 tokio-rt-worker
+1616243 1616251   6  0.0 tokio-rt-worker
+1616243 1616260   6  0.0 tokio-rt-worker
+1616246 1616269   6  0.0 tokio-rt-worker
+1616246 1616272   6  0.0 tokio-rt-worker
+1616246 1616280   6  0.0 tokio-rt-worker
+1622326 1622326   6  0.0 computer-use-li
+1623698 1623698   6  0.0 python3
+1625621 1625635   6  0.0 V8 DefaultWorke
+1625621 1625636   6  0.0 V8 DefaultWorke
+1757862 1757866   6  0.0 ThreadPoolPrese
+1757862 1766128   6  0.0 MemoryInfra
+1832013 1832021   6  0.0 Bun Pool 2
+1832013 2689535   6  0.0 Bun Pool 7
+1958828 1973184   6  0.0 ThreadPoolForeg
+1958828 1973187   6  0.0 ThreadPoolForeg
+1973119 1973136   6  0.0 ThreadPoolAudio
+1973119 1973141   6  0.0 HangWatcher
+1973119 2400706   6  0.0 MemoryInfra
+2214097 2445036   6  0.0 ThreadPoolForeg
+2214097 2445037   6  0.0 ThreadPoolForeg
+2303919 2304139   6  0.0 ThreadPoolForeg
+2303919 2304227   6  0.0 pool-spawner
+2303919 2304228   6  0.0 gmain
+2303919 2304231   6  0.0 CacheThread_Blo
+2304061 2304061   6  0.0 curseforge
+2304142 2304142   6  0.0 curseforge
+2304142 2304220   6  0.0 ThreadPoolServi
+2304142 2304222   6  0.0 ThreadPoolForeg
+2304145 2304152   6  0.0 ThreadPoolForeg
+2304240 2304249   6  0.0 ThreadPoolForeg
+2306375 2306711   6  0.0 ThreadPoolForeg
+2306379 2306689   6  0.0 ThreadPoolForeg
+2313520 2313522   6  0.0 ThreadPoolForeg
+2386608 2386633   6  0.0 tokio-rt-worker
+2386608 2386642   6  0.0 tokio-rt-worker
+2438426 2438432   6  0.2 Chrome_ChildIOT
+2438426 2438434   6  4.5 Compositor
+2438426 2438436   6  0.0 HangWatcher
+2438426 2438695   6  0.0 Realtime AudioW
+2438426 2444335   6  0.0 WebRTC_Signalin
+2440502 2440506   6  0.0 ThreadPoolPrese
+2440502 2440512   6  0.0 HangWatcher
+2440985 2442243   6  0.0 ThreadPoolForeg
+2440985 2442248   6  0.0 ThreadPoolForeg
+2441015 2449414   6  0.0 ThreadPoolForeg
+2441015 2449424   6  0.0 ThreadPoolForeg
+2441367 2441579   6  0.0 ThreadPoolForeg
+2441367 2441585   6  0.0 ThreadPoolForeg
+2441393 2441448   6  0.0 tokio-rt-worker
+2441721 2441737   6  0.0 libuv-worker
+2441837 2441912   6  0.0 libuv-worker
+2441965 2441972   6  0.0 Chrome_ChildIOT
+2441965 2446059   6  0.0 ThreadPoolForeg
+2444347 2444354   6  0.0 ThreadPoolPrese
+2444347 2444360   6  0.0 HangWatcher
+2456954 2456966   6  0.0 tokio-rt-worker
+2456954 2456976   6  0.0 tokio-rt-worker
+2456954 2457001   6  0.0 sentry-transpor
+2456954 3638925   6  0.0 tokio-rt-worker
+2456959 2456985   6  0.0 tokio-rt-worker
+2456959 2456999   6  0.0 tokio-rt-worker
+2458554 2458583   6  0.0 tokio-rt-worker
+2485117 2485130   6  0.0 tokio-rt-worker
+2485117 2485132   6  0.0 tokio-rt-worker
+2485117 2485136   6  0.0 tokio-rt-worker
+2485117 2485137   6  0.0 tokio-rt-worker
+2485117 2485138   6  0.0 tokio-rt-worker
+2485125 2485163   6  0.0 tokio-rt-worker
+2485125 2485168   6  0.0 tokio-rt-worker
+2527719 2527735   6  0.0 V8Worker
+2527974 2527974   6  0.0 python3
+2534432 2534474   6  0.0 sandbox_ipc_thr
+2534432 2534481   6  0.0 PerfettoTrace
+2534432 2534486   6  0.0 MemoryInfra
+2534432 2534501   6  0.0 libuv-worker
+2534432 2534523   6  0.0 ThreadPoolForeg
+2534432 2534524   6  0.0 ThreadPoolForeg
+2534476 2534476   6  0.0 lunarclient
+2534552 2534580   6  0.0 inotify_reader
+2642258  357012   6  0.0 gly-global-exec
+2642258 2642320   6  0.0 PerfettoTrace
+2642258 2642327   6  0.0 ThreadPoolForeg
+2642258 2642351   6  0.0 ThreadPoolForeg
+2642258 2642378   6  0.0 ThreadPoolForeg
+2642357 2642390   6  0.0 chrome:disk$0
+2642357 2642391   6  0.0 chrome:sh0
+2642359 2642363   6  0.0 ThreadPoolServi
+2642374 2709482   6  0.0 MemoryInfra
+2642754 2642756   6  0.0 ThreadPoolServi
+2642754 2642761   6  0.0 ThreadPoolForeg
+2642754 2642956   6  0.0 ThreadPoolForeg
+2642754 2647042   6  0.0 ThreadPoolForeg
+2670598 2670685   6  0.0 signal-desktop
+2670598 2670686   6  0.0 PerfettoTrace
+2670598 2670695   6  0.0 V8Worker
+2670598 2670703   6  0.0 WorkerThread
+2670598 2670735   6  0.0 ThreadPoolSingl
+2670598 2670776   6  0.0 CacheThread_Blo
+2670721 2670749   6  0.0 signal-des:sh0
+2670721 2670760   6  0.0 signal-des:sh7
+2670721 2670772   6  0.0 ThreadPoolForeg
+2670721 2670779   6  0.0 signal:traceq0
+2670778 2670780   6  0.0 PerfettoTrace
+2670778 2670783   6  0.0 Chrome_ChildIOT
+2670778 2670785   6  0.0 Compositor
+2670778 2670835   6  0.0 libsignal-tokio
+2670778 2670841   6  0.0 libsignal-tokio
+2670778 2670849   6  0.0 ThreadPoolForeg
+2670778 2670871   6  0.0 signal-desktop
+2839220 2839243   6  0.0 ThreadPoolForeg
+2839220 2839247   6  0.0 threaded-ml
+2924731 2924731   6  0.0 scdaemon
+2983610 2983611   6  0.0 chrome_crashpad
+2983776  566732   6  0.0 updater-client-
+2983776  566739   6  0.0 updater-client-
+2983776 2983796   6  0.0 Discord
+2983776 2983802   6  0.0 MemoryInfra
+2983776 2983836   6  0.0 CrShutdownDetec
+2983776 2983904   6  0.0 updater-client-
+2984028 2984056   6  0.1 ThreadPoolForeg
+2984028 2984071   6  0.0 ThreadPoolForeg
+2984028 2984424   6  0.0 libuv-worker
+2984028 2984641   6  0.0 DedicatedWorker
+2984028 3919795   6  0.0 DedicatedWorker
+3085277 3085314   6  0.0 ThreadPoolServi
+3085277 3085334   6  0.0 ThreadPoolForeg
+3085277 3085416   6  0.0 spotify
+3085277 3085418   6  0.0 Default Worker 
+3085277 3085431   6  0.0 Ad Detection Th
+3085352 3085437   6  0.0 ThreadPoolForeg
+3085352 3341171   6  0.0 ThreadPoolForeg
+3085352 3341459   6  0.0 ThreadPoolForeg
+3085356 3085361   6  0.0 ThreadPoolForeg
+3085442 3085459   6  0.0 ThreadPoolSingl
+3085442 3086059   6  0.0 ThreadPoolForeg
+3085442 3088594   6  0.0 ThreadPoolForeg
+3085450 3085454   6  0.1 ThreadPoolForeg
+3085450 3085466   6  0.0 ThreadPoolForeg
+3085729 3417564   6  0.0 MemoryInfra
+3137931 1362143   6  0.0 ThreadPoolForeg
+3157556 3157556   6  0.3 kworker/u66:9-btrfs-endio
+3276250 3276270   6  0.0 libuv-worker
+3318512 3318583   6  0.0 tokio-rt-worker
+3318512 3318588   6  0.0 tokio-rt-worker
+3318512 3318590   6  0.0 tokio-rt-worker
+3318512 3318593   6  0.0 tokio-rt-worker
+3318512 3318700   6  0.0 reqwest-interna
+3326980 3326997   6  0.0 DelayedTaskSche
+3326980 3327004   6  0.0 libuv-worker
+3326980 3327005   6  0.0 libuv-worker
+3332650 3332654   6  0.0 V8Worker
+3332650 3332760   6  0.0 libuv-worker
+3332650 3332761   6  0.0 libuv-worker
+3332759 3332766   6  0.0 tokio-rt-worker
+3332759 3332836   6  0.0 app-server-stdo
+3342557 3417561   6  0.0 MemoryInfra
+3422148 3422148   6  0.0 python3
+3422345 3422345   6  0.0 computer-use-li
+3458013 3458034   6  0.0 libuv-worker
+3497889 3497911   6  0.0 libuv-worker
+3498223 3498223   6  0.0 python3
+3498382 3498391   6  0.0 tokio-rt-worker
+3500479 3500540   6  0.0 V8Worker
+3508529 3508529   6  0.0 kworker/6:1-events
+3547865 3547868   6  0.0 ThreadPoolForeg
+3547865 3547871   6  0.0 Chrome_ChildIOT
+3554818 3554829   6  0.0 ThreadPoolPrese
+3556171 3556171   6  0.0 computer-use-li
+3559260 3559260   6  0.0 MainThread
+3559260 3559323   6  0.0 libuv-worker
+3559260 3559324   6  0.0 libuv-worker
+3559260 3559325   6  0.0 libuv-worker
+3559309 3559309   6  0.0 python3
+3561279 3561321   6  0.0 V8Worker
+3561279 3561322   6  0.0 V8Worker
+3561306 3561306   6  0.0 python3
+3561560 3561584   6  0.0 SignalInspector
+3561560 3561586   6  0.0 libuv-worker
+3561560 3561587   6  0.0 libuv-worker
+3561560 3561588   6  0.0 libuv-worker
+3567828 3567828   6  0.0 kworker/6:0-events
+3631164 3631164   6  0.0 kworker/6:2-events
+3637283 3637285   6  0.0 ThreadPoolServi
+3637283 3637287   6  0.0 ThreadPoolPrese
+3666776 3666796   6  0.0 gh
+3666776 3666819   6  0.0 gh
+3666776 3666841   6  0.0 gh
+3672213 3672222   6  0.0 gh
+    102     102  14  0.0 cpuhp/14
+    103     103  14  0.0 idle_inject/14
+    104     104  14  0.0 migration/14
+    105     105  14  0.0 ksoftirqd/14
+    107     107  14  0.0 kworker/14:0H-kblockd
+    146     146  14  0.0 kworker/u67:0-hci0
+    313     313  14  0.0 kworker/R-btrfs-worker
+    413     413  14  0.0 kworker/14:1H-kblockd
+    694     694  14  0.0 kworker/R-cfg80211
+    796     920  14  0.1 ananicy-cpp
+    923     923  14  0.0 psimon
+    935    1067  14  0.0 tailscaled
+   1005    1036  14  0.0 rootlesskit
+   1027    1139  14  0.0 Xorg:cs0
+   1081    1120  14  0.0 dockerd
+   1081 3671446  14  0.0 dockerd
+   1127  894617  14  0.0 containerd
+   1127  894620  14  0.0 containerd
+   1953    1962  14  0.0 containerd-shim
+   1997    1997  14  0.0 containerd-shim
+   1997    1999  14  0.0 containerd-shim
+   1997    2007  14  0.0 containerd-shim
+   2045    2048  14  0.0 containerd-shim
+   2167    2168  14  0.0 docker-proxy
+   2456    2459  14  0.0 containerd-shim
+   2675    2677  14  0.0 containerd-shim
+   2675    2680  14  0.0 containerd-shim
+   2675 1226350  14  0.0 containerd-shim
+   2723    2725  14  0.0 docker-proxy
+   2723    2729  14  0.0 docker-proxy
+   2995    3000  14  0.0 containerd-shim
+   2995    3004  14  0.0 containerd-shim
+   3169    3183  14  0.0 containerd-shim
+   3169   27221  14  0.0 containerd-shim
+   3245    3245  14  0.0 docker-init
+   3278    3284  14  0.0 containerd-shim
+   3278    3288  14  0.0 containerd-shim
+   3424 1673354  14  0.0 containerd-shim
+   3440    3508  14  0.0 node-V8Worker
+   3734    3740  14  0.0 containerd-shim
+   3794    3805  14  0.0 containerd-shim
+   3883    5142  14  0.0 jemalloc_bg_thd
+   3900   10088  14  0.0 containerd-shim
+   3929    4750  14  0.0 V8Worker
+   3929    4752  14  0.0 V8Worker
+   4003    4008  14  0.0 containerd-shim
+   4325    4330  14  0.0 docker-proxy
+   4325    4334  14  0.0 docker-proxy
+   4437    4506  14  0.0 DelayedTaskSche
+   4437    4508  14  0.0 V8Worker
+   4512    4518  14  0.0 V8Worker
+   4581   61672  14  0.0 esbuild
+   4700    4700  14  0.0 docker-proxy
+   4805    4811  14  0.0 docker-proxy
+   4954    4966  14  0.0 DelayedTaskSche
+   5006    5015  14  0.0 esbuild
+   5023    5039  14  0.0 esbuild
+   5103    5103  14  0.0 docker-proxy
+   5103    5117  14  0.0 docker-proxy
+   5150    5152  14  0.0 node-V8Worker
+   5273    5274  14  0.0 gpx_grafana_pos
+   5354  659349  14  0.0 gpx_grafana-pyr
+   5385 1776735  14  0.0 gpx_grafana_inf
+   5396    5407  14  0.0 gpx_grafana-jae
+   5507    5510  14  0.0 gpx_grafana-mss
+   5507   26546  14  0.0 gpx_grafana-mss
+   5507   26547  14  0.0 gpx_grafana-mss
+   5517    5517  14  0.0 gpx_grafana-mys
+   5517    5521  14  0.0 gpx_grafana-mys
+   5517 2888678  14  0.0 gpx_grafana-mys
+   5583    5589  14  0.0 gpx_grafana-pro
+   5700    5720  14  0.0 gpx_grafana-tem
+   5860    5926  14  0.0 Hyprlan:disk$0
+   6256    6297  14  0.0 Xwayland:sh1
+   6331    6944  14  0.0 GC Thread#3
+   6331 1524914  14  0.0 DefaultDispatch
+   6341    6395  14  0.0 hyprvoice
+   6345 1389411  14  0.0 QSGRenderThread
+   6368    6499  14  0.0 gly-global-exec
+   6402    6456  14  0.0 [pango] fontcon
+   6402    6459  14  0.0 pool-spawner
+   6602    6616  14  0.0 gmain
+   6624    6668  14  0.0 xdg-deskto:cs0
+   7152    7196  14  0.0 pool-spawner
+   7152    7197  14  0.0 gmain
+   7971    9831  14  0.0 ThreadPoolExecu
+   8307    8349  14  0.0 sunshine
+   8307    8462  14  0.0 gmain
+   8350    8357  14  0.0 node-V8Worker
+ 165646  165806  14  0.0 ccio-acpitz
+ 165646  165816  14  0.0 iou-wrk-165815
+ 165646  165817  14  0.0 iou-wrk-165814
+ 342776  690544  14  0.0 tokio-rt-worker
+ 436736  436820  14  0.0 dconf worker
+ 436736  437088  14  0.0 qs:gdrv0
+ 436736  437089  14  0.0 qs:gl0
+ 690268  690281  14  0.0 tokio-rt-worker
+ 799273  799294  14  0.0 llama-server
+1376117 1376213  14  0.0 gdbus
+1494751 1494994  14  0.0 python
+1494751 1494995  14  0.0 python
+1498740 1498742  14  0.0 V8Worker
+1498740 1498744  14  0.0 V8Worker
+1498740 1498754  14  0.0 libuv-worker
+1510671 1510884  14  0.0 GC Thread#1
+1510671 1511036  14  0.1 G1 Conc#2
+1510671 1512354  14  0.0 FileSystemWatch
+1510671 1516674  14  0.0 Server Watchdog
+1610491 1610988  14  0.0 ThreadPoolAudio
+1611015 1611037  14  0.0 ChatGPT:sh1
+1611017 1611032  14  0.0 ThreadPoolForeg
+1611686 1611688  14  0.0 codex-main
+1611686 1611816  14  0.0 app-server-sign
+1611686 2530849  14  0.2 tokio-rt-worker
+1611686 3504080  14  0.0 sqlx-sqlite-wor
+1611686 3522360  14  0.0 tokio-rt-worker
+1611686 3522364  14  0.1 tokio-rt-worker
+1611887 1611900  14  0.0 ThreadPoolForeg
+1612144 1612164  14  0.0 ThreadPoolForeg
+1616215 1616232  14  0.0 tokio-rt-worker
+1616218 1616285  14  0.0 V8Worker
+1616246 1616267  14  0.0 tokio-rt-worker
+1616246 1616273  14  0.0 tokio-rt-worker
+1616246 1616275  14  0.0 tokio-rt-worker
+1616246 1616277  14  0.0 tokio-rt-worker
+1616246 1616279  14  0.0 tokio-rt-worker
+1625621 1625624  14  0.0 V8 DefaultWorke
+1625621 1625628  14  0.0 V8 DefaultWorke
+1625621 1625633  14  0.0 V8 DefaultWorke
+1757862 1757863  14  0.0 PerfettoTrace
+1757862 1757904  14  0.0 ThreadPoolForeg
+1801998 1848143  14  0.0 ThreadPoolForeg
+1801998 2442509  14  0.0 DedicatedWorker
+1832013 3569582  14  0.0 Bun Pool 6
+1958828 1958829  14  0.0 PerfettoTrace
+1973119 2445029  14  0.0 ThreadPoolForeg
+2152973 2152973  14  0.4 kworker/u66:1-btrfs-endio-write
+2214097 2214100  14  0.0 ThreadPoolForeg
+2214097 2214108  14  0.0 ServiceWorker t
+2214097 2445035  14  0.0 ThreadPoolForeg
+2214097 2445038  14  0.0 ThreadPoolForeg
+2303919 2304229  14  0.0 gdbus
+2304142 2304216  14  0.0 curseforge:sh0
+2304145 2306721  14  0.0 ThreadPoolForeg
+2304145 2306724  14  0.0 ThreadPoolForeg
+2304240 2304607  14  0.0 ThreadPoolForeg
+2304240 2304608  14  0.0 ThreadPoolForeg
+2304365 2304367  14  0.0 .NET EventPipe
+2386608 2386641  14  0.0 tokio-rt-worker
+2418120 2418120  14  0.0 python3
+2438426 2438430  14  0.0 ThreadPoolPrese
+2440502 2440550  14  0.0 ThreadPoolForeg
+2440502 2440559  14  0.0 ThreadPoolForeg
+2440985 2440993  14  0.0 PerfettoTrace
+2440985 2442249  14  0.0 ThreadPoolForeg
+2440985 2541399  14  0.0 MemoryInfra
+2441015 2441140  14  0.0 ThreadPoolForeg
+2441015 2449413  14  0.0 ThreadPoolForeg
+2441015 2449416  14  0.0 ThreadPoolForeg
+2441015 2449420  14  0.0 ThreadPoolForeg
+2441367 2441532  14  0.0 ThreadPoolForeg
+2441367 2441582  14  0.0 ThreadPoolForeg
+2441393 2441451  14  0.0 tokio-rt-worker
+2441393 2441459  14  0.0 tokio-rt-worker
+2441965 2441973  14  0.0 ThreadPoolForeg
+2441965 2446065  14  0.0 ThreadPoolForeg
+2441965 2446066  14  0.0 ThreadPoolForeg
+2456954 2456974  14  0.0 tokio-rt-worker
+2456954 2456981  14  0.0 tokio-rt-worker
+2456959 2456992  14  0.0 tokio-rt-worker
+2457007 2457045  14  0.0 V8Worker
+2458548 2458561  14  0.0 tokio-rt-worker
+2458548 2458572  14  0.0 tokio-rt-worker
+2458548 2458580  14  0.0 sentry-transpor
+2485117 2485143  14  0.0 tokio-rt-worker
+2490007 2490007  14  0.0 MainThread
+2490007 2490021  14  0.0 V8Worker
+2490007 2490022  14  0.0 V8Worker
+2490007 2490023  14  0.0 V8Worker
+2490007 2490024  14  0.0 V8Worker
+2490007 2490031  14  0.0 SignalInspector
+2527719 2527737  14  0.0 V8Worker
+2528000 2528000  14  0.0 MainThread
+2528000 2528043  14  0.0 V8Worker
+2528000 2528044  14  0.0 V8Worker
+2528000 2528045  14  0.0 V8Worker
+2528000 2528046  14  0.0 V8Worker
+2534432 2534483  14  0.0 ThreadPoolForeg
+2534432 2568784  14  0.0 launch-native-6
+2534552 2534579  14  0.0 ThreadPoolForeg
+2642258 2642326  14  0.0 ThreadPoolForeg
+2642258 2642397  14  0.0 ThreadPoolForeg
+2642357 2642389  14  0.0 chrome:cs0
+2642357 2642638  14  0.0 chrome:traceq0
+2642359 2642368  14  0.0 ThreadPoolForeg
+2642359 2642520  14  0.0 ThreadPoolForeg
+2642359 2643028  14  0.0 ThreadPoolForeg
+2642359 2644219  14  0.0 ThreadPoolForeg
+2642754 2642758  14  0.0 ThreadPoolPrese
+2642754 2642759  14  0.0 ThreadPoolAudio
+2642754 2642933  14  0.0 ThreadPoolForeg
+2642754 2642954  14  0.0 ThreadPoolForeg
+2642754 2709488  14  0.0 MemoryInfra
+2654656 2654663  14  0.0 ThreadPoolForeg
+2670598 2670705  14  0.0 gmain
+2670598 2670731  14  0.0 libuv-worker
+2670721 2670764  14  0.0 signal-des:sh11
+2670721 2670773  14  0.0 Chrome_ChildIOT
+2983776  566731  14  0.0 updater-client-
+2983776  566735  14  0.0 updater-client-
+2983776 2983812  14  0.0 libuv-worker
+2983776 2983852  14  0.0 ThreadPoolSingl
+2983845 2983913  14  0.0 PerfettoTrace
+2983845 2983928  14  0.0 Discor:traceq0
+2983849 2983853  14  0.0 PerfettoTrace
+2983849 2984041  14  0.0 ThreadPoolForeg
+2983849 2984047  14  0.0 ThreadPoolForeg
+2983849 2984049  14  0.0 ThreadPoolForeg
+2984028 2984066  14  0.0 Discord
+2984028 2984068  14  0.0 ThreadPoolForeg
+3085277 3085332  14  0.0 ThreadPoolForeg
+3085277 3085417  14  0.0 ConnectivityIO
+3085277 3085429  14  0.0 Local File Scan
+3085277 3085435  14  0.0 Wake-on-Lan wor
+3085442 3085448  14  0.0 ThreadPoolForeg
+3085450 3085465  14  0.0 ThreadPoolForeg
+3318361 3318416  14  0.0 tokio-rt-worker
+3318361 3318420  14  0.0 tokio-rt-worker
+3318361 3318421  14  0.0 tokio-rt-worker
+3318361 3318426  14  0.0 tokio-rt-worker
+3318433 3318433  14  0.0 MainThread
+3332363 3332367  14  0.0 DelayedTaskSche
+3332650 3332653  14  0.0 V8Worker
+3332650 3332655  14  0.0 V8Worker
+3332651 3332794  14  0.0 libuv-worker
+3332759 3332764  14  0.0 codex-main
+3342557 3342670  14  0.0 threaded-ml
+3422144 3422210  14  0.0 V8Worker
+3422144 3422323  14  0.0 libuv-worker
+3458013 3458023  14  0.0 V8Worker
+3458013 3458024  14  0.0 V8Worker
+3497889 3497897  14  0.0 DelayedTaskSche
+3510595 3510595  14  0.0 kworker/14:1-cgroup_free
+3547865 3558267  14  0.0 ThreadPoolForeg
+3547865 3558272  14  0.0 ThreadPoolForeg
+3559260 3559322  14  0.0 libuv-worker
+3561560 3561580  14  0.0 V8Worker
+3564726 3564726  14  0.0 kworker/14:0-events
+3621116 3621116  14  0.0 kworker/14:2-events
+3637283 3637292  14  0.0 ThreadPoolSingl
+3652105 3652105  14  0.0 kworker/u69:0
+3657380 3657380  14  0.0 systemd-userwor
+3672213 3672217  14  0.0 gh
+3672213 3672220  14  0.0 gh
