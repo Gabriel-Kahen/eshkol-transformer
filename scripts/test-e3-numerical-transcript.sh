@@ -231,4 +231,16 @@ grep -F 'state_f32' "${out}/verify-mean-of-means.stderr" >/dev/null || \
   die "mean-of-means mutant failed outside the accumulator value assertion"
 grep -F 'final.metrics_f32' "${out}/verify-second-normalization.stderr" >/dev/null || \
   die "second-normalization mutant failed outside the final loss value assertion"
+ATEN_CPU_CAPABILITY=default MKL_CBWR=COMPATIBLE "${q0_python}" -B \
+  -m tests.e3_private.verify_second_normalization_mutant \
+  --reference "${out}/reference-a.json" \
+  --normal "${out}/observed-a.json" \
+  --mutant "${out}/observed-second-normalization.json" \
+  --normal-roles "${out}/roles-a.tsv" \
+  --mutant-roles "${out}/roles-second-normalization.tsv" \
+  >"${out}/second-normalization-causal.stdout" \
+  2>"${out}/second-normalization-causal.stderr"
+grep -Fx 'E3-SECOND-NORMALIZATION-CAUSAL-KILL-PASS' \
+  "${out}/second-normalization-causal.stdout" >/dev/null || \
+  die "second-normalization mutant lacks exact causal final-loss witness"
 printf 'E3 compiled five-case private numerical transcripts and three mutants passed\n'

@@ -743,7 +743,13 @@ entered the exact shared M3 header, and the E1B consumer script pin predated
 the E3 fault-tuple selector. This isolated CI repair keeps the shared header
 exact, declares the test-only seam only in its participating source files,
 and refreshes the script checksum to the candidate's exact bytes. Focused
-checks pass; independent review and hosted admission remain pending.
+checks pass. The [2026-11-14 PR #214 evidence review](WAVE3_PR214_ADMISSION_REVIEW.md)
+verifies supported run `38661209451` on the identical `c71d39a` tree,
+including compiled CLI3 production-generate/cross-command resume parity and
+E3 native frame/parity gates. That review also found and repaired the
+first-evaluation mutant's stale `e3_frame.c` checksum after this declaration
+move; 65 focused source tests pass. Generated Eshkol G3-R/C2 SAVE and E3 §9
+gates remain open; no full Wave 3 admission follows.
 
 The [D1 corpus validate command slice](CLI3_CORPUS_VALIDATE.md) is staged from
 `93ea6258` on this current-main source union. It adds a standalone Eshkol-native
@@ -754,11 +760,12 @@ identified the former public D1 package and command-contract blocker. A
 stages the validator, six read-only summary accessors, and one shared public
 command handler for the installed app. The installed entry intercepts only
 `corpus validate`; the required production-generate gate now checks its
-command contract and the existing commands. Exact-tree compiled package,
-installed runtime, and hosted gates remain pending. Source-only tests cover
-evidence-path and dirty checkout rejection. The exact composed head has not
-passed the compiled D1 and command gate; this does not establish full CLI3
-acceptance. The required CLI3 suite's
+command contract and the existing commands. Supported PR #214 run
+`38661209451` subsequently passes the production package/D1 dispatch and
+command gates on the identical `c71d39a` tree; see the
+[bounded evidence review](WAVE3_PR214_ADMISSION_REVIEW.md). Source-only tests
+also cover evidence-path and dirty checkout rejection. Full CLI3 acceptance
+remains open beyond the fixed profile. The required CLI3 suite's
 production-generate and cross-command gates now retain evidence in separate
 directories so their identically named output files cannot overwrite each other.
 Draft PR #202's first hosted run `38256561519` stopped at Q0 Python isolation
@@ -807,7 +814,9 @@ requires complete C2 byte equality and identical separate-process evaluate
 and generate JSON for both final checkpoints, while retaining the original
 one-update checks. Successful reads and wrong-tokenizer, wrong-config, and
 corrupt-image rejections must leave checkpoint bytes unchanged. This added
-parity path has not yet passed a compiled or hosted gate.
+parity path was subsequently exercised successfully by PR #214 supported run
+`38661209451` on the identical `c71d39a` tree; see the
+[bounded evidence review](WAVE3_PR214_ADMISSION_REVIEW.md).
 The test is registered after the production generate gate in the required
 CLI3 CI suite. The accepted J result (`/home/gabe/.codex/evidence/eshkol-transformer/cli3-union-j-result-independent-review-20261012-a/VERDICT.md`)
 validates both compiled gates on exact source `18693b4` (tree `3a7f76e5`)
@@ -821,7 +830,8 @@ runtime-source normalization could admit it. An isolated source-only policy
 repair admits dependencies under that exact authenticated runtime root while
 preserving traversal and symlink rejection for each root. Focused policy tests
 and the compiled J production-generate/cross-command gates pass on repaired
-source `18693b4`; composed-head compiled and hosted exact-head checks remain open.
+source `18693b4`; the subsequent identical-tree `c71d39a` supported result
+is recorded in the [PR #214 evidence review](WAVE3_PR214_ADMISSION_REVIEW.md).
 
 The CLI3/G3-G source contract compares the complete installed executable entry
 with its test fixture after accounting for the public D1 `corpus validate`
@@ -994,6 +1004,14 @@ role/CE/state/final verification and byte equality for identical packed
 emissions. Its three compiled mutants remain on packed-single. Local parser
 and shell checks do not substitute for independent source/test review or a
 fresh supported compiled gate; this extension has no runtime evidence yet.
+The existing second-normalization mutant's numerical gate now has a bounded
+causal verifier after the strict final-metric rejection. It requires unchanged
+three-batch rows and all 63 role records, recomputes the binary32 accumulator
+from independently admitted D2 rows and validated CE words, then requires the
+second exact division's loss and a two-ULP perplexity bound with unchanged
+weight, accuracy and counters. Focused synthetic negative controls pass; this
+source change has no fresh compiled result. Supported exact-source AOT,
+poison/sanitizer execution and independent review remain the M2 proving gate.
 An isolated all-correct/all-wrong source candidate adds two fixed raw V256
 six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
 and a separate two-case private numerical runner. The new versioned manifest
@@ -2414,9 +2432,15 @@ rows remain open.
 A conditional current-main Wave 3 source candidate combines that G3/C2 head
 with the independently source-reviewed E3 `9aed9c65` head over the exact
 reviewed CLI3 `baf0a03f` base. The G3 and E3 source/test blobs are retained
-unchanged. Combined source/docs review, compiled cross-workstream and hosted
-gates remain open. G3, C2/SAVE, E3 §9, TR3, CLI3 and full Wave 3 acceptance
-remain **HOLD**.
+unchanged. The [2026-11-14 independent review](WAVE3_PR214_ADMISSION_REVIEW.md)
+found no production source defect and verified all 24 successful hosted checks
+for `c71d39a`, including compiled production CLI3 cross-command resume parity and E3
+native frame/parity execution on its exact tree. A stale first-evaluation
+mutant source pin is repaired separately with passing focused tests. The
+generated Eshkol G3-R replay, authentic C2 SAVE/reader and E3 §9 gates remain
+open. Retained one-use leaf preparations are not runtime evidence; the
+32 GiB disk floor also prevents a new heavy attempt on this host at review
+time. G3, C2/SAVE, E3 §9, TR3, full CLI3 and Wave 3 acceptance remain **HOLD**.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
