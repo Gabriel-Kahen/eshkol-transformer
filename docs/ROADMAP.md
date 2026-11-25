@@ -16,6 +16,9 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   and the focused O2 retirement coverage. All 26 required hosted jobs passed
   on the integrated tree, and main reused that exact evidence.
   [Integration PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240)
+- CI topology unit discovery now runs O2's existing exact public facade and
+  header-tree pin before the expensive suites. The O2 package command retains
+  the same test and expected digest.
 - Full CPU-v1 admission depends on trained save/reload and continuation,
   public terminal generation, and supported E3 numerical and resource
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
