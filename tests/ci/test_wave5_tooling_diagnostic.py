@@ -40,6 +40,7 @@ class Wave5DiagnosticTests(unittest.TestCase):
             "llvm-config-21 --version",
             "= '21.1.8'",
             "make toolchain",
+            "persist-credentials: false",
             "scripts/run-wave5-tooling-diagnostic.sh",
             "if: always()",
             "sha256sum -c SHA256SUMS",

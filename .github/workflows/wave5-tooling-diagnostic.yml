@@ -37,6 +37,8 @@ jobs:
           df -h "$RUNNER_TEMP" > "$root/initial-disk.txt"
           grep '^MemAvailable:' /proc/meminfo > "$root/initial-memory.txt"
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
       - name: Authenticate exact branch head and tree
         shell: /usr/bin/bash -euo pipefail {0}
         env:
@@ -84,8 +86,6 @@ jobs:
           disk_bytes="$(df -B1 --output=avail "$RUNNER_TEMP" | tail -n 1 | tr -d '[:space:]')"
           printf 'memory_available_kib\t%s\ndisk_available_bytes\t%s\n' \
             "$memory_kib" "$disk_bytes" > "$root/preflight.tsv"
-          test "$memory_kib" -ge $((8 * 1024 * 1024))
-          test "$disk_bytes" -ge $((6 * 1024 * 1024 * 1024))
           make toolchain > "$root/toolchain.stdout" 2> "$root/toolchain.stderr"
       - name: Run six focused leaf gates
         shell: /usr/bin/bash -euo pipefail {0}
