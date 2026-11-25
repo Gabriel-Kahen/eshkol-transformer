@@ -2451,7 +2451,9 @@ time. G3, C2/SAVE, E3 §9, TR3, full CLI3 and Wave 3 acceptance remain **HOLD**.
 The [G3-R/C2 one-use controller](G3R_ONE_USE_LAUNCHER.md) supplies exact
 input/seal checks, locked resource rechecks, exclusive claims, owned-container
 custody and complete output/artifact validation. Its focused controls are
-source-level evidence only; a fresh preparation repinned to the composed tree,
+source-level evidence only; 34 focused control/oracle and Q0 tests pass on the
+reconciled source. The historical `aece425d` preparations are sealed but stale
+for this tree; fresh preparations repinned to the final composed tree,
 independent recipe/seal review, and resource-qualified generated replay/SAVE
 runs remain required. G3/C2 generated runtime and E3 §9 admission remain **HOLD**.
 

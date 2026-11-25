@@ -284,6 +284,8 @@ class Inputs:
         require(manifest(self.prep, ("seal.json",)) == self.files, "preparation inventory")
         require(source_pin(self.source_root) == self.source, "source manifest/head/tree")
         require(not git(self.source_root, "status", "--porcelain=v1", "--untracked-files=all"), "dirty source")
+        require(manifest(self.source_root, (".git",)) == self.source["files"],
+                "source inventory includes ignored or untracked inputs")
         fd = open_path(self.common, os.O_RDONLY | os.O_DIRECTORY)
         os.close(fd)
         for dep in self.deps:

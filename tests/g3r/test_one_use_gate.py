@@ -307,6 +307,17 @@ class OneUseGateTests(unittest.TestCase):
                     write(f.source / rel, old)
         self.assertFalse(f.process.calls)
 
+    def test_ignored_source_input_rejected_before_claim(self):
+        f = self.fixture
+        write(f.source / '.git/info/exclude', b'build/\n')
+        write(f.source / 'build/hidden.esk', b'ignored but visible in source mount')
+        self.assertFalse(subprocess.check_output(
+            ['git', '-C', str(f.source), 'status', '--porcelain=v1', '--untracked-files=all']))
+        with self.assertRaisesRegex(gate.Hold, 'source inventory includes ignored'):
+            f.runner().run()
+        self.assertFalse((f.package / 'CLAIM.json').exists())
+        self.assertFalse(f.process.calls)
+
     def test_seal_and_dependency_tampering_rejected_before_claim(self):
         f = self.fixture
         for path in (f.prep / 'inside.sh', self.root / 'eshkol-build/pin', f.client):

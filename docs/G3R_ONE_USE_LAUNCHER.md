@@ -4,7 +4,8 @@ The development-only controller is `tests/g3r/one_use_gate.py`. It runs one
 reviewed replay or authentic-SAVE preparation:
 
 ```bash
-python3 -B -m tests.g3r.one_use_gate /absolute/fresh/package EXPECTED_SEAL_SHA256
+flock -x /home/gabe/.cache/eshkol-transformer-orchestration-build.lock \
+  python3 -B -m tests.g3r.one_use_gate /absolute/fresh/package EXPECTED_SEAL_SHA256
 ```
 
 `source_pin` and `seal_preparation` are preparation helpers. The caller supplies
@@ -15,9 +16,10 @@ profile, its guest recipe and exact required evidence inventory.
 
 ## Input and one-use checks
 
-- Bind the committed source HEAD/tree, clean tracked/untracked status, tracked
-  file inventory, dependency inventories, recipe files, Docker client, socket
-  endpoint and image identity. Changed or extra preparation/dependency files fail.
+- Bind the committed source HEAD/tree, clean tracked/untracked status, complete
+  source file inventory (including rejection of ignored extras), dependency
+  inventories, recipe files, Docker client, socket endpoint and image identity.
+  Changed or extra inputs fail.
 - Reject traversal and symlink components with no-follow filesystem operations;
   the fixed Docker vector mounts inputs read-only. Only `out/guest` is mounted
   writable at `/out`; host CID, inspection logs, Docker config and result records
@@ -43,13 +45,15 @@ prelaunch and custody checks; contradictory output remains uncertain.
 A successful container exit alone is insufficient. Required per-step command,
 stdout, stderr and exit records must be complete; the controller checks runtime
 oracles, normal/repeat/sanitizer parity and artifact identities before sealing
-a PASS result. SAVE additionally checks the no-SAVE control, authentic producer
+a PASS result. It requires nonempty per-step argv records; independent review
+of the sealed recipe and resulting command records establishes command identity.
+SAVE additionally checks the no-SAVE control, authentic producer
 result, canonical seed-to-saved byte identity, companion digest and unchanged pair.
 Passing output inventories allow only the accepted `link.g3r -> valid.g3r`
 and `fifo.g3r` negative fixtures. Failure seals retain unexpected links or
 special nodes as metadata without dereferencing them; those nodes cannot pass.
 
-Thirty-two focused tests (28 control/oracle and four Q0) exercise these controls
+Focused control/oracle and Q0 tests exercise these controls
 with fake Docker, resources and clocks, including dirty/stale/reused inputs,
 path escapes, missing logs, artifact substitutions, interrupted clients,
 inspection uncertainty and logging failures. A real read-only Docker absence
@@ -59,14 +63,23 @@ daemon uncertainty, not uncatchable process or host failure.
 
 ## Current admission bound
 
-Fresh concrete replay/SAVE preparations and source/toolchain preflight receipts
-are retained under `build/evidence/g3r-launcher-hardening-20261115/` in the
-integration worktree. Earlier failed and unlaunched bundles remain untouched;
-this controller does not relabel or release them. Each fresh package still
-needs its exact recipe/config/seal reviewed before a resource-qualified launch.
+The November 15 replay/SAVE preparations and preflight receipts are retained
+under `build/evidence/g3r-launcher-hardening-20261115/concrete-aece425d/` in
+the historical integration worktree. Their independently recorded seals are
+`1646205b598774c3ec6fa0a0d842aceae52b118bee836cfe132defe0116c8e0f`
+and `d2e511e35304ca0fdc8c60bbfa3380604c93c5a659351c13005fbb1511378abe`,
+respectively. Both bind source head `aece425db480ffb1e16ccea7a4e393b2dfb9e974`
+and tree `4be3eff7d6678f3ad6eb5545e3807c83797e89a7`; they are ineligible
+for this composed tree. Earlier failed and unlaunched bundles remain preserved.
 
-The [measured standard hosted runner](G3R_HOSTED_RESOURCE_QUALIFICATION_20261115.md)
-fails the same RAM/swap floors. No heavy replay/SAVE execution is established
-by this change. Planned sanitizer modes instrument native providers and link
-sanitizer runtimes; they do not instrument generated Eshkol IR. Independent
-runtime-result review and E3 §9 remain separate admission gates.
+The [current source reconciliation](CPU_V1_SOURCE_RECONCILIATION_20261125.md)
+requires new preparations pinned to the final committed head/tree, copied
+dependencies with exact inventories, independent recipe/config/seal review and
+a caller-supplied seal SHA-256. Keep preparations and outputs outside the mounted
+source tree so ignored files cannot become unpinned source inputs. The launch
+host must satisfy 16 GiB available
+RAM, 8 GiB free swap and 32 GiB free on both scratch/output and Docker storage,
+rechecked under the locks. No heavy replay/SAVE execution is established here.
+Planned sanitizer modes instrument native providers and link sanitizer runtimes;
+they do not instrument generated Eshkol IR. Independent runtime-result review
+and E3 §9 remain separate admission gates.
