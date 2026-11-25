@@ -91,23 +91,22 @@ All multi-byte integers are unsigned little-endian, encoded and decoded via expl
 
 ## Measured Verification Evidence
 
-The table below records the predecessor `23e8fa35` validation inside the
-pinned container `eshkol-r0-debug:20260928` (`clang-21` / `clang++-21`, pinned
-Eshkol toolchain `/tc/build/eshkol-run`). Its hashes are not successor hashes.
-On the successor tree, the focused pinned Clang 21 native regression gate
-passes after the durability and overlap fixes. The full successor gate is
-queued behind the shared compiler lock.
+The focused successor at `6943792c` passed `bash scripts/test-t2-trainer.sh`
+inside the pinned container `eshkol-r0-debug:20260928` (`clang-21` /
+`clang++-21`, pinned Eshkol toolchain `/tc/build/eshkol-run`). The run used the
+shared compiler lock. The later documentation-only evidence update does not
+change the tested native or AOT inputs.
 
 | Check | Result | Measured Value |
 | --- | --- | --- |
-| Core archive (`normal`, byte-identical across 2 builds) | PASS | `7ce105cd418a8bf70d6e95919d6bee1ab4da8461ba85a8aa0dd0671d31d01b56` |
+| Core archive (`normal`, byte-identical across 2 builds) | PASS | `9cd86f24476ee9eef9534dda038ff38e3c3cfa95e7551cae172e7a9792ef9d7f` |
 | Bridge archive (`normal`, byte-identical across 2 builds) | PASS | `bb04c36c0d47f1ab94505ae3ccaa40c6f862dc4ed7dc9dc4a00a2a93f34d444c` |
-| Core archive (`sanitize`, byte-identical across 2 builds) | PASS | `503f0e5c32ac59da43ee19a121a56760f58572b055a48ce37a5a35445297cae0` |
-| Bridge archive (`sanitize`, byte-identical across 2 builds) | PASS | `c319a7731f3bb0c000aa9f9c68ba5f008510a91f36b6a826963234c4f7c13d3a` |
+| Core archive (`sanitize`, byte-identical across 2 builds) | PASS | `3956c260489a5fe76bce61060aa541d34a2209a2cab4dcd76531db62bace8dea` |
+| Bridge archive (`sanitize`, byte-identical across 2 builds) | PASS | `da7742c136af1d3e23a1ede96994b53bd0633fedbd5df53b6018d8ac2f90fa13` |
 | C++17 header & archive linkage (`clang++-21 -std=c++17`) | PASS | `header_trainer_cpp` exit 0 |
-| Native C11 normal + ASan/UBSan/LSan (`detect_leaks=1`) | PASS | All determinism, tie-break, round-trip, tamper, re-signed semantic, and symlink checks |
-| Independent Python oracle (`test_t2_trainer_oracle.py`) | PASS | Predecessor 4/4 suites: exact merge-by-merge table, token ID sequence, lossless decode, and `ETBPE100` bytes/SHA-256 |
-| Eshkol AOT binary (`--strict-types --optimize 0 --no-stdlib`, 2 fresh builds) | PASS | Byte-identical ELF SHA-256: `4f580f65f6221cdcbc34f2066adb0352549dcbdd7d4b5024a85e547f156239fa` |
+| Native C11 normal + ASan/UBSan/LSan (`detect_leaks=1`) | PASS | Determinism, tie-break, round-trip, tamper, re-signed semantic, symlink, overlapping decode, short adjacent output, and pre/post-rename fsync fault checks |
+| Independent Python oracle (`test_t2_trainer_oracle.py`) | PASS | 5/5 suites: accepted T2 merge/encode parity, document-order artifact equality, reciprocal codec rejection, lossless decode, and `ETBPE100` bytes/SHA-256 |
+| Eshkol AOT binary (`--strict-types --optimize 0 --no-stdlib`, 2 fresh builds) | PASS | Byte-identical ELF SHA-256: `706f5e5f3959d716c32326c1c8fa99694018c242390850e64af1786cb8f82a3d` |
 | AOT train + fresh-process reload compression | PASS | `vocab=320`, `merges=60`, `81` raw bytes -> `18` tokens (**4.50x** compression, 77.78% reduction) |
 | AOT lossless all-256 + NUL round-trip | PASS | `264` bytes (NULs + `0x00..0xFF` + invalid UTF-8) decoded byte-for-byte identically |
 | AOT trained artifact SHA-256 (train == reload) | PASS | `a10bf0892d61535389fa5fbb80fec5455ea029b03eb4d4c7ee22e170659ec76a` |
