@@ -42,11 +42,11 @@
 (extern i32 beam-apply-min-length i64 i64 i64 i64 ptr ptr
         :real et_beam_aot_apply_min_length)
 (extern i32 beam-log-softmax i64 ptr ptr :real et_beam_aot_log_softmax)
-(extern void beam-store-u32 ptr i64 i64 :real et_beam_aot_store_u32)
-(extern i64 beam-load-u32 ptr i64 :real et_beam_aot_load_u32)
-(extern i64 beam-load-i64 ptr i64 :real et_beam_aot_load_i64)
-(extern void beam-store-f64 ptr i64 f64 :real et_beam_aot_store_f64)
-(extern f64 beam-load-f64 ptr i64 :real et_beam_aot_load_f64)
+(extern i32 beam-store-u32-checked ptr i64 i64 i64 :real et_beam_aot_store_u32)
+(extern i64 beam-load-u32-checked ptr i64 i64 :real et_beam_aot_load_u32)
+(extern i64 beam-load-i64-checked ptr i64 i64 :real et_beam_aot_load_i64)
+(extern i32 beam-store-f64-checked ptr i64 i64 f64 :real et_beam_aot_store_f64)
+(extern f64 beam-load-f64-checked ptr i64 i64 :real et_beam_aot_load_f64)
 (extern f64 beam-nan-f64 :real et_beam_aot_nan_f64)
 (extern f64 beam-pos-inf-f64 :real et_beam_aot_pos_inf_f64)
 (extern f64 beam-neg-inf-f64 :real et_beam_aot_neg_inf_f64)
@@ -81,6 +81,30 @@
 (define logits-buf (checked-allocate (* 8 8 16)))
 (define proc-in-buf (checked-allocate (* 8 16)))
 (define proc-out-buf (checked-allocate (* 8 16)))
+
+(define (beam-buffer-bytes buf)
+  (cond
+    ((= (ptr->usize buf) (ptr->usize count-buf)) 8)
+    ((= (ptr->usize buf) (ptr->usize prompt-buf)) (* 4 16))
+    ((= (ptr->usize buf) (ptr->usize logits-buf)) (* 8 8 16))
+    ((= (ptr->usize buf) (ptr->usize proc-in-buf)) (* 8 16))
+    ((= (ptr->usize buf) (ptr->usize proc-out-buf)) (* 8 16))
+    (else 0)))
+
+(define (beam-store-u32 buf index value)
+  (expect-status "AOT checked u32 store" 0
+                 (beam-store-u32-checked buf (beam-buffer-bytes buf)
+                                         index value)))
+(define (beam-load-u32 buf index)
+  (beam-load-u32-checked buf (beam-buffer-bytes buf) index))
+(define (beam-load-i64 buf index)
+  (beam-load-i64-checked buf (beam-buffer-bytes buf) index))
+(define (beam-store-f64 buf index value)
+  (expect-status "AOT checked f64 store" 0
+                 (beam-store-f64-checked buf (beam-buffer-bytes buf)
+                                         index value)))
+(define (beam-load-f64 buf index)
+  (beam-load-f64-checked buf (beam-buffer-bytes buf) index))
 
 ;; Fill row b (vocab V) with a constant value.
 (define (fill-row buf row vocab val)
