@@ -337,6 +337,9 @@ def check(root, overrides=None):
     targets = recipes(make)
     assert re.search(r"^test-io5-gguf:\s*$", make, re.M)
     assert targets["test-io5-gguf"] == ["/usr/bin/bash scripts/test-io5-gguf.sh"]
+    assert "bash scripts/test-io5.sh" in read("scripts/test-io5-gguf.sh")
+    assert '"${IO5_REFERENCE_PYTHON:-python3}" -m unittest discover -s tests/io5 -p \'test_*.py\' -v' in read("scripts/test-io5.sh")
+    assert "class ModelMappingTests(unittest.TestCase):" in read("tests/io5/test_model_mapping.py")
     assert targets["test-ci-dataset-resources-after-build"] == [
         "/usr/bin/bash scripts/test-d2.sh --phase resources"]
     assert targets["test-ci-m3-after-build"] == [
