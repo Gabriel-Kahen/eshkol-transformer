@@ -24,15 +24,20 @@ docker run --rm --network none \
   -e CC=clang-21 -e CXX=clang++-21 \
   eshkol-r0-debug:20260928 bash -ec '
     git config --global --add safe.directory "*"
-    bash scripts/test-doc5-walkthrough.sh
+    make test-doc5
   '
 ```
+
+The image and `/tc` cache are prebuilt pinned inputs; the runner builds CLI3
+from a disposable copy of the checkout. On a supported native Ubuntu 22.04
+environment, follow [toolchain setup](../toolchain/README.md), run
+`make toolchain`, then `make test-doc5` from a fresh checkout.
 
 The runner checks every API row, tutorial repository path, and referenced Make
 target. It copies tracked sources into a disposable directory, builds CLI3,
 runs the existing cross-command gate and installed DATA4 command tests, then
 executes the integrated recipe below. A source-only check is available as
-`bash scripts/test-doc5-walkthrough.sh --check-source`; it does not establish
+`make test-doc5-source`; it does not establish
 the executable walkthrough.
 
 ## Prepare, train, evaluate, and generate

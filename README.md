@@ -15,6 +15,13 @@ one byte using greedy or categorical sampling. The
 tested build and reproduction steps. The [roadmap](docs/ROADMAP.md) tracks broader
 model, evaluation, and resume support.
 
+The [corpus-to-model tutorial](docs/DOC5_CORPUS_TO_MODEL_TUTORIAL.md) walks
+through DATA4 preparation, one training update, evaluation, and one-byte
+generation. The [API reference](docs/DOC5_API_REFERENCE.md) lists the bounded
+public and source-only entry points. On the pinned toolchain, run
+`make test-doc5-source` to check documentation paths and symbols, or
+`make test-doc5` for the executable walkthrough in a disposable checkout.
+
 ## Build and test
 
 The initial supported lane is Ubuntu 22.04 x86-64 with Clang/LLVM 21.1.8. The

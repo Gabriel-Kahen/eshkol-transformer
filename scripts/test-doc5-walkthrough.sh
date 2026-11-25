@@ -25,8 +25,7 @@ export TMPDIR="${scratch}/tmp" XDG_CACHE_HOME="${scratch}/cache"
 mkdir -p "${scratch}/repo" "${TMPDIR}" "${XDG_CACHE_HOME}"
 
 # Component builders include checkout-relative build/ outputs. Run them all
-# against the tracked source files in a disposable checkout, including the Git
-# index needed by the Python-isolation gate.
+# against the tracked source files in a disposable checkout.
 git ls-files -z --deduplicate | tar --null -T - -cf - | tar -xf - -C "${scratch}/repo"
 cp docs/DOC5_{API_REFERENCE,CORPUS_TO_MODEL_TUTORIAL}.md "${scratch}/repo/docs/"
 cp scripts/test-doc5-walkthrough.sh "${scratch}/repo/scripts/"
@@ -53,7 +52,8 @@ span='`([^`]+)`'
 source_span='^[[:blank:]]*`([^`]+)`[[:blank:]]*$'
 rows=0
 while IFS= read -r row; do
-  [[ "${row}" == '|'* ]] || continue
+  [[ "${row}" =~ ^[[:space:]]*\| ]] || continue
+  row="${row#"${row%%[![:space:]]*}"}"
   IFS='|' read -r _ component source_cell references gates _ <<< "${row}"
   case "${component}:${source_cell}" in
     ' Component : Source '|' --- : --- ') continue ;;
@@ -82,9 +82,13 @@ while IFS= read -r row; do
     ' "${source_file}" ||
       die "DOC5 missing reference '${symbol}' in ${source_file}"
   done
+  gate_count=0
+  gate_remainder="${gates}"
   while [[ "${gates}" =~ ${span} ]]; do
     gate="${BASH_REMATCH[1]}"
+    gate_remainder="${gate_remainder/"${BASH_REMATCH[0]}"/}"
     gates="${gates#*"${BASH_REMATCH[0]}"}"
+    gate_count=$((gate_count + 1))
     case "${gate}" in
       'make '*)
         require_make_target "${gate#make }" 'DOC5 API reference'
@@ -95,6 +99,8 @@ while IFS= read -r row; do
       *) die "DOC5 unrecognized gate: ${gate}" ;;
     esac
   done
+  (( gate_count > 0 )) && [[ -z "${gate_remainder//[[:space:],]/}" ]] ||
+    die "DOC5 API reference: malformed gate cell in row: ${row}"
   rows=$((rows + 1))
 done < docs/DOC5_API_REFERENCE.md
 (( rows > 0 )) || die 'DOC5 API table is empty'
@@ -124,7 +130,7 @@ awk '
       for (i = 2; i < count; i += 2) make_references(spans[i])
     }
     line = $0
-    while (match(line, /(^|[^[:alnum:]_./$-])(\.\.?\/)?(docs|include|native|scripts|tests|tools|src|internal|benchmarks)\/[[:alnum:]_./+-]+/)) {
+    while (match(line, /(^|[^[:alnum:]_./$-])(\.\.?\/)?(docs|include|native|scripts|tests|tools|toolchain|src|internal|benchmarks)\/[[:alnum:]_./+-]+/)) {
       path = substr(line, RSTART, RLENGTH)
       line = substr(line, RSTART + RLENGTH)
       sub(/^[^[:alnum:]_.]/, "", path)
