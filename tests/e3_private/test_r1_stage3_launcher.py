@@ -22,7 +22,12 @@ def container(running=False, label='owned', exit_code=0):
 
 
 class Stage3LauncherCustodyTest(unittest.TestCase):
-    def test_low_host_resources_are_observations_not_invented_admission(self):
+    def test_gate_uses_shared_orchestration_lock(self):
+        self.assertEqual(
+            LAUNCHER.LOCK,
+            Path('/home/gabe/.cache/eshkol-transformer-orchestration-build.lock'))
+
+    def test_host_qualification_preserves_all_four_floors(self):
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
             (evidence / 'tmp').mkdir()
@@ -36,6 +41,32 @@ class Stage3LauncherCustodyTest(unittest.TestCase):
             self.assertEqual(report['scratch_path'], str(evidence / 'tmp'))
             self.assertEqual(report['guest_tmpdir'], '/out/tmp')
             self.assertGreater(report['scratch_free_bytes'], 0)
+            report['scratch_free_bytes'] = 0
+            report['host_tmp_free_bytes'] = 0
+            failures = LAUNCHER.qualification_failures(report)
+            self.assertEqual(failures['MemAvailable']['required_bytes'], 16 * 1024**3)
+            self.assertEqual(failures['SwapFree']['required_bytes'], 8 * 1024**3)
+            self.assertEqual(failures['package/output scratch']['required_bytes'], 32 * 1024**3)
+            self.assertEqual(failures['/tmp']['required_bytes'], 4 * 1024**3)
+
+    def test_qualification_accepts_exact_floor_and_rejects_one_byte_short(self):
+        report = {'host_bytes': {'MemAvailable': 16 * 1024**3,
+                                 'SwapFree': 8 * 1024**3},
+                  'scratch_free_bytes': 32 * 1024**3,
+                  'host_tmp_free_bytes': 4 * 1024**3}
+        self.assertEqual(LAUNCHER.qualification_failures(report), {})
+        for section, key in (('host_bytes', 'MemAvailable'),
+                             ('host_bytes', 'SwapFree'),
+                             (None, 'scratch_free_bytes'),
+                             (None, 'host_tmp_free_bytes')):
+            mutated = {'host_bytes': dict(report['host_bytes']),
+                       'scratch_free_bytes': report['scratch_free_bytes'],
+                       'host_tmp_free_bytes': report['host_tmp_free_bytes']}
+            if section:
+                mutated[section][key] -= 1
+            else:
+                mutated[key] -= 1
+            self.assertEqual(len(LAUNCHER.qualification_failures(mutated)), 1)
 
     def test_dependencies_keep_their_own_git_identity(self):
         source = SCRIPT.read_text()

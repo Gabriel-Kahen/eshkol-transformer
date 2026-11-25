@@ -1523,6 +1523,16 @@ free swap; `/home` about 93 GiB free).
 Earlier accepted numerical F/mode leaves and failed complete-call retention
 remain separate evidence. E3 §9 stays **HOLD**.
 
+The [2026-11-25 Wave 3 stage-3 source reconciliation](e3/E3_STAGE3_WAVE3_RECONCILIATION_20261125.md)
+replays the existing PR #223 gate over composed Wave 3 source `4ff24845a`
+without changing its E3 runtime, test or package blobs. Focused launcher and
+one-shot tests pass. The shared-build lock and preserved 16 GiB available
+RAM, 8 GiB free swap, 32 GiB actual scratch and 4 GiB `/tmp` qualification
+floors now fail closed before Docker create. This host currently misses the
+RAM/swap floors, and no measured configured hosted runner qualifies. The
+compiled normal/repeat/poison/sanitizer gate and independent result review
+remain pending; E3 §9 stays **HOLD**.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

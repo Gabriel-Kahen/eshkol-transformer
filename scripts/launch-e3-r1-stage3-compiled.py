@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host-only f31 launcher; retain heavy.lock until the owned CID is gone."""
+"""Host-only f31 launcher; retain the shared build lock until the CID is gone."""
 import argparse
 import fcntl
 import hashlib
@@ -13,7 +13,7 @@ import subprocess
 import time
 
 SOURCE = Path(__file__).resolve().parents[1]
-LOCK = Path('/tmp/eshkol-transformer-heavy-build.lock')
+LOCK = Path('/home/gabe/.cache/eshkol-transformer-orchestration-build.lock')
 DEPS = Path('/home/gabe/.codex/evidence/eshkol-transformer/e3-r1-stage8-ce-gate-124cb36c-20261014-b/deps')
 VENV = Path('/home/gabe/.codex/venvs/eshkol-oracle-py3146')
 IMAGE = 'sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6'
@@ -21,8 +21,8 @@ BASE = '70220bbe0d27a9a8110deeedaf873055f11ca9a6'
 LABEL = 'codex.e3.r1.stage3.run'
 
 
-# Resource observations are evidence, not a hypothetical minimum. A bounded
-# cgroup run either proves completion under its cap or preserves its failure.
+# The hosted qualification floor is distinct from the bounded guest cgroup cap.
+# Neither a floor pass nor a cgroup observation proves numerical completion.
 def resource_report(evidence):
     memory = {}
     for line in Path('/proc/meminfo').read_text().splitlines():
@@ -31,12 +31,28 @@ def resource_report(evidence):
             memory[name] = int(value.strip().split()[0]) * 1024
     scratch = evidence / 'tmp'
     space = os.statvfs(scratch)
+    temporary = os.statvfs('/tmp')
     return {'kind': 'e3-stage3-resource-observation-v1',
             'host_bytes': memory,
             'scratch_free_bytes': space.f_bavail * space.f_frsize,
             'scratch_path': str(scratch), 'guest_tmpdir': '/out/tmp',
+            'host_tmp_free_bytes': temporary.f_bavail * temporary.f_frsize,
             'container_memory_bytes': 6 * 1024**3,
             'container_memory_plus_swap_bytes': 7 * 1024**3}
+
+
+def qualification_failures(report):
+    """Preserve the stage-8 hosted qualification floor for this combined gate."""
+    observed = {
+        'MemAvailable': report['host_bytes'].get('MemAvailable', -1),
+        'SwapFree': report['host_bytes'].get('SwapFree', -1),
+        'package/output scratch': report['scratch_free_bytes'],
+        '/tmp': report['host_tmp_free_bytes'],
+    }
+    floors = {'MemAvailable': 16 * 1024**3, 'SwapFree': 8 * 1024**3,
+              'package/output scratch': 32 * 1024**3, '/tmp': 4 * 1024**3}
+    return {name: {'observed_bytes': observed[name], 'required_bytes': floor}
+            for name, floor in floors.items() if observed[name] < floor}
 
 
 def git(*args):
@@ -212,10 +228,14 @@ def main():
         (evidence / 'tmp').mkdir()
         (evidence / 'gate').mkdir()
         resources = resource_report(evidence)
+        failures = qualification_failures(resources)
+        resources['qualification_failures'] = failures
+        resources['qualification_floor_met'] = not failures
         (evidence / 'resource-observation.json').write_text(
             json.dumps(resources, indent=2) + '\n')
-        if resources['scratch_free_bytes'] < 32 * 1024**3:
-            raise SystemExit('E3 stage-3 requires 32 GiB free on the scratch filesystem')
+        if failures:
+            raise SystemExit('E3 stage-3 host qualification floor is unmet; '
+                             'inspect resource-observation.json')
         create_argv = [
             'docker', 'create', '--pull', 'never', '--network', 'none', '--read-only',
             '--cpus=3', '--memory=6g', '--memory-swap=7g', '--pids-limit=256', '--ulimit', 'core=0',

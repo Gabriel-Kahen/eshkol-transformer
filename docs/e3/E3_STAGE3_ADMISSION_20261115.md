@@ -47,9 +47,10 @@ After source review, freeze a clean commit/tree and invoke:
 python3 scripts/launch-e3-r1-stage3-compiled.py COMMIT TREE /home/gabe/.cache/et-e3-admission-20261115-evidence/stage3
 ```
 
-The launcher serializes on `/tmp/eshkol-transformer-heavy-build.lock`.
-Only the lock resides under `/tmp`; `TMPDIR=/out/tmp` and every generated
-artifact reside in the `/home` evidence directory. A lock-time check requires
+The launcher serializes on
+`/home/gabe/.cache/eshkol-transformer-orchestration-build.lock`.
+`TMPDIR=/out/tmp` and every generated artifact reside in the `/home` evidence
+directory. A lock-time check requires
 at least 32 GiB free on that actual scratch filesystem. The source/common Git,
 fe9 dependencies and pinned Q0 environment mount read-only. The network-disabled
 read-only f31 image is pinned by full digest. Three CPUs, 6 GiB memory and
@@ -59,6 +60,10 @@ peak memory/events, command GNU-time RSS, host memory/swap, scratch space,
 compiler/runtime stderr and terminal custody. An OOM or timeout is a preserved
 resource failure, never a numerical pass or reason to loosen assertions.
 No new RAM/swap minimum has been invented from the historical 12 GiB cap.
+The later [Wave 3 reconciliation](E3_STAGE3_WAVE3_RECONCILIATION_20261125.md)
+separately enforces the preserved stage-8 **host qualification** floors of
+16 GiB available RAM and 8 GiB free swap before its combined gate launches;
+those floors are not PR #223 guest sufficiency claims.
 
 The existing compiler timeout remains 900 seconds per package compiler call,
 5,400-second package/AOT command bounds, and 14,400-second global bound.
