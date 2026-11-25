@@ -3600,11 +3600,27 @@ publication, public G2 and continuation remain pending.
   Wave 3 A2 provider. Both static mutation checkers, Q0 isolation, and the
   call-entry source check pass; an independent source-and-test review found no
   issue in this bounded replay. The earlier compiled seals have different
-  inputs and do not qualify this tree. The next gate is fresh pinned normal,
-  repeat, and sanitizer runs of both terminal-pending-anchor and terminal-
-  carriers scripts under the shared heavy-build lock, with exact-tree source,
-  compiler, runtime, resource, and output seals. No compiled Wave 3 result or
-  terminal composition is claimed here.
+  inputs and do not qualify this tree. Fresh pinned normal, repeat, and
+  sanitizer runs of both terminal-pending-anchor and terminal-carriers scripts
+  completed under the shared heavy-build lock with exact-tree source, compiler,
+  runtime, resource, and output seals.
+
+  That scoped gate passed on unchanged candidate `12598d3bc01c155eab0eeb89b26c11304ee3fcbd`
+  (tree `d6338d1b0632864c9672a9458c7989893ab8bac9`) using the verified
+  `fe9dfd5` Eshkol build, Ubuntu 22.04 and Clang 21.1.8. The pending-anchor
+  script passed seven static mutations, four feature-off and 23 protected
+  checks per normal/repeat/sanitizer run; the carrier script passed seven plus
+  22 static mutations and 530 checks per mode. All corresponding stdout matched
+  byte-for-byte and successful compile/run stderr was empty. The carrier gate
+  classified all eight unguarded allocation cuts in each normal and sanitizer
+  mode as the pinned emergency exit 1. Peak script RSS was 4,024,772 and
+  3,776,440 KiB respectively; both scripts exited zero, and the exact source
+  worktree stayed clean. The 83-file seal is
+  `/home/gabe/.codex/evidence/eshkol-transformer/g3c4-carrier-wave3-12598d3-20261125/SHA256SUMS-RUN`
+  (`59496ab7...`), with separate normal, repeat, sanitizer, and failpoint
+  manifests. This qualifies the two standalone carrier leaves on the reconciled
+  Wave 3 tree; terminal composition and the separate G3/C2 and E3 gates remain
+  pending.
 
 ## Wave 4 — practical pretraining and performance
 
