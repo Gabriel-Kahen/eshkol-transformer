@@ -1,0 +1,455 @@
+;;; Speculative Decoding (draft-verify rejection sampling) AOT verification
+;;; in compiled Eshkol (--strict-types --optimize 0 --no-stdlib).
+;;; Proves:
+;;; 1. Greedy speculative decoding is 100% token-identical to target-only
+;;;    autoregressive greedy decoding over 32-token rollouts while reducing
+;;;    target model evaluations.
+;;; 2. Stochastic speculative decoding is 100% reproducible across runs with
+;;;    the same (seed, counter), diverges across different seeds, and handles
+;;;    EOS early termination cleanly.
+;;; 3. Canonical logits-to-probs conversion normalizes to 1.0 and respects top-k.
+;;; 4. Negative/invalid/non-finite calls are explicitly rejected while
+;;;    preserving prior telemetry.
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern i32 spec-create i64 i64 ptr :real et_spec_aot_create)
+(extern void spec-destroy ptr :real et_spec_aot_destroy)
+
+(extern i32 spec-set-draft-tok ptr i64 i64 :real et_spec_aot_set_draft_token)
+(extern i32 spec-set-draft-logit ptr i64 i64 f64 :real et_spec_aot_set_draft_logit)
+(extern i32 spec-set-target-logit ptr i64 i64 f64 :real et_spec_aot_set_target_logit)
+
+(extern i32 spec-verify-greedy ptr i64 :real et_spec_aot_verify_greedy)
+(extern i32 spec-verify-sample ptr f64 i64 f64 i64 i64 i64 :real et_spec_aot_verify_sample)
+(extern i32 spec-logits-to-probs ptr i64 i64 f64 i64 f64 :real et_spec_aot_logits_to_probs)
+(extern i32 spec-sample-row ptr i64 i64 f64 i64 f64 i64 i64 :real et_spec_aot_sample_row)
+
+(extern i64 spec-horizon ptr :real et_spec_aot_horizon)
+(extern i64 spec-vocab ptr :real et_spec_aot_vocab_size)
+(extern i64 spec-accepted ptr :real et_spec_aot_accepted_count)
+(extern i64 spec-emitted ptr :real et_spec_aot_emitted_count)
+(extern i64 spec-eos-hit ptr :real et_spec_aot_eos_hit)
+(extern i64 spec-rejected ptr :real et_spec_aot_rejected)
+(extern i64 spec-rng-draws ptr :real et_spec_aot_rng_draws)
+(extern i64 spec-next-counter ptr :real et_spec_aot_next_counter)
+(extern i64 spec-emitted-tok ptr i64 :real et_spec_aot_emitted_token)
+(extern f64 spec-prob ptr i64 :real et_spec_aot_prob)
+(extern i64 spec-sampled-tok ptr :real et_spec_aot_sampled_token)
+(extern i64 spec-sampled-next-counter ptr :real et_spec_aot_sampled_next_counter)
+
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define status-ok 0)
+(define status-bounds -3)
+(define status-param -4)
+(define status-nonfinite -5)
+(define status-token-range -6)
+(define no-eos -1)
+
+(define vocab-size 16)
+(define horizon 4)
+(define eos-token 15)
+(define rollout-len 32)
+(define prompt-token 2)
+
+(define (require-check label ok)
+  (unless ok
+    (display "SPEC AOT FAIL: ") (display label) (newline) (exit 1)))
+
+(define (expect-status label expected actual)
+  (unless (= expected actual)
+    (display "SPEC AOT FAIL: ") (display label)
+    (display " expected=") (display expected)
+    (display " actual=") (display actual) (newline) (exit 1)))
+
+(define (checked-allocate size)
+  (let ((p (allocate size)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (buf-set! buf idx val)
+  (volatile-store! i64 (ptr-add buf (* idx 8)) val))
+
+(define (buf-get buf idx)
+  (volatile-load i64 (ptr-add buf (* idx 8))))
+
+(define (create-ctx k v)
+  (let ((cell (checked-allocate 8)))
+    (expect-status "spec-create" status-ok (spec-create k v (ffi-pointer cell)))
+    (let ((ctx (volatile-load ptr cell)))
+      (release (ffi-pointer cell))
+      (require-check "null ctx" (not (= (ptr->usize ctx) 0)))
+      ctx)))
+
+(define (expect-create-err label k v expected)
+  (let ((cell (checked-allocate 8)))
+    (volatile-store! i64 (ffi-pointer cell) 0)
+    (expect-status label expected (spec-create k v (ffi-pointer cell)))
+    (require-check "failed create mutated out_ctx"
+                   (= (volatile-load i64 (ffi-pointer cell)) 0))
+    (release (ffi-pointer cell))))
+
+;; Deterministic autoregressive target logit model (V=16).
+;; When eos-step >= 0 and pos == eos-step, spikes eos-token (15).
+(define (target-logit pos prev v eos-step)
+  (let* ((winner (if (and (>= eos-step 0) (= pos eos-step))
+                     eos-token
+                     (modulo (+ (* 5 pos) (* 3 prev) 7) (- vocab-size 1))))
+         (h (- (modulo (+ (* 11 pos) (* 7 prev) (* 13 v)) 17) 8))
+         (base (* 0.15 (* 1.0 h))))
+    (if (= v winner) (+ base 3.6) base)))
+
+;; Deterministic draft logit model:
+;; mode 0: high-agreement (~75% match; disagrees only when (modulo pos 4) == 3)
+;; mode 1: identical to target (100% match)
+(define (draft-logit pos prev v eos-step mode)
+  (let* ((t-val (target-logit pos prev v eos-step))
+         (t-winner (if (and (>= eos-step 0) (= pos eos-step))
+                       eos-token
+                       (modulo (+ (* 5 pos) (* 3 prev) 7) (- vocab-size 1))))
+         (alt-winner (modulo (+ t-winner 1) (- vocab-size 1))))
+    (if (and (= mode 0) (= (modulo pos 4) 3))
+        (if (= v alt-winner) (+ t-val 5.0) t-val)
+        t-val)))
+
+(define (target-greedy-argmax pos prev eos-step)
+  (let ((best 0)
+        (best-val (target-logit pos prev 0 eos-step)))
+    (do ((v 1 (+ v 1)))
+        ((= v vocab-size) best)
+      (let ((val (target-logit pos prev v eos-step)))
+        (when (> val best-val)
+          (set! best-val val)
+          (set! best v))))))
+
+(define (draft-greedy-argmax pos prev eos-step mode)
+  (let ((best 0)
+        (best-val (draft-logit pos prev 0 eos-step mode)))
+    (do ((v 1 (+ v 1)))
+        ((= v vocab-size) best)
+      (let ((val (draft-logit pos prev v eos-step mode)))
+        (when (> val best-val)
+          (set! best-val val)
+          (set! best v))))))
+
+(define (fill-target-row ctx row pos prev eos-step)
+  (do ((v 0 (+ v 1)))
+      ((= v vocab-size))
+    (expect-status "set-target-logit" status-ok
+                   (spec-set-target-logit (ffi-pointer ctx) row v
+                                          (target-logit pos prev v eos-step)))))
+
+(define (fill-draft-row ctx row pos prev eos-step mode)
+  (do ((v 0 (+ v 1)))
+      ((= v vocab-size))
+    (expect-status "set-draft-logit" status-ok
+                   (spec-set-draft-logit (ffi-pointer ctx) row v
+                                         (draft-logit pos prev v eos-step mode)))))
+
+(define (run-greedy-equivalence mode label)
+  (let ((ctx (create-ctx horizon vocab-size))
+        (ref-buf (checked-allocate (* rollout-len 8)))
+        (spec-buf (checked-allocate (* (+ rollout-len horizon 2) 8)))
+        (draft-buf (checked-allocate (* horizon 8))))
+    ;; 1. Reference target-only greedy rollout (32 target evaluations).
+    (let ((prev prompt-token))
+      (do ((t 0 (+ t 1)))
+          ((= t rollout-len))
+        (let ((tok (target-greedy-argmax t prev -1)))
+          (buf-set! ref-buf t tok)
+          (set! prev tok))))
+
+    ;; 2. Speculative greedy rollout (K=4).
+    (let ((emitted-total 0)
+          (target-calls 0)
+          (accepted-total 0)
+          (cur-prev prompt-token))
+      (do ()
+          ((>= emitted-total rollout-len))
+        (let ((d-prev cur-prev))
+          (do ((i 0 (+ i 1)))
+              ((= i horizon))
+            (let ((dt (draft-greedy-argmax (+ emitted-total i) d-prev -1 mode)))
+              (buf-set! draft-buf i dt)
+              (expect-status "set-draft-tok" status-ok
+                             (spec-set-draft-tok (ffi-pointer ctx) i dt))
+              (set! d-prev dt))))
+        (fill-target-row ctx 0 emitted-total cur-prev -1)
+        (do ((i 0 (+ i 1)))
+            ((= i horizon))
+          (fill-target-row ctx (+ i 1) (+ emitted-total i 1)
+                           (buf-get draft-buf i) -1))
+        (set! target-calls (+ target-calls 1))
+        (expect-status "verify-greedy" status-ok
+                       (spec-verify-greedy (ffi-pointer ctx) no-eos))
+        (let ((acc (spec-accepted (ffi-pointer ctx)))
+              (em (spec-emitted (ffi-pointer ctx))))
+          (require-check "greedy emitted bounds" (and (>= em 1) (<= em (+ horizon 1))))
+          (set! accepted-total (+ accepted-total acc))
+          (do ((j 0 (+ j 1)))
+              ((or (= j em) (>= emitted-total rollout-len)))
+            (let ((tok (spec-emitted-tok (ffi-pointer ctx) j)))
+              (buf-set! spec-buf emitted-total tok)
+              (set! cur-prev tok)
+              (set! emitted-total (+ emitted-total 1))))))
+
+      ;; Verify 100% token-for-token identity and reduced target calls.
+      (do ((t 0 (+ t 1)))
+          ((= t rollout-len))
+        (require-check "greedy token mismatch"
+                       (= (buf-get spec-buf t) (buf-get ref-buf t))))
+      (require-check "greedy target calls not reduced" (< target-calls rollout-len))
+      (let ((acc-per-step (/ (* 1.0 accepted-total) (* 1.0 target-calls))))
+        (display "SPEC AOT GREEDY mode=") (display label)
+        (display " tokens=") (display rollout-len)
+        (display " target_calls=") (display target-calls)
+        (display " accepted=") (display accepted-total)
+        (display " acc_per_step=") (display (number->string acc-per-step))
+        (display " exact_match=PASS")
+        (newline)))
+
+    (release (ffi-pointer draft-buf))
+    (release (ffi-pointer spec-buf))
+    (release (ffi-pointer ref-buf))
+    (spec-destroy (ffi-pointer ctx))))
+
+;; Run a stochastic speculative rollout into out-buf; returns total tokens in
+;; meta-buf[0], accepted sum in meta-buf[1], target_calls in meta-buf[2],
+;; final counter in meta-buf[3], eos_hit in meta-buf[4].
+(define (run-stochastic-rollout seed max-len eos-step eos-id out-buf meta-buf)
+  (let ((ctx (create-ctx horizon vocab-size))
+        (draft-buf (checked-allocate (* horizon 8)))
+        (emitted-total 0)
+        (accepted-total 0)
+        (target-calls 0)
+        (cur-prev prompt-token)
+        (rng-counter 0)
+        (stopped 0)
+        (eos-seen 0))
+    (do ()
+        ((or (>= emitted-total max-len) (= stopped 1)))
+      ;; Draft K tokens stochastically using canonical sampler.
+      (let ((d-prev cur-prev))
+        (do ((i 0 (+ i 1)))
+            ((= i horizon))
+          (fill-draft-row ctx i (+ emitted-total i) d-prev eos-step 0)
+          (expect-status "sample-draft" status-ok
+                         (spec-sample-row (ffi-pointer ctx) 0 i 0.85 8 0.9
+                                          seed rng-counter))
+          (let ((dt (spec-sampled-tok (ffi-pointer ctx))))
+            (set! rng-counter (spec-sampled-next-counter (ffi-pointer ctx)))
+            (buf-set! draft-buf i dt)
+            (expect-status "set-stoch-draft-tok" status-ok
+                           (spec-set-draft-tok (ffi-pointer ctx) i dt))
+            (set! d-prev dt))))
+      ;; Populate K+1 target logit rows.
+      (fill-target-row ctx 0 emitted-total cur-prev eos-step)
+      (do ((i 0 (+ i 1)))
+          ((= i horizon))
+        (fill-target-row ctx (+ i 1) (+ emitted-total i 1)
+                         (buf-get draft-buf i) eos-step))
+      (set! target-calls (+ target-calls 1))
+      (expect-status "verify-sample" status-ok
+                     (spec-verify-sample (ffi-pointer ctx) 0.85 8 0.9
+                                         eos-id seed rng-counter))
+      (let ((acc (spec-accepted (ffi-pointer ctx)))
+            (em (spec-emitted (ffi-pointer ctx)))
+            (eh (spec-eos-hit (ffi-pointer ctx))))
+        (set! rng-counter (spec-next-counter (ffi-pointer ctx)))
+        (set! accepted-total (+ accepted-total acc))
+        (do ((j 0 (+ j 1)))
+            ((or (= j em) (>= emitted-total max-len)))
+          (let ((tok (spec-emitted-tok (ffi-pointer ctx) j)))
+            (buf-set! out-buf emitted-total tok)
+            (set! cur-prev tok)
+            (set! emitted-total (+ emitted-total 1))))
+        (when (= eh 1)
+          (set! eos-seen 1)
+          (set! stopped 1))))
+    (buf-set! meta-buf 0 emitted-total)
+    (buf-set! meta-buf 1 accepted-total)
+    (buf-set! meta-buf 2 target-calls)
+    (buf-set! meta-buf 3 rng-counter)
+    (buf-set! meta-buf 4 eos-seen)
+    (release (ffi-pointer draft-buf))
+    (spec-destroy (ffi-pointer ctx))))
+
+(define (run-stochastic-and-eos-tests)
+  (let ((out1 (checked-allocate (* 40 8)))
+        (out2 (checked-allocate (* 40 8)))
+        (out3 (checked-allocate (* 40 8)))
+        (m1 (checked-allocate (* 8 8)))
+        (m2 (checked-allocate (* 8 8)))
+        (m3 (checked-allocate (* 8 8))))
+    ;; Seeded replay parity (24 tokens, no EOS).
+    (run-stochastic-rollout 987654321 24 -1 no-eos out1 m1)
+    (run-stochastic-rollout 987654321 24 -1 no-eos out2 m2)
+    (run-stochastic-rollout 123456789 24 -1 no-eos out3 m3)
+
+    (require-check "stoch len mismatch" (= (buf-get m1 0) 24))
+    (require-check "stoch replay len" (= (buf-get m1 0) (buf-get m2 0)))
+    (require-check "stoch replay accepted" (= (buf-get m1 1) (buf-get m2 1)))
+    (require-check "stoch replay calls" (= (buf-get m1 2) (buf-get m2 2)))
+    (require-check "stoch replay counter" (= (buf-get m1 3) (buf-get m2 3)))
+    (let ((diff-count 0))
+      (do ((i 0 (+ i 1)))
+          ((= i 24))
+        (require-check "stoch replay token mismatch"
+                       (= (buf-get out1 i) (buf-get out2 i)))
+        (when (not (= (buf-get out1 i) (buf-get out3 i)))
+          (set! diff-count (+ diff-count 1))))
+      (require-check "different seeds produced identical trajectory" (> diff-count 0)))
+
+    (display "SPEC AOT STOCHASTIC tokens=") (display (buf-get m1 0))
+    (display " target_calls=") (display (buf-get m1 2))
+    (display " accepted=") (display (buf-get m1 1))
+    (display " final_counter=") (display (buf-get m1 3))
+    (display " replay=PASS")
+    (newline)
+
+    ;; EOS early stop test (spike EOS at position 6, max_len=24).
+    (run-stochastic-rollout 424242 24 6 eos-token out1 m1)
+    (let ((eos-len (buf-get m1 0))
+          (eos-flag (buf-get m1 4)))
+      (require-check "stoch EOS not hit" (= eos-flag 1))
+      (require-check "stoch EOS did not stop early" (< eos-len 24))
+      (require-check "stoch EOS not final token"
+                     (= (buf-get out1 (- eos-len 1)) eos-token))
+      (display "SPEC AOT EOS mode=stochastic emitted=") (display eos-len)
+      (display " eos_hit=") (display eos-flag)
+      (display " PASS")
+      (newline))
+
+    ;; Greedy EOS early stop test (spike EOS at position 5).
+    (let ((ctx (create-ctx horizon vocab-size))
+          (draft-buf (checked-allocate (* horizon 8)))
+          (emitted-total 0)
+          (cur-prev prompt-token)
+          (eos-flag 0))
+      (do ()
+          ((or (>= emitted-total 24) (= eos-flag 1)))
+        (let ((d-prev cur-prev))
+          (do ((i 0 (+ i 1)))
+              ((= i horizon))
+            (let ((dt (draft-greedy-argmax (+ emitted-total i) d-prev 5 1)))
+              (buf-set! draft-buf i dt)
+              (expect-status "eos-draft-tok" status-ok
+                             (spec-set-draft-tok (ffi-pointer ctx) i dt))
+              (set! d-prev dt))))
+        (fill-target-row ctx 0 emitted-total cur-prev 5)
+        (do ((i 0 (+ i 1)))
+            ((= i horizon))
+          (fill-target-row ctx (+ i 1) (+ emitted-total i 1)
+                           (buf-get draft-buf i) 5))
+        (expect-status "eos-verify-greedy" status-ok
+                       (spec-verify-greedy (ffi-pointer ctx) eos-token))
+        (let ((em (spec-emitted (ffi-pointer ctx)))
+              (eh (spec-eos-hit (ffi-pointer ctx))))
+          (do ((j 0 (+ j 1)))
+              ((= j em))
+            (let ((tok (spec-emitted-tok (ffi-pointer ctx) j)))
+              (buf-set! out2 emitted-total tok)
+              (set! cur-prev tok)
+              (set! emitted-total (+ emitted-total 1))))
+          (set! eos-flag eh)))
+      (require-check "greedy EOS not hit" (= eos-flag 1))
+      (require-check "greedy EOS exact length" (= emitted-total 6))
+      (require-check "greedy EOS final token" (= (buf-get out2 5) eos-token))
+      (display "SPEC AOT EOS mode=greedy emitted=") (display emitted-total)
+      (display " eos_hit=") (display eos-flag)
+      (display " PASS")
+      (newline)
+      (release (ffi-pointer draft-buf))
+      (spec-destroy (ffi-pointer ctx)))
+
+    (release (ffi-pointer m3))
+    (release (ffi-pointer m2))
+    (release (ffi-pointer m1))
+    (release (ffi-pointer out3))
+    (release (ffi-pointer out2))
+    (release (ffi-pointer out1))))
+
+(define (run-probs-and-negative-tests)
+  ;; Invalid create bounds.
+  (expect-create-err "K=0" 0 16 status-bounds)
+  (expect-create-err "K=17" 17 16 status-bounds)
+  (expect-create-err "V=1" 4 1 status-bounds)
+  (expect-create-err "V=4097" 4 4097 status-bounds)
+
+  (let ((ctx (create-ctx horizon vocab-size)))
+    (require-check "horizon getter" (= (spec-horizon (ffi-pointer ctx)) horizon))
+    (require-check "vocab getter" (= (spec-vocab (ffi-pointer ctx)) vocab-size))
+
+    ;; Populate a valid baseline state and verify probabilities sum to 1.
+    (do ((i 0 (+ i 1)))
+        ((= i horizon))
+      (expect-status "base-dt" status-ok (spec-set-draft-tok (ffi-pointer ctx) i i))
+      (fill-draft-row ctx i i prompt-token -1 1))
+    (do ((i 0 (+ i 1)))
+        ((= i (+ horizon 1)))
+      (fill-target-row ctx i i prompt-token -1))
+
+    (expect-status "probs-topk4" status-ok
+                   (spec-logits-to-probs (ffi-pointer ctx) 1 0 0.8 4 1.0))
+    (let ((psum 0.0)
+          (nz 0))
+      (do ((v 0 (+ v 1)))
+          ((= v vocab-size))
+        (let ((pv (spec-prob (ffi-pointer ctx) v)))
+          (set! psum (+ psum pv))
+          (when (> pv 0.0)
+            (set! nz (+ nz 1)))))
+      (require-check "probs sum != 1" (< (abs (- psum 1.0)) 1.0e-12))
+      (require-check "top_k=4 nonzero count" (= nz 4)))
+
+    ;; Establish baseline valid verify result.
+    (expect-status "base-verify" status-ok
+                   (spec-verify-sample (ffi-pointer ctx) 0.9 8 0.95 no-eos 77 10))
+    (let ((good-acc (spec-accepted (ffi-pointer ctx)))
+          (good-em (spec-emitted (ffi-pointer ctx)))
+          (good-cnt (spec-next-counter (ffi-pointer ctx))))
+      ;; Reject invalid sampling params.
+      (expect-status "neg-temp" status-param
+                     (spec-verify-sample (ffi-pointer ctx) -0.5 8 0.95 no-eos 77 10))
+      (expect-status "zero-topk" status-param
+                     (spec-verify-sample (ffi-pointer ctx) 0.9 0 0.95 no-eos 77 10))
+      (expect-status "oob-topk" status-param
+                     (spec-verify-sample (ffi-pointer ctx) 0.9 17 0.95 no-eos 77 10))
+      (expect-status "zero-topp" status-param
+                     (spec-verify-sample (ffi-pointer ctx) 0.9 8 0.0 no-eos 77 10))
+      (expect-status "gt1-topp" status-param
+                     (spec-verify-sample (ffi-pointer ctx) 0.9 8 1.2 no-eos 77 10))
+      (expect-status "bad-eos" status-token-range
+                     (spec-verify-greedy (ffi-pointer ctx) vocab-size))
+      ;; Reject out-of-range draft token.
+      (expect-status "set-oob-draft-tok" status-ok
+                     (spec-set-draft-tok (ffi-pointer ctx) 0 vocab-size))
+      (expect-status "reject-oob-draft-tok" status-token-range
+                     (spec-verify-greedy (ffi-pointer ctx) no-eos))
+      (expect-status "restore-draft-tok" status-ok
+                     (spec-set-draft-tok (ffi-pointer ctx) 0 0))
+      ;; Reject non-finite logit (1.0e300 overflows binary32 to +INF).
+      (expect-status "set-inf-logit" status-ok
+                     (spec-set-target-logit (ffi-pointer ctx) horizon 0 1.0e300))
+      (expect-status "reject-inf-greedy" status-nonfinite
+                     (spec-verify-greedy (ffi-pointer ctx) no-eos))
+      (expect-status "reject-inf-sample" status-nonfinite
+                     (spec-verify-sample (ffi-pointer ctx) 0.9 8 0.95 no-eos 77 10))
+      ;; Confirm prior telemetry survived every rejected call.
+      (require-check "accepted mutated" (= (spec-accepted (ffi-pointer ctx)) good-acc))
+      (require-check "emitted mutated" (= (spec-emitted (ffi-pointer ctx)) good-em))
+      (require-check "counter mutated" (= (spec-next-counter (ffi-pointer ctx)) good-cnt)))
+
+    (spec-destroy (ffi-pointer ctx)))
+
+  (display "SPEC AOT NEGATIVE PASS")
+  (newline))
+
+(run-probs-and-negative-tests)
+(run-greedy-equivalence 1 "identical")
+(run-greedy-equivalence 0 "partial")
+(run-stochastic-and-eos-tests)

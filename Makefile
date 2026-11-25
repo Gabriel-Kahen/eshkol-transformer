@@ -351,6 +351,22 @@ test-io5:
 test-io5-gguf:
 	/usr/bin/bash scripts/test-io5-gguf.sh
 
+.PHONY: test-beam-search
+test-beam-search:
+	/usr/bin/bash scripts/test-beam-search.sh
+
+.PHONY: test-constrained-decode
+test-constrained-decode:
+	/usr/bin/bash scripts/test-constrained-decode.sh
+
+.PHONY: test-paged-kv
+test-paged-kv:
+	/usr/bin/bash scripts/test-paged-kv.sh
+
+.PHONY: test-spec-decode
+test-spec-decode:
+	/usr/bin/bash scripts/test-spec-decode.sh
+
 .PHONY: test-io5-gguf-native
 test-io5-gguf-native:
 	test -n "$${IO5_GGUF_NATIVE_PREFIX:-}"
