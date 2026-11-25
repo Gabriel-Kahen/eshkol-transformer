@@ -137,6 +137,20 @@ that historical source tree, not this isolated extraction with ownership fixes:
 | AOT CoW / prefix / GQA parity / truncate / OOM / cleanup | `forks=3 cow_copies=3 shared_blocks=1 prefix_hits=1`, 8 GQA parity checks `max_abs_err = 3.173e-08 <= 1e-6`, truncate `13 -> 9` bitwise restore PASS, OOM & negatives PASS, cleanup `free_blocks=10/10` PASS |
 | Python isolation & CI topology gates | PASS (`5/5` unittest OK; `23` shared suites, `38`-command coverage) |
 
+## Isolated candidate verification (2026-11-25)
+
+On the extracted main-based candidate, the pinned Ubuntu 22.04/Clang 21.1.8/
+Eshkol `fe9dfd52` toolchain verification passed. The deterministic archive and
+symbol audit passed with core SHA-256 `545b06bf3502080537e3dba7c77f54d39c0e38595d928b2597b756679640f22a`
+and bridge SHA-256 `16a889e17f91034b1217edab2089db10ab4473ea9b2f9f9dc6e304c0c2bba351`.
+Native C11 tests and the eight-case/984-value Python f64 oracle passed; the
+maximum oracle absolute error was `5.579e-08`. Every create-time `calloc`
+cut was forced in pool-owned, external-pool, and AOT-bridge creation, with
+unchanged caller outputs, unchanged external storage, and sanitizer-clean
+cleanup. The native C11, allocation-cut, and C++17 header/linkage suites
+passed ASan/UBSan/LSan. Strict two-build AOT qualification remains pending
+the shared heavy-build lock.
+
 ## Limitations and scope
 
 - Bounded CPU single-threaded binary32 KV storage with binary64 online-softmax
