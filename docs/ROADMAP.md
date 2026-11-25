@@ -21,6 +21,13 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
   tracks the combined gate. The [E3 runner measurement](e3/E3_HOSTED_QUALIFICATION_20261115.md)
   records the resource shortfall on the standard hosted runner.
+- On accepted `8d185344`, [hosted run 45646675969](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45646675969)
+  passed `parameter-state`: 100m16s in the suite, after 2m10s of pinned
+  toolchain verification. Its log has a 90m52s gap after the sanitized identity
+  build and before the registry proof result. The P1 diagnostic candidate adds
+  phase durations across that gap; it does not change assertions or establish
+  a runtime reduction. A supported run with the same P1 inputs and these
+  markers is needed to localize the cost.
 
 ## Parallel execution strategy
 
