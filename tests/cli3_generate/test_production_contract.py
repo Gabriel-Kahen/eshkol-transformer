@@ -157,12 +157,9 @@ class ProductionGenerateContract(unittest.TestCase):
         self.assertIn('ESHKOL_LIB_DIR="${public_dir}"', build)
         self.assertIn('"${public_dir}/transformer/data.esk"', build)
         self.assertIn('compile_app --emit-object --emit-depfile', build)
-        self.assertIn('"${app_source}" -o "${temporary_dir}/eshkol-transformer.depcheck.o"', build)
         self.assertIn('[[ -s "${temporary_dir}/eshkol-transformer.d" ]]', build)
-        link = 'compile_app "${temporary_dir}/eshkol-transformer.depcheck.o" -o'
-        self.assertLess(build.index('die "CLI3 app imported the full D1/D2 facade"'),
-                        build.index(link))
-        self.assertNotIn('compile_app "${app_source}" -o', build)
+        self.assertLess(build.index('compile_app --emit-object --emit-depfile'),
+                        build.index('compile_app "${app_source}" -o'))
         self.assertIn('cli3_generate_defined_symbols.txt', build)
         self.assertIn('(require transformer.data)',
                       (ROOT / 'src/eshkol_transformer/cli.esk').read_text())

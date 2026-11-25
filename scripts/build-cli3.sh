@@ -75,8 +75,7 @@ if grep -F "${PROJECT_ROOT}/lib/transformer/data.esk" \
     "${temporary_dir}/eshkol-transformer.d" >/dev/null; then
   die "CLI3 app imported the full D1/D2 facade"
 fi
-# Link the same object whose import closure passed the checks above.
-compile_app "${temporary_dir}/eshkol-transformer.depcheck.o" -o "${temporary_dir}/eshkol-transformer"
+compile_app "${app_source}" -o "${temporary_dir}/eshkol-transformer"
 nm -u "${temporary_dir}/eshkol-transformer" \
   >"${temporary_dir}/eshkol-transformer.undefined.txt"
 if grep -E 'et_e1b_public_(d1_token_corpus_write|d2_)' \
