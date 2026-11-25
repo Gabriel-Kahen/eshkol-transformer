@@ -3354,6 +3354,7 @@ publication, public G2 and continuation remain pending.
 | DIST5 | Data-parallel training and collective abstraction | TR3, K1 | Multi-process deterministic smoke and failure handling | planned |
 | EVAL5 | External evaluation adapters and contamination checks | E3, T2 | Reproducible benchmark manifests | planned |
 | DOC5 | Tutorials, API reference and from-scratch corpus-to-model guide | CLI3 | Fresh-environment walkthrough succeeds | planned |
+| BEAM5 | [Standalone deterministic beam search and logit processors](BEAM_SEARCH_DECODING.md) | A0 | The original 11-file `5f2d7404d` source closure is selectively extracted onto main `8d185344`. Independent source/test review and the pinned-toolchain native/reference/ASan/UBSan/LSan/strict dual-AOT gate pass on the repaired candidate. The mock-logit oracle validates bounded CPU binary64 decoding only; hosted CI and integration admission remain pending. No live CLI3, G3, tokenizer, or training path is claimed. | active |
 
 ## Orchestrator rules
 

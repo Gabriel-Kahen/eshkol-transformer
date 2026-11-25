@@ -659,6 +659,64 @@ static void test_negative_and_sentinel_preservation(void) {
   CHECK(c_sent == 999u);
   CHECK(h_sent[0].seq_len == 0xA5A5A5A5u);
 
+  /* Caller-owned state corruption must fail before any indexed read or copy. */
+  uint32_t active_out[2] = {0u, 0u};
+  state->active_lens[0] = UINT32_MAX;
+  CHECK(et_beam_step_v1(state, finite2, 1u) == ET_BEAM_ERR_STATE);
+  CHECK(et_beam_get_active_beam_v1(state, 0u, active_out, 2u, &c_sent,
+                                  &out[0]) == ET_BEAM_ERR_STATE);
+  state->active_lens[0] = snapshot->active_lens[0];
+  state->active_tokens[0][0] = state->config.vocab_size;
+  CHECK(et_beam_step_v1(state, finite2, 1u) == ET_BEAM_ERR_STATE);
+  state->active_tokens[0][0] = snapshot->active_tokens[0][0];
+  state->active_log_probs[0] = (double)NAN;
+  CHECK(et_beam_step_v1(state, finite2, 1u) == ET_BEAM_ERR_STATE);
+  state->active_log_probs[0] = snapshot->active_log_probs[0];
+
+  /* The AOT count output must never alias the state or hypothesis output. */
+  const et_beam_config_v1 finish_cfg =
+      make_cfg(1u, 2u, 0u, 1u, 0u, 0u, 0u, 0.0, 1.0);
+  CHECK(et_beam_init_v1(state, &finish_cfg, prompt, 1u) == ET_BEAM_OK);
+  const double eos_first[2] = {2.0, 1.0};
+  CHECK(et_beam_step_v1(state, eos_first, 1u) == ET_BEAM_OK);
+  CHECK(et_beam_is_done_v1(state) == 1u);
+  memcpy(snapshot, state, sizeof(*state));
+  memset(h_sent, 0xA5, sizeof(h_sent));
+  CHECK(et_beam_aot_finalize(state, h_sent, 1, &state->active_log_probs[0]) ==
+        ET_BEAM_ERR_ALIASING);
+  CHECK(memcmp(state, snapshot, sizeof(*state)) == 0);
+  CHECK(h_sent[0].seq_len == 0xA5A5A5A5u);
+  CHECK(et_beam_aot_finalize(state, h_sent, 1, &h_sent[0].sum_log_prob) ==
+        ET_BEAM_ERR_ALIASING);
+  CHECK(memcmp(state, snapshot, sizeof(*state)) == 0);
+  CHECK(h_sent[0].seq_len == 0xA5A5A5A5u);
+  state->finished_pool[0].seq_len = UINT32_MAX;
+  CHECK(et_beam_finalize_v1(state, h_sent, 1u, &c_sent) == ET_BEAM_ERR_STATE);
+  state->finished_pool[0].seq_len = snapshot->finished_pool[0].seq_len;
+  state->finished_pool[0].score = (double)NAN;
+  CHECK(et_beam_finalize_v1(state, h_sent, 1u, &c_sent) == ET_BEAM_ERR_STATE);
+  CHECK(h_sent[0].seq_len == 0xA5A5A5A5u);
+  CHECK(c_sent == 999u);
+
+  uint32_t helper_u32[2] = {7u, 9u};
+  double helper_f64[2] = {sentinel, sentinel};
+  CHECK(et_beam_aot_store_u32(helper_u32, sizeof(helper_u32), -1, 3) ==
+        ET_BEAM_ERR_INVALID_ARG);
+  CHECK(et_beam_aot_store_u32(helper_u32, sizeof(helper_u32), 2, 3) ==
+        ET_BEAM_ERR_INVALID_ARG);
+  CHECK(et_beam_aot_store_u32(helper_u32, sizeof(helper_u32), 0, -1) ==
+        ET_BEAM_ERR_INVALID_ARG);
+  CHECK(et_beam_aot_load_u32(helper_u32, sizeof(helper_u32), -1) == -1);
+  CHECK(et_beam_aot_load_i64(helper_u32, sizeof(helper_u32), 1) == -1);
+  CHECK(helper_u32[0] == 7u && helper_u32[1] == 9u);
+  CHECK(et_beam_aot_store_f64(helper_f64, sizeof(helper_f64), -1, 3.0) ==
+        ET_BEAM_ERR_INVALID_ARG);
+  CHECK(et_beam_aot_store_f64(helper_f64, sizeof(helper_f64), 2, 3.0) ==
+        ET_BEAM_ERR_INVALID_ARG);
+  CHECK(isnan(et_beam_aot_load_f64(helper_f64, sizeof(helper_f64), -1)));
+  CHECK(f64_bits(helper_f64[0]) == f64_bits(sentinel));
+  CHECK(f64_bits(helper_f64[1]) == f64_bits(sentinel));
+
   /* Non-default FP rounding mode -> ET_BEAM_ERR_FP_ENV. */
   const int saved_round = fegetround();
   CHECK(fesetround(FE_UPWARD) == 0);

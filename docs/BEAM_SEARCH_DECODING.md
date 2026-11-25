@@ -2,7 +2,7 @@
 
 ## 1. Overview and Scope
 
-This module delivers a standalone, Eshkol-native deterministic beam search and composable logit-processor engine in IEEE-754 binary64 with zero heap allocations across the entire native core and Eshkol AOT bridge.
+This module delivers a standalone deterministic beam search and composable logit-processor engine in IEEE-754 binary64 with zero heap allocations across the native core and Eshkol AOT bridge. The AOT driver supplies synthetic logits; this module has no live CLI3, G3 model, tokenizer, or training integration.
 
 Core files:
 
@@ -20,9 +20,9 @@ Core files:
 
 ### 2.1 Floating-Point Environment and Zero-Allocation Contract
 
-- Every native function executes in IEEE-754 binary64 under `#pragma STDC FENV_ACCESS ON`, `#pragma STDC FP_CONTRACT OFF`, `-ffp-contract=off -fexcess-precision=standard -fno-fast-math`, and validates default `FE_TONEAREST` rounding and default x87/MXCSR control state (`ET_BEAM_ERR_FP_ENV = -5` otherwise).
+- Core scoring, processor, and lifecycle functions execute in IEEE-754 binary64 under `#pragma STDC FENV_ACCESS ON`, `#pragma STDC FP_CONTRACT OFF`, `-ffp-contract=off -fexcess-precision=standard -fno-fast-math`, and validate default `FE_TONEAREST` rounding and default x87/MXCSR control state (`ET_BEAM_ERR_FP_ENV = -5` otherwise). Plain state queries and raw-buffer test helpers do not inspect the FP environment.
 - Both `beam_search.o` and `beam_search_eshkol_bridge.o` contain **zero heap allocator imports** (`nm -u` audits no `malloc`, `calloc`, `realloc`, or `free`). All runtime hot paths are additionally wrapped with `-Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free` in both `-O2` and ASan/UBSan/LSan builds.
-- Every API entry validates pointer alignment, non-overlapping spans (exact in-place `logits_in == logits_out` is permitted for logit processors and log-softmax; partial overlaps fail closed with `ET_BEAM_ERR_ALIASING = -4`), finiteness (`NaN` and `+INFINITY` fail closed with `ET_BEAM_ERR_NONFINITE = -2`), and non-empty valid token sets (all `-INFINITY` fails closed with `ET_BEAM_ERR_NO_VALID_TOKENS = -3`). All mutating APIs are failure-atomic and leave outputs/committed state untouched on error.
+- Core logit and lifecycle entries validate relevant pointer alignment and overlap (exact in-place `logits_in == logits_out` is permitted for logit processors and log-softmax; partial overlaps fail closed with `ET_BEAM_ERR_ALIASING = -4`). Logit inputs reject `NaN` and `+INFINITY` with `ET_BEAM_ERR_NONFINITE = -2`, and all-masked token sets fail with `ET_BEAM_ERR_NO_VALID_TOKENS = -3`. Mutating core APIs preserve committed state and outputs on error; the checked AOT buffer stores reject invalid spans before writing.
 
 ### 2.2 Composable Logit Processors
 
@@ -42,7 +42,7 @@ Within each beam step, logit processors run in canonical deterministic order bef
    - Guarantees **zero repeated N-grams** across every surviving beam hypothesis.
 
 3. **Min-Length EOS Suppression (`et_beam_apply_min_length_v1`)**:
-   - Whenever `generated_len < min_new_tokens`, masks `logits_out[eos_token_id] = -INFINITY`.
+   - Whenever the number of already generated non-EOS tokens is less than `min_new_tokens`, masks `logits_out[eos_token_id] = -INFINITY`. Thus `min_new_tokens = max_new_tokens` prevents EOS within the budget and finalization may return an unfinished beam.
 
 4. **Binary64 Log-Softmax (`et_beam_log_softmax_v1`)**:
    - Computes `m = max_{v finite} logits[v]`, `log_sum_exp = log(sum_{v finite} exp(logits[v] - m))`, and `log_probs[v] = (logits[v] - m) - log_sum_exp` for finite `v` (`-INFINITY` for masked `v`).
@@ -88,7 +88,7 @@ Because `sum_log_prob <= 0.0` and `LP(L, alpha)` is monotonically non-decreasing
 
 ## 3. Verification Evidence
 
-Verified inside container `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, pinned Eshkol toolchain):
+The original experimental commit `5f2d7404d` recorded the following checks inside container `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, pinned Eshkol toolchain). These measurements are historical and do not qualify the current extraction or subsequent repairs:
 
 - **Deterministic archives & zero-alloc symbol audit** (`scripts/build-beam-search.sh`): PASS
   - `libeshkol_transformer_beam_search.a` SHA-256: `f411fdbe11677114a22b6183c02693b234a1b68a008036927cf79044597bdf4d`
@@ -103,9 +103,14 @@ Verified inside container `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, 
   - Verified `B=1` greedy trap `[1, 2, 4, 0]` vs `B=4` global optimum `[1, 3, 5, 6, 0]` (`> +3.5` nats gain), `no_repeat_ngram_size = 2` and `3` eliminating loops on cyclic logits, `min_new_tokens = 4` EOS suppression (`gen_len = 5`), Wu ranking shift (`alpha = 0.0` short winner `gen_len = 2` vs `alpha = 1.5` long winner `gen_len = 5`), and negative fail-closed rejections with sentinel preservation.
 - **Repository gates**: `tests/q0/test_python_isolation.py` (5/5 OK) and `scripts/check-ci-topology.sh` (PASS).
 
+### Current main extraction
+
+The 11 source paths from `5f2d7404d` were cherry-picked onto main `8d185344f3abaacb2fdd5ff75743f0ff02a92ab2`; the source and test repairs above add malformed-state, AOT count-alias, and checked-buffer negatives. On the merged pinned Eshkol `fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9` toolchain (Ubuntu 22.04, Clang/LLVM 21.1.8, image `sha256:68e2e292a255c9b42206e2298d12770aea7594ff9b82219460cb27ee28dbdc99`), `bash scripts/test-beam-search.sh` passed the deterministic archive and symbol audit, C++17 linkage, native C11 negatives, Python oracle (10 scenarios, four processors, 10 negative codes, zero maximum absolute error), ASan/UBSan/LSan with allocation traps, and two fresh strict AOT compilations with byte-identical ELF and stdout. The current core and bridge archive SHA-256 values are `e1c84ba5c98a6a9d20bbc923a89d62540aa65c657d32ee4e313c5ee5afee9506` and `c2e27f6dc08c4bf54f9f93623adb662903ff62486d61d9c7ab4e2675e63af622`; AOT ELF SHA-256 is `ec993713b6410125744b03da2652135b91115c0385ff55b53af3c687c005f412`. The local run log is `/home/gabe/.codex/evidence/eshkol-beam-search-standalone-20261125/test-beam-search.log` (SHA-256 `0eb9f29ac5d266a10f3f5fd024f45ac8978ba1721ac0f42d3f26637f1657f92e`). Python isolation (5/5) and CI topology passed separately. An independent source-and-test review found no blocking issue after the repairs. Hosted CI and integration admission are still pending.
+
 ## 4. Measured Limitations and Unsupported Cases
 
 - **Hard capacity bounds**: `num_beams <= 8`, `vocab_size in [2, 4096]`, `prompt_len + max_new_tokens <= 256`, `finished_pool <= 16`. Exceeding these bounds fails explicitly with `ET_BEAM_ERR_LIMIT (-7)` or `ET_BEAM_ERR_INVALID_ARG (-1)`.
 - **Single-sequence batching**: One `et_beam_state_v1` tracks a single prompt with up to `B` active beams; multi-request batching is outside this engine and composes cleanly at the caller/scheduler layer.
 - **CPU IEEE-754 binary64 only**: All logit processing, log-softmax, and Wu scoring execute on CPU in binary64 under default `FE_TONEAREST` MXCSR/x87 state; non-default FP environments fail closed with `ET_BEAM_ERR_FP_ENV (-5)`.
+- **AOT buffer helper capacity**: The standalone driver supplies each helper's true allocation size in bytes. The C ABI cannot verify a caller's size claim beyond checking its range and index; callers must pass the actual capacity.
 - **Diverse beam search / group penalties**: Hamming diversity penalties, constrained multi-beam Trie intersections, and stochastic beam sampling are not implemented in v1.

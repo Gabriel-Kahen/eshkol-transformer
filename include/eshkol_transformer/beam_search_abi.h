@@ -42,7 +42,9 @@ enum {
  *   - eos_token_id < vocab_size
  *   - max_new_tokens >= 1, prompt_len >= 1,
  *     prompt_len + max_new_tokens <= ET_BEAM_MAX_SEQ_LEN (256)
- *   - min_new_tokens <= max_new_tokens
+ *   - min_new_tokens <= max_new_tokens; EOS is masked until this many
+ *     non-EOS tokens have already been generated. Equality prevents an EOS
+ *     completion within the budget, leaving active beams for finalization.
  *   - no_repeat_ngram_size == 0 (disabled) or
  *     ET_BEAM_MIN_NGRAM (2) <= no_repeat_ngram_size <= ET_BEAM_MAX_SEQ_LEN
  *   - early_stopping in {0, 1}

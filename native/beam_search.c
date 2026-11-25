@@ -211,6 +211,35 @@ static int state_is_valid(const et_beam_state_v1 *state) {
     return 0;
   if (state->done > 1u || state->stopped_early > 1u)
     return 0;
+  if (state->stopped_early != 0u && state->done == 0u)
+    return 0;
+  if (state->done == 0u && (state->active_count == 0u ||
+                            state->steps_done >= state->config.max_new_tokens))
+    return 0;
+  const uint32_t active_len = state->prompt_len + state->steps_done;
+  for (uint32_t b = 0u; b < state->active_count; ++b) {
+    if (state->active_lens[b] != active_len ||
+        !isfinite(state->active_log_probs[b]) ||
+        state->active_log_probs[b] > 0.0)
+      return 0;
+    for (uint32_t i = 0u; i < active_len; ++i) {
+      if (state->active_tokens[b][i] >= state->config.vocab_size)
+        return 0;
+    }
+  }
+  for (uint32_t b = 0u; b < state->finished_count; ++b) {
+    const et_beam_hypothesis_v1 *hyp = &state->finished_pool[b];
+    if (hyp->generated_len == 0u || hyp->generated_len > state->steps_done ||
+        hyp->seq_len != state->prompt_len + hyp->generated_len ||
+        hyp->finished != 1u || hyp->reserved != 0u ||
+        !isfinite(hyp->sum_log_prob) || hyp->sum_log_prob > 0.0 ||
+        !isfinite(hyp->score) || hyp->score > 0.0)
+      return 0;
+    for (uint32_t i = 0u; i < hyp->seq_len; ++i) {
+      if (hyp->tokens[i] >= state->config.vocab_size)
+        return 0;
+    }
+  }
   return 1;
 }
 

@@ -69,11 +69,17 @@ int32_t et_beam_aot_apply_min_length(int64_t gen_len, int64_t min_new_tokens,
 int32_t et_beam_aot_log_softmax(int64_t vocab_size, const void *logits_in,
                                 void *log_probs_out);
 
-void et_beam_aot_store_u32(void *buf, int64_t index, int64_t value);
-int64_t et_beam_aot_load_u32(const void *buf, int64_t index);
-int64_t et_beam_aot_load_i64(const void *buf, int64_t index);
-void et_beam_aot_store_f64(void *buf, int64_t index, double value);
-double et_beam_aot_load_f64(const void *buf, int64_t index);
+/* Checked raw-buffer helpers for the standalone AOT driver. The caller must
+ * supply the actual allocation size in bytes; indices are element indices.
+ * Invalid stores return ET_BEAM_ERR_INVALID_ARG without writing. Invalid
+ * loads return -1 (u32/i64) or NaN (f64). */
+int32_t et_beam_aot_store_u32(void *buf, int64_t buf_bytes, int64_t index,
+                              int64_t value);
+int64_t et_beam_aot_load_u32(const void *buf, int64_t buf_bytes, int64_t index);
+int64_t et_beam_aot_load_i64(const void *buf, int64_t buf_bytes, int64_t index);
+int32_t et_beam_aot_store_f64(void *buf, int64_t buf_bytes, int64_t index,
+                              double value);
+double et_beam_aot_load_f64(const void *buf, int64_t buf_bytes, int64_t index);
 double et_beam_aot_nan_f64(void);
 double et_beam_aot_pos_inf_f64(void);
 double et_beam_aot_neg_inf_f64(void);
