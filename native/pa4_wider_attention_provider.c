@@ -154,6 +154,20 @@ static int aliases_table(span target, table views, size_t max_count,
       overlaps(target, views.storage))
     return 1;
   const size_t alignment = _Alignof(et_kernel_tensor_view_v1);
+  /* The caller supplies an addressable first descriptor even when its
+     advertised table span or stride is malformed. Protect its borrowed
+     buffers before reporting the malformed table. */
+  if (views.count != 0u &&
+      aligned_span(views.storage.start, alignment,
+                   ET_KERNEL_TENSOR_VIEW_V1_0_SIZE)) {
+    const et_kernel_tensor_view_v1 *first = views.storage.start;
+    if (overlaps(target, (span){first, ET_KERNEL_TENSOR_VIEW_V1_0_SIZE}) ||
+        overlaps(target, shape_span(first->shape, first->rank)) ||
+        overlaps_text(target, first->dtype) ||
+        overlaps_text(target, first->device) ||
+        (include_data && overlaps(target, view_data(first))))
+      return 1;
+  }
   if (views.stride < ET_KERNEL_TENSOR_VIEW_V1_0_SIZE ||
       views.stride % alignment != 0u ||
       !aligned_span(views.storage.start, alignment, views.storage.bytes))
@@ -166,7 +180,7 @@ static int aliases_table(span target, table views, size_t max_count,
   size_t count = views.count < readable ? views.count : readable;
   if (count > max_count)
     count = max_count;
-  for (size_t i = 0; i < count; ++i) {
+  for (size_t i = 1u; i < count; ++i) {
     const et_kernel_tensor_view_v1 *view = view_at(views, i);
     /* The full v1.0 prefix is in the addressable table span even when its
        advertised struct_size is malformed. Its buffers remain borrowed. */
@@ -183,7 +197,9 @@ static int aliases_table(span target, table views, size_t max_count,
    direct validation rejects without writing a diagnostic to that address. */
 static int aliases_call(span target, const et_kernel_call_v1 *call,
                         int include_data) {
-  if (overlaps(target, (span){call, sizeof(size_t)}))
+  /* A malformed size still leaves an addressable v1.0 descriptor. Do not
+     overwrite any of that prefix while reporting the size error. */
+  if (overlaps(target, (span){call, ET_KERNEL_CALL_V1_0_SIZE}))
     return 1;
   if (!aligned_span(call, _Alignof(et_kernel_call_v1), sizeof(size_t)))
     return 0;
@@ -202,7 +218,7 @@ static int aliases_call(span target, const et_kernel_call_v1 *call,
                     include_data))
     return 1;
 
-  if (overlaps(target, (span){request, sizeof(size_t)}))
+  if (overlaps(target, (span){request, ET_KERNEL_REQUEST_V1_0_SIZE}))
     return 1;
   if (!aligned_span(request, _Alignof(et_kernel_request_v1), sizeof(size_t)))
     return 0;

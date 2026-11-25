@@ -53,6 +53,13 @@ validation of the same provider and operation. Keep inputs, descriptors
 and floating-point controls fixed between validation and invocation.
 Each output is overwritten on invocation.
 
+Malformed call, request and first tensor-view prefixes remain protected
+from a direct diagnostic write even when their advertised sizes are too
+short. The first tensor view and its borrowed buffers must still be
+addressable when the table's advertised byte span or stride is malformed.
+Later views are inspected only when their full v1.0 prefix is within the
+advertised table span.
+
 Both providers require x86-64 IEEE binary32, round-to-nearest, masked FP
 exceptions, and gradual underflow. Validation checks x87 and MXCSR
 controls and scans every floating input for finiteness, including masked

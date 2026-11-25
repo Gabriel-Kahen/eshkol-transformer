@@ -396,6 +396,67 @@ static void structural_cases(const et_kernel_provider_v1 *p,
   require(p->validate_call(call, &aliased_error) != 0 &&
               memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
           "direct diagnostic alias rejected without clobbering output");
+  _Alignas(et_kernel_call_v1) unsigned char short_call_storage
+      [sizeof(et_kernel_call_v1) + sizeof(et_kernel_error)] = {0};
+  et_kernel_call_v1 *short_call = (void *)short_call_storage;
+  *short_call = good_call;
+  short_call->struct_size = sizeof(size_t);
+  unsigned char saved_call[sizeof(short_call_storage)];
+  memcpy(saved_call, short_call_storage, sizeof(saved_call));
+  et_kernel_error *call_alias =
+      (void *)(short_call_storage + offsetof(et_kernel_call_v1, capability));
+  require(p->validate_call(short_call, call_alias) != 0 &&
+              memcmp(saved_call, short_call_storage, sizeof(saved_call)) == 0,
+          "truncated call prefix preserves borrowed metadata");
+  _Alignas(et_kernel_request_v1) unsigned char short_request_storage
+      [sizeof(et_kernel_request_v1) + sizeof(et_kernel_error)] = {0};
+  et_kernel_request_v1 *short_request = (void *)short_request_storage;
+  *short_request = good_request;
+  short_request->struct_size = sizeof(size_t);
+  unsigned char saved_request[sizeof(short_request_storage)];
+  memcpy(saved_request, short_request_storage, sizeof(saved_request));
+  et_kernel_error *request_alias =
+      (void *)(short_request_storage + offsetof(et_kernel_request_v1, operation));
+  call->request = short_request;
+  require(p->validate_call(call, request_alias) != 0 &&
+              memcmp(saved_request, short_request_storage,
+                     sizeof(saved_request)) == 0,
+          "truncated request prefix preserves borrowed metadata");
+  *call = good_call;
+  _Alignas(et_kernel_tensor_view_v1) unsigned char short_view_storage
+      [sizeof(et_kernel_tensor_view_v1) + sizeof(et_kernel_error)] = {0};
+  et_kernel_tensor_view_v1 *short_view = (void *)short_view_storage;
+  *short_view = good_output;
+  unsigned char saved_view[sizeof(short_view_storage)];
+  memcpy(saved_view, short_view_storage, sizeof(saved_view));
+  et_kernel_error *view_alias =
+      (void *)(short_view_storage + offsetof(et_kernel_tensor_view_v1, data));
+  call->outputs = short_view;
+  call->output_bytes = sizeof(size_t);
+  require(p->validate_call(call, view_alias) != 0 &&
+              memcmp(saved_view, short_view_storage, sizeof(saved_view)) == 0,
+          "truncated table span preserves borrowed descriptor prefix");
+  *call = good_call;
+  output->data = &aliased_error;
+  call->output_bytes = sizeof(size_t);
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "truncated table span preserves first borrowed output");
+  *call = good_call;
+  call->output_stride = sizeof(size_t);
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "truncated table stride preserves first borrowed output");
+  *call = good_call;
+  *output = good_output;
+  f.in[Q].data = &aliased_error;
+  call->input_bytes = sizeof(size_t);
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "truncated input table span preserves first borrowed input");
+  *call = good_call;
+  f.in[Q].data = f.q;
+  output->data = &aliased_error;
   output->struct_size = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE - 1u;
   require(p->validate_call(call, &aliased_error) != 0 &&
               memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
