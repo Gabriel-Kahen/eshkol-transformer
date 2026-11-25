@@ -50,9 +50,16 @@ require_make_target() {
 # The API table is the reference inventory. Read each code span from the
 # documented source, symbol, and gate columns so drift fails the walkthrough.
 span='`([^`]+)`'
+source_span='^[[:blank:]]*`([^`]+)`[[:blank:]]*$'
 rows=0
-while IFS='|' read -r left subsystem source_cell references gates scope right; do
-  [[ -z "${left}" && "${source_cell}" =~ ${span} ]] || continue
+while IFS= read -r row; do
+  [[ "${row}" == '|'* ]] || continue
+  IFS='|' read -r _ component source_cell references gates _ <<< "${row}"
+  case "${component}:${source_cell}" in
+    ' Component : Source '|' --- : --- ') continue ;;
+  esac
+  [[ "${source_cell}" =~ ${source_span} ]] ||
+    die "DOC5 API reference: malformed source cell in row: ${row}"
   source_file="${BASH_REMATCH[1]}"
   [[ -f "${source_file}" ]] || die "DOC5 missing source: ${source_file}"
   while [[ "${references}" =~ ${span} ]]; do
