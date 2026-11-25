@@ -21,6 +21,12 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
   tracks the combined gate. The [E3 runner measurement](e3/E3_HOSTED_QUALIFICATION_20261115.md)
   records the resource shortfall on the standard hosted runner.
+- The [current-main CPU-v1 source reconciliation](CPU_V1_SOURCE_RECONCILIATION_20261125.md)
+  composes the #214 source and #216 test/evidence repair over `8d185344`.
+  Focused source, topology, and host-stub gates pass; generated Eshkol G3/C2,
+  public terminal continuation, E3 section 9, and exact-tree hosted evidence
+  remain open. The #218/#226 terminal and #221/#223 launcher branches remain
+  separate prerequisites.
 
 ## Parallel execution strategy
 
