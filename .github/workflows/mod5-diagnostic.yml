@@ -1,4 +1,4 @@
-name: MOD5/MP4/PA4-Wider provider diagnostic (non-admission)
+name: MOD5 six-slice foundation diagnostic (non-admission)
 
 on:
   pull_request:
@@ -17,9 +17,24 @@ on:
       - scripts/test-mod5.sh
       - scripts/test-mp4.sh
       - scripts/test-pa4-wider.sh
+      - include/eshkol_transformer/eval5_benchmark_abi.h
+      - include/eshkol_transformer/dist5_collectives_abi.h
+      - include/eshkol_transformer/amd4_hip_abi.h
+      - native/eval5_benchmark.c
+      - native/dist5_collectives.c
+      - native/amd4_hip_observability.c
+      - scripts/build-eval5.sh
+      - scripts/build-dist5.sh
+      - scripts/build-amd4.sh
+      - scripts/test-eval5.sh
+      - scripts/test-dist5.sh
+      - scripts/test-amd4.sh
       - tests/mod5/**
       - tests/mp4/**
       - tests/pa4_wider/**
+      - tests/eval5/**
+      - tests/dist5/**
+      - tests/amd4/**
   workflow_dispatch:
     inputs:
       expected_head:
@@ -39,14 +54,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  provider:
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'codex/mod5-') }}
+  foundation:
+    if: ${{ (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/codex/mod5-')) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/mod5-')) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     env:
       CC: clang-21
       CXX: clang++-21
       MOD5_ASAN_DETECT_LEAKS: '1'
+      MP4_ASAN_DETECT_LEAKS: '1'
+      EVAL5_ASAN_DETECT_LEAKS: '1'
+      DIST5_ASAN_DETECT_LEAKS: '1'
+      AMD4_ASAN_DETECT_LEAKS: '1'
     steps:
       - name: Reserve diagnostic evidence
         shell: /usr/bin/bash -euo pipefail {0}
@@ -59,6 +78,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Authenticate exact source
         shell: /usr/bin/bash -euo pipefail {0}
         env:
@@ -69,11 +89,12 @@ jobs:
           root="$RUNNER_TEMP/mod5-diagnostic"
           [[ "$EXPECTED_HEAD" =~ ^[0-9a-f]{40}$ ]]
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$GITHUB_REF" == refs/heads/codex/mod5-* ]]
             [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]
             [[ "$GITHUB_SHA" == "$EXPECTED_HEAD" ]]
             [[ "$(git rev-parse 'HEAD^{tree}')" == "$EXPECTED_TREE" ]]
           else
-            [[ "$EVENT_NAME" == pull_request && -z "$EXPECTED_TREE" ]]
+            [[ "$EVENT_NAME" == pull_request && "$GITHUB_HEAD_REF" == codex/mod5-* && -z "$EXPECTED_TREE" ]]
             EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
           fi
           [[ "$(git rev-parse HEAD)" == "$EXPECTED_HEAD" ]]
@@ -94,23 +115,24 @@ jobs:
             clang-21 --version | head -1 | grep -F 'version 21.1.8'
             clang++-21 --version | head -1 | grep -F 'version 21.1.8'
           } > "$root/dependencies.stdout" 2> "$root/dependencies.stderr"
-      - name: Run opt-in MOD5 provider gate
+      - name: Run six opt-in foundation gates
         shell: /usr/bin/bash -euo pipefail {0}
         run: |
-          make test-mod5 > "$RUNNER_TEMP/mod5-diagnostic/gate.stdout" \
-            2> "$RUNNER_TEMP/mod5-diagnostic/gate.stderr"
-      - name: Run opt-in MP4 provider gate
-        shell: /usr/bin/bash -euo pipefail {0}
-        env:
-          MP4_ASAN_DETECT_LEAKS: '1'
-        run: |
-          make test-mp4 > "$RUNNER_TEMP/mod5-diagnostic/mp4-gate.stdout" \
-            2> "$RUNNER_TEMP/mod5-diagnostic/mp4-gate.stderr"
-      - name: Run opt-in PA4-Wider provider gate
-        shell: /usr/bin/bash -euo pipefail {0}
-        run: |
-          make test-pa4-wider > "$RUNNER_TEMP/mod5-diagnostic/pa4-wider-gate.stdout" \
-            2> "$RUNNER_TEMP/mod5-diagnostic/pa4-wider-gate.stderr"
+          root="$RUNNER_TEMP/mod5-diagnostic"
+          failed=0
+          run_gate() {
+            local gate="$1" result=0
+            make "$gate" > "$root/$gate.stdout" 2> "$root/$gate.stderr" || result=$?
+            printf '%s\t%s\n' "$gate" "$result" >> "$root/gate-exits.tsv"
+            if (( result != 0 )); then failed=1; fi
+          }
+          run_gate test-mod5
+          run_gate test-mp4
+          run_gate test-pa4-wider
+          run_gate test-eval5
+          run_gate test-dist5
+          run_gate test-amd4
+          exit "$failed"
       - name: Seal diagnostic evidence
         if: always()
         shell: /usr/bin/bash -euo pipefail {0}
@@ -127,7 +149,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: mod5-cpu-f32-${{ github.run_id }}-${{ github.run_attempt }}
+          name: mod5-six-slice-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/mod5-diagnostic/
           if-no-files-found: error
           retention-days: 30
