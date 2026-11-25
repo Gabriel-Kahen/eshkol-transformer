@@ -107,7 +107,7 @@ cmp -- "${scratch}/esk-run-1/out/amd4-aot" "${scratch}/esk-run-2/out/amd4-aot"
 cmp -- "${scratch}/esk-run-1/run.stdout" "${scratch}/esk-run-2/run.stdout"
 
 awk '
-  /^AMD4 AOT LIVE ABSENCE status=unavailable-runtime kfd=absent hip=unavailable rocblas=unavailable devices=0 bytes=[1-9][0-9]*$/ { ++live; next }
+  /^AMD4 AOT LIVE ABSENCE status=unavailable-runtime kfd=(absent|inaccessible|accessible) hip=unavailable rocblas=unavailable devices=0 bytes=[1-9][0-9]*$/ { ++live; next }
   /^AMD4 AOT INJECTED TWO_DEVICE status=ok devices=2 bytes=[1-9][0-9]*$/ { ++twodev; next }
   $0 == "AMD4 AOT INJECTED FAILURES oom=alloc driver=driver-failure rocblas=missing-symbols PASS" { ++fail; next }
   $0 == "AMD4 AOT K1 REJECTION gemm=unsupported attention=unsupported code=15 canary=0xdeadbeef PASS" { ++k1; next }

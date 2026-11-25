@@ -789,10 +789,13 @@ static void test_live(void) {
   CHECK(report.source == ET_AMD4_SOURCE_LIVE && status == report.status);
   const char *expect_absent = getenv("AMD4_EXPECT_NO_HIP");
   if (expect_absent != NULL && strcmp(expect_absent, "1") == 0) {
-    CHECK(report.kfd == ET_AMD4_KFD_ABSENT);
     CHECK(report.hip_library == ET_AMD4_LIBRARY_UNAVAILABLE);
     CHECK(report.rocblas_library == ET_AMD4_LIBRARY_UNAVAILABLE);
   }
+  CHECK(report.kfd >= ET_AMD4_KFD_ABSENT &&
+        report.kfd <= ET_AMD4_KFD_ACCESSIBLE);
+  const char *const kfd_lines[] = {"kfd=absent\n", "kfd=inaccessible\n",
+                                   "kfd=accessible\n"};
   if (report.hip_library != ET_AMD4_LIBRARY_READY) {
     CHECK(status == ET_AMD4_ERR_UNAVAILABLE_RUNTIME);
     CHECK(report.device_count_result.status == ET_AMD4_NOT_RUN);
@@ -807,6 +810,7 @@ static void test_live(void) {
   CHECK(strstr(text, "kernel.amd-hip.gemm=unavailable\n") != NULL);
   CHECK(strstr(text, "kernel.amd-hip.attention=unavailable\n") != NULL);
   CHECK(strstr(text, "source=live\n") != NULL);
+  CHECK(strstr(text, kfd_lines[report.kfd]) != NULL);
   fputs(text, stdout);
   free(text);
 }

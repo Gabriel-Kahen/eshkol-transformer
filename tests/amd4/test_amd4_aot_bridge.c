@@ -24,7 +24,6 @@ static void test_live_probe(void) {
   const char *expect_absent = getenv("AMD4_EXPECT_NO_HIP");
   if (expect_absent != NULL && strcmp(expect_absent, "1") == 0) {
     CHECK(status == ET_AMD4_ERR_UNAVAILABLE_RUNTIME);
-    CHECK(et_amd4_aot_report_kfd(&report) == ET_AMD4_KFD_ABSENT);
     CHECK(et_amd4_aot_report_hip_library(&report) ==
           ET_AMD4_LIBRARY_UNAVAILABLE);
     CHECK(et_amd4_aot_report_rocblas_library(&report) ==
@@ -32,6 +31,11 @@ static void test_live_probe(void) {
     CHECK(et_amd4_aot_report_device_count(&report) == 0);
     CHECK(et_amd4_aot_report_reported_device_count(&report) == 0);
   }
+
+  const int32_t kfd = et_amd4_aot_report_kfd(&report);
+  CHECK(kfd >= ET_AMD4_KFD_ABSENT && kfd <= ET_AMD4_KFD_ACCESSIBLE);
+  const char *const kfd_lines[] = {"kfd=absent\n", "kfd=inaccessible\n",
+                                   "kfd=accessible\n"};
 
   int64_t required = 0;
   CHECK(et_amd4_aot_format_report(&report, NULL, 0, &required) == ET_AMD4_OK);
@@ -42,6 +46,7 @@ static void test_live_probe(void) {
         ET_AMD4_OK);
   CHECK(strstr(text, "eshkol-transformer-amd4-observability:v1\n") == text);
   CHECK(strstr(text, "source=live\n") != NULL);
+  CHECK(strstr(text, kfd_lines[kfd]) != NULL);
   CHECK(strstr(text, "kernel.amd-hip.gemm=unavailable\n") != NULL);
   CHECK(strstr(text, "kernel.amd-hip.attention=unavailable\n") != NULL);
   CHECK(et_amd4_aot_read_byte(text, 0) == 'e');

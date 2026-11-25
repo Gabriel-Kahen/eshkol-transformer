@@ -50,6 +50,7 @@
 (define source-injected 1)
 
 (define kfd-absent 0)
+(define kfd-inaccessible 1)
 (define kfd-accessible 2)
 
 (define lib-unavailable 0)
@@ -152,8 +153,11 @@
              (amd4-report-status (ffi-pointer report)))
   (expect-eq "live source" source-live
              (amd4-report-source (ffi-pointer report)))
-  (expect-eq "live kfd absent" kfd-absent
-             (amd4-report-kfd (ffi-pointer report)))
+  (let ((kfd (amd4-report-kfd (ffi-pointer report))))
+    (require-check "live kfd state"
+                   (or (= kfd kfd-absent)
+                       (= kfd kfd-inaccessible)
+                       (= kfd kfd-accessible))))
   (expect-eq "live hip unavailable" lib-unavailable
              (amd4-report-hip-library (ffi-pointer report)))
   (expect-eq "live rocblas unavailable" lib-unavailable
@@ -162,7 +166,14 @@
              (amd4-report-device-count (ffi-pointer report)))
   (expect-eq "live reported devices" 0
              (amd4-report-reported-count (ffi-pointer report)))
-  (let* ((res (format-report-buffer report))
+  (let* ((kfd (amd4-report-kfd (ffi-pointer report)))
+         (kfd-name (cond ((= kfd kfd-absent) "absent")
+                         ((= kfd kfd-inaccessible) "inaccessible")
+                         (else "accessible")))
+         (kfd-line (cond ((= kfd kfd-absent) "kfd=absent")
+                         ((= kfd kfd-inaccessible) "kfd=inaccessible")
+                         (else "kfd=accessible")))
+         (res (format-report-buffer report))
          (buf (vector-ref res 0))
          (len (vector-ref res 1)))
     (require-check "live header"
@@ -171,7 +182,8 @@
     (require-check "live source line" (buffer-contains-line? buf len "source=live"))
     (require-check "live status line"
                    (buffer-contains-line? buf len "status=unavailable-runtime"))
-    (require-check "live kfd line" (buffer-contains-line? buf len "kfd=absent"))
+    (require-check "live kfd line"
+                   (buffer-contains-line? buf len kfd-line))
     (require-check "live hip line"
                    (buffer-contains-line? buf len "hip.library=unavailable"))
     (require-check "live rocblas line"
@@ -183,7 +195,9 @@
     (require-check "live attention unavailable"
                    (buffer-contains-line? buf len "kernel.amd-hip.attention=unavailable"))
     (release (ffi-pointer buf))
-    (display "AMD4 AOT LIVE ABSENCE status=unavailable-runtime kfd=absent hip=unavailable rocblas=unavailable devices=0 bytes=")
+    (display "AMD4 AOT LIVE ABSENCE status=unavailable-runtime kfd=")
+    (display kfd-name)
+    (display " hip=unavailable rocblas=unavailable devices=0 bytes=")
     (display len) (newline)))
 
 ;; 2. Injected 2-device MI250X + RX 7900 XTX observability report verification.

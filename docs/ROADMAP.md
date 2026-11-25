@@ -3357,6 +3357,25 @@ publication, public G2 and continuation remain pending.
 | PA4 | [Bounded CPU-f32 forward/backward attention candidate](PA4_ATTENTION.md) and [PA4-Wider online-softmax attention](PA4_WIDER_ATTENTION.md) | A2, B0 | The separately linked candidate preserves exact forward and backward output bits on all ten admitted shapes while keeping default A2 `-O2` object bytes identical to the frozen baseline. The opt-in comparator merged through [PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240) with exact hosted CI. The independently reviewed successor (`codex/pa4-backward-preflight-opt`, `5d3a22c6`; measured at `2913b1b3`) extends fixed stack row-scratch to forward/backward preflight and backward invocation and adds directly timed joint forward+backward measurement with pre-timer output zeroing (supported Ubuntu 22.04 / Clang 21.1.8: −24.763% forward dispatch, −48.987% forward invoke, −62.151% backward dispatch, −38.775% backward invoke, −51.934% joint dispatch, −42.132% joint invoke). The independently reviewed PA4-Wider opt-in pair (`codex/pa4-wider-online-softmax`, `baa1eb40`; `et_pa4_wider_ref_provider_v1` and `et_pa4_wider_online_provider_v1`, zero edits to `a2_attention_provider.c`) scales allocation-free MHA/GQA/MQA attention to `Tq, Tk <= 64, Dh <= 16` with single-pass online-softmax forward and row-scratch backward: 36,016 paired comparisons (forward max abs diff `1.19e-7`, backward bitwise identical), 1,404 central finite differences, ASan/UBSan/LSan, and 864 AB/BA timed benchmark samples showing −47.17% joint dispatch and −48.77% joint invoke time at `T=64` (`make test-pa4-wider`). Hosted exact-head CI and default PA4 admission remain open. | active |
 | DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | [DATA4-A bounded corpus selection](DATA4_CORPUS_SLICE.md) and the bounded [DATA4-B installed report slice](DATA4_INSTALLED_REPORT.md) merged through PR #233 after required `data4-corpus`, `model-composition`, and `cli3-commands` gates passed. The independently reviewed DATA4-C successor (`codex/data4-manifest-binding`, `05f9e42c`; installed gate at `a5f9b38f`) bumps canonical reports to `version 2 0` with mandatory `manifest-sha256` binding complete `manifest.etm` bytes, rejecting same-summary report swaps (`corrupt-data` / exit 12) and legacy v1.0 reports (`version-mismatch` / exit 11) while keeping all five CLI3 package manifests byte-identical. Pinned Ubuntu 22.04 / LLVM 21.1.8 / Eshkol `fe9dfd52` runs passed 42 source checks, native two-run/corrupt-shard checks, 6 CLI3 production-contract tests, and 13 installed DATA4 command tests. Hosted CI and broader corpus-scale DATA4 admission remain pending. | active |
 
+AMD4 AOT bridge test correction on `codex/amd4-aot-kfd-hip-test-gap`
+(based on `cee591f3`): live KFD state is checked independently against its
+formatted report while `AMD4_EXPECT_NO_HIP=1` still requires unavailable HIP
+and rocBLAS, unavailable runtime, and zero devices. On the current host the
+probe reported `kfd=accessible`, `hip.library=unavailable`,
+`rocblas.library=unavailable`, and unavailable AMD compute capabilities.
+`CC=clang CXX=clang++ AMD4_EXPECT_NO_HIP=1 AMD4_ASAN_DETECT_LEAKS=1 bash scripts/test-amd4.sh`
+passed 925 checks in each normal and sanitizer build; direct AOT bridge C11
+normal and ASan/UBSan/LSan runs passed 154 checks each. With the exact pinned
+Eshkol `fe9dfd52` cache in `eshkol-r0-debug:20260928` (8 GiB memory cap),
+`bash scripts/test-amd4-aot.sh` passed bridge archive and C++17 checks, 154
+C11 bridge checks per normal and sanitizer build, and two fresh compiled
+Eshkol AOT runs with identical stdout and byte-identical ELFs (SHA-256
+`d26e98705a7c31cb7dffaf28d1e70b0e5e348be39d735351cbe4021709446cb5`).
+The live compiled report was 464 bytes with `kfd=accessible` and zero devices;
+the deterministic two-device and failure mocks and K1 rejection passed.
+These observations establish no AMD GPU execution; hosted CI and hardware
+validation remain pending.
+
 ## Wave 5 — ecosystem expansion
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
