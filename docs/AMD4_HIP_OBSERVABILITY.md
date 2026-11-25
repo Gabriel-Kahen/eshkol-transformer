@@ -126,7 +126,9 @@ execution.
 `CC=clang CXX=clang++ AMD4_ASAN_DETECT_LEAKS=1 bash scripts/test-amd4.sh`
 passed the strict C11/C++17 build, deterministic archive and symbol checks,
 injected device and failure tests, live host observations, and K1 fail-closed
-checks in normal and ASan/UBSan/LSan builds (925 checks per C11 run).
+checks in normal and ASan/UBSan/LSan builds (925 checks per C11 run on
+that host). The Clang 21.1.8 container gate passed 923 checks per C11 run
+with KFD absent and HIP and rocBLAS libraries unavailable.
 
 Live device enumeration and rocBLAS handle checks on hardware, direct AMD GPU
 execution, numerical parity, and GPU benchmarks remain pending a
