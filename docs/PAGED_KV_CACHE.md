@@ -148,8 +148,16 @@ maximum oracle absolute error was `5.579e-08`. Every create-time `calloc`
 cut was forced in pool-owned, external-pool, and AOT-bridge creation, with
 unchanged caller outputs, unchanged external storage, and sanitizer-clean
 cleanup. The native C11, allocation-cut, and C++17 header/linkage suites
-passed ASan/UBSan/LSan. Strict two-build AOT qualification remains pending
-the shared heavy-build lock.
+passed ASan/UBSan/LSan. The pinned rerun on clean commit `ceeb74f3` and tree
+`94b8db33` also passed both strict AOT builds, which produced identical ELF
+and stdout. The ELF SHA-256 is
+`0d4f5c5333bef13bb445757fc4656d82bc4c5397c59e5796951bf3322a87648d`.
+The fixtures covered CoW, prefix sharing, eight GQA parity checks, bitwise
+truncate restore, exhaustion, invalid inputs, and full pool cleanup.
+The recorded maximum GQA absolute error was `3.174e-08` rounded up.
+The gate seal is
+`/home/gabe/.codex/evidence/eshkol-transformer/paged-kv-exact-ceeb74f3.NVUTKL/SHA256SUMS`
+with SHA-256 `b79616cc9898ffe89ef3c029025bd7a25c521223579950b68d1bcd63afed5bda`.
 
 ## Limitations and scope
 
