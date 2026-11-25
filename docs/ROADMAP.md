@@ -3355,7 +3355,7 @@ publication, public G2 and continuation remain pending.
 | MOD5 | RMSNorm/SwiGLU/GQA/MQA/ALiBi/sliding-window model variants | M3 | Per-variant parity and training smoke tests | planned |
 | DIST5 | Data-parallel training and collective abstraction | TR3, K1 | Multi-process deterministic smoke and failure handling | planned |
 | EVAL5 | External evaluation adapters and contamination checks | E3, T2 | Reproducible benchmark manifests | planned |
-| DOC5 | Tutorials, API reference and from-scratch corpus-to-model guide | CLI3 | Fresh-environment walkthrough succeeds | planned |
+| DOC5 | [Corpus-to-model tutorial](DOC5_CORPUS_TO_MODEL_TUTORIAL.md) and [API reference](DOC5_API_REFERENCE.md) | CLI3, DATA4 | The current-main candidate documents corpus preparation, one CPU-f32 training update, checkpoint inspection, evaluation and one-byte generation. The source check passed all 42 API rows and verified tutorial paths and Make targets. Executable fresh-environment qualification remains pending. | active |
 
 ## Orchestrator rules
 
