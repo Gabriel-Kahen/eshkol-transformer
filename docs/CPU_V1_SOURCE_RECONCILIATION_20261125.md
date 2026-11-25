@@ -32,12 +32,15 @@ In particular, #214's fixed-profile resumed/uninterrupted checkpoint parity
 does not prove full trained continuation. Main's installed binary establishes
 one-update, one-byte generation, not terminal multi-token or EOS output.
 
-The next G3/C2 generated qualification requires a fresh exact-source #221
-preparation and independent recipe/seal review. Its controller command is
-`python3 -B -m tests.g3r.one_use_gate /absolute/fresh/package EXPECTED_SEAL_SHA256`.
+The next G3/C2 generated qualification requires a fresh #221 preparation
+repinned to this candidate's frozen tree and independent recipe/seal review.
+Its controller invocation template is
+`flock -x /home/gabe/.cache/eshkol-transformer-orchestration-build.lock python3 -B -m tests.g3r.one_use_gate /absolute/fresh/package EXPECTED_SEAL_SHA256`.
 The controller resides on the separate #221 branch and must be reconciled to
-the frozen source tree before use.
-Under both heavy-build locks, it requires **16 GiB available RAM, 8 GiB free
+the frozen source tree before use. It also acquires its own heavy-build and
+Docker custody locks. A fully concrete command requires the reviewed fresh
+package path and its independently verified seal SHA-256. The resource check
+requires **16 GiB available RAM, 8 GiB free
 swap, and 32 GiB free on actual scratch/output storage**. The measured
 standard hosted runner fails the RAM and swap floors; no new full matrix was
 launched. E3 #223 separately requires at least 32 GiB free on its actual
