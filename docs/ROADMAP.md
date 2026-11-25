@@ -3570,6 +3570,51 @@ publication, public G2 and continuation remain pending.
   are prerequisites; Eshkol implementation and compiled same-call proof remain
   pending. No public G2 or continuation acceptance is claimed.
 
+- **Private P2/G2 terminal pending-allocation precursor:** The
+  [abort-only anchor candidate](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
+  reserves the original output and second/text carriers before sampling. An
+  independent lexical root detects paired carrier replacement and changed
+  list nodes/successors before abort. On the `c71d39a984` worktree candidate,
+  the pinned `fe9dfd5` Ubuntu 22.04/Clang 21 normal, repeat and sanitizer
+  fixtures pass 23 private and four feature-off checks with identical stdout
+  and empty stderr; seven static mutations pass. The runner's final Git check
+  failed because the container lacked the external worktree Git directory;
+  host postflight passed. Evidence is sealed under
+  `build/g3c4-p2g2-terminal-pending-anchor-20261114/SHA256SUMS` pending
+  independent result review and integration. Actual bytevector backing
+  extent, allocation failure cuts, same-call EOS/second-token publication,
+  detached clones, public G2 and save/reload remain open.
+
+- **Standalone P2/G2 constructor-owned carrier prerequisite:** The
+  [private carrier bundle candidate](g3/G3_C4_P2_G2_TERMINAL_CARRIERS_LEAF.md)
+  captures all eight literal constructor returns in an inaccessible lexical
+  root, authenticates original bundle/carrier identities and fixed extents,
+  and provides authenticated scrub/unlink retirement. Pinned normal, repeat
+  and sanitizer runs pass 530 identical checks each, including eight guarded
+  allocation cuts with earlier-bundle preservation and retry; sixteen
+  unguarded cuts match the exact pinned emergency exit 1 diagnostic.
+  Unchanged pending/feature-off predecessors pass 23/4 per mode; 22+7 static
+  mutations and Q0's four tests pass. Evidence is under
+  `build/g3c4-p2g2-terminal-carriers-20261115-attempt3/`; integration remains
+  pending. Its development allocator
+  witness is evidence only; the production helper never converts carriers
+  to native pointers. Existing protected/prefix wrappers and native ABI
+  remain unchanged. Composition into the sole native pending output and
+  actual terminal close, public G2, trained-G2 sanitizer acceptance and
+  save/reload remain open.
+
+  Wave 3 source reconciliation replays both published leaves onto `4ff24845`
+  without changing their Eshkol source, fixtures, or native shim. The carrier
+  closure additionally records `pa4_attention_candidate.h`, included by the
+  Wave 3 A2 provider. Both static mutation checkers, Q0 isolation, and the
+  call-entry source check pass; an independent source-and-test review found no
+  issue in this bounded replay. The earlier compiled seals have different
+  inputs and do not qualify this tree. The next gate is fresh pinned normal,
+  repeat, and sanitizer runs of both terminal-pending-anchor and terminal-
+  carriers scripts under the shared heavy-build lock, with exact-tree source,
+  compiler, runtime, resource, and output seals. No compiled Wave 3 result or
+  terminal composition is claimed here.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
