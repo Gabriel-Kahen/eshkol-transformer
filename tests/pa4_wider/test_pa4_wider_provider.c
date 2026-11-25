@@ -249,12 +249,12 @@ static void structural_cases(const et_kernel_provider_v1 *p,
   call->input_count--;
   rejected(p, runtime, call, ET_KERNEL_CODE_INVALID_BUFFER, 1);
   *call = good_call;
-  et_kernel_tensor_view_v1 short_table[6];
-  memcpy(short_table, f.in, sizeof(short_table));
+  et_kernel_tensor_view_v1 short_table[8] = {0};
+  memcpy(short_table, f.in, 6u * sizeof(*short_table));
   call->inputs = short_table;
   call->input_count = 8u;
   call->input_bytes = call->input_count * call->input_stride;
-  /* The provider can reject an excessive count without inspecting entries. */
+  /* The declared table span stays addressable for diagnostic alias checks. */
   rejected(p, runtime, call, ET_KERNEL_CODE_INVALID_BUFFER, 0);
   *call = good_call;
   call->output_stride--;
@@ -396,6 +396,16 @@ static void structural_cases(const et_kernel_provider_v1 *p,
   require(p->validate_call(call, &aliased_error) != 0 &&
               memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
           "direct diagnostic alias rejected without clobbering output");
+  output->struct_size = ET_KERNEL_TENSOR_VIEW_V1_0_SIZE - 1u;
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "malformed output prefix preserves aliased output");
+  output->struct_size = call->output_stride + 1u;
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "oversized output prefix preserves aliased output");
+  *output = good_output;
+  output->data = &aliased_error;
   /* Malformed output table byte length must still preserve readable outputs. */
   call->output_bytes = call->output_stride + 8u;
   require(p->validate_call(call, &aliased_error) != 0 &&
@@ -425,6 +435,15 @@ static void structural_cases(const et_kernel_provider_v1 *p,
   require(p->validate_call(call, &aliased_error) != 0 &&
               memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
           "excessive output_count preserves aliased trailing output");
+  *call = good_call;
+  *output = good_output;
+  f.in[UPSTREAM].data = &aliased_error;
+  call->input_count = 7u;
+  call->input_bytes = 7u * call->input_stride;
+  require(p->validate_call(call, &aliased_error) != 0 &&
+              memcmp(&saved_error, &aliased_error, sizeof(saved_error)) == 0,
+          "excessive input_count preserves aliased trailing input");
+  f.in[UPSTREAM].data = f.upstream;
   *call = good_call;
   *output = good_output;
   require(p->validate_call(call, NULL) == 0,
