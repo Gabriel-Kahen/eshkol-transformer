@@ -49,6 +49,7 @@ printf 'EVAL5 %s deterministic archive SHA-256 %s\n' "${eval5_mode}" "${eval5_di
 
 cat > "${eval5_tmp}/expected-symbols" <<'SYMBOLS'
 et_eval5_audit_contamination
+et_eval5_bind_tokenizer_identity
 et_eval5_manifest_format
 et_eval5_manifest_parse
 et_eval5_manifest_read_file

@@ -586,6 +586,105 @@ static void test_manifest(et_eval5_manifest *manifest, const char *directory) {
   CHECK(closedir(entries) == 0);
 }
 
+static void test_tokenizer_identity(et_eval5_manifest *manifest) {
+  static const struct {
+    const char *fingerprint;
+    uint32_t vocabulary;
+    uint8_t first[4];
+    uint8_t last[4];
+  } accepted[] = {
+      {"sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704",
+       256u, {0xaa, 0xbb, 0x31, 0xf4}, {0xbf, 0xe5, 0x07, 0x04}},
+      {"sha256:eshkol-bpe-tokenizer-v1:1866ebedd76bf7d0e8e111ab25603a99aee927ea341e1305e4bb2c145648eb72",
+       263u, {0x18, 0x66, 0xeb, 0xed}, {0x56, 0x48, 0xeb, 0x72}},
+  };
+  static const char *prefixes[] = {
+      "sha256:eshkol-byte-tokenizer-v1:",
+      "sha256:eshkol-bpe-tokenizer-v1:",
+  };
+  static const char hex[] = "0123456789abcdef";
+  char fingerprint[sizeof("sha256:eshkol-byte-tokenizer-v1:") + 64u];
+  char corpus[sizeof(fingerprint)];
+  uint8_t digest[ET_EVAL5_SHA256_BYTES];
+  for (size_t i = 0; i < COUNT(accepted); ++i) {
+    const char *fingerprint = accepted[i].fingerprint;
+    size_t length = strlen(fingerprint);
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length,
+                                          accepted[i].vocabulary,
+                                          (const uint8_t *)fingerprint, length,
+                                          accepted[i].vocabulary, digest) == ET_EVAL5_OK);
+    CHECK(memcmp(digest, accepted[i].first, 4u) == 0);
+    CHECK(memcmp(digest + 28u, accepted[i].last, 4u) == 0);
+  }
+  for (size_t family = 0; family < COUNT(prefixes); ++family) {
+    size_t prefix_length = strlen(prefixes[family]);
+    size_t length = prefix_length + 64u;
+    memcpy(fingerprint, prefixes[family], prefix_length);
+    for (size_t i = 0; i < ET_EVAL5_SHA256_BYTES; ++i) {
+      unsigned value = (unsigned)(0x40u + i);
+      fingerprint[prefix_length + 2u * i] = hex[value >> 4];
+      fingerprint[prefix_length + 2u * i + 1u] = hex[value & 15u];
+    }
+    memcpy(corpus, fingerprint, length);
+    memset(digest, 0xa5, sizeof(digest));
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          (const uint8_t *)corpus, length, 256u,
+                                          digest) == ET_EVAL5_OK);
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length,
+                                          family == 0 ? 4352u : 4608u,
+                                          (const uint8_t *)corpus, length,
+                                          family == 0 ? 4352u : 4608u,
+                                          digest) == ET_EVAL5_OK);
+    for (size_t i = 0; i < sizeof(digest); ++i)
+      CHECK(digest[i] == (uint8_t)(0x40u + i));
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length - 1u, 256u,
+                                          (const uint8_t *)corpus, length, 256u,
+                                          digest) == ET_EVAL5_ERR_FORMAT);
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 255u,
+                                          (const uint8_t *)corpus, length, 255u,
+                                          digest) == ET_EVAL5_ERR_FORMAT);
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length,
+                                          family == 0 ? 4353u : 4609u,
+                                          (const uint8_t *)corpus, length, 256u,
+                                          digest) == ET_EVAL5_ERR_FORMAT);
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          (const uint8_t *)corpus, length, 257u,
+                                          digest) == ET_EVAL5_ERR_IDENTITY);
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          (const uint8_t *)corpus, length - 1u, 256u,
+                                          digest) == ET_EVAL5_ERR_IDENTITY);
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          NULL, length, 256u,
+                                          digest) == ET_EVAL5_ERR_ARGUMENT);
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          (const uint8_t *)corpus, length, 256u,
+                                          NULL) == ET_EVAL5_ERR_ARGUMENT);
+    corpus[prefix_length + 2u] ^= 1;
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          (const uint8_t *)corpus, length, 256u,
+                                          digest) == ET_EVAL5_ERR_IDENTITY);
+    corpus[prefix_length + 2u] ^= 1;
+    fingerprint[prefix_length + 2u] = 'A';
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          (const uint8_t *)corpus, length, 256u,
+                                          digest) == ET_EVAL5_ERR_FORMAT);
+    fingerprint[prefix_length + 2u] = '\0';
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          (const uint8_t *)corpus, length, 256u,
+                                          digest) == ET_EVAL5_ERR_FORMAT);
+    fingerprint[prefix_length + 2u] = corpus[prefix_length + 2u];
+    fingerprint[7] = 'x';
+    CHECK(et_eval5_bind_tokenizer_identity((const uint8_t *)fingerprint, length, 256u,
+                                          (const uint8_t *)corpus, length, 256u,
+                                          digest) == ET_EVAL5_ERR_FORMAT);
+    for (size_t i = 0; i < sizeof(digest); ++i)
+      CHECK(digest[i] == (uint8_t)(0x40u + i));
+  }
+  memcpy(manifest->tokenizer_sha256, digest, sizeof(digest));
+  CHECK(et_eval5_bind_tokenizer_identity(NULL, 0, 256u, (const uint8_t *)corpus, 95u,
+                                        256u, digest) == ET_EVAL5_ERR_ARGUMENT);
+}
+
 int main(int argc, char **argv) {
   if (argc == 3 && strcmp(argv[1], "--read-status") == 0) {
     et_eval5_manifest manifest;
@@ -603,9 +702,10 @@ int main(int argc, char **argv) {
   for (size_t i = 0; i < ET_EVAL5_SHA256_BYTES; ++i) {
     manifest.train_dataset_sha256[i] = (uint8_t)i;
     manifest.eval_dataset_sha256[i] = (uint8_t)(0x20u + i);
-    manifest.tokenizer_sha256[i] = (uint8_t)(0x40u + i);
     manifest.checkpoint_sha256[i] = (uint8_t)(0x60u + i);
   }
+
+  test_tokenizer_identity(&manifest);
 
   test_byte_audit(&manifest);
   test_token_audit();

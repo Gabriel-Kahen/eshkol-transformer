@@ -77,9 +77,18 @@ evaluation run. For an accepted T1 or T2 tokenizer, `tokenizer_sha256` is the
 32 bytes decoded from the 64-hex-digit suffix of its validated public
 fingerprint. T1 uses `sha256:eshkol-byte-tokenizer-v1:...` (96 bytes), and T2
 uses `sha256:eshkol-bpe-tokenizer-v1:...` (95 bytes).
-The suffix is already domain separated by the tokenizer format. The
-runner must still compare the complete public fingerprint with the D1 shard
-identity before scoring; this standalone library cannot establish that link.
+The suffix is already domain separated by the tokenizer format. The runner
+calls `et_eval5_bind_tokenizer_identity` with the validated T1/T2 public
+fingerprint and the authenticated D1 corpus-summary fingerprint, each with an
+explicit byte length and vocabulary size. The helper requires the canonical
+family prefix, lowercase hex suffix, T1 vocabulary 256–4352 or T2 vocabulary
+256–4608, and exact equality of both complete fingerprints and vocabulary
+sizes. It returns `ET_EVAL5_ERR_FORMAT` for malformed tokenizer identity or
+`ET_EVAL5_ERR_IDENTITY` for a D1 mismatch; failures leave the output digest
+untouched. The runner copies the returned digest into `tokenizer_sha256`.
+The caller must source these values from the same validated tokenizer and D1
+owners used for scoring; the standalone helper cannot authenticate those
+owners or prove that a later manifest used its output.
 For any other tokenizer, the runner must define and verify a canonical
 tokenizer identity digest before using this field. The audit summary covers
 the supplied audit corpus, which can include the full evaluation split when
