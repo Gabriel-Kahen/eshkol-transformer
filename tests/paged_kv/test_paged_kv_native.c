@@ -498,6 +498,10 @@ static void test_negative_contracts(void) {
   /* External pool size / alignment / alias negatives. */
   size_t req = 0u;
   CHECK(et_paged_kv_pool_float_count(&bad, &req) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_pool_float_count(&bad, (size_t *)&bad) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  CHECK(et_paged_kv_create(&bad, NULL, 0u, (et_paged_kv_pool **)&bad) ==
+        ET_PAGED_KV_ERR_ALIAS);
   CHECK(et_paged_kv_create(&bad, NULL, 1u, &pool) == ET_PAGED_KV_ERR_ARGUMENT);
   uint8_t *raw_ext = (uint8_t *)calloc(req * sizeof(float) + 16u, 1u);
   CHECK(raw_ext != NULL);
@@ -509,10 +513,31 @@ static void test_negative_contracts(void) {
   /* Create valid pool with external buffer. */
   CHECK(et_paged_kv_create_raw(&bad, raw_ext, req, &pool) == ET_PAGED_KV_OK);
 
+  /* Public outputs must not overwrite caller-owned live KV storage. */
+  uint32_t *alias_out = (uint32_t *)raw_ext;
+  et_paged_kv_config cfg_out;
+  CHECK(et_paged_kv_config_get(pool, (et_paged_kv_config *)raw_ext) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  CHECK(et_paged_kv_config_get(pool, &cfg_out) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_alloc(pool, alias_out) == ET_PAGED_KV_ERR_ALIAS);
+  et_paged_kv_stats alias_stats;
+  CHECK(et_paged_kv_stats_get(pool, &alias_stats) == ET_PAGED_KV_OK);
+  CHECK(alias_stats.active_seqs == 0u && alias_out[0] == 0u);
+
   /* OOM seqs + invalid seq_id + fork-of-freed-seq. */
   uint32_t s0 = 0u, s1 = 0u, s2 = 0u;
   CHECK(et_paged_kv_seq_alloc(pool, &s0) == ET_PAGED_KV_OK);
   CHECK(et_paged_kv_seq_alloc(pool, &s1) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_fork(pool, s0, alias_out) == ET_PAGED_KV_ERR_ALIAS);
+  CHECK(et_paged_kv_seq_len(pool, s0, alias_out) == ET_PAGED_KV_ERR_ALIAS);
+  CHECK(et_paged_kv_block_refcount(pool, 0u, alias_out) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  CHECK(et_paged_kv_seq_block_table(pool, s0, NULL, 0u, alias_out) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  uint8_t absent_hash[ET_PAGED_KV_HASH_BYTES] = {0u};
+  CHECK(et_paged_kv_prefix_cache_attach(pool, s0, absent_hash, alias_out) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  CHECK(alias_out[0] == 0u);
   CHECK(et_paged_kv_seq_alloc(pool, &s2) == ET_PAGED_KV_ERR_OOM_SEQS);
   CHECK(et_paged_kv_seq_fork(pool, s0, &s2) == ET_PAGED_KV_ERR_OOM_SEQS);
   CHECK(et_paged_kv_seq_free(pool, s1) == ET_PAGED_KV_OK);
@@ -564,6 +589,13 @@ static void test_negative_contracts(void) {
 
   /* Valid append of 1 token, then truncate beyond seq_len rejected. */
   CHECK(et_paged_kv_append_token(pool, s0, kf, vf) == ET_PAGED_KV_OK);
+  const uint32_t saved_kv_bits = alias_out[0];
+  uint32_t count_out = 99u;
+  CHECK(et_paged_kv_seq_block_table(pool, s0, alias_out, 1u, &count_out) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  CHECK(et_paged_kv_seq_block_table(pool, s0, &count_out, 1u,
+                                    &count_out) == ET_PAGED_KV_ERR_ALIAS);
+  CHECK(count_out == 99u && alias_out[0] == saved_kv_bits);
   CHECK(et_paged_kv_seq_truncate(pool, s0, 2u) ==
         ET_PAGED_KV_ERR_INVALID_RANGE);
   CHECK(et_paged_kv_seq_truncate(pool, s1, 0u) == ET_PAGED_KV_ERR_INVALID_SEQ);

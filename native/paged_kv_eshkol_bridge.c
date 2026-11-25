@@ -102,6 +102,9 @@ void et_paged_kv_aot_destroy(et_paged_kv_aot_ctx *ctx) {
 int32_t et_paged_kv_aot_reset(et_paged_kv_aot_ctx *ctx) {
   if (ctx == NULL)
     return ET_PAGED_KV_ERR_ARGUMENT;
+  const int32_t st = et_paged_kv_reset(ctx->pool);
+  if (st != ET_PAGED_KV_OK)
+    return st;
   memset(ctx->k_stage, 0, ctx->token_floats * sizeof(float));
   memset(ctx->v_stage, 0, ctx->token_floats * sizeof(float));
   memset(ctx->q_stage, 0, sizeof(ctx->q_stage));
@@ -109,7 +112,7 @@ int32_t et_paged_kv_aot_reset(et_paged_kv_aot_ctx *ctx) {
   memset(ctx->token_id_stage, 0, sizeof(ctx->token_id_stage));
   memset(ctx->hashes, 0, sizeof(ctx->hashes));
   ctx->last_num_q_heads = 0u;
-  return et_paged_kv_reset(ctx->pool);
+  return ET_PAGED_KV_OK;
 }
 
 int64_t et_paged_kv_aot_seq_alloc(et_paged_kv_aot_ctx *ctx) {

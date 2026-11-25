@@ -269,6 +269,32 @@ struct et_paged_kv_pool {
   uint64_t prefix_cache_hits;
 };
 
+/* Public outputs may not overwrite either caller-owned KV storage or the
+ * manager's allocations, including its block tables and refcounts. */
+static int output_overlaps_pool(const et_paged_kv_pool *pool, const void *out,
+                                size_t bytes) {
+  const span_entry owned[] = {
+      {pool, sizeof(*pool)},
+      {pool->kv_data, pool->pool_bytes},
+      {pool->ref_count, (size_t)pool->cfg.num_blocks * sizeof(uint32_t)},
+      {pool->block_prefix_active, (size_t)pool->cfg.num_blocks},
+      {pool->block_prefix_hashes,
+       (size_t)pool->cfg.num_blocks * ET_PAGED_KV_HASH_BYTES},
+      {pool->free_stack, (size_t)pool->cfg.num_blocks * sizeof(uint32_t)},
+      {pool->seqs, (size_t)pool->cfg.max_seqs * sizeof(paged_kv_seq)},
+      {pool->block_tables,
+       (size_t)pool->cfg.max_seqs * pool->cfg.max_blocks_per_seq *
+           sizeof(uint32_t)},
+      {pool->prefix_table,
+       (size_t)pool->prefix_table_cap * sizeof(prefix_cache_entry)},
+  };
+  for (size_t i = 0; i < sizeof(owned) / sizeof(owned[0]); ++i) {
+    if (spans_overlap(owned[i].ptr, owned[i].bytes, out, bytes))
+      return 1;
+  }
+  return 0;
+}
+
 /* ---- Prefix Hash Table Helpers (Zero Heap Allocation on Hot Path) ---- */
 
 static uint32_t hash_slot_index(const uint8_t hash[ET_PAGED_KV_HASH_BYTES],
@@ -519,6 +545,9 @@ et_paged_kv_status et_paged_kv_pool_float_count(const et_paged_kv_config *cfg,
                                                 size_t *out_count) {
   if (out_count == NULL)
     return ET_PAGED_KV_ERR_ARGUMENT;
+  if (cfg != NULL &&
+      spans_overlap(cfg, sizeof(*cfg), out_count, sizeof(*out_count)))
+    return ET_PAGED_KV_ERR_ALIAS;
   return validate_config_and_count(cfg, out_count);
 }
 
@@ -532,6 +561,8 @@ et_paged_kv_status et_paged_kv_create_raw(const et_paged_kv_config *cfg,
   const et_paged_kv_status st = validate_config_and_count(cfg, &pool_floats);
   if (st != ET_PAGED_KV_OK)
     return st;
+  if (spans_overlap(cfg, sizeof(*cfg), out_pool, sizeof(*out_pool)))
+    return ET_PAGED_KV_ERR_ALIAS;
 
   const size_t pool_bytes = pool_floats * sizeof(float);
   if (external_pool == NULL) {
@@ -643,9 +674,7 @@ et_paged_kv_status et_paged_kv_stats_get(const et_paged_kv_pool *pool,
                                          et_paged_kv_stats *out_stats) {
   if (pool == NULL || out_stats == NULL)
     return ET_PAGED_KV_ERR_ARGUMENT;
-  if (spans_overlap(pool, sizeof(*pool), out_stats, sizeof(*out_stats)) ||
-      spans_overlap(pool->kv_data, pool->pool_bytes, out_stats,
-                    sizeof(*out_stats)))
+  if (output_overlaps_pool(pool, out_stats, sizeof(*out_stats)))
     return ET_PAGED_KV_ERR_ALIAS;
 
   uint32_t shared = 0u;
@@ -671,6 +700,8 @@ et_paged_kv_status et_paged_kv_config_get(const et_paged_kv_pool *pool,
                                           et_paged_kv_config *out_cfg) {
   if (pool == NULL || out_cfg == NULL)
     return ET_PAGED_KV_ERR_ARGUMENT;
+  if (output_overlaps_pool(pool, out_cfg, sizeof(*out_cfg)))
+    return ET_PAGED_KV_ERR_ALIAS;
   *out_cfg = pool->cfg;
   return ET_PAGED_KV_OK;
 }
@@ -679,6 +710,8 @@ et_paged_kv_status et_paged_kv_seq_alloc(et_paged_kv_pool *pool,
                                          uint32_t *out_seq_id) {
   if (pool == NULL || out_seq_id == NULL)
     return ET_PAGED_KV_ERR_ARGUMENT;
+  if (output_overlaps_pool(pool, out_seq_id, sizeof(*out_seq_id)))
+    return ET_PAGED_KV_ERR_ALIAS;
   for (uint32_t s = 0u; s < pool->cfg.max_seqs; ++s) {
     if (!pool->seqs[s].alive) {
       pool->seqs[s].alive = 1u;
@@ -719,6 +752,9 @@ et_paged_kv_status et_paged_kv_seq_fork(et_paged_kv_pool *pool,
     return ET_PAGED_KV_ERR_ARGUMENT;
   if (parent_seq_id >= pool->cfg.max_seqs || !pool->seqs[parent_seq_id].alive)
     return ET_PAGED_KV_ERR_INVALID_SEQ;
+  if (output_overlaps_pool(pool, out_child_seq_id,
+                           sizeof(*out_child_seq_id)))
+    return ET_PAGED_KV_ERR_ALIAS;
 
   uint32_t child_id = pool->cfg.max_seqs;
   for (uint32_t s = 0u; s < pool->cfg.max_seqs; ++s) {
@@ -788,6 +824,8 @@ et_paged_kv_status et_paged_kv_seq_len(const et_paged_kv_pool *pool,
     return ET_PAGED_KV_ERR_ARGUMENT;
   if (seq_id >= pool->cfg.max_seqs || !pool->seqs[seq_id].alive)
     return ET_PAGED_KV_ERR_INVALID_SEQ;
+  if (output_overlaps_pool(pool, out_len, sizeof(*out_len)))
+    return ET_PAGED_KV_ERR_ALIAS;
   *out_len = pool->seqs[seq_id].seq_len;
   return ET_PAGED_KV_OK;
 }
@@ -803,6 +841,14 @@ et_paged_kv_status et_paged_kv_seq_block_table(const et_paged_kv_pool *pool,
     return ET_PAGED_KV_ERR_INVALID_SEQ;
 
   const paged_kv_seq *seq = &pool->seqs[seq_id];
+  const size_t blocks_bytes =
+      (size_t)seq->num_logical_blocks * sizeof(uint32_t);
+  if (output_overlaps_pool(pool, out_num_blocks, sizeof(*out_num_blocks)) ||
+      (out_blocks != NULL &&
+       (output_overlaps_pool(pool, out_blocks, blocks_bytes) ||
+        spans_overlap(out_blocks, blocks_bytes, out_num_blocks,
+                      sizeof(*out_num_blocks)))))
+    return ET_PAGED_KV_ERR_ALIAS;
   if (out_blocks == NULL) {
     if (capacity != 0u)
       return ET_PAGED_KV_ERR_ARGUMENT;
@@ -826,6 +872,8 @@ et_paged_kv_status et_paged_kv_block_refcount(const et_paged_kv_pool *pool,
     return ET_PAGED_KV_ERR_ARGUMENT;
   if (block_id >= pool->cfg.num_blocks)
     return ET_PAGED_KV_ERR_INVALID_RANGE;
+  if (output_overlaps_pool(pool, out_refcount, sizeof(*out_refcount)))
+    return ET_PAGED_KV_ERR_ALIAS;
   *out_refcount = pool->ref_count[block_id];
   return ET_PAGED_KV_OK;
 }
@@ -1186,6 +1234,10 @@ et_paged_kv_status et_paged_kv_prefix_cache_attach(
     return ET_PAGED_KV_ERR_ARGUMENT;
   if (seq_id >= pool->cfg.max_seqs || !pool->seqs[seq_id].alive)
     return ET_PAGED_KV_ERR_INVALID_SEQ;
+  if (output_overlaps_pool(pool, out_hit, sizeof(*out_hit)) ||
+      spans_overlap(prefix_hash, ET_PAGED_KV_HASH_BYTES, out_hit,
+                    sizeof(*out_hit)))
+    return ET_PAGED_KV_ERR_ALIAS;
 
   paged_kv_seq *seq = &pool->seqs[seq_id];
   const uint32_t bs = pool->cfg.block_size;

@@ -47,13 +47,25 @@ printf 'PAGED_KV C++17 header and linkage: PASS\n'
 "${scratch}/test_paged_kv_native"
 python3 tests/paged_kv/test_paged_kv_oracle.py "${scratch}/test_paged_kv_native"
 
-# 3. Native C11 and C++17 tests under ASan/UBSan/LSan.
+# 3. Force every create-time allocation to fail and check caller ownership.
+"${CC}" "${cflags[@]}" -O2 tests/paged_kv/test_paged_kv_alloc_failure.c \
+  "${archives[@]}" -Wl,--wrap=calloc -lm \
+  -o "${scratch}/test_paged_kv_alloc_failure"
+"${scratch}/test_paged_kv_alloc_failure"
+
+# 4. Native C11 and C++17 tests under ASan/UBSan/LSan.
 export ASAN_OPTIONS=detect_leaks=1:halt_on_error=1
 export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 "${CC}" "${cflags[@]}" "${san[@]}" tests/paged_kv/test_paged_kv_native.c \
   native/paged_kv_eshkol_bridge.c native/paged_kv.c -lm \
   -o "${scratch}/test_paged_kv_native.san"
 "${scratch}/test_paged_kv_native.san"
+
+"${CC}" "${cflags[@]}" "${san[@]}" \
+  tests/paged_kv/test_paged_kv_alloc_failure.c \
+  native/paged_kv_eshkol_bridge.c native/paged_kv.c \
+  -Wl,--wrap=calloc -lm -o "${scratch}/test_paged_kv_alloc_failure.san"
+"${scratch}/test_paged_kv_alloc_failure.san"
 
 "${CC}" "${cflags[@]}" "${san[@]}" -c native/paged_kv.c \
   -o "${scratch}/paged_kv.san.o"
@@ -65,7 +77,7 @@ export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
 "${scratch}/header_paged_kv_cpp.san"
 printf 'PAGED_KV ASan/UBSan/LSan tests: PASS\n'
 
-# 4. Compile tests/paged_kv/test_paged_kv_aot.esk TWICE from fresh dirs and
+# 5. Compile tests/paged_kv/test_paged_kv_aot.esk TWICE from fresh dirs and
 #    verify byte-identical ELFs and byte-identical stdout.
 for run in 1 2; do
   mkdir -p "${scratch}/cache-${run}" "${scratch}/out-${run}" \

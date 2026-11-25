@@ -116,12 +116,13 @@ using single-pass online softmax in IEEE-754 binary64 accumulators (`running_max
 and **zero heap allocations**. Output is staged in a bounded stack buffer and
 committed to `out` only after all heads and finite checks pass.
 
-## Measured verification results
+## Historical experiment evidence
 
-Verified inside the pinned Ubuntu 22.04 container (`eshkol-r0-debug:20260928`,
+The original `cd714a38b` experiment was verified inside the pinned Ubuntu 22.04 container (`eshkol-r0-debug:20260928`,
 Clang 21.1.8, pinned Eshkol `fe9dfd52`) via `bash scripts/test-paged-kv.sh`,
 `python3 -m unittest -v tests/q0/test_python_isolation.py`, and
-`bash scripts/check-ci-topology.sh`:
+`bash scripts/check-ci-topology.sh`. The following hashes and results describe
+that historical source tree, not this isolated extraction with ownership fixes:
 
 | Check | Measured result |
 |---|---|
@@ -142,6 +143,12 @@ Clang 21.1.8, pinned Eshkol `fe9dfd52`) via `bash scripts/test-paged-kv.sh`,
   accumulation (`num_blocks <= 4096`, `num_layers <= 64`, `num_kv_heads <= 64`,
   `num_q_heads <= 64`, `block_size <= 64`, `head_dim <= 256`, `max_seqs <= 256`,
   pool <= 256 MiB).
+- Prefix-cache hashes bind token IDs and the preceding token hash, but do not
+  bind model weights, adapters, tokenizer identity, or KV content. A pool must
+  be scoped to one KV producer identity; cross-model or cross-adapter reuse
+  requires a separate identity-bound cache contract.
+- This manager and AOT verifier are opt-in. They are not connected to default
+  model dispatch, and this gate does not measure live serving performance.
 - GPU paged-attention kernels, quantized KV caches (FP8/INT8/INT4), sliding
   window eviction, and multi-threaded concurrent mutation are outside this scope.
 - `tests/paged_kv/test_paged_kv_oracle.py` is a development-only verification
