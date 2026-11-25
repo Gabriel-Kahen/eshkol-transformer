@@ -1,13 +1,18 @@
 # DATA4 installed report
 
-The DATA4-C manifest binding passed the local installed gate from clean
-commit `a5f9b38f135fee36028ff633933850334c5a359b` in the pinned Ubuntu
-22.04/LLVM 21.1.8 container. The gate took 13:20.06 with 5,791,748 KiB peak
-RSS. All 42 source checks and all 13 installed tests passed. The source
-closure, native source closure, public strings, package exports, and
-undefined symbol manifests matched byte-for-byte. The package's defined
-symbol check passed as well. Independent review and hosted validation of
-DATA4-C are pending.
+The DATA4-C manifest binding passed the current-main local installed gate at
+`3d0c4e31`/tree `ed76cd95` in the pinned Ubuntu 22.04/LLVM 21.1.8
+container. The gate took 14:43.79 with 6,110,504 KiB peak RSS and zero swaps.
+All 42 source checks and all 13 installed tests passed. The source closure,
+native source closure, public strings, package exports, and undefined symbol
+manifests matched byte-for-byte; the package's defined-symbol check also
+passed. The retained local receipt at
+`/home/gabe/.codex/evidence/eshkol-transformer/data4-c-current-main-3d0c4e31/installed/SHA256SUMS`
+verifies, including its clean exact head/tree and package scratch artifacts.
+Independent source-and-test review found no blocking defect. Hosted validation
+and admission remain pending. The earlier clean `a5f9b38f` gate took 13:20.06
+with 5,791,748 KiB peak RSS and passed the same 42 source and 13 installed
+checks.
 
 The earlier DATA4-B command, reader, and focused diagnostic source/tests
 were independently reviewed. [Supported installed diagnostic 43935284566](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43935284566)
