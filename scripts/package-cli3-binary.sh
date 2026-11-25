@@ -51,6 +51,10 @@ cmp -s "${evidence}/gate.pass" <(printf 'CLI3-PRODUCTION-GENERATE-PASS\n') || \
   die "CLI3 production gate receipt is invalid"
 cmp -s "${cross}/gate.pass" <(printf 'CLI3-CROSS-COMMAND-CHAIN-PASS\n') || \
   die "CLI3 cross-command gate receipt is invalid"
+[[ -f "${cross}/binary-before.sha256" && ! -L "${cross}/binary-before.sha256" ]] || \
+  die "CLI3 cross-command executable receipt is unavailable"
+cmp -s "${evidence}/binary-before.sha256" "${cross}/binary-before.sha256" || \
+  die "CLI3 gates did not test the same executable"
 
 verify_toolchain
 [[ -z "$(git -C "${PROJECT_ROOT}" status --porcelain --untracked-files=all)" ]] || \

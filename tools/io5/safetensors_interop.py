@@ -296,28 +296,68 @@ def parse_json(raw: bytes, maximum: int) -> object:
         raise InteropError("invalid JSON") from error
 
 
-def encode_safetensors(raw_c1: bytes, limits: Limits = Limits()) -> bytes:
-    state = decode_c1(raw_c1, limits)
-    manifest = {"provider": state.provider, "entries": [], "aliases": state.aliases}
+def make_manifest(state: State, names: tuple[str, ...]) -> str:
+    entries = [{"name": name, "path": tensor.path, "kind": tensor.kind}
+               for name, tensor in zip(names, state.tensors, strict=True)]
+    return json_bytes({"provider": state.provider, "entries": entries,
+                       "aliases": state.aliases}).decode("ascii")
+
+
+def state_from_manifest(manifest_text: str, named: dict[str, Tensor],
+                        limits: Limits) -> tuple[State, tuple[str, ...]]:
+    manifest = parse_json(text_bytes(manifest_text, limits.metadata, "IO5 manifest"), limits.metadata)
+    require(type(manifest) is dict and set(manifest) == {"provider", "entries", "aliases"},
+            "IO5 manifest fields")
+    entries, groups = manifest["entries"], manifest["aliases"]
+    require(type(entries) is list and len(entries) == len(named) and type(groups) is list,
+            "IO5 manifest counts")
+    tensors, names = [], {}
+    for entry in entries:
+        require(type(entry) is dict and set(entry) == {"name", "path", "kind"}, "IO5 entry fields")
+        name, path = entry["name"], entry["path"]
+        require(type(name) is str and name in named and name not in names, "IO5 tensor name")
+        require(type(path) is list, "IO5 path array")
+        names[name] = None
+        tensor = named[name]
+        tensors.append(Tensor(tuple(path), entry["kind"], tensor.shape, tensor.data))
+    require(all(type(group) is list for group in groups), "IO5 alias arrays")
+    return State(manifest["provider"], tuple(tensors), tuple(tuple(g) for g in groups)), tuple(names)
+
+
+def safetensors_descriptor(tensor: Tensor, offset: int) -> dict:
+    return {"dtype": "F32", "shape": tensor.shape,
+            "data_offsets": (offset, offset + len(tensor.data))}
+
+
+def padded_safetensors_header_size(size: int) -> int:
+    return (size + 7) & -8
+
+
+def encode_safetensors_tensors(named: dict[str, Tensor], metadata: dict[str, str],
+                               limits: Limits) -> bytes:
     header = {}
     offset = 0
-    for index, tensor in enumerate(state.tensors):
-        name = f"t{index:06d}"
-        manifest["entries"].append({"name": name, "path": tensor.path, "kind": tensor.kind})
-        header[name] = {"dtype": "F32", "shape": tensor.shape,
-                        "data_offsets": (offset, offset + len(tensor.data))}
+    for name, tensor in named.items():
+        header[name] = safetensors_descriptor(tensor, offset)
         offset += len(tensor.data)
-    header["__metadata__"] = {VERSION_KEY: "1.0", MANIFEST_KEY: json_bytes(manifest).decode("ascii"),
-                              DIGEST_KEY: hashlib.sha256(raw_c1).hexdigest()}
+    if metadata:
+        header["__metadata__"] = metadata
     encoded = json_bytes(header)
-    encoded += b" " * (-len(encoded) % 8)
+    encoded += b" " * (padded_safetensors_header_size(len(encoded)) - len(encoded))
     require(len(encoded) <= limits.metadata, "safetensors header limit")
     require(8 + len(encoded) + offset <= limits.file, "safetensors file limit")
-    return struct.pack("<Q", len(encoded)) + encoded + b"".join(t.data for t in state.tensors)
+    return struct.pack("<Q", len(encoded)) + encoded + b"".join(t.data for t in named.values())
 
 
-def decode_safetensors(raw: bytes, limits: Limits = Limits(), *,
-                       plain_provider: str | None = None) -> bytes:
+def encode_safetensors(raw_c1: bytes, limits: Limits = Limits()) -> bytes:
+    state = decode_c1(raw_c1, limits)
+    names = tuple(f"t{index:06d}" for index in range(len(state.tensors)))
+    metadata = {VERSION_KEY: "1.0", MANIFEST_KEY: make_manifest(state, names),
+                DIGEST_KEY: hashlib.sha256(raw_c1).hexdigest()}
+    return encode_safetensors_tensors(dict(zip(names, state.tensors)), metadata, limits)
+
+
+def decode_safetensors_tensors(raw: bytes, limits: Limits) -> tuple[dict[str, Tensor], dict[str, str]]:
     require(8 <= len(raw) <= limits.file, "safetensors file size limit")
     header_len = struct.unpack_from("<Q", raw)[0]
     require(2 <= header_len <= limits.metadata and header_len <= len(raw) - 8,
@@ -353,42 +393,30 @@ def decode_safetensors(raw: bytes, limits: Limits = Limits(), *,
         require(begin == cursor, "noncontiguous tensor offsets")
         cursor = end
     require(cursor == len(raw) - start, "unindexed safetensors data")
+    named = {name: Tensor((name,), "parameter", shape, raw[start + begin:start + end])
+             for name, (shape, begin, end) in descriptors.items()}
+    return named, metadata
+
+
+def decode_safetensors(raw: bytes, limits: Limits = Limits(), *,
+                       plain_provider: str | None = None) -> bytes:
+    named, metadata = decode_safetensors_tensors(raw, limits)
     reserved = {key for key in metadata if key.startswith("eshkol.io5.")}
     if reserved:
         require(plain_provider is None, "plain import cannot override IO5 metadata")
         require(reserved == RESERVED and metadata[VERSION_KEY] == "1.0", "unsupported IO5 metadata version/fields")
-        manifest = parse_json(text_bytes(metadata[MANIFEST_KEY], limits.metadata, "IO5 manifest"),
-                              limits.metadata)
-        require(type(manifest) is dict and set(manifest) == {"provider", "entries", "aliases"},
-                "IO5 manifest fields")
-        entries, groups = manifest["entries"], manifest["aliases"]
-        require(type(entries) is list and len(entries) == len(header) and type(groups) is list,
-                "IO5 manifest counts")
-        tensors, names = [], set()
-        for entry in entries:
-            require(type(entry) is dict and set(entry) == {"name", "path", "kind"}, "IO5 entry fields")
-            name, path = entry["name"], entry["path"]
-            require(type(name) is str and name in descriptors and name not in names, "IO5 tensor name")
-            require(type(path) is list, "IO5 path array")
-            names.add(name)
-            shape, begin, end = descriptors[name]
-            tensors.append(Tensor(tuple(path), entry["kind"], shape, raw[start + begin:start + end]))
-        require(all(type(group) is list for group in groups), "IO5 alias arrays")
-        state = State(manifest["provider"], tuple(tensors), tuple(tuple(g) for g in groups))
+        state, _ = state_from_manifest(metadata[MANIFEST_KEY], named, limits)
         result = encode_c1(state, limits)
         require(metadata[DIGEST_KEY] == hashlib.sha256(result).hexdigest(), "IO5 C1 checksum")
         return result
     require(plain_provider is not None, "plain safetensors requires explicit --plain-provider")
     text_bytes(plain_provider, 127, "provider")
-    tensors = []
-    for name in sorted(descriptors, key=lambda value: value.encode("utf-8")):
-        shape, begin, end = descriptors[name]
-        tensors.append(Tensor((name,), "parameter", shape, raw[start + begin:start + end]))
-    return encode_c1(State(plain_provider, tuple(tensors)), limits)
+    tensors = tuple(named[name] for name in sorted(named, key=lambda value: value.encode("utf-8")))
+    return encode_c1(State(plain_provider, tensors), limits)
 
 
-def read_file(path: Path, limits: Limits) -> bytes:
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+def read_file(path: str | Path, limits: Limits, *, directory: int | None = None) -> bytes:
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
     with os.fdopen(descriptor, "rb") as source:
         info = os.fstat(source.fileno())
         require(stat.S_ISREG(info.st_mode) and info.st_size <= limits.file, "input regular-file/size policy")

@@ -2,18 +2,43 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-# Run only when the production CLI3 root is ready for a fresh compiled gate.
-[[ $# == 1 ]] || die "usage: $0 DISK_BACKED_EVIDENCE_DIR"
-verify_toolchain
-for command in cmp python3 realpath; do require_command "${command}"; done
+# Standalone runs build fresh. The combined CI suite passes its completed sibling gate.
+[[ $# == 1 || $# == 2 ]] || \
+  die "usage: $0 DISK_BACKED_EVIDENCE_DIR [SAME_RUN_PRODUCTION_EVIDENCE]"
+for command in cmp python3 realpath sha256sum; do require_command "${command}"; done
 evidence="$(realpath -m -- "$1")"
+if [[ $# == 2 ]]; then
+  production="$(realpath -e -- "$2")"
+  [[ -d "$2" && ! -L "$2" && "${production}" == "${evidence%/*}/production-generate" ]] || \
+    die "CLI3 reuse requires sibling production evidence"
+  cmp -s "${production}/gate.pass" <(printf 'CLI3-PRODUCTION-GENERATE-PASS\n') || \
+    die "CLI3 reuse requires a passed production gate"
+  mapfile -t recorded <"${production}/scratch-path.txt"
+  [[ ${#recorded[@]} == 1 && "${recorded[0]}" == "${production}/.build."* ]] || \
+    die "CLI3 production build path is not the recorded evidence child"
+  build="$(realpath -e -- "${recorded[0]}")"
+  [[ "${build}" == "${recorded[0]}" && "${build%/*}" == "${production}" ]] || \
+    die "CLI3 production build path changed"
+  binary="${build}/eshkol-transformer"
+  [[ -f "${binary}" && -x "${binary}" && ! -L "${binary}" ]] || \
+    die "CLI3 tested production executable is unavailable"
+  mapfile -t receipt <"${production}/binary-before.sha256"
+  [[ ${#receipt[@]} == 1 && "${receipt[0]}" == "$(sha256sum -- "${binary}")" ]] || \
+    die "CLI3 production executable differs from its pre-test receipt"
+fi
+verify_toolchain
 mkdir -p -- "${evidence}"
 scratch="$(mktemp -d "${evidence}/.cli3-cross-command.XXXXXX")"
 printf '%s\n' "${scratch}" >"${evidence}/cross-command-scratch-path.txt"
-TMPDIR="${evidence}" CLI3_COMPILER_TIMEOUT_SECONDS=1200 \
-  /usr/bin/bash "${PROJECT_ROOT}/scripts/build-cli3.sh" "${scratch}"
-binary="${scratch}/eshkol-transformer"
-[[ -x "${binary}" ]] || die "production CLI3 executable was not built"
+if [[ $# == 1 ]]; then
+  TMPDIR="${evidence}" CLI3_COMPILER_TIMEOUT_SECONDS=1200 \
+    /usr/bin/bash "${PROJECT_ROOT}/scripts/build-cli3.sh" "${scratch}"
+  binary="${scratch}/eshkol-transformer"
+  [[ -x "${binary}" ]] || die "production CLI3 executable was not built"
+  receipt=("$(sha256sum -- "${binary}")")
+fi
+printf '%s\n' "${receipt[0]}" >"${evidence}/binary-before.sha256"
+sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
 
 run_ok() {
   local name=$1
@@ -235,5 +260,6 @@ assert generation == {
     'prompt_hex': '41', 'sampling': 'greedy', 'seed': 1729,
 }
 PY
+sha256sum -c "${evidence}/binary-before.sha256" >/dev/null
 printf 'CLI3-CROSS-COMMAND-CHAIN-PASS\n' >"${evidence}/gate.pass"
 printf 'CLI3-CROSS-COMMAND-CHAIN-PASS\n'

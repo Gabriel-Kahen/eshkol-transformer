@@ -78,8 +78,10 @@ class ChangedPathSelectorTests(unittest.TestCase):
 
     def test_io5_tools_tests_locks_and_gate_require_full_coverage(self) -> None:
         for relative in ("tools/io5/gguf_interop.py", "tools/io5/safetensors_interop.py",
+                         "tools/io5/model_mapping.py", "tests/io5/test_model_mapping.py",
                          "tests/io5/test_gguf_interop.py", "tests/io5/requirements-gguf-reference.lock",
-                         "tests/io5/requirements-reference.lock", "scripts/test-io5-gguf.sh",
+                         "tests/io5/requirements-reference.lock", "scripts/test-io5.sh",
+                         "scripts/test-io5-gguf.sh",
                          "scripts/prepare-io5-ggml-native.sh", "tests/io5/test_gguf_native.py",
                          ".github/workflows/full-coverage.yml"):
             with self.subTest(path=relative):

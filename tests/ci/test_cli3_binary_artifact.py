@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "scripts/package-cli3-binary.sh"
+CROSS_COMMAND = ROOT / "scripts/test-cli3-cross-command-chain.sh"
 
 
 class CLI3BinaryArtifactTests(unittest.TestCase):
@@ -101,6 +102,57 @@ class CLI3BinaryArtifactTests(unittest.TestCase):
             result = self.run_rejected(evidence, root / "artifact")
             self.assertIn("differs from its pre-test receipt", result.stderr)
             self.assertFalse((root / "artifact").exists())
+
+    def test_rejects_cross_command_receipt_for_another_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "production-generate"
+            scratch = evidence / ".build.fake"
+            scratch.mkdir(parents=True)
+            binary = scratch / "eshkol-transformer"
+            binary.write_bytes(b"#!/bin/sh\nexit 0\n")
+            binary.chmod(0o755)
+            (scratch / "config.json").write_text("{}\n")
+            (scratch / "byte.t1").write_bytes(b"fixture")
+            (evidence / "tokenizer.json").write_text("{}\n")
+            (evidence / "scratch-path.txt").write_text(str(scratch) + "\n")
+            (evidence / "binary-before.sha256").write_text(
+                hashlib.sha256(binary.read_bytes()).hexdigest()
+                + "  " + str(binary) + "\n")
+            (evidence / "gate.pass").write_text("CLI3-PRODUCTION-GENERATE-PASS\n")
+            cross = root / "cross-command-chain"
+            cross.mkdir()
+            (cross / "gate.pass").write_text("CLI3-CROSS-COMMAND-CHAIN-PASS\n")
+            result = self.run_rejected(evidence, root / "artifact")
+            self.assertIn("cross-command executable receipt is unavailable", result.stderr)
+            (cross / "binary-before.sha256").write_text(
+                "0" * 64 + "  " + str(binary) + "\n")
+            result = self.run_rejected(evidence, root / "artifact")
+            self.assertIn("gates did not test the same executable", result.stderr)
+            self.assertFalse((root / "artifact").exists())
+
+    def test_cross_command_rejects_incomplete_or_changed_production_build(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            production = root / "production-generate"
+            build = production / ".build.fixture"
+            build.mkdir(parents=True)
+            cross = root / "cross-command-chain"
+            binary = build / "eshkol-transformer"
+            binary.write_bytes(b"#!/bin/sh\nexit 0\n")
+            binary.chmod(0o755)
+            (production / "scratch-path.txt").write_text(str(build) + "\n")
+            (production / "binary-before.sha256").write_text(
+                "0" * 64 + "  " + str(binary) + "\n")
+            command = ["/usr/bin/bash", str(CROSS_COMMAND), str(cross), str(production)]
+
+            for expected in ("requires a passed production gate", "differs from its pre-test receipt"):
+                with self.subTest(expected=expected):
+                    result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(expected, result.stderr)
+                    self.assertFalse((cross / "gate.pass").exists())
+                (production / "gate.pass").write_text("CLI3-PRODUCTION-GENERATE-PASS\n")
 
 
 if __name__ == "__main__":

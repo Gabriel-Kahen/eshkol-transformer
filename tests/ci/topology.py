@@ -337,6 +337,9 @@ def check(root, overrides=None):
     targets = recipes(make)
     assert re.search(r"^test-io5-gguf:\s*$", make, re.M)
     assert targets["test-io5-gguf"] == ["/usr/bin/bash scripts/test-io5-gguf.sh"]
+    assert "bash scripts/test-io5.sh" in read("scripts/test-io5-gguf.sh")
+    assert '"${IO5_REFERENCE_PYTHON:-python3}" -m unittest discover -s tests/io5 -p \'test_*.py\' -v' in read("scripts/test-io5.sh")
+    assert "class ModelMappingTests(unittest.TestCase):" in read("tests/io5/test_model_mapping.py")
     assert targets["test-ci-dataset-resources-after-build"] == [
         "/usr/bin/bash scripts/test-d2.sh --phase resources"]
     assert targets["test-ci-m3-after-build"] == [
@@ -374,7 +377,7 @@ def check(root, overrides=None):
         '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-production-generate.sh"',
         '"${evidence}/production-generate"',
         '/usr/bin/bash "${PROJECT_ROOT}/scripts/test-cli3-cross-command-chain.sh"',
-        '"${evidence}/cross-command-chain"',
+        '"${evidence}/cross-command-chain" "${evidence}/production-generate"',
         'if [[ -n "${CLI3_BINARY_ARTIFACT_ROOT:-}" ]]; then',
         '/usr/bin/bash "${PROJECT_ROOT}/scripts/package-cli3-binary.sh"',
         '"${evidence}/production-generate" "${CLI3_BINARY_ARTIFACT_ROOT}"',
