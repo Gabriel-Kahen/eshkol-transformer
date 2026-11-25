@@ -1,0 +1,228 @@
+;;; Compiled Eshkol AOT DATA4 corpus quality-filtering, exact + MinHash/n-gram
+;;; near-deduplication, and canonical SHA-256 provenance-report verification.
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+
+(extern ptr d4-create :real et_data4_aot_session_create)
+(extern void d4-destroy ptr :real et_data4_aot_session_destroy)
+(extern i32 d4-set-limits ptr i64 i64 i64 i64 :real et_data4_aot_set_limits)
+(extern i32 d4-set-quality ptr f64 f64 f64 f64 i32
+        :real et_data4_aot_set_quality)
+(extern i32 d4-set-near-dedup ptr i32 i32 i32 i32 i64 f64
+        :real et_data4_aot_set_near_dedup)
+(extern i32 d4-add-doc ptr ptr i64 ptr i64 :real et_data4_aot_add_doc)
+(extern i32 d4-run ptr :real et_data4_aot_run)
+(extern i64 d4-get-stat ptr i32 :real et_data4_aot_get_stat)
+(extern i32 d4-get-disp ptr i64 :real et_data4_aot_get_doc_disposition)
+(extern i64 d4-get-matched ptr i64 :real et_data4_aot_get_doc_matched_ordinal)
+(extern i64 d4-get-jnum ptr i64 :real et_data4_aot_get_doc_jaccard_num)
+(extern i64 d4-get-jden ptr i64 :real et_data4_aot_get_doc_jaccard_den)
+(extern i32 d4-copy-report ptr ptr i64 :real et_data4_aot_copy_report)
+(extern i32 d4-copy-sha256 ptr ptr i64 :real et_data4_aot_copy_report_sha256)
+(extern i32 d4-verify-report ptr i64 :real et_data4_aot_verify_report)
+(extern i32 d4-store-u8 ptr i64 i64 i64 :real et_data4_aot_buf_store_u8)
+(extern i64 d4-load-u8 ptr i64 i64 :real et_data4_aot_buf_load_u8)
+
+(define-syntax ffi-pointer
+  (syntax-rules ()
+    ((_ p) (ptr-add p 0))))
+
+(define disp-kept 0)
+(define disp-rejected-utf8 1)
+(define disp-rejected-length 2)
+(define disp-rejected-quality 3)
+(define disp-rejected-repetition 4)
+(define disp-duplicate-exact 5)
+(define disp-duplicate-near 6)
+
+(define stat-input-docs 0)
+(define stat-kept-docs 1)
+(define stat-rejected-utf8 2)
+(define stat-rejected-length 3)
+(define stat-rejected-quality 4)
+(define stat-rejected-repetition 5)
+(define stat-duplicate-exact 6)
+(define stat-duplicate-near 7)
+(define stat-input-bytes 8)
+(define stat-kept-bytes 9)
+(define stat-report-bytes 10)
+
+(define err-checksum -8)
+
+(define (require-check label ok)
+  (unless ok
+    (display "FAIL: ") (display label) (newline)
+    (exit 1)))
+
+(define (expect-eq label expected actual)
+  (unless (= actual expected)
+    (display "FAIL: ") (display label)
+    (display " expected ") (display expected)
+    (display " got ") (display actual) (newline)
+    (exit 1)))
+
+(define (checked-allocate bytes)
+  (let ((p (allocate bytes)))
+    (require-check "allocation failed" (not (= (ptr->usize p) 0)))
+    p))
+
+(define (fill-string-bytes! buf cap str)
+  (let ((n (string-length str)))
+    (do ((i 0 (+ i 1)))
+        ((= i n))
+      (expect-eq "store string byte" 0
+                 (d4-store-u8 (ffi-pointer buf) cap i
+                              (char->integer (string-ref str i)))))))
+
+(define (add-ascii-doc! session id-str body-str)
+  (let* ((id-len (string-length id-str))
+         (body-len (string-length body-str))
+         (id-buf (checked-allocate id-len))
+         (body-buf (checked-allocate (if (= body-len 0) 1 body-len))))
+    (fill-string-bytes! id-buf id-len id-str)
+    (when (> body-len 0)
+      (fill-string-bytes! body-buf body-len body-str))
+    (expect-eq id-str 0
+               (d4-add-doc (ffi-pointer session)
+                           (ffi-pointer id-buf) id-len
+                           (ffi-pointer body-buf) body-len))
+    (release id-buf)
+    (release body-buf)))
+
+(define (add-invalid-utf8-doc! session id-str)
+  (let* ((id-len (string-length id-str))
+         (id-buf (checked-allocate id-len))
+         (bytes (vector 98 97 100 32 117 116 102 56 32
+                        237 160 128 32
+                        115 117 114 114 111 103 97 116 101 32 116 101 120 116))
+         (n 27)
+         (body-buf (checked-allocate n)))
+    (fill-string-bytes! id-buf id-len id-str)
+    (do ((i 0 (+ i 1)))
+        ((= i n))
+      (expect-eq "store bad utf8 byte" 0
+                 (d4-store-u8 (ffi-pointer body-buf) n i (vector-ref bytes i))))
+    (expect-eq id-str 0
+               (d4-add-doc (ffi-pointer session)
+                           (ffi-pointer id-buf) id-len
+                           (ffi-pointer body-buf) n))
+    (release id-buf)
+    (release body-buf)))
+
+(define (hex-nibble-char v)
+  (cond ((= v 0) "0") ((= v 1) "1") ((= v 2) "2") ((= v 3) "3")
+        ((= v 4) "4") ((= v 5) "5") ((= v 6) "6") ((= v 7) "7")
+        ((= v 8) "8") ((= v 9) "9") ((= v 10) "a") ((= v 11) "b")
+        ((= v 12) "c") ((= v 13) "d") ((= v 14) "e") (else "f")))
+
+(define (display-sha256-hex buf)
+  (do ((i 0 (+ i 1)))
+      ((= i 32))
+    (let* ((b (d4-load-u8 (ffi-pointer buf) 32 i))
+           (hi (quotient b 16))
+           (lo (remainder b 16)))
+      (display (hex-nibble-char hi))
+      (display (hex-nibble-char lo)))))
+
+;; Create session and configure deterministic DATA4 pipeline.
+(define session (d4-create))
+(require-check "session create" (not (= (ptr->usize session) 0)))
+(expect-eq "set limits" 0
+           (d4-set-limits (ffi-pointer session) 24 512 20 512))
+(expect-eq "set quality" 0
+           (d4-set-quality (ffi-pointer session) 0.90 0.50 0.25 0.35 5))
+(expect-eq "set near dedup" 0
+           (d4-set-near-dedup (ffi-pointer session) 1 5 64 16 4918307507731842373 0.75))
+
+;; Multi-source corpus: clean, invalid UTF-8, short outlier, long outlier,
+;; low-quality symbols, repetitive spam, exact duplicate, near duplicate,
+;; and second distinct clean document.
+(define clean-doc-0
+  "Eshkol transformer training requires deterministic corpus filtering and exact provenance verification across shards.")
+(define near-doc-7
+  "Eshkol transformer training requires deterministic corpus filtering and exact provenance verification across shards!")
+(define spam-doc-5
+  "abcdeabcdeabcdeabcdeabcdeabcdeabcdeabcdeabcdeabcdeabcdeabcde1234")
+(define long-doc-3
+  "Long outlier text repeating distinct numbered phrases for bounds checking: alpha01 beta02 gamma03 delta04 epsilon05 zeta06 eta07 theta08 iota09 kappa10 lambda11 mu12 nu13 xi14 omicron15 pi16 rho17 sigma18 tau19 upsilon20 phi21 chi22 psi23 omega24 mercury25 venus26 earth27 mars28 jupiter29 saturn30 uranus31 neptune32 pluto33 ceres34 eris35 haumea36 makemake37 sedna38 orcus39 quaoar40 gonggong41 triton42 titan43 europa44 ganymede45 callisto46 enceladus47 mimas48 iapetus49 rhea50 dione51 tethys52 phobos53 deimos54 charon55 hydra56 nix57.")
+(define distinct-doc-8
+  "Completely distinct technical note on memory-safe C11 ring buffers, checksummed manifests, and reproducible LLVM builds.")
+
+(add-ascii-doc! session "src.clean.0" clean-doc-0)
+(add-invalid-utf8-doc! session "src.bad_utf8.1")
+(add-ascii-doc! session "src.short.2" "too short doc")
+(add-ascii-doc! session "src.long.3" long-doc-3)
+(add-ascii-doc! session "src.symbols.4" "!!!@@@###$$$%%%^^^&&&***((()))___+++===---///|||~~~")
+(add-ascii-doc! session "src.spam.5" spam-doc-5)
+(add-ascii-doc! session "src.exact_dup.6" clean-doc-0)
+(add-ascii-doc! session "src.near_dup.7" near-doc-7)
+(add-ascii-doc! session "src.distinct.8" distinct-doc-8)
+
+(expect-eq "pipeline run" 0 (d4-run (ffi-pointer session)))
+
+;; Verify aggregate statistics.
+(expect-eq "input docs" 9 (d4-get-stat (ffi-pointer session) stat-input-docs))
+(expect-eq "kept docs" 2 (d4-get-stat (ffi-pointer session) stat-kept-docs))
+(expect-eq "rejected utf8" 1 (d4-get-stat (ffi-pointer session) stat-rejected-utf8))
+(expect-eq "rejected length" 2 (d4-get-stat (ffi-pointer session) stat-rejected-length))
+(expect-eq "rejected quality" 1 (d4-get-stat (ffi-pointer session) stat-rejected-quality))
+(expect-eq "rejected repetition" 1 (d4-get-stat (ffi-pointer session) stat-rejected-repetition))
+(expect-eq "duplicate exact" 1 (d4-get-stat (ffi-pointer session) stat-duplicate-exact))
+(expect-eq "duplicate near" 1 (d4-get-stat (ffi-pointer session) stat-duplicate-near))
+
+;; Verify per-document dispositions and canonical match provenance.
+(expect-eq "doc0 kept" disp-kept (d4-get-disp (ffi-pointer session) 0))
+(expect-eq "doc1 utf8" disp-rejected-utf8 (d4-get-disp (ffi-pointer session) 1))
+(expect-eq "doc2 short" disp-rejected-length (d4-get-disp (ffi-pointer session) 2))
+(expect-eq "doc3 long" disp-rejected-length (d4-get-disp (ffi-pointer session) 3))
+(expect-eq "doc4 qual" disp-rejected-quality (d4-get-disp (ffi-pointer session) 4))
+(expect-eq "doc5 rep" disp-rejected-repetition (d4-get-disp (ffi-pointer session) 5))
+(expect-eq "doc6 exact" disp-duplicate-exact (d4-get-disp (ffi-pointer session) 6))
+(expect-eq "doc6 match ord" 0 (d4-get-matched (ffi-pointer session) 6))
+(expect-eq "doc7 near" disp-duplicate-near (d4-get-disp (ffi-pointer session) 7))
+(expect-eq "doc7 match ord" 0 (d4-get-matched (ffi-pointer session) 7))
+(expect-eq "doc8 kept" disp-kept (d4-get-disp (ffi-pointer session) 8))
+
+(define jnum (d4-get-jnum (ffi-pointer session) 7))
+(define jden (d4-get-jden (ffi-pointer session) 7))
+(require-check "doc7 jaccard bounds" (and (> jnum 0) (> jden jnum)))
+
+;; Copy canonical TSV provenance report and SHA-256 digest, verify valid report,
+;; then flip a byte and confirm tamper rejection (ET_DATA4_ERR_CHECKSUM == -8).
+(define report-len (d4-get-stat (ffi-pointer session) stat-report-bytes))
+(require-check "report non-empty" (> report-len 100))
+(define report-buf (checked-allocate report-len))
+(define sha-buf (checked-allocate 32))
+(expect-eq "copy report" 0
+           (d4-copy-report (ffi-pointer session) (ffi-pointer report-buf) report-len))
+(expect-eq "copy sha256" 0
+           (d4-copy-sha256 (ffi-pointer session) (ffi-pointer sha-buf) 32))
+(expect-eq "verify report ok" 0
+           (d4-verify-report (ffi-pointer report-buf) report-len))
+
+;; Flip byte 10 inside header format/payload and assert ET_DATA4_ERR_CHECKSUM (-8).
+(define orig-b (d4-load-u8 (ffi-pointer report-buf) report-len (- report-len 3)))
+(define flipped-b (if (= orig-b 97) 98 97))
+(expect-eq "tamper byte" 0
+           (d4-store-u8 (ffi-pointer report-buf) report-len (- report-len 3) flipped-b))
+(expect-eq "verify tampered checksum" err-checksum
+           (d4-verify-report (ffi-pointer report-buf) report-len))
+
+(display "DATA4 AOT CORPUS input=") (display (d4-get-stat (ffi-pointer session) stat-input-docs))
+(display " kept=") (display (d4-get-stat (ffi-pointer session) stat-kept-docs))
+(display " utf8=") (display (d4-get-stat (ffi-pointer session) stat-rejected-utf8))
+(display " length=") (display (d4-get-stat (ffi-pointer session) stat-rejected-length))
+(display " quality=") (display (d4-get-stat (ffi-pointer session) stat-rejected-quality))
+(display " repetition=") (display (d4-get-stat (ffi-pointer session) stat-rejected-repetition))
+(display " exact=") (display (d4-get-stat (ffi-pointer session) stat-duplicate-exact))
+(display " near=") (display (d4-get-stat (ffi-pointer session) stat-duplicate-near))
+(display " jaccard=") (display jnum) (display "/") (display jden)
+(display " PASS") (newline)
+
+(display "DATA4 AOT REPORT bytes=") (display report-len)
+(display " sha256=") (display-sha256-hex sha-buf)
+(display " tamper=REJECTED PASS") (newline)
+
+(release sha-buf)
+(release report-buf)
+(d4-destroy (ffi-pointer session))
