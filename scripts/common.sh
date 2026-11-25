@@ -23,6 +23,13 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
+restore_mtime_if_same_contents() {
+  local before="$1" after="$2"
+  if [[ -f "${before}" && -f "${after}" ]] && cmp -s -- "${before}" "${after}"; then
+    touch -r "${before}" "${after}"
+  fi
+}
+
 resolve_executable_into() {
   local output_name="$1" configured="$2" description="$3" resolved
   [[ "${output_name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || \

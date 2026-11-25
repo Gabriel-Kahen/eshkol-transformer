@@ -573,6 +573,22 @@ metrics implementation.
 | Q0 | Test harness and frozen reference-oracle format | — | [Deterministic harness, frozen fixture, and passing compiled parity](Q0_VALIDATION.md) | complete |
 | B0 | Benchmark and memory-measurement harness | F0 | [Versioned/checksummed smoke and accepted-A2 CPU-f32 attention benchmark contracts](BENCHMARK_FORMAT.md). The attention foundation covers all ten admitted shapes in forward and backward, with separate dispatch timing and fresh-process RSS; independent source review and [PR #219](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/219) integration are complete. [Hosted PR CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43743833642) passed 24/24 checks on the exact merge tree; [merged-main CI](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43922467842) succeeded by exact-tree reuse, with the full suites skipped. Focused merged-main `make test-b0` passed 50/50 tests, including 20 real attention cases. Full-count latency/RSS measurements remain CachyOS compatibility-only; they establish no supported-lane performance, PA4 speedup, memory improvement, or admission of draft #215 | complete (smoke and A2 benchmark foundation) |
 
+Local F0 warm-bootstrap follow-up: after the required full pinned CMake configure,
+bootstrap restores `generated/eshkol/build_config.h`'s prior mtime only when its
+final bytes match the pre-configure file. In writable same-path copies of the
+verified pinned tree on Ubuntu 22.04/Clang 21, a warm `make toolchain` took
+0.57 seconds with no Ninja work; changing the cached host C++ driver changed
+the header and rebuilt six edges in 31.34 seconds. A fresh changed-input replay
+using final source commit `0d8bd51a` rebuilt the same six edges in 32.17 seconds
+and passed the unchanged provenance gate; its checked receipt is
+`/home/gabe/.codex/evidence/eshkol-f0-integration-preflight-20261125/SHA256SUMS`.
+The CI cache key hashes both changed bootstrap scripts, so the first candidate
+job without an exact matching cache builds cold; later jobs can restore a cache
+once a successful job saves it. Concurrent jobs may also miss before that save.
+The pinned Eshkol source and workflow predecessor pins match current main.
+These local results do not explain the hosted 154-target cache-hit rebuild or
+establish hosted wall-time savings.
+
 The B0 supported attention report-v2 extension and explicit manual CI mode passed
 independent source/test/report review. Exact-head supported diagnostic run
 `43930911395` passed 60 forward/backward measurements across ten shapes, and
