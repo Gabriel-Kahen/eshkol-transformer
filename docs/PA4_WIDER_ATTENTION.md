@@ -215,6 +215,14 @@ archive SHA-256
 re-verified the full conformance, sanitizer, and 864-sample benchmark suite in
 `eshkol-r0-debug:20260928`.
 
+The subsequent malformed ABI-prefix and borrowed-buffer closure passed
+36,016 paired comparisons and 1,404 central gradient checks in both regular
+and ASan/UBSan/LSan builds with Clang 21.1.8, plus the archive symbol audit
+and C++17 linkage check. The timing table above predates that closure. A
+current-source benchmark was not completed because the shared measurement
+lock remained occupied; these timings are not a performance claim for the
+focused integration candidate.
+
 ### Reproduce
 
 From the worktree root, bind-mount the worktree and shared Git directory.
