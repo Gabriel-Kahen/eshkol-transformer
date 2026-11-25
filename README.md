@@ -15,6 +15,20 @@ one byte using greedy or categorical sampling. The
 tested build and reproduction steps. The [roadmap](docs/ROADMAP.md) tracks broader
 model, evaluation, and resume support.
 
+The standalone [beam search](docs/BEAM_SEARCH_DECODING.md) and
+[constrained decoding](docs/CONSTRAINED_DECODING_FSA.md) engines are opt-in
+source-tree components. On the pinned toolchain, run their gates in this order:
+
+```bash
+bash scripts/check-ci-topology.sh
+python3 -m unittest tests.q0.test_python_isolation
+bash scripts/test-beam-search.sh
+bash scripts/test-constrained-decode.sh
+```
+
+These gates exercise synthetic logits and grammar inputs. Model dispatch and
+installed CLI generation are separate integration gates.
+
 ## Build and test
 
 The initial supported lane is Ubuntu 22.04 x86-64 with Clang/LLVM 21.1.8. The
