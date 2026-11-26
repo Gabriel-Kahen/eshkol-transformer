@@ -1,7 +1,7 @@
 name: P1 pair-memory diagnostic (non-admission)
 on:
   pull_request:
-    branches: [codex/p1-pair-memory-hosted-diagnostic-20261126]
+    branches: [codex/p1-pair-memory-timing-receipt-20261126]
 permissions:
   contents: read
 concurrency:
@@ -57,7 +57,7 @@ jobs:
           root="$RUNNER_TEMP/p1-pair-memory-diagnostic"
           test ! -e "$root" && test ! -L "$root"
           mkdir -m 0700 "$root"
-          test "$GITHUB_BASE_REF" = codex/p1-pair-memory-hosted-diagnostic-20261126
+          test "$GITHUB_BASE_REF" = codex/p1-pair-memory-timing-receipt-20261126
           [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = 15f2522946b8ee13b9f166967a99f2665263d4d0
           test "$(git rev-parse 'HEAD^{tree}')" = 672e9da3d40061278e94ca0aa1954e98936afa7e
@@ -126,7 +126,81 @@ jobs:
           import shutil
           import sys
 
+          def validate_timing(timing, source, workspace, outcome):
+              if not timing.is_file() or timing.is_symlink():
+                  raise ValueError("missing or linked compiler timing log")
+              data = timing.read_bytes()
+              content = data.decode("ascii")
+              if not content.endswith("\n"):
+                  raise ValueError("empty or truncated compiler timing log")
+              negative_cases = {}
+              for name in ("transformer-error-make", "transformer-error-raise",
+                           "transformer-error-wrap-foreign", "e1-internal-dispatch",
+                           "et-e1b-private-raise"):
+                  negative_cases[f"cache-public-surface-{name}"] = (
+                      False, f" -e (begin (require transformer.module) {name})")
+              fixed_positive = set()
+              for run in (1, 2):
+                  public = ("example", "public-stubs", "public-reverse")
+                  fixed_positive.update(f"cache-object-{name}-{run}.o" for name in ("module", *public))
+                  fixed_positive.update(f"cache-aot-{name}-{run}" for name in public)
+                  fixed_positive.add(f"cache-guessed-object-{run}")
+                  for kind in ("provider", "module", "handle", "state_entry", "state_dict"):
+                      stem = f"negative_public_{kind}_internal"
+                      fixture = workspace / "tests/p1" / f"{stem}.esk"
+                      for phase, suffix in (("source", f" -r {fixture}"),
+                                            ("object", f" {fixture} -o {source}/{stem}.o"),
+                                            ("aot", f" {fixture} -o {source}/{stem}")):
+                          negative_cases[f"cache-{stem}-{phase}-{run}"] = (phase == "object", suffix)
+                  fixture = workspace / "tests/p1/negative_guessed_private_native.esk"
+                  negative_cases[f"cache-guessed-aot-{run}"] = (False, f" {fixture} -o {source}/guessed-private")
+                  for stem in ("negative_wrong_arity", "negative_fixture_not_public",
+                               "negative_provider_callback_arity"):
+                      fixture = workspace / "tests/p1" / f"{stem}.esk"
+                      negative_cases[f"cache-{stem}-{run}"] = (True, f" {fixture} -o {source}/{stem}.o")
+
+              invocation = ("timeout --foreground --signal=TERM --kill-after=5s 1200s "
+                            "env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR "
+                            "-u ESHKOL_AOT_MODULE_CACHE_DIR ESHKOL_JIT_CACHE=0 "
+                            f"XDG_CACHE_HOME={source}/")
+              runner = workspace / ".deps/eshkol-build/eshkol-run"
+              record = re.compile(r"elapsed_s=[0-9]+\.[0-9]{2} max_rss_kib=[0-9]+ exit=([01]) command="
+                                  + re.escape(invocation) + r"(cache-[A-Za-z0-9._-]+) "
+                                  + re.escape(str(runner))
+                                  + r"( --strict-types (?:--emit-object )?--no-stdlib [ -~]+)")
+              generated_cache = re.compile(r"cache-compiler\.[A-Za-z0-9]{6}")
+              lines = iter(content[:-1].split("\n"))
+              seen = set()
+              generated_count = 0
+              for line in lines:
+                  announced_failure = line == "Command exited with non-zero status 1"
+                  match = record.fullmatch(next(lines, "") if announced_failure else line)
+                  if match is None:
+                      raise ValueError("malformed GNU time record")
+                  status, cache, args = match.groups()
+                  expected_negative = negative_cases.get(cache)
+                  if ((status == "1") != announced_failure
+                          or (status == "1") != (expected_negative is not None)):
+                      raise ValueError("unexpected GNU time status")
+                  if cache in seen:
+                      raise ValueError("duplicate GNU time cache record")
+                  seen.add(cache)
+                  if expected_negative is not None:
+                      expect_object, suffix = expected_negative
+                      if (expect_object != args.startswith(" --strict-types --emit-object ")
+                              or not args.endswith(suffix)):
+                          raise ValueError("unexpected GNU time negative invocation")
+                  elif generated_cache.fullmatch(cache):
+                      generated_count += 1
+                  elif cache not in fixed_positive:
+                      raise ValueError("unexpected GNU time positive invocation")
+              if outcome == "success" and (
+                      generated_count != 8 or not (fixed_positive | negative_cases.keys()) <= seen):
+                  raise ValueError("incomplete compiler timing inventory for successful suite")
+              return data
+
           root, outcome = Path(sys.argv[1]), sys.argv[2]
+          workspace = Path.cwd()
           log = root / "parameter-state.log"
           if not log.is_file():
               if outcome == "success":
@@ -140,7 +214,7 @@ jobs:
               raise SystemExit(0)
           source = Path(markers[0])
           if (not source.is_absolute() or not source.is_dir() or source.is_symlink()
-                  or source.parent.resolve() != (Path.cwd() / ".deps").resolve()
+                  or source.parent.resolve() != (workspace / ".deps").resolve()
                   or not re.fullmatch(r"eshkol-transformer-p1\.[A-Za-z0-9]+", source.name)):
               raise SystemExit("invalid P1 evidence path")
           traces = sorted(source.glob("pair-*-memory.tsv"))
@@ -194,22 +268,26 @@ jobs:
               if outcome == "success" and overlap_rss == 0:
                   raise SystemExit("successful pair has no simultaneous positive RSS sample")
               files.extend((trace, summary))
-          timing = source / "compiler-timing.log"
-          if not timing.is_file() or timing.is_symlink():
-              raise SystemExit("missing or linked compiler timing log")
-          if outcome == "success":
-              lines = timing.read_text().splitlines()
-              pattern = r"elapsed_s=[0-9]+(?:\.[0-9]+)? max_rss_kib=[0-9]+ exit=0 command=.+"
-              if not lines or any(re.fullmatch(pattern, line) is None for line in lines):
-                  raise SystemExit("successful suite has invalid compiler timing log")
-          files.append(timing)
           destination = root / "validated-p1"
           destination.mkdir(mode=0o700)
           for path in files:
               shutil.copyfile(path, destination / path.name)
-          (root / "collection.tsv").write_text(
-              f"scope\tP1 compiler process groups only\n"
-              f"suite_outcome\t{outcome}\nvalidated_pairs\t{len(traces)}\n")
+
+          def record_collection(timing_outcome):
+              status = "complete" if outcome == "success" and timing_outcome == "validated" else "partial"
+              (root / "collection.tsv").write_text(
+                  f"scope\tP1 compiler process groups only\n"
+                  f"suite_outcome\t{outcome}\nvalidated_pairs\t{len(traces)}\n"
+                  f"timing_outcome\t{timing_outcome}\nreceipt_status\t{status}\n")
+
+          timing = source / "compiler-timing.log"
+          try:
+              timing_bytes = validate_timing(timing, source, workspace, outcome)
+          except (OSError, ValueError) as error:
+              record_collection("invalid")
+              raise SystemExit(f"invalid compiler timing log: {error}")
+          (destination / timing.name).write_bytes(timing_bytes)
+          record_collection("validated")
           PY
       - name: Seal diagnostic receipt
         if: always()

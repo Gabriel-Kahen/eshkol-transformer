@@ -123,15 +123,17 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   parameter-state lane with the three opt-in P1 flags, and uploads a sealed
   diagnostic receipt. It copies validated per-pair TSV/JSON and compiler timing
   from the retained P1 directory; build scratch stays out of the artifact.
-  After review, a PR from a reviewed `codex/p1-pair-memory-trigger-*` branch
-  into `codex/p1-pair-memory-hosted-diagnostic-20261126` is the only trigger;
-  the checkout still pins the candidate source above. Hosted run
-  `45883192669` began on the prior workflow commit `7114e474`; its result is
-  not assessed in this source branch and no acceptance claim follows.
-  A workflow-only successor additionally rejects a successful six-pair receipt
-  unless every pair has at least one sample where both compiler groups report
-  positive RSS. The already-launched diagnostic uses its prior workflow; its
-  receipt must be checked against this condition separately.
+  Hosted run `45883192669` passed parameter-state on workflow `7114e474`,
+  but its collector rejected intentional compile-negative GNU time records
+  before copying traces. The timing-receipt successor recognizes only the
+  pinned success and expected exit-1 record forms. It copies validated traces
+  before timing validation and seals a partial receipt if timing fails. A
+  complete receipt still requires simultaneous positive RSS from both
+  compiler groups in each of the six pairs. The prior run provides no pair
+  traces for that check.
+  After review, a PR from a `codex/p1-pair-memory-trigger-*` branch into
+  `codex/p1-pair-memory-timing-receipt-20261126` is the only trigger. The fresh
+  diagnostic and matched serial comparison remain pending.
 
 ## Parallel execution strategy
 
