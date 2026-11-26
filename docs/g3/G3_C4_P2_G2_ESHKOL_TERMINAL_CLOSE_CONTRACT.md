@@ -1,6 +1,6 @@
 # Private Eshkol P2/G2 terminal close and same-call coordinator contract
 
-Status: independently reviewed source-grounded private contract; source implementation, prerequisite integration, and compiled same-call proof remain pending. This does not authorize a public G2 facade. Native terminal source/tests `aae70bb57d597e13c1469fc02b7c655cd40226f5` and manifest-only successor `fd41dfdb135683889a7ffa974c23f1045dc59cf9` are independently accepted; PR184 integration remains pending. The logical I1 prerequisite contract is merged through PR185, while its native implementation is in progress. This contract composes those accepted APIs without changing P2/G1, the generic abort-required protected scope, or installed dispatch. Full Wave3 generation and continuation remain open until their separate acceptance evidence exists.
+Status: independently reviewed private close contract with a proposed constructor-bound reservation prerequisite below. The native terminal commit and snapshot are merged, and the native logical I1 clone, copy, and release entries are present on the Wave 3 rehearsal. Reservation review, same-call implementation, and compiled proof are pending. Public G2, installed dispatch, and continuation remain separate acceptance gates. [Native terminal merge](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/d48eda71b63ec54f643b4779ec497a82d61d2c9d).
 
 ## Existing authority and distinct private entry
 
@@ -15,6 +15,67 @@ Idle input preflight captures original generator/model/tokenizer/core/policy and
 The first/second raw[1] and staging[8], pending raw[2]/staging[16], and logical text[1]/text[2] imply exact header-plus-payload extents 9/16,10/24,9/10; retain those actual allocation-time identities and lengths. A rewritten mutable slot, paired replacement, or equal-length substitute cannot redefine an original allocation. The header-aware native API does not prove backing allocation extent: the Eshkol caller must authenticate the original bytevector and actual allocated extent before every ptr conversion. All carriers and shell/control storage are distinct, with full native alias checks retained.
 
 The terminal anchor is separate from call/prefix anchor stacks and must survive their removal and `m3-call` return. A pending terminal anchor is rooted but cannot authorize reads or publication. It records the original output shell/entry/native handle, both original text carriers and their lengths, logical branch/count/cache expectations after authentication, and its own original record identity. No final RNG is available from the accepted Eshkol carriers before commit; leave it unknown here and obtain authentic final words only from a later native snapshot, not an invented precommit expectation. It does not retain an active-call/model/generator/tokenizer ownership edge after terminal success.
+
+### Proposed constructor-bound reservation
+
+The native commit authenticates the active call and its sole pending native
+output. The pending-anchor leaf captures the existing reservation's auxiliary
+pair. The constructor leaf attests eight allocations in its private lexical
+root and currently retires them together. The historical composer also
+allocates its own carriers and uses the existing reservation's fresh auxiliary
+pair. The new private reservation must connect these authorities at initial
+enrollment. [Merged native terminal](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/d48eda71b63ec54f643b4779ec497a82d61d2c9d),
+[pending anchor, #218 head](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/23c544b66406b1e8a5397c3d0d566c56c178e3e3),
+[carrier constructor, #226 head](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/c4ffa6ee83de3cde4e2359d8af139d12bfc84137),
+[historical composer](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/aa9e661fd21f7779147b564347f066ef084ba09d).
+
+Construct the bundle internally. Install its original pending raw[2] and
+staging[16] in the sole output entry's auxiliary pair at first enrollment.
+Use its original first and second raw[1]/staging[8] pairs and logical
+text[1]/text[2] directly. Before sampling, bind the bundle, all eight original
+objects and their extents, the protected and terminal anchors, the output
+shell/entry/native owner, and the exact registry and root-list nodes and
+successors to the authenticated call. Preserve the existing native reserve
+ABI and the generic abort-only wrapper. Caller-supplied bundles, replacement
+after enrollment, duplicate output entries, and any identity, extent, or
+list substitution must reject before sampling or carrier pointer conversion.
+
+Reservation may establish the private pending call and output edges. It leaves
+the entry cache, RNG, and all earlier owners intact and creates no live result,
+staged frame, or prefix commit. On a recoverable construction or reservation
+failure, unwind only this attempt's installed edges and native pending owner
+before propagating the original condition. If authentic abort rejects a held
+I1 or A2 lease, preserve the same pending owner, all eight carrier payloads, and the
+captured nodes while the exact holder releases its lease and abort is retried
+in-region. Scrub and unlink the bundle only after abort succeeds. A release
+capability must belong to the original holder and the same call. The historical
+holder branch and diagnostic fixes do not yet qualify that path.
+[Held-lease audit](https://github.com/Gabriel-Kahen/eshkol-transformer/blob/bffb4ab6f1a5a601f4644ab066376ae1734352d3/docs/g3/G3_C4_P2_G2_HELD_LEASE_PRODUCTION_HOLD.md),
+[native holder candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/44ad1362883131c5dbaa6ab3467cf231de5b32b7),
+[status diagnostic](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/bffb4ab6f1a5a601f4644ab066376ae1734352d3),
+[later-case control](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/14ae8395ed41306c3151281a67a91eae9b999b25).
+
+Before native commit, preflight the one-use retirement and capture every
+operand, including the selected original text and the root successor to
+restore. Native zero first sets the preallocated success barrier. Then transfer
+the selected text to the surviving terminal anchor and original output entry,
+scrub the other seven carrier payloads, and revoke the pending bundle root
+using the captured successor. The terminal anchor owns the selected text
+until successful authenticated terminal release. Standalone retirement
+scrubs all eight carriers and may rebuild its root list, so the closed
+success tail cannot call it. The tail has only preflighted bounded writes,
+with no allocation, registry search, recoverable call, or readback.
+
+Implement after independent reservation contract review and integration of
+the pending-anchor and carrier predecessor leaves. Their pinned normal,
+repeat, and sanitizer runs passed at `12598d3b`. Preserve those gates and
+their feature-off and allocation-cut checks when qualifying the reservation.
+Its first executable proof must cover sole-entry identity, zero sampling on
+reservation failure, original carrier substitutions, same-owner abort/retry,
+and preservation of earlier owners. Terminal success additionally requires
+independent review and pinned compiled evidence for any held-lease capability
+it uses, plus the close and detached-result gates below. [Qualified
+predecessor source](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/12598d3bc01c155eab0eeb89b26c11304ee3fcbd).
 
 ## Actual same-region sampling, decode, and rollback
 

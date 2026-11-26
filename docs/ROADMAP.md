@@ -3810,6 +3810,14 @@ publication, public G2 and continuation remain pending.
   Wave 3 tree; terminal composition and the separate G3/C2 and E3 gates remain
   pending.
 
+  The [proposed constructor-bound reservation](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#proposed-constructor-bound-reservation)
+  would install the original carrier bundle when the sole private pending
+  output is enrolled. It defines reservation rollback, same-owner lease
+  release and abort retry, and transfer of selected text to the surviving
+  anchor without allocating after native terminal commit. Contract review,
+  reservation implementation, and held-lease and same-call qualification
+  remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
