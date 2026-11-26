@@ -912,7 +912,9 @@ supplies no trained SAN, EOS, continuation, or CPU-v1 admission.
 
 The optional [downloaded CLI3 artifact runner](CLI3_DOWNLOADED_ARTIFACT_RUNNER.md)
 checks the exact archive inventory and member types, streams the executable,
-and rechecks the extracted hashes before replaying the fixed profile. A
+and rechecks the extracted hashes before replaying the fixed profile. It
+accepts a clean checkout at the exact source tree and verifies the recorded
+build commit's tree when that commit exists locally. A
 network-disabled Ubuntu 22.04 replay of the DATA4 v2 artifact from run
 `45718652932` passed report binding, checkpoint continuation, evaluation, and
 one-byte generation. Focused local checks also reject incorrect archive

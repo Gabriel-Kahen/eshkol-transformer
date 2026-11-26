@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+import os
 from pathlib import Path
 import platform
 import re
@@ -71,26 +72,39 @@ def receipt(data: bytes, filename: str) -> str:
     return match.group(1).decode("ascii")
 
 
-def git(source: Path, *args: str) -> str:
+def git(source: Path, *args: str, input_text: str | None = None) -> str:
+    # Also disable transports for older Git versions without GIT_NO_LAZY_FETCH.
+    environment = {**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_ALLOW_PROTOCOL": ""}
     return subprocess.check_output(
-        ["git", "-C", str(source), *args], text=True, stderr=subprocess.DEVNULL
+        ["git", "--no-replace-objects", "-C", str(source), *args],
+        input=input_text, text=True, stderr=subprocess.DEVNULL, env=environment,
     ).strip()
 
 
 def verify_source(source: Path, files: dict[str, bytes]) -> None:
+    identity = re.fullmatch(
+        r"format\teshkol-cli3-binary-v1\nhead\t([0-9a-f]{40})\n"
+        r"tree\t([0-9a-f]{40})\nos\tLinux\narch\tx86_64\n",
+        files["metadata/identity.tsv"].decode("ascii", "strict"),
+    )
+    if not identity:
+        fail("artifact source or platform identity differs from expected checkout")
+    build_commit, build_tree = identity.groups()
     try:
-        head = git(source, "rev-parse", "HEAD")
-        tree = git(source, "rev-parse", "HEAD^{tree}")
+        checkout_tree = git(source, "rev-parse", "HEAD^{tree}")
         dirty = git(source, "status", "--porcelain", "--untracked-files=all")
+        if dirty:
+            fail("expected source checkout is dirty")
+        if build_tree != checkout_tree:
+            fail("artifact source or platform identity differs from expected checkout")
+        object_type = git(source, "cat-file", "--batch-check=%(objecttype)",
+                          input_text=f"{build_commit}\n")
+        if object_type != f"{build_commit} missing" and (
+                object_type != "commit" or
+                git(source, "rev-parse", f"{build_commit}^{{tree}}") != build_tree):
+            fail("artifact build commit does not identify the recorded tree")
     except (OSError, subprocess.CalledProcessError) as exc:
         fail(f"expected source is not a readable Git checkout: {exc}")
-    if dirty:
-        fail("expected source checkout is dirty")
-    identity = files["metadata/identity.tsv"].decode("ascii", "strict")
-    expected = ("format\teshkol-cli3-binary-v1\n"
-                f"head\t{head}\ntree\t{tree}\nos\tLinux\narch\tx86_64\n")
-    if identity != expected:
-        fail("artifact source or platform identity differs from expected checkout")
     for name in MANIFESTS:
         source_file = source / "native" / f"cli3_generate_{name}.txt"
         if source_file.read_bytes() != files[f"metadata/{name}.txt"]:

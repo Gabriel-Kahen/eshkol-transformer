@@ -83,6 +83,41 @@ class DownloadedArtifactTests(unittest.TestCase):
         _, _, hashes = RUNNER.verify_archive(self.download, self.source)
         self.assertEqual(hashes["eshkol-transformer"], RUNNER.digest(self.files["eshkol-transformer"]))
 
+    def set_build_commit(self, build_commit):
+        identity = self.files["metadata/identity.tsv"].splitlines(keepends=True)
+        identity[1] = f"head\t{build_commit}\n".encode()
+        self.files["metadata/identity.tsv"] = b"".join(identity)
+
+    def test_accepts_distinct_head_with_the_exact_build_tree(self):
+        self.write_archive()
+        build_commit = RUNNER.git(self.source, "rev-parse", "HEAD")
+        RUNNER.git(self.source, "commit", "--allow-empty", "-qm", "same tree")
+        self.assertNotEqual(RUNNER.git(self.source, "rev-parse", "HEAD"), build_commit)
+        RUNNER.verify_archive(self.download, self.source)
+
+    def test_accepts_unavailable_synthetic_commit_with_the_exact_tree(self):
+        self.set_build_commit("f" * 40)
+        self.write_archive()
+        RUNNER.verify_archive(self.download, self.source)
+
+    def test_rejects_a_checkout_with_a_different_tree(self):
+        self.write_archive()
+        (self.source / "extra").write_text("another source file\n")
+        RUNNER.git(self.source, "add", "extra")
+        RUNNER.git(self.source, "commit", "-qm", "different tree")
+        with self.assertRaisesRegex(ValueError, "source or platform identity differs"):
+            RUNNER.verify_archive(self.download, self.source)
+
+    def test_rejects_a_locally_known_inconsistent_build_commit(self):
+        empty_tree = RUNNER.git(self.source, "mktree", input_text="")
+        wrong_commit = RUNNER.git(self.source, "commit-tree", empty_tree, "-m", "different tree")
+        for object_id in (wrong_commit, empty_tree):
+            with self.subTest(object_id=object_id):
+                self.set_build_commit(object_id)
+                self.write_archive()
+                with self.assertRaisesRegex(ValueError, "build commit does not identify the recorded tree"):
+                    RUNNER.verify_archive(self.download, self.source)
+
     def test_uses_the_same_archive_for_outer_hash_and_member_verification(self):
         self.write_archive()
         replacement = self.root / "replacement.tar"
