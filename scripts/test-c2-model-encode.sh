@@ -42,7 +42,7 @@ mkdir -p "${runtime}"
   -c "${PROJECT_ROOT}/native/p1_identity.c" \
   -o "${runtime}/p1_identity.o"
 for source in data_io checkpoint_io kernel_abi i64_tensor t1_i64_shell \
-              f32_tensor; do
+              f32_tensor c2_checkpoint_format c2_x1_canonical; do
   "${cc}" "${cflags[@]}" -c "${PROJECT_ROOT}/native/${source}.c" \
     -o "${runtime}/${source}.o"
 done
@@ -60,6 +60,10 @@ nm -g --defined-only --format=posix \
   >"${tmp}/c2-native-symbols"
 cmp "${PROJECT_ROOT}/native/c2_i2_model_copy_defined_symbols.txt" \
   "${tmp}/c2-native-symbols"
+{
+  cat "${PROJECT_ROOT}/native/c2_i2_model_copy_defined_symbols.txt"
+  printf '%s\n' et_c2_private_model_sha256_v1
+} | LC_ALL=C sort >"${tmp}/model-expected-c2-undefined"
 "${cc}" "${cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
   -c "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" \
   -o "${tmp}/i2-without-c2.o"
@@ -118,7 +122,7 @@ compile_probe() {
   nm -u --format=posix "${tmp}/probe-${label}/model.o" | \
     awk '{ print $1 }' | rg '^et_c2_' | LC_ALL=C sort -u \
     >"${tmp}/probe-${label}/c2-undefined"
-  cmp "${PROJECT_ROOT}/native/c2_i2_model_copy_defined_symbols.txt" \
+  cmp "${tmp}/model-expected-c2-undefined" \
     "${tmp}/probe-${label}/c2-undefined"
   sed -e 's/^[^:]*://' -e 's/\\//g' \
     "${tmp}/probe-${label}/model.d" | tr -s '[:space:]' '\n' | \

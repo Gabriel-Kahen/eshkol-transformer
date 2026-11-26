@@ -47,6 +47,47 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
   tracks the combined gate. The [E3 runner measurement](e3/E3_HOSTED_QUALIFICATION_20261115.md)
   records the resource shortfall on the standard hosted runner.
+- On accepted `8d185344`, [hosted run 45646675969](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45646675969)
+  passed `parameter-state`: 100m16s in the suite, after 2m10s of pinned
+  toolchain verification. Its log has a 90m52s gap after the sanitized identity
+  build and before the registry proof result. The P1 diagnostic candidate adds
+  phase durations across that gap; it does not change assertions or establish
+  a runtime reduction. A supported run with the same P1 inputs and these
+  markers is needed to localize the cost.
+- The exact diagnostic tree `ba0c02b0` at `22a28382` passed one isolated
+  Ubuntu 22.04.5 / Clang 21.1.8 `parameter-state` run on 2026-11-25. The
+  pinned toolchain check took 34s; the full P1 suite took 96m08s. The
+  deterministic compile matrix dominated at 76m42s, followed by package
+  builds at 9m51s, runtime/determinism at 6m53s, and the registry proof at
+  2m06s. The 110-line compiler timing log recorded a 3,146,840 KiB peak RSS.
+  This local timing is characterization, not a hosted CI result or speedup
+  claim. The full receipt is sealed at
+  `/home/gabe/.codex/evidence/eshkol-p1-exact-phase-run-20261125/SHA256SUMS`.
+  An isolated, default-off `P1_TWO_COMPILERS=1` prototype pairs independent
+  public object compiles and the trusted test object with the registry AOT.
+  Each has a separate cache/output/depfile/log path; timing lines retain their
+  format. The heavy pair requires 8 GiB available memory headroom, while the
+  169de76c serial peaks for those tasks were 2,784,368 and 3,008,724 KiB.
+  Mock overlap, failure-status and child cleanup checks pass. The exact
+  `8923e368` tree passed one isolated, network-disabled Ubuntu 22.04.5 / Clang
+  21.1.8 `parameter-state` run with `P1_TWO_COMPILERS=1` and the same pinned
+  compiler, build cache, limits, and sanitizer settings as the serial case.
+  Both repeats, byte comparisons, sanitizer checks, negatives, and registry
+  proof passed. The suite took 76m19s, including a 57m27s deterministic compile
+  matrix, versus 96m08s and 76m42s in the serial local run. The sampled peak
+  container-process RSS sum was 4,667,904 KiB; cgroup memory.peak was
+  4,797,132,800 bytes. These are container-wide observations, not a compiler-only
+  or serial-memory comparison. Host contention and initial memory differed, so
+  this one local comparison is not a hosted speedup claim. Exact receipt:
+  `/home/gabe/.codex/evidence/eshkol-p1-two-compiler-exact-20261125/SHA256SUMS`.
+- The opt-in two-compiler [hosted diagnostic](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45743747737)
+  passed the complete parameter-state suite with the pinned Ubuntu 22.04 and
+  Clang/LLVM 21.1.8 toolchain. It checked out `261b8196`/tree `5be22737`.
+  The suite ran in 64m17s, including a 49m08s compile matrix. Both scheduled
+  heavy pairs passed their 8 GiB pre-launch check. The receipt measures
+  single-compiler peak RSS and initial host headroom. A sustained hosted
+  memory trace and a matched serial comparison remain open. Default compile
+  scheduling stays serial.
 
 ## Parallel execution strategy
 
@@ -749,6 +790,10 @@ generation, and Wave 3 remains incomplete.
 | L2 | [Fused indexed token cross-entropy](L2_INDEXED_CROSS_ENTROPY.md) | K1, Q0 | Explicit carrier-neutral K1 provider, stable per-token f32 loss, direct-backward/oracle/finite-difference parity, adversarial failure atomicity, deterministic Eshkol AOT, sanitizer and isolation gates | complete |
 | O2 | [AdamW, parameter groups, clipping, accumulation and schedules](O2_OPTIMIZER.md) | P1L, Q0, I2 | Exact 1,365-parameter/group boundary; accumulated-gradient, clipping, AdamW and schedule parity; atomic step/load; releasable logical-state continuation; exact 53-global/six-wrapper aggregate; 6,201 adversarial checks, sanitizers, independent review, supported blocking/exhaustive CI, identical-tree merge and bounded merged-main retest. Reviewed test-only repair `2a9f368` makes the TR3-O defined-symbol query portable to supported Ubuntu 22.04/GNU nm 2.38 without changing assertions or runtime scope; four focused package tests and the full TR3-O gate pass on the supported host. After accepted private A2 Step12A changed the header tree, hosted run `35999574298` reached and passed the long O2 build but failed only the stale header-tree test pin; test-only `ecbd0a6` repins the exact new tree and all four focused O2 package tests pass locally. Fresh hosted O2 rerun is pending | complete |
 | C2 | [Detached full training-state checkpoint schema](C2_TRAINING_STATE.md) | C1, D2, O2, X1, K2 | Accepted C2 1.0 component continuation and atomic-file publication: exact 81-global/75-export/81-string boundary, authenticated carriers, exact-bit LOAD/SAVE ownership, failure atomicity, deterministic packaging, flat 1,024/8,192 root retention, and final joint 64-tensor runs at 521,500/521,576 KiB below 524,288 KiB. PR #79 merged as `cbd0929`; PR #77 merged to main as `913cdf4097db09d6c33769e9b0968c01ce0e1f55`; reviewed, tested, and merged states share tree `512a3355cea79583d73b49f690a46478fb1c772c`. Supported run 35393213200 passed all 15 suites/23 commands plus smoke/benchmark, and acceptance 35401088338 reused the verified exact tree successfully. TR3 retains joint live restore/full trajectory and G3 generation proof; [issue #121 handler-order correction](C2_HANDLER_ORDER.md) is in progress: source-order/mutation tests, the exact 5/6/11 final-runtime allocation witness, and focused owner/LOAD gates pass; transformer commit `beb5821` is frozen and independently approved. The reviewed handler-order source is present in the Wave 3 integration branch. On exact clean `7ae5c37` with pinned `81298`/f31, fresh supported P1 handler/LSan, C1 native/sanitizer/AOT, four-image C2 SAVE and canonical C2 public/package/retention gates passed; public retention was 6,356,992 bytes at both 1,024 and 8,192 iterations, slope zero. Sealed public evidence is `c2-121-public-retry-root-7ae5c37-20260924T074300Z` (`SHA256SUMS` `875c3717...`). The scoped exact-7ae5c37 operational gate failed its strict <524,288 KiB peak target at 527,828 KiB; hosted PR #126 corroborated an old-head joint peak of 525,980 KiB. The 1,024/8,192 public-retention slope and production C2 bytes stayed unchanged. A test-only dedicated joint AOT witness preserved the same 26 assertions and 33-file source closure but still peaked at 524,952 KiB, 664 KiB over the unchanged cap; it was not integrated. An isolated byte-preserving C1 SHA-256 streaming repair `daeac8b` avoids copying each complete checkpoint input block and was integrated as the identical source blob at `cfb878e`. Fourteen supported known-answer/boundary cases, canonical four-image SAVE, fresh public/package/retention, and the strict joint operational gate pass. The two joint AOT peaks were 463,836 and 463,692 KiB, leaving 60,452 and 60,596 KiB under the unchanged 524,288 KiB ceiling; both 26-check runs preserved exact bytes and ownership counters. The isolated joint evidence is sealed at `c2-sha-streaming-joint-daeac8b-20260924T100039Z` (`SHA256SUMS` `3974ae27...`). Hosted PR #126 run `35989961605` on pushed `dbc4112` now passes the full C2 operational suite after the shared D2 repair: two joint runs peaked 460,520/460,576 KiB, 63,768/63,712 KiB under the unchanged 524,288 KiB cap, and file/metadata/tensor/count/corrupt, exact/one-over, admission-failure, strict Clang/GCC/C++, sanitizer and byte-lifecycle gates passed. C2 public, SAVE, LOAD, format and state suites in the same run are green. Hosted PR #126 run `35999574298` on pushed `a914540` also passes all six C2 matrix groups, including the strict operational suite; its aggregate still fails only separately scoped A2/O2 exact test pins now repaired locally. Hosted PR #126 run `36009739388` on pushed `46d5c31` also passes C2 SAVE/LOAD/format/state and the strict operational suite; its two joint peaks are 460,776/460,800 KiB, below the unchanged 524,288 KiB cap. Fresh hosted PR #126 run `36020537251` on pushed `8169e68` passes all six C2 matrix groups again, including strict operational joint peaks 460,464/461,148 KiB below 524,288 KiB; D2 shard-loader and the prior symbol-manifest failure paths also pass. All 23 jobs in that supported run completed successfully. Newer supported run `36030979305` on `979bd52` passed all 23 jobs, including all six C2 groups; the pushed `8c13bbf` E3 facade/G3 binding union run `36041612097` is queued, so final #121 acceptance remains pending its exact-head result | active |
+
+C2-only nested-C1 SHA trial: an isolated C1 leaf passes a private digest callback through the tensor-record and whole-container encode preimages and exposes it only to a new private C2-owner entry. Existing C1/C2 entry points, default SHA, decode, and C1 1.0 bytes remain unchanged. The focused C1 gate passes 276 logical checks, repeated AOT parity, 1,012 adversarial cases, native sanitizer and package-isolation checks under the pinned toolchain; independent source-and-test review found no blocker. The separately implemented native delegate, cross-package symbol manifests, composite C2 gate, hosted CI, and admission remain orchestrator-owned.
+The composed C2 candidate delegates the owned model encoder's two existing digest preimages to the private C2 native SHA-256 helper. Focused native parity and rejection checks passed with sanitizers. On pinned Ubuntu, the C2 model gate preserved exact C1 bytes, the installed CLI3 command gates passed, and the one-compiler joint checkpoint gate passed 26 checks in 143.671 seconds with two byte-identical 16 MiB outputs. The `8204e315` C2 package gate passed deterministic rebuilds, public load/save/release, exact 81 globals, 75 exports and 81 name strings, and the original undefined-symbol list. Historical TR3 package and hosted qualification remain gates. [Private SAVE contract](C2_CHECKPOINT_SAVE_PRIVATE.md)
+An isolated historical TR3 audit on the exact C2 SHA descendant `8204e315` reconciles the two private source-closure orders and private object, linked, and factory symbol inventories. The package-mode and linked private gates pass under their respective exact compiler pins; the linked gate also verifies the pinned runtime archive. The linked dynamic export boundary is unchanged. The private-root gate compiles and matches its object inventories but its runtime fixture raises an unhandled user exception. The factory compiles and links, but its success probe returns internal status at the D2 open stage before inventory comparison. Factory and private-root functional compatibility, supported composite gates, and hosted qualification remain pending. The [sealed local receipt](/home/gabe/.codex/evidence/eshkol-transformer/tr3-c2-historical-package-20261126/RESULTS.md) records the exact partial results.
 
 C2 operational follow-up: PR #204's old-head clang-b joint run timed out at the
 unchanged 1,800-second watchdog after clang-a's 26-check pass. The inner operation

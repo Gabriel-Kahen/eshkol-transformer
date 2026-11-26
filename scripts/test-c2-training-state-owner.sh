@@ -43,7 +43,7 @@ cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -fPIC -fvisibility=hidden
 "${cc}" "${cflags[@]}" -DET_P1_TRUSTED_BUILD=1 \
   -c "${PROJECT_ROOT}/native/p1_identity.c" -o "${runtime}/p1_identity.o"
 for source in data_io checkpoint_io kernel_abi t1_i64_shell f32_tensor \
-              i64_tensor d2_native o2_optimizer c2_x1_canonical; do
+              i64_tensor d2_native o2_optimizer c2_x1_canonical c2_checkpoint_format; do
   "${cc}" "${cflags[@]}" -c "${PROJECT_ROOT}/native/${source}.c" \
     -o "${runtime}/${source}.o"
 done

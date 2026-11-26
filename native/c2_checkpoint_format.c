@@ -137,6 +137,43 @@ static void sha256_final(sha256_state *state, uint8_t digest[32]) {
   }
 }
 
+/* Private whole-bytevector bridge. The caller owns both live objects. */
+int64_t et_c2_private_model_sha256_v1(const void *input_bv,
+                                      int64_t input_bytes, void *digest_bv) {
+  int64_t input_length, digest_length;
+  uintptr_t input_start, digest_start;
+  size_t input_span, digest_span;
+  sha256_state state;
+  uint8_t digest[32];
+  if (input_bv == NULL || digest_bv == NULL || input_bytes < 0)
+    return 1;
+  input_start = (uintptr_t)input_bv;
+  digest_start = (uintptr_t)digest_bv;
+  if (input_start > UINTPTR_MAX - sizeof(input_length) ||
+      digest_start > UINTPTR_MAX - sizeof(digest_length))
+    return 1;
+  memcpy(&input_length, input_bv, sizeof(input_length));
+  memcpy(&digest_length, digest_bv, sizeof(digest_length));
+  if (input_bytes != input_length || digest_length != 32 ||
+      (uint64_t)input_bytes > UINT64_MAX / UINT64_C(8) ||
+      (uint64_t)input_length > SIZE_MAX - sizeof(input_length))
+    return 1;
+  input_span = sizeof(input_length) + (size_t)input_length;
+  digest_span = sizeof(digest_length) + 32u;
+  if (input_span > UINTPTR_MAX - input_start ||
+      digest_span > UINTPTR_MAX - digest_start ||
+      (input_start < digest_start + digest_span &&
+       digest_start < input_start + input_span))
+    return 1;
+  sha256_init(&state);
+  sha256_update(&state, (const uint8_t *)(input_start + sizeof(input_length)),
+                (size_t)input_bytes);
+  sha256_final(&state, digest);
+  memcpy((void *)(digest_start + sizeof(digest_length)), digest,
+         sizeof(digest));
+  return 0;
+}
+
 static uint16_t u16(const uint8_t *p) {
   return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8u));
 }

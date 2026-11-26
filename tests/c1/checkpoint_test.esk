@@ -309,6 +309,118 @@
                     176 3 97 163 150 23 122 156 180 16 255 97 242 0 21 173)))
 (check "deterministic checkpoint bytes" (bytes=? encoded-a encoded-b))
 
+;; Exercise the C2 owner entry without linking a C2 or native SHA extension.
+(define sha-owned-state (module-state-dict source))
+(define sha-owner-token (vector 'c1-sha-owner-test))
+(define sha-access-token (vector 'c1-sha-access-test))
+(define sha-borrow (vector #f #f #f #f #f (vector #f #f #f #f #f)))
+(check "C2 SHA test claims state"
+       (state-dict-claim-c2-internal! sha-owned-state sha-owner-token))
+(check "C2 SHA test activates borrow"
+       (state-dict-c2-owned-borrow-activate-internal!
+         sha-owned-state sha-owner-token sha-access-token sha-borrow
+         'c1-sha-test))
+(define sha-default
+  (c1-checkpoint-encode-c2-owned-state-internal
+    sha-owned-state sha-access-token policy c1-fixture-codec-internal
+    'c1-sha-test))
+(check "C2 owner default SHA bytes equal C1 bytes"
+       (bytes=? encoded-a sha-default))
+(define sha-delegate-calls 0)
+(define sha-delegated
+  (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+    sha-owned-state sha-access-token policy c1-fixture-codec-internal
+    (lambda (bytes)
+      (set! sha-delegate-calls (+ sha-delegate-calls 1))
+      (check "SHA delegate receives assembled bytevector" (bytevector? bytes))
+      (check "SHA delegate receives exact domain"
+             (bytes=?
+               (bytevector-copy bytes 0
+                 (bytevector-length
+                   (if (= sha-delegate-calls 5)
+                       c1-test-container-domain c1-test-tensor-domain)))
+               (if (= sha-delegate-calls 5)
+                   c1-test-container-domain c1-test-tensor-domain)))
+      (c1-sha256 bytes))
+    'c1-sha-test))
+(check "C2 owner delegated SHA preserves C1 bytes"
+       (bytes=? encoded-a sha-delegated))
+(check "SHA delegate called for four records and container"
+       (= sha-delegate-calls 5))
+
+(define sha-failure-calls 0)
+(define sha-failure
+  (guard (caught (#t caught))
+    (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+      sha-owned-state sha-access-token policy c1-fixture-codec-internal
+      (lambda (bytes)
+        (set! sha-failure-calls (+ sha-failure-calls 1))
+        (raise 'c1-sha-test-failure))
+      'c1-sha-test)
+    #f))
+(check "SHA delegate failure retains original exception"
+       (eq? sha-failure 'c1-sha-test-failure))
+(check "SHA delegate failure has no retry" (= sha-failure-calls 1))
+(define sha-container-failure-calls 0)
+(define sha-container-failure
+  (guard (caught (#t caught))
+    (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+      sha-owned-state sha-access-token policy c1-fixture-codec-internal
+      (lambda (bytes)
+        (set! sha-container-failure-calls (+ sha-container-failure-calls 1))
+        (if (= sha-container-failure-calls 5)
+            (raise 'c1-sha-container-failure)
+            (c1-sha256 bytes)))
+      'c1-sha-test)
+    #f))
+(check "container SHA failure retains original exception"
+       (eq? sha-container-failure 'c1-sha-container-failure))
+(check "container SHA failure has no retry"
+       (= sha-container-failure-calls 5))
+(expect-error "SHA delegate wrong type" 'internal
+              (lambda ()
+                (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+                  sha-owned-state sha-access-token policy
+                  c1-fixture-codec-internal (lambda (bytes) #f)
+                  'c1-sha-test)))
+(expect-error "SHA delegate wrong length" 'internal
+              (lambda ()
+                (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+                  sha-owned-state sha-access-token policy
+                  c1-fixture-codec-internal
+                  (lambda (bytes) (make-bytevector 31 0))
+                  'c1-sha-test)))
+(define sha-container-invalid-calls 0)
+(expect-error "SHA delegate wrong container length" 'internal
+              (lambda ()
+                (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+                  sha-owned-state sha-access-token policy
+                  c1-fixture-codec-internal
+                  (lambda (bytes)
+                    (set! sha-container-invalid-calls
+                          (+ sha-container-invalid-calls 1))
+                    (if (= sha-container-invalid-calls 5)
+                        (make-bytevector 31 0)
+                        (c1-sha256 bytes)))
+                  'c1-sha-test)))
+(check "SHA delegate rejects malformed container after four records"
+       (= sha-container-invalid-calls 5))
+(expect-error "SHA delegate nonprocedure" 'invalid-argument
+              (lambda ()
+                (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+                  sha-owned-state sha-access-token policy
+                  c1-fixture-codec-internal #f 'c1-sha-test)))
+(check "SHA failures leave C2 tensor access inactive"
+       (equal? (vector-ref sha-borrow 5) (vector #f #f #f #f #f)))
+(check "C2 SHA test deactivates borrow"
+       (state-dict-c2-owned-borrow-deactivate-internal!
+         sha-owned-state sha-owner-token sha-access-token sha-borrow
+         'c1-sha-test))
+(check "C2 SHA test returns state to live ownership"
+       (state-dict-claim-c2-rollback-internal!
+         sha-owned-state sha-owner-token))
+(state-dict-release! sha-owned-state)
+
 (define metadata
   (guard (error
           (#t

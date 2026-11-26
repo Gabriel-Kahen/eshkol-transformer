@@ -61,6 +61,8 @@
   (c1-checkpoint-encode-state-internal
     state policy i2-checkpoint-codec-internal))
 (define encoded (c2-model-encode-state-internal state policy))
+(check "private C2 native SHA matches scalar SHA of the C1 image"
+       (c1-bytes=? (c1-sha256 reference) (c2-model-checkpoint-sha256 reference)))
 (check "private adapter preserves the exact C1 1.0 bytes"
        (c1-bytes=? reference encoded))
 (define metadata (c1-checkpoint-inspect-bytes-internal encoded policy))
