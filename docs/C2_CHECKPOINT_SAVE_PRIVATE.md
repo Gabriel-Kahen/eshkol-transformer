@@ -73,3 +73,23 @@ reject artifact.
 This is development-host evidence from CachyOS with Clang 22. It does not claim
 the project-supported Ubuntu 22.04/LLVM 21 result, public K2 composition, or a
 released checkpoint capability; those gates remain outstanding.
+
+## C2-owned model checksum candidate
+
+The C2-owned C1 model encoder takes an explicit private digest delegate for
+its tensor record and container checksum inputs. It passes the same complete
+domain-prefixed bytevectors to native SHA-256 and copies the returned 32-byte
+digests into the existing C1 fields. The native helper checks both live
+bytevector spans, exact lengths, and overlap before writing. Native failure
+propagates as an internal error through the existing save transaction.
+Standalone C1 encoding and all decoding still use their existing digest path.
+The C2 and CLI3 aggregates resolve the new helper as a local symbol.
+
+The focused one-compiler joint gate on the composed `fe5985d5` tree used the
+pinned Ubuntu 22.04, Clang 21.1.8 and Eshkol `fe9dfd52` toolchain. It passed
+all 26 operational checks in 143.671 seconds at 321,984 KiB peak runtime RSS.
+Both 16 MiB outputs matched the existing fixture byte for byte, with SHA-256
+`23affcc0b05c8cc431f10357fa15e8ac9c2e0fa0a323a69a020efe586bdcef07`.
+The earlier scalar diagnostic took 875.441 seconds in a separate run. These
+are fixture measurements with different run conditions. The complete hosted
+C2 and repository suites remain admission gates.
