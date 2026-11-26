@@ -11,6 +11,16 @@ int32_t et_eval5_v256_score(const float *doc0, const float *doc1,
                             const uint32_t *eval_tokens, double metrics_out[5],
                             int64_t counts_out[2], float probes_out[8]);
 
+/* Two owner-validated nine-byte documents per split, with their ordered raw
+ * T1/D1 IDs. Token 3-grams, overlap >= 0.25, rate <= 0, and no exact match.
+ * summary_out holds six audit counts followed by two matching eval indices;
+ * all outputs remain untouched on errors other than CONTAMINATED. */
+int32_t et_eval5_v256_audit(const uint8_t train_bytes[18],
+                            const uint32_t train_tokens[18],
+                            const uint8_t eval_bytes[18],
+                            const uint32_t eval_tokens[18],
+                            uint64_t summary_out[8]);
+
 /* Fixed-size, checked f64 readback for the Eshkol FFI. Invalid access returns
  * NaN, which the mandatory score comparator rejects. */
 double et_eval5_v256_metric(const double metrics[5], int64_t index);

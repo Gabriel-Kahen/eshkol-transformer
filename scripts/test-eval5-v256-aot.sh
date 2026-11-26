@@ -78,6 +78,12 @@ fi
   "${fixture}/eval-clean" "${fixture}/model.etcp" > "${scratch}/score.out"
 python3 -m tests.eval5.check_mod5_v256_witness "${fixture}" "${scratch}/score.out"
 
+"${scratch}/witness" --audit-control "${fixture}/tokenizer.etok" \
+  "${fixture}/train" "${fixture}/eval-clean" > "${scratch}/audit-control.out"
+grep -Fxq 'AUDIT -7 2 2 2 2 14 14 0 1' "${scratch}/audit-control.out"
+! grep -q '^SCORE' "${scratch}/audit-control.out" ||
+  die "contaminated control reached scoring"
+
 "${scratch}/witness" --check-c1 "${fixture}/model.etcp" > "${scratch}/c1-good.out"
 grep -Fxq C1_CHECKED "${scratch}/c1-good.out"
 python3 - "${fixture}/model.etcp" "${scratch}/wrong-shape.etcp" <<'PY'
@@ -107,4 +113,4 @@ grep -Fq 'C1 checkpoint SHA-256 mismatch' "${scratch}/c1-identity-bad.out"
 grep -Fq 'D1 manifest SHA-256 mismatch' "${scratch}/split-bad.out"
 ! grep -q '^SCORE' "${scratch}/c1-bad.out" "${scratch}/c1-identity-bad.out" "${scratch}/split-bad.out" ||
   die "rejected input produced a SCORE line"
-printf 'EVAL5 V256 AOT live score, C1 shape/identity, and D1 identity: PASS\n'
+printf 'EVAL5 V256 AOT live audit/control, score, C1 shape/identity, and D1 identity: PASS\n'

@@ -1,4 +1,4 @@
-"""Compare a live AOT SCORE line with the exact C1/D1 reference fixture."""
+"""Compare live audit and score lines with the exact C1/D1 reference fixture."""
 
 import math
 from pathlib import Path
@@ -32,9 +32,23 @@ def expected_probes(root):
 def check(root, stdout):
     record = fixture.verify(root)
     lines = stdout.splitlines()
-    if len(lines) != 1:
-        raise ValueError("expected exactly one live SCORE line")
-    fields = lines[0].split()
+    if len(lines) != 2:
+        raise ValueError("expected live AUDIT then SCORE lines")
+    audit = record["score_reference"]["audit"]
+    wanted_audit = [0, *(audit[key] for key in (
+        "eval_documents", "contaminated_documents", "exact_doc_matches",
+        "ngram_contaminated_docs", "total_eval_ngrams", "matched_eval_ngrams")),
+        0, 0]
+    audit_fields = lines[0].split()
+    if len(audit_fields) != 10 or audit_fields[0] != "AUDIT":
+        raise ValueError("malformed live AUDIT line")
+    try:
+        actual_audit = [int(value) for value in audit_fields[1:]]
+    except ValueError as error:
+        raise ValueError("noninteger live audit field") from error
+    if actual_audit != wanted_audit:
+        raise ValueError("live contamination audit differs from reference")
+    fields = lines[1].split()
     if len(fields) != 16 or fields[0] != "SCORE":
         raise ValueError("malformed live SCORE line")
     metrics = [float(value) for value in fields[1:6]]
