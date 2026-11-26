@@ -15,6 +15,7 @@ import safetensors_interop as safe
 FINGERPRINT = "eval5-mod5-token-v1"
 SHAPES = ((8, 16), (16, 16), (16, 16), (8, 16), (16, 32),
           (32, 16), (32, 16), (16,), (16,), (16, 16), (16,), (16, 16))
+SHAPES_256 = SHAPES[:9] + ((256, 16),) + SHAPES[10:11] + ((256, 16),)
 PATHS = (
     "blocks.0.attention.key.weight", "blocks.0.attention.output.weight",
     "blocks.0.attention.query.weight", "blocks.0.attention.value.weight",
@@ -32,7 +33,7 @@ def weights_from_c1(raw):
         raise ValueError("unexpected MOD5 provider or alias topology")
     if tuple(".".join(t.path) for t in state.tensors) != PATHS:
         raise ValueError("unexpected MOD5 parameter roster")
-    if tuple(t.shape for t in state.tensors) != SHAPES:
+    if tuple(t.shape for t in state.tensors) not in (SHAPES, SHAPES_256):
         raise ValueError("unexpected MOD5 parameter shapes")
     result = [struct.unpack("<" + "f" * (len(t.data) // 4), t.data)
               for t in state.tensors]
@@ -70,8 +71,9 @@ def attention(q, k, v):
 
 
 def logits(weights, context):
-    if len(context) != 8 or any(type(t) is not int or not 0 <= t < 16 for t in context):
-        raise ValueError("expected eight V=16 token IDs")
+    vocab = len(weights[11]) // 16
+    if len(context) != 8 or any(type(t) is not int or not 0 <= t < vocab for t in context):
+        raise ValueError("expected eight in-vocabulary token IDs")
     x = [list(weights[11][token * 16:(token + 1) * 16]) for token in context]
     norm = rms(x, weights[7])
     q = project(norm, weights[2], 16, 16)
@@ -88,32 +90,40 @@ def logits(weights, context):
     down = project(hidden, weights[4], 16, 32)
     block = [[a + b for a, b in zip(left, right)]
              for left, right in zip(residual, down)]
-    return project(rms(block, weights[10]), weights[9], 16, 16)
+    return project(rms(block, weights[10]), weights[9], vocab, 16)
 
 
 def nll(rows, targets):
     def row_loss(row, target):
+        row = struct.unpack("<" + "f" * len(row), struct.pack("<" + "f" * len(row), *row))
         peak = max(row)
-        return peak - row[target] + math.log(math.fsum(math.exp(x - peak) for x in row))
+        largest = row.index(peak)
+        tail = math.fsum(math.exp(x - peak) for i, x in enumerate(row) if i != largest)
+        return peak - row[target] + math.log1p(tail)
     return math.fsum(row_loss(row, target) for row, target in zip(rows, targets, strict=True))
 
 
-def documents(corpus):
-    if (corpus["fingerprint"] != FINGERPRINT or corpus["vocab_size"] != 16
+def documents(corpus, fingerprint=FINGERPRINT, vocab=16):
+    if (corpus["fingerprint"] != fingerprint or corpus["vocab_size"] != vocab
             or corpus["shard_count"] != 1 or len(corpus["tokens"]) != 18):
         raise ValueError("unexpected D1 fixture identity or shape")
     tokens = corpus["tokens"]
-    if any(type(t) is not int or not 0 <= t < 16 for t in tokens):
+    if any(type(t) is not int or not 0 <= t < vocab for t in tokens):
         raise ValueError("D1 token outside model vocabulary")
     return [tuple(tokens[i:i + 9]) for i in (0, 9)]
 
 
-def audit(train, evaluation):
-    train_bytes = {bytes("".join(f"{t:02x}" for t in doc), "ascii") for doc in train}
+def audit(train, evaluation, train_bytes=None, eval_bytes=None):
+    if train_bytes is None:
+        train_bytes = [bytes("".join(f"{t:02x}" for t in doc), "ascii") for doc in train]
+    if eval_bytes is None:
+        eval_bytes = [bytes("".join(f"{t:02x}" for t in doc), "ascii") for doc in evaluation]
+    if len(train_bytes) != len(train) or len(eval_bytes) != len(evaluation):
+        raise ValueError("document boundary count mismatch")
+    train_bytes = set(train_bytes)
     grams = {doc[i:i + 3] for doc in train for i in range(7)}
     exact = overlap = matched = contaminated = 0
-    for doc in evaluation:
-        raw = bytes("".join(f"{t:02x}" for t in doc), "ascii")
+    for doc, raw in zip(evaluation, eval_bytes, strict=True):
         e = raw in train_bytes
         count = sum(doc[i:i + 3] in grams for i in range(7))
         n = count > 0 and count / 7 >= 0.25
@@ -126,8 +136,9 @@ def audit(train, evaluation):
             "matched_eval_ngrams": matched, "total_eval_ngrams": 14}
 
 
-def evaluate(weights, train, evaluation):
-    counts = audit(train, evaluation)
+def evaluate(weights, train, evaluation, train_bytes=None, eval_bytes=None,
+             byte_count=32):
+    counts = audit(train, evaluation, train_bytes, eval_bytes)
     if counts["contaminated_documents"]:
         return {"audit": counts, "status": "contaminated"}
     outputs = [logits(weights, doc[:8]) for doc in evaluation]
@@ -143,9 +154,9 @@ def evaluate(weights, train, evaluation):
     correct = sum(min(range(2), key=lambda i: nll(item[i][0][6:8], item[i][1]) / 2)
                   == item[2] for item in choices)
     return {"audit": counts, "status": "clean", "lm": {
-        "token_count": 16, "byte_count": 32, "total_nll": total,
+        "token_count": 16, "byte_count": byte_count, "total_nll": total,
         "mean_nll": total / 16, "perplexity": math.exp(total / 16),
-        "bits_per_byte": total / (math.log(2) * 32)},
+        "bits_per_byte": total / (math.log(2) * byte_count)},
         "mc": {"correct_count": correct, "total_count": 4, "accuracy": correct / 4}}
 
 
