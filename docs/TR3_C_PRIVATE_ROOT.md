@@ -32,5 +32,10 @@ projects the lease record's three-field tokenizer identity to C2's two-field
 snapshot path retain their existing contracts. The historical unprojected
 fixture remains in its sealed evidence directory. A separate supported
 fe9/LLVM 21.1.8 scratch replay of this exact projection on C2 candidate
-`e3280e3b` passed all 151 private-root checks; this maintained source change
-still needs a fresh compiled gate and integration review on its exact tree.
+`e3280e3b` passed all 151 private-root checks. A fresh replay of the
+maintained fixture at `26fe11ca` on the same supported toolchain also passed
+151 checks, including exact C2 bytes, SAVE/LOAD, and live result-cell restore.
+The staged source matches the scratch witness after removing diagnostic
+wrappers, with identical corpus inputs and assertion labels. Compilation
+took 2:08.56 at 5,514,468 KiB peak RSS. Full package and hosted CI
+qualification remain open.

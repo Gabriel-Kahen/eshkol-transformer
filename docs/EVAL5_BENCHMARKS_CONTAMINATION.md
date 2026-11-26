@@ -221,6 +221,11 @@ and 16 original target bytes, and MC accuracy `2/4`. Python computes model
 logits in binary64 and rounds each logit to binary32 before scoring; the
 values are a tolerance target, not a measured compiled-model result.
 
+The tested native CLI from PR #255 independently generated the same T1
+artifact, both D1 manifests, and all six shards byte for byte from the
+original documents on pinned, network-disabled Ubuntu 22.04.
+[Hosted executable provenance](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773952998)
+
 The opt-in MOD5 provider advertises the fixed block shapes used here and has
 no vocabulary dimension. The existing compiled MOD5-C and old EVAL5 AOT
 fixtures hardcode V=16 in their model rosters, so they have not executed this
