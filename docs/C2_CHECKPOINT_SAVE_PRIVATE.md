@@ -74,7 +74,7 @@ This is development-host evidence from CachyOS with Clang 22. It does not claim
 the project-supported Ubuntu 22.04/LLVM 21 result, public K2 composition, or a
 released checkpoint capability; those gates remain outstanding.
 
-## C2-owned model checksum candidate
+## C2-owned model checksum
 
 The C2-owned C1 model encoder takes an explicit private digest delegate for
 its tensor record and container checksum inputs. It passes the same complete
@@ -91,11 +91,41 @@ all 26 operational checks in 143.671 seconds at 321,984 KiB peak runtime RSS.
 Both 16 MiB outputs matched the existing fixture byte for byte, with SHA-256
 `23affcc0b05c8cc431f10357fa15e8ac9c2e0fa0a323a69a020efe586bdcef07`.
 The earlier scalar diagnostic took 875.441 seconds in a separate run. These
-are fixture measurements with different run conditions. The complete hosted
-C2 and repository suites remain admission gates.
+are fixture measurements with different run conditions. The exact
+`e3280e3b` candidate, tree `ed10f9bc`, passed the hosted C2 suite and all
+26 required jobs in
+[PR #254 run 45773851264](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773851264).
+The downloaded CLI3 binary also passed its fixed-profile fixture on that
+clean source tree in a network-disabled Ubuntu 22.04 container. The exact
+C2 commit then landed through [PR #255](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/255)
+at main commit `513d2edefa0d949955b3d4144c7d24a0669286e0`. All 26 required
+jobs also passed on the combined tree `a00f10337f86e67e3ae29298d08da496d1d0f215`.
 
 The focused public C2 package gate on `8204e315` passed both deterministic
 rebuilds, the installed save/load/release calls, arity and private-binding
 negatives, and the retention check. The built archive retained the exact
 81 global definitions, 75 package exports, 81 name strings, and 162 original
 undefined symbols. Its SHA-256 bridge is local and hidden.
+
+### Matched joint fixture measurement
+
+The native candidate `e3280e3b` and a scalar control `9a26cf32` ran the
+same one-compiler joint checkpoint fixture in fresh scratch directories on
+the same host under a continuous build reservation. The control differs
+only in the explicit digest callback. Both passed all 26 assertions and
+wrote two 16 MiB outputs identical to the original fixture.
+
+| Measure | Native candidate | Scalar control |
+| --- | ---: | ---: |
+| Joint runtime | 140.908 s | 880.920 s |
+| Peak runtime RSS | 278,840 KiB | 231,096 KiB |
+| Retained runtime RSS | 125,640 KiB | 22,652 KiB |
+| Command elapsed including AOT | 4m19.50s | 16m38.56s |
+
+The joint fixture ran 6.25 times as fast with the native callback and used
+47,744 KiB more peak runtime RSS. Both arms stayed below the existing
+524,288 KiB runtime ceiling. The native arm ran first. A single pair with
+uncontrolled background host activity measures this fixture only.
+The sealed receipt `c2-sha-matched-pair-e3280e3-20261126` records exact
+inputs and outputs. Its `SHA256SUMS` digest is
+`744c1ab759c08cbc24ea0f75b7099f7a39e16e5cf43878cc8b9c96217304541f`.
