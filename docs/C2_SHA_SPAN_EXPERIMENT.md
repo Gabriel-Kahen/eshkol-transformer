@@ -17,7 +17,10 @@ Run `bash scripts/test-c2-sha-spans-experiment.sh` for optimized and
 ASan/UBSan/LSan digest-equivalence and malformed-input checks. The tests cover
 C1 tensor and container domain bytes, zero and SHA block-boundary payloads,
 the independent SHA-256 `abc` known answer, unchanged inputs, and no digest
-write on rejection. The C1 encoder is not wired to this helper; a later
+write on rejection. The combined witness also compared the default optimized
+C2 format object against its predecessor byte for byte and got the same
+SHA-256 `d47455feb6bfbc292b579ba5ed0e77f02a88e6c6477da6809af9530de2ca6308`.
+The C1 encoder is not wired to this helper; a later
 feature-private callback change would have to preserve the existing record
 zero slot, domain ordering, payload ownership, callback failure behavior,
 source/symbol manifests, and byte-identical save/load gates.
