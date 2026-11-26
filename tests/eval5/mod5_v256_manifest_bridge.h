@@ -29,4 +29,16 @@ et_eval5_status et_eval5_v256_manifest_roundtrip(
     char out[ET_EVAL5_MANIFEST_MAX_BYTES + 1u], size_t capacity,
     size_t *out_size);
 
+/* Eight-pointer FFI seam for the fixed Eshkol witness. Each fingerprint has
+ * exactly 96 bytes; digests are train D1, eval D1, then C1 (3 x 32 bytes).
+ * audit_record is status then eight counts, all i64. The output allocation
+ * must hold ET_EVAL5_MANIFEST_MAX_BYTES + 1 bytes. On failure, output and
+ * out_size are untouched. */
+et_eval5_status et_eval5_v256_manifest_roundtrip_live(
+    const uint8_t tokenizer_fingerprint[96],
+    const uint8_t corpus_fingerprint[96],
+    const uint8_t digests[96], const int64_t audit_record[9],
+    const double metrics[5], const int64_t mc_counts[2],
+    char out[ET_EVAL5_MANIFEST_MAX_BYTES + 1u], uint64_t *out_size);
+
 #endif

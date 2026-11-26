@@ -67,3 +67,40 @@ et_eval5_status et_eval5_v256_manifest_roundtrip(
   *out_size = size;
   return ET_EVAL5_OK;
 }
+
+et_eval5_status et_eval5_v256_manifest_roundtrip_live(
+    const uint8_t tokenizer_fingerprint[96],
+    const uint8_t corpus_fingerprint[96],
+    const uint8_t digests[96], const int64_t audit_record[9],
+    const double metrics[5], const int64_t mc_counts[2],
+    char out[ET_EVAL5_MANIFEST_MAX_BYTES + 1u], uint64_t *out_size) {
+  if (tokenizer_fingerprint == NULL || corpus_fingerprint == NULL ||
+      digests == NULL || audit_record == NULL || metrics == NULL ||
+      mc_counts == NULL || out == NULL || out_size == NULL)
+    return ET_EVAL5_ERR_ARGUMENT;
+  if (audit_record[0] == ET_EVAL5_ERR_CONTAMINATED)
+    return ET_EVAL5_ERR_CONTAMINATED;
+  if (audit_record[0] != ET_EVAL5_OK) return ET_EVAL5_ERR_ARGUMENT;
+  et_eval5_v256_manifest_input input = {0};
+  input.tokenizer_fingerprint = tokenizer_fingerprint;
+  input.tokenizer_length = 96u;
+  input.corpus_fingerprint = corpus_fingerprint;
+  input.corpus_length = 96u;
+  memcpy(input.train_manifest_sha256, digests, 32u);
+  memcpy(input.eval_manifest_sha256, digests + 32u, 32u);
+  memcpy(input.checkpoint_sha256, digests + 64u, 32u);
+  for (size_t i = 0; i < 8u; ++i) {
+    if (audit_record[i + 1u] < 0) return ET_EVAL5_ERR_FORMAT;
+    input.audit_counts[i] = (uint64_t)audit_record[i + 1u];
+  }
+  memcpy(input.metrics, metrics, sizeof(input.metrics));
+  memcpy(input.mc_counts, mc_counts, sizeof(input.mc_counts));
+  char staged[ET_EVAL5_MANIFEST_MAX_BYTES + 1u];
+  size_t staged_size = 0;
+  et_eval5_status status = et_eval5_v256_manifest_roundtrip(
+      &input, staged, sizeof(staged), &staged_size);
+  if (status != ET_EVAL5_OK) return status;
+  memcpy(out, staged, staged_size + 1u);
+  *out_size = (uint64_t)staged_size;
+  return ET_EVAL5_OK;
+}

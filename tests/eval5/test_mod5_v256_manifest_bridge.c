@@ -24,7 +24,7 @@ static int digest(const char hex[65], uint8_t out[32]) {
   return 1;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
   static const char fingerprint[] =
       "sha256:eshkol-byte-tokenizer-v1:"
       "aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704";
@@ -80,6 +80,36 @@ int main(void) {
   CHECK(digest("aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704",
                expected_tokenizer));
   CHECK(memcmp(parsed.tokenizer_sha256, expected_tokenizer, 32u) == 0);
+  if (argc == 2 && strcmp(argv[1], "--emit") == 0) {
+    CHECK(fwrite(formatted, 1u, size, stdout) == size);
+    return 0;
+  }
+
+  uint8_t digests[96];
+  memcpy(digests, input.train_manifest_sha256, 32u);
+  memcpy(digests + 32u, input.eval_manifest_sha256, 32u);
+  memcpy(digests + 64u, input.checkpoint_sha256, 32u);
+  int64_t audit_record[9] = {0};
+  for (size_t i = 0; i < 8u; ++i)
+    audit_record[i + 1u] = (int64_t)input.audit_counts[i];
+  char live_output[ET_EVAL5_MANIFEST_MAX_BYTES + 1u];
+  uint64_t live_size = 0;
+  CHECK(et_eval5_v256_manifest_roundtrip_live(
+      (const uint8_t *)fingerprint, (const uint8_t *)fingerprint,
+      digests, audit_record, input.metrics, input.mc_counts,
+      live_output, &live_size) == ET_EVAL5_OK);
+  CHECK(live_size == size && memcmp(live_output, formatted, size + 1u) == 0);
+
+  memset(live_output, '!', sizeof(live_output));
+  live_size = 777u;
+  audit_record[0] = ET_EVAL5_ERR_CONTAMINATED;
+  CHECK(et_eval5_v256_manifest_roundtrip_live(
+      (const uint8_t *)fingerprint, (const uint8_t *)fingerprint,
+      digests, audit_record, input.metrics, input.mc_counts,
+      live_output, &live_size) == ET_EVAL5_ERR_CONTAMINATED);
+  for (size_t i = 0; i < sizeof(live_output); ++i) CHECK(live_output[i] == '!');
+  CHECK(live_size == 777u);
+  audit_record[0] = 0;
 
   char untouched[sizeof(formatted)];
   memset(untouched, '!', sizeof(untouched));
@@ -105,6 +135,12 @@ int main(void) {
   CHECK(et_eval5_v256_manifest_roundtrip(&input, formatted, sizeof(formatted),
                                           &size) == ET_EVAL5_ERR_IDENTITY);
   CHECK(memcmp(formatted, untouched, sizeof(formatted)) == 0 && size == 777u);
+  CHECK(et_eval5_v256_manifest_roundtrip_live(
+      (const uint8_t *)fingerprint, (const uint8_t *)wrong_corpus,
+      digests, audit_record, input.metrics, input.mc_counts,
+      live_output, &live_size) == ET_EVAL5_ERR_IDENTITY);
+  for (size_t i = 0; i < sizeof(live_output); ++i) CHECK(live_output[i] == '!');
+  CHECK(live_size == 777u);
   input.corpus_fingerprint = (const uint8_t *)fingerprint;
   input.metrics[1] += 1.0;
   CHECK(et_eval5_v256_manifest_roundtrip(&input, formatted, sizeof(formatted),
