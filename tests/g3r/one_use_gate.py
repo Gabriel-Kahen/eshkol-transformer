@@ -1,6 +1,6 @@
 """Development-only custody for one fresh generated G3-R replay or C2 SAVE gate.
 
-Run: python3 -B -m tests.g3r.one_use_gate PACKAGE EXPECTED_SEAL_SHA256
+Run: python3 -B -m tests.g3r.one_use_gate [--preflight] PACKAGE EXPECTED_SEAL_SHA256
 PACKAGE/preparation contains config.json, inside.sh and a complete seal.json.
 The caller pins seal.json independently. Outputs/CLAIM never belong to that seal.
 No old preparation, marker, client exit or native-only sanitizer result grants
@@ -21,6 +21,7 @@ import stat
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Callable
 
@@ -427,20 +428,25 @@ class Runner:
             raise failure
         return code, read_file(stdout_path), read_file(stderr_path)
 
-    def docker(self, name: str, args: list[str], timeout: int | None = 30) -> tuple[int, bytes, bytes]:
+    def docker_argv(self, config: Path, args: list[str]) -> list[str]:
         d = self.i.docker
-        return self.record(name, [d["client"], "--host", "unix://" + d["socket"],
-                                 "--config", str(self.i.out / "docker-config"), *args], timeout)
+        return [d["client"], "--host", "unix://" + d["socket"], "--config", str(config), *args]
 
-    def daemon(self) -> None:
-        code, data, _ = self.docker("security", ["info", "--format", "{{json .SecurityOptions}}"])
+    def docker(self, name: str, args: list[str], timeout: int | None = 30) -> tuple[int, bytes, bytes]:
+        return self.record(name, self.docker_argv(self.i.out / "docker-config", args), timeout)
+
+    def verify_docker_ready(self, probe: Callable[[str, list[str]], tuple[int, bytes, bytes]]) -> None:
+        code, data, _ = probe("security", ["info", "--format", "{{json .SecurityOptions}}"])
         require(code == 0 and "name=rootless" in load_json(data), "rootless daemon proof")
-        code, data, _ = self.docker("docker-root", ["info", "--format", "{{.DockerRootDir}}"])
+        code, data, _ = probe("docker-root", ["info", "--format", "{{.DockerRootDir}}"])
         require(code == 0 and data.decode().strip() == self.i.docker["root"], "Docker root identity")
-        code, data, _ = self.docker("image", ["image", "inspect", self.i.docker["image"]])
+        code, data, _ = probe("image", ["image", "inspect", self.i.docker["image"]])
         rows = load_json(data) if code == 0 else []
         require(len(rows) == 1 and rows[0]["Id"] == self.i.docker["image"]
                 and rows[0].get("Os") == "linux" and rows[0].get("Architecture") == "amd64", "image identity/platform")
+        name = self.i.config["container_name"]
+        code, data, error = probe("prelaunch-name", ["container", "inspect", name])
+        require(confirmed_absence(code, data, error, name), "container name occupied or unavailable")
 
     def inspect(self) -> dict | None:
         self.counter += 1
@@ -511,16 +517,37 @@ class Runner:
             for sig, handler in previous.items():
                 signal.signal(sig, handler)
 
-    def run(self) -> dict:
+    @contextmanager
+    def prepared(self):
         require(not os.environ.get("ESHKOL_ALLOW_UNSUPPORTED_HOST"), "unsupported-host override")
         self.i.verify()
         require(set(os.listdir(self.i.package)) == {"preparation"}, "stale/reused package")
         with heavy_locks(self.locks):
-            # Revalidate identities and capacity after acquiring BOTH slots.
             self.i.verify()
             require(set(os.listdir(self.i.package)) == {"preparation"}, "one-use package already claimed")
             sample = self.sample(self.i)
             require_resources(sample)
+            yield sample
+
+    def preflight(self) -> dict:
+        with self.prepared() as sample, tempfile.TemporaryDirectory(prefix="g3r-preflight-", dir="/tmp") as config:
+            def probe(_name: str, args: list[str]) -> tuple[int, bytes, bytes]:
+                with tempfile.TemporaryFile(dir=config) as stdout, tempfile.TemporaryFile(dir=config) as stderr:
+                    code = self.process.execute(self.docker_argv(Path(config), args), stdout, stderr, 30)
+                    stdout.seek(0)
+                    stderr.seek(0)
+                    return code, stdout.read(), stderr.read()
+
+            try:
+                self.verify_docker_ready(probe)
+            except ClientInterrupted as exc:
+                raise Hold("Docker preflight interrupted: " + str(exc)) from exc
+            return {"schema": SCHEMA, "status": "READY", "gate": self.i.config["gate"],
+                    "source_head": self.i.source["head"], "source_tree": self.i.source["tree"],
+                    "preparation_sha256": self.i.expected, "resources": sample}
+
+    def run(self) -> dict:
+        with self.prepared() as sample:
             write_new(self.i.package / "CLAIM.json", json_bytes({"schema": SCHEMA,
                 "source_head": self.i.source["head"], "source_tree": self.i.source["tree"],
                 "preparation_sha256": self.i.expected, "time": self.clock()}))
@@ -534,11 +561,7 @@ class Runner:
             attempted, row, failure, status = False, None, None, "FAIL"
             old_handlers = {sig: signal.signal(sig, self.interrupted) for sig in SIGNALS}
             try:
-                self.daemon()
-                code, data, _ = self.docker("prelaunch-name", ["container", "inspect", self.i.config["container_name"]])
-                err = read_file(self.i.out / "host/prelaunch-name.stderr")
-                require(confirmed_absence(code, data, err, self.i.config["container_name"]),
-                        "container name occupied or unavailable")
+                self.verify_docker_ready(self.docker)
                 # Once any client launch is attempted, cleanup owns both locks.
                 attempted = True
                 code, _, _ = self.record("run", self.i.command(), timeout=None)
@@ -677,8 +700,16 @@ def validate_evidence(inputs: Inputs) -> dict[str, str]:
 
 
 def main() -> None:
-    require(len(sys.argv) == 3, "usage: python3 -B -m tests.g3r.one_use_gate PACKAGE SEAL_SHA256")
-    Runner(Inputs(Path(sys.argv[1]), sys.argv[2])).run()
+    args = sys.argv[1:]
+    preflight = args[:1] == ["--preflight"]
+    if preflight:
+        args = args[1:]
+    require(len(args) == 2, "usage: python3 -B -m tests.g3r.one_use_gate [--preflight] PACKAGE SEAL_SHA256")
+    runner = Runner(Inputs(Path(args[0]), args[1]))
+    if preflight:
+        sys.stdout.buffer.write(json_bytes(runner.preflight()))
+    else:
+        runner.run()
 
 
 if __name__ == "__main__":

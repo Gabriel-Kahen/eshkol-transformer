@@ -32,6 +32,15 @@ profile, its guest recipe and exact required evidence inventory.
   A failed claimed attempt remains consumed; its evidence is preserved.
   Scratch and `TMPDIR` belong on the `/home`-backed output mount.
 
+## Readiness check
+
+Pass `--preflight` before the package path to verify the sealed inputs,
+locked resource floors, pinned Docker root and image, and container-name
+availability. Successful preflight writes a JSON `READY` record to stdout
+with the source identity, seal and measured resources. The package remains
+unclaimed, and temporary Docker client files are removed. Resource holds
+retain status 75. A later launch repeats the normal checks under the locks.
+
 ## Custody and results
 
 The controller binds container name, CID, image and source/preparation labels.
