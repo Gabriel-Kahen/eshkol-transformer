@@ -16,3 +16,18 @@ flags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -ffp-contract=off
   build/mod5/libeshkol_transformer_mod5.a "${scratch}/kernel.o" \
   build/dist5/libeshkol_dist5.a -lm -o "${scratch}/test"
 "${scratch}/test"
+
+sanitizers=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
+for source in mod5_primitives_provider kernel_abi dist5_collectives; do
+  "${cc}" "${flags[@]}" "${sanitizers[@]}" -c "native/${source}.c" \
+    -o "${scratch}/${source}.san.o"
+done
+"${cc}" "${flags[@]}" "${sanitizers[@]}" \
+  tests/dist5/test_dist5_mod5_gradients.c \
+  "${scratch}/mod5_primitives_provider.san.o" \
+  "${scratch}/kernel_abi.san.o" "${scratch}/dist5_collectives.san.o" \
+  -lm -o "${scratch}/test-sanitized"
+export ASAN_OPTIONS="detect_leaks=1:halt_on_error=1"
+export UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1"
+"${scratch}/test-sanitized"
+printf 'DIST5/MOD5 ASan/UBSan/LSan: PASS\n'

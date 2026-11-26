@@ -118,16 +118,20 @@ mismatches, peer exits and stalls during metadata, payload, or result
 acknowledgment, descriptor cleanup after rejected bootstrap, and the call-wide
 deadline during a slow payload transfer.
 
-`bash scripts/test-dist5-mod5.sh` is a separate development-only composition
+`make test-dist5-mod5` is a separate development-only composition
 witness. It reuses the accepted MOD5 GQA block backward fixture and its K1
 provider on current `main`. Two forked ranks compute gradients from distinct,
 equal-sized two-sequence minibatches. For each of three updates, the test
 compares every active synchronized gradient and SGD parameter against the
 serial mean of the two independently computed minibatch gradients, using
 absolute tolerance `1e-7` and relative tolerance `1e-6`. On an intervening
-nonfinite-gradient injection, both collectives reject, destination buffers
+nonfinite-gradient injection, both ranks observe rejection, destination buffers
 and model parameters stay unchanged, and a later barrier and SGD step succeed.
-This gate links the existing MOD5 and DIST5 archives without a new runtime ABI.
+This gate first links the existing MOD5 and DIST5 archives, then recompiles
+the MOD5 provider, K1 runtime, DIST5 transport, and witness with
+ASan/UBSan/LSan (`detect_leaks=1`). Both builds passed the focused local gate.
+No runtime ABI was added. Rank processes exit normally so leak reports affect
+their status; the parent reaps them and fails the gate on a child error.
 
 The composition witness does not implement a general trainer, unequal-batch
 weighting, AOT path, persistent optimizer state, or recovery across process
