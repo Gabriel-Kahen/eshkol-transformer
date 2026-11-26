@@ -1,5 +1,6 @@
 ;;; Test-only V=256 EVAL5 score witness. The prefix is the pinned MOD5-C source.
 (extern i32 score-v256 ptr ptr ptr ptr ptr ptr ptr ptr :real et_eval5_v256_score)
+(extern f64 score-metric ptr i64 :real et_eval5_v256_metric)
 
 (define expected-model-sha @@MODEL_SHA@@)
 (define expected-train-sha @@TRAIN_SHA@@)
@@ -113,7 +114,7 @@
                                  (ffi-pointer counts) (ffi-pointer probes)))
       (display "SCORE")
       (do ((i 0 (+ i 1))) ((= i 5))
-        (display " ") (print-real "%.17g" (volatile-load f64 (ptr-add metrics (* 8 i)))))
+        (display " ") (print-real "%.17g" (score-metric (ffi-pointer metrics) i)))
       (do ((i 0 (+ i 1))) ((= i 2))
         (display " ") (display (volatile-load i64 (ptr-add counts (* 8 i)))))
       (do ((i 0 (+ i 1))) ((= i 8))
@@ -139,7 +140,7 @@
              (display "C1_CHECKED") (newline))
             ((equal? argc 5)
              (score-fixture (cadr args) (caddr args) (cadddr args)
-                            (car (cddddr args))))
+                            (cadr (cdddr args))))
             (else (check-data #f "expected tokenizer, train, eval, and C1 paths"))))
     (close-mod5 (ffi-pointer runtime))
     0))

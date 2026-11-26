@@ -11,4 +11,8 @@ int32_t et_eval5_v256_score(const float *doc0, const float *doc1,
                             const uint32_t *eval_tokens, double metrics_out[5],
                             int64_t counts_out[2], float probes_out[8]);
 
+/* Fixed-size, checked f64 readback for the Eshkol FFI. Invalid access returns
+ * NaN, which the mandatory score comparator rejects. */
+double et_eval5_v256_metric(const double metrics[5], int64_t index);
+
 #endif

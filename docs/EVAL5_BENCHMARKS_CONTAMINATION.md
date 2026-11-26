@@ -270,3 +270,10 @@ checksummed C1 shape mutant and swapped D1 split identity. Its explicit
 gate has not run; a build slot and its exact compiler result are still needed.
 Set `EVAL5_V256_EVIDENCE_DIR` to a fresh directory to retain its compiled
 source, compiler log, score line, fixture, and negative-path outputs.
+
+The first pinned Ubuntu 22.04/Clang 21 replay on `a13051c5` stopped at AOT
+source generation before model execution: Eshkol rejected `volatile-load f64`
+and `cddddr`. The retained attempt directory is
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-aot-a13051c5-20261126T190906Z`.
+The focused successor uses an FFI f64 readback helper and the already used
+`cdddr` list primitive; source and normal/sanitized C checks pass locally.
