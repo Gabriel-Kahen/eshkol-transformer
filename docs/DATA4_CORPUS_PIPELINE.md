@@ -8,6 +8,18 @@ staging path. No compatibility between this report and the installed DATA4-A
 version-1 report is claimed. Integration requires an explicit contract for how
 quality-filtered documents enter the accepted T2/D1 aggregate.
 
+The development-only `scripts/test-data4-quality-t2-d1.sh` witness consumes
+the AOT bridge's actual per-ordinal DATA4-Q dispositions, preserves the
+corresponding original source IDs and bytes in order, verifies the independent
+quality report, and stages only kept bytes through the accepted T2 encoder and
+D1 writer. It checks the exact selected IDs and token IDs before publication,
+then validates D1 and compares the complete T2 readback. A duplicate source ID
+must fail the quality run before any D1 target is created. This is a test-only
+composition: no installed command, public ABI, DATA4-A report conversion, or
+general-purpose ownership transfer is added. D1 stores flat token IDs; document
+IDs and boundaries are established before publication and cannot be recovered
+from the D1 readback alone.
+
 ## Public C11/C++17 ABI and Eshkol AOT Bridge
 
 - Core ABI: `include/eshkol_transformer/data4_pipeline_abi.h` and `native/data4_pipeline.c`
