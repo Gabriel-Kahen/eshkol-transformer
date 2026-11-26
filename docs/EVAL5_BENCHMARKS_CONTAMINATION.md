@@ -160,3 +160,33 @@ Evaluation metrics consume caller-provided logits and use the platform's
 requires separate validation. The manifest stores the exact emitted bits.
 Integration with dataset readers, tokenizers, model inference, and external
 benchmark runners is outside this standalone library.
+
+## Fixed MOD5/D1 reference oracle (development only)
+
+`tests/eval5/mod5_reference_oracle.py` accepts a CPU-F32 C1 checkpoint and
+two validated D1 corpus directories, using the existing IO5 C1 decoder,
+MOD5 mapping checker, and D1 reference parser. It checks the fixed one-block
+`[V=16,D=16,F=32,Hq=4,Hkv=2,Dh=4]` MOD5 parameter roster and computes
+independent binary64 reference logits, token 3-gram and exact-document audit,
+LM metrics, and four length-normalized MC decisions. Run
+`python3 tests/eval5/mod5_reference_oracle.py model.etcp train-dir eval-dir`.
+It emits JSON for comparison with a future live AOT run; it writes no EVAL5
+manifest. `python3 -m unittest tests.eval5.test_mod5_reference_oracle` checks
+the parser boundary, clean and contaminated fixture outcomes, and rejection.
+
+This oracle uses a deliberately synthetic V=16 tokenizer representation: each
+token is written as two ASCII hex bytes solely for fixture audit and the
+32-byte LM denominator. It does not prove original-text provenance or the
+canonical T1/T2 tokenizer identity required by EVAL5 admission. The older
+`codex/eval5-live-mod5-runner` candidate hashes a fixture identity string
+for its manifest and hashes a single shard for each dataset; those fields
+must be replaced by owner-authenticated tokenizer fingerprints and canonical
+D1 inventory digests before a live manifest can be accepted. A live AOT gate
+must also compare its scored logits and metrics with this independent oracle
+on the exact C1 checkpoint and D1 corpora. The oracle performs development
+calculations in Python binary64 and does not assert last-bit parity with
+Eshkol or the EVAL5 C scorer.
+The current MOD5 fixture has vocabulary 16, while accepted T1/T2 tokenizer
+identities require at least 256 IDs. A real T1/T2 benchmark therefore needs
+a corresponding 256-or-larger-vocabulary live MOD5 model and matching D1
+corpora, or a separately specified and validated non-T1/T2 tokenizer owner.
