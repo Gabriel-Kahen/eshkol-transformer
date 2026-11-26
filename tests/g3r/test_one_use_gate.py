@@ -144,8 +144,11 @@ class Fixture:
             base = out / 'authentic-save'
             for name in ('no-save/program', 'producer/program', 'private-normal/pair-file-reader', 'private-sanitize/pair-file-reader'):
                 write(base / name, binary('sanitize' in name))
-            write(base / 'producer/program.ll', b'call @et_e1b_public_c2_checkpoint_save_v1\n')
-            write(base / 'no-save/program.ll', b'; compiled no-SAVE control\n')
+            native = b'  call void @et_e1b_public_c2_checkpoint_save_v1(ptr %27)\n'
+            app = b'  %9 = call %eshkol_tagged_value @"checkpoint-save!"(%eshkol_tagged_value %owner)\n'
+            write(base / 'producer/program.ll', native + app)
+            # Imported persistence emits this native bridge in the no-SAVE control too.
+            write(base / 'no-save/program.ll', native)
             saved = bytes(make_fixture()[0])
             companion = companion_record(hashlib.sha256(saved).digest())
             write(base / 'roundtrip.c2', saved)
@@ -490,14 +493,22 @@ class OneUseGateTests(unittest.TestCase):
         f = Fixture(self.root / 'save', 'save')
         self.addCleanup(f.close)
         f.runner().run()
+        control_ir = (f.package / 'out/guest/authentic-save/no-save/program.ll').read_bytes()
+        self.assertIn(b'call void @et_e1b_public_c2_checkpoint_save_v1(', control_ir)
+        self.assertNotIn(b'call %eshkol_tagged_value @"checkpoint-save!"(', control_ir)
         seal = json.loads((f.package / 'out/seal.json').read_text())
         self.assertEqual(seal['files']['guest/authentic-save/companions/link.g3r'], 'symlink:valid.g3r')
         self.assertEqual(seal['files']['guest/authentic-save/companions/fifo.g3r'], 'mode:' + str(__import__('stat').S_IFIFO))
 
     def test_save_pair_and_producer_identity_mutations_fail(self):
         mutations = [
-            lambda b: write(b / 'producer/program.ll', b'no SAVE call'),
-            lambda b: write(b / 'no-save/program.ll', b'et_e1b_public_c2_checkpoint_save_v1'),
+            lambda b: write(b / 'producer/program.ll',
+                            b'  call void @et_e1b_public_c2_checkpoint_save_v1(ptr %27)\n'),
+            lambda b: write(b / 'no-save/program.ll',
+                            b'  call void @et_e1b_public_c2_checkpoint_save_v1(ptr %27)\n'
+                            b'  %1 = call %eshkol_tagged_value @"checkpoint-save!"(ptr %2)\n'),
+            lambda b: write(b / 'producer/program.ll',
+                            b'  %9 = call %eshkol_tagged_value @"checkpoint-save!"(ptr %2)\n'),
             lambda b: write(b / 'roundtrip.c2', b'corrupted'),
             lambda b: write(b / 'pair-after-reader.sha256', b'changed'),
             lambda b: write(b / 'private-sanitize/run.stdout', b'static PASS'),
