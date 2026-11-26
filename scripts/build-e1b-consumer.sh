@@ -2121,6 +2121,11 @@ if [[ "${e3_overflow_mutant}" == clamp ]]; then
 fi
 
 if [[ -n "${package_native_source_closure}" ]]; then
+  if [[ "${package_policy}" == c2-wave2-aggregate ]]; then
+    # verify_toolchain authenticates this external source tree. Only its
+    # canonical public Eshkol headers may be projected into the C2 manifest.
+    c2_verified_eshkol_headers="$(realpath -- "${e1b_source}/inc/eshkol")"
+  fi
   {
     for native_depfile in "${package_native_depfiles[@]}"; do
       sed -e 's/^[^:]*://' -e 's/\\//g' "${native_depfile}" | \
@@ -2153,6 +2158,17 @@ if [[ -n "${package_native_source_closure}" ]]; then
               "${PROJECT_ROOT}/"*) printf '%s\n' "${native_dependency}" ;;
               *) die "M3T native dependency is outside reviewed source roots" ;;
             esac
+          elif [[ "${package_policy}" == c2-wave2-aggregate ]]; then
+            c2_canonical_dependency="$(realpath -- "${native_dependency}")"
+            case "${c2_canonical_dependency}" in
+              "${PROJECT_ROOT}/"*) printf '%s\n' "${native_dependency}" ;;
+              "${c2_verified_eshkol_headers}/"*)
+                printf '%s/.deps/eshkol-src/inc/eshkol/%s\n' \
+                  "${PROJECT_ROOT}" \
+                  "${c2_canonical_dependency#"${c2_verified_eshkol_headers}/"}"
+                ;;
+              *) die "C2 native dependency is outside reviewed source roots" ;;
+            esac
           else
             printf '%s\n' "${native_dependency}"
           fi
@@ -2165,9 +2181,14 @@ if [[ -n "${package_native_source_closure}" ]]; then
       }
     ' >"${e1b_tmp}/native-source-closure.txt"
   if [[ "${e3_zero_discovery}" != 1 ]]; then
-    cmp -s "${package_native_source_closure}" \
-      "${e1b_tmp}/native-source-closure.txt" || \
+    if ! cmp -s "${package_native_source_closure}" \
+      "${e1b_tmp}/native-source-closure.txt"; then
+      if [[ "${package_policy}" == c2-wave2-aggregate ]] && command -v diff >/dev/null; then
+        diff -u -- "${package_native_source_closure}" \
+          "${e1b_tmp}/native-source-closure.txt" >&2 || true
+      fi
       die "${package_policy} trusted native source closure drifted"
+    fi
   fi
 fi
 

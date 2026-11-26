@@ -2449,6 +2449,13 @@ existing private file reader against that image in normal, repeat and
 sanitizer modes. Source and host checks are complete; the compiled gate is
 unrun and does not establish restored model or public continuation.
 
+The frozen `4d319644` one-use REPLAY completed, but its separate SAVE stopped
+at the C2 native source-closure check before producing a saved roundtrip. A
+source-only successor projects four authenticated Eshkol headers from the
+external pinned dependency mount into the existing 53-path C2 manifest. An
+exact-image Clang 21 dependency probe matches that manifest in order; a fresh
+one-use SAVE and independent result review remain required.
+
 The source-only current-main union of these G3-R leaves starts from the
 reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
 commits `2569ccf`, `c63951e`, `b8b64b9`, `f3e1485`, and `308dd596`.
