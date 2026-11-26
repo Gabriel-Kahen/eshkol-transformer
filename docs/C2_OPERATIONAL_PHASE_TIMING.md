@@ -131,3 +131,18 @@ any replacement, speedup, or full supported C2 qualification.
 
 The sealed receipt is
 `/home/gabe/.codex/evidence/eshkol-transformer/c2-c1-sha-attribution-20261125`.
+The first receipt is preliminary because the validator constants were pinned
+after overlay generation. The generated runtime inputs match the committed
+generator byte for byte after path normalization.
+
+An independent collection of the exact `4fe16c326`/tree `743a3492` rerun
+verified the container's final driver exit status 0, all 26 checks, 25
+progress markers, 21 seam observations, and both byte-identical fixture
+comparisons. It spent 735.613 of 735.878 seconds inside SHA across the same
+378 hashes. Assembly took 45 ms and the remaining model interval was 220 ms.
+Joint elapsed was 868.137 seconds and peak runtime RSS was 340,652 KiB. The
+host wrapper exited before its final status record while the container
+continued to completion. The completed snapshot independently validated the
+source hashes and reran the receipt parser. Its seal in
+`c2-c1-sha-attribution-4fe16c326-completed.PGC9Gu` has SHA-256
+`075009327ca3489af1a02b409cb7f298a75fda5c9c37bedff1f014e7d670bd1d`.

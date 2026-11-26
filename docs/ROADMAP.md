@@ -759,9 +759,10 @@ passed the same pinned network-none one-Clang joint gate with 26 checks,
 Across six model encodes, the unchanged `c1-sha256` took 729.615 s for
 378 tensor/container hashes over 201,302,880 input bytes; checksum-input
 assembly took 0.054 s and the remaining model interval was 0.193 s at
-millisecond resolution. This is a single instrumented diagnostic, not a
-measured replacement or production change. Full supported C2 admission and
-any optimization decision remain separate.
+millisecond resolution. The completed exact-commit rerun measured 735.613 s
+inside SHA out of 735.878 s in six model encodes with the same checks and
+fixture bytes. Both measurements used the development diagnostic. Full
+supported C2 qualification and any optimization remain separate.
 
 ## Wave 3 — first complete language model
 
