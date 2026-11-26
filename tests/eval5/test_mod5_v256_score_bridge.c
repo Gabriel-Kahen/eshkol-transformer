@@ -25,6 +25,12 @@ int main(void) {
       fabs(metrics[3] - 8.0) > 1e-12 ||
       counts[0] != 2 || counts[1] != 4 || metrics[4] != 0.5)
     return 1;
+  if (et_eval5_v256_metric(metrics, 0) != metrics[0] ||
+      et_eval5_v256_metric(metrics, 4) != metrics[4] ||
+      !isnan(et_eval5_v256_metric(metrics, -1)) ||
+      !isnan(et_eval5_v256_metric(metrics, 5)) ||
+      !isnan(et_eval5_v256_metric(NULL, 0)))
+    return 5;
 
   metrics[0] = -123.0;
   counts[0] = -123;

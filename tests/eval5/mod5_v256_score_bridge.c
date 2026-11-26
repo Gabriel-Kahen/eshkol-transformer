@@ -11,6 +11,11 @@ static et_eval5_sequence sequence(const float *logits,
   return (et_eval5_sequence){logits, targets, count, VOCAB, count * VOCAB};
 }
 
+double et_eval5_v256_metric(const double metrics[5], int64_t index) {
+  if (metrics == NULL || index < 0 || index >= 5) return NAN;
+  return metrics[index];
+}
+
 int32_t et_eval5_v256_score(const float *doc0, const float *doc1,
                             const float *context_a, const float *context_b,
                             const uint32_t *eval_tokens, double metrics_out[5],

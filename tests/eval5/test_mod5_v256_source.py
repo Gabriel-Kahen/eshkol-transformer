@@ -50,6 +50,9 @@ class Mod5V256SourceTests(unittest.TestCase):
             self.assertEqual(source.count("(define span-bytes (* 4 vocab width))"), 1)
             self.assertIn(record["tokenizer_fingerprint"], source)
             self.assertNotIn("@@", source)
+            self.assertNotIn("volatile-load f64", source)
+            self.assertNotIn("cddddr", source)
+            self.assertIn("score-metric (ffi-pointer metrics) i", source)
             with patch.object(source_builder, "OWNER_SHA256", "0" * 64):
                 with self.assertRaises(ValueError):
                     source_builder.generate(root)
