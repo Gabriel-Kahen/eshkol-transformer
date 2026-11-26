@@ -1687,6 +1687,13 @@ RAM/swap floors, and no measured configured hosted runner qualifies. The
 compiled normal/repeat/poison/sanitizer gate and independent result review
 remain pending; E3 §9 stays **HOLD**.
 
+The exact `4d319644` stage-3 run passed its normal package but stopped while
+building the sanitized fault package: the retained Clang 21 object has three
+fewer ordinary `mem*` imports and eight additional ASan imports than the
+fault tuple's test-only pins. A source-only successor repins just that fault
+tuple's exact sanitizer inventories and cardinality checks. No sanitized
+runtime, repeat, poison or E3 §9 acceptance follows without a fresh gate.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

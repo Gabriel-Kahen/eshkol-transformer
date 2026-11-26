@@ -146,9 +146,16 @@ class FaultTupleTest(unittest.TestCase):
                       "tests/e3_private/fault_bridge.c")
         self.assertEqual(rows(FAULT, "native_source_closure"), native)
         self.assertEqual(rows(FAULT, "archive_members"), ["e3_fault_package.o"])
-        for suffix in ("sanitized_noninstrumentation_undefined_symbols",
-                       "sanitized_instrumentation_undefined_symbols"):
-            self.assertEqual(rows(FAULT, suffix), rows(RETENTION, suffix))
+        suffix = "sanitized_noninstrumentation_undefined_symbols"
+        self.assertEqual(rows(FAULT, suffix),
+                         [value for value in rows(RETENTION, suffix)
+                          if value not in {"memcpy", "memmove", "memset"}])
+        suffix = "sanitized_instrumentation_undefined_symbols"
+        self.assertEqual(rows(FAULT, suffix), sorted(
+            rows(RETENTION, suffix) + [
+                "__asan_alloca_poison", "__asan_allocas_unpoison",
+                "__asan_load1", "__asan_load8", "__asan_store1",
+                "__asan_store2", "__asan_store4", "__asan_store8"]))
         root = (TESTS / "fault_driver_root.esk").read_text()
         self.assertEqual(root.count('(load "retention_driver_root.esk")'), 1)
         self.assertEqual(root.count('(load "fault_driver.esk")'), 1)

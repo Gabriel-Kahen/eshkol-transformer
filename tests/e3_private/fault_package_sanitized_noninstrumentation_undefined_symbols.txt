@@ -146,9 +146,6 @@ hash_table_set
 logf
 malloc
 memchr
-memcpy
-memmove
-memset
 open
 openat
 pread

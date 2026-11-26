@@ -6,17 +6,21 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = ROOT / "tests/e3_private/retention_package"
+FAULT_PREFIX = ROOT / "tests/e3_private/fault_package"
+MUTANT_PREFIX = ROOT / "tests/e3_private/retention_first_eval_mutant_package"
 
 
 class RetentionSanitizerPolicyTests(unittest.TestCase):
-    def run_policy(self, kind=None, mutation=None):
+    def run_policy(self, kind=None, mutation=None, tuple_kind="retention"):
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
             inputs = []
+            prefix = {"fault": FAULT_PREFIX, "retention": PREFIX,
+                      "retention-first-eval-mutant": MUTANT_PREFIX}[tuple_kind]
             for name in ("undefined_symbols", "sanitized_noninstrumentation_undefined_symbols",
                          "sanitized_instrumentation_undefined_symbols"):
                 target = out / name
-                target.write_bytes(Path(str(PREFIX) + "_" + name + ".txt").read_bytes())
+                target.write_bytes(Path(str(prefix) + "_" + name + ".txt").read_bytes())
                 inputs.append(target)
             if kind is not None:
                 rows = inputs[kind].read_text().splitlines()
@@ -29,14 +33,17 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
                 inputs[kind].write_text("\n".join(sorted(rows)) + "\n")
             return subprocess.run(
                 ["bash", "-c", 'set -euo pipefail; die() { echo "$*" >&2; exit 1; }; '
-                 'PROJECT_ROOT=$2; source "$1"; '
-                 'e3_retention_verify_sanitizer_imports "$3" "$4" "$5"',
-                 "policy", str(ROOT / "scripts/e3-retention-sanitizer-import-policy.sh"),
+                 'e3_tuple_kind=$1; PROJECT_ROOT=$3; source "$2"; '
+                 'e3_retention_verify_sanitizer_imports "$4" "$5" "$6"',
+                 "policy", tuple_kind,
+                 str(ROOT / "scripts/e3-retention-sanitizer-import-policy.sh"),
                  str(ROOT), *(str(p) for p in inputs)], capture_output=True)
 
     def test_exact_emitted_inventory(self):
-        result = self.run_policy()
-        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        for tuple_kind in ("retention", "retention-first-eval-mutant"):
+            with self.subTest(tuple_kind=tuple_kind):
+                result = self.run_policy(tuple_kind=tuple_kind)
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
 
     def test_noninstrumentation_drift(self):
         for mutation in ("missing", "extra", "same_count"):
@@ -52,6 +59,12 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
         for mutation in ("missing", "extra"):
             with self.subTest(mutation=mutation):
                 self.assertNotEqual(self.run_policy(0, mutation).returncode, 0)
+
+    def test_fault_stage3_policy_rejects_drift(self):
+        self.assertEqual(self.run_policy(tuple_kind="fault").returncode, 0)
+        for kind in (1, 2):
+            self.assertNotEqual(
+                self.run_policy(kind, "same_count", tuple_kind="fault").returncode, 0)
 
     def test_verified_split_inventories_reach_published_evidence(self):
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
