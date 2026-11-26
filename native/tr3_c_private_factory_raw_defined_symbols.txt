@@ -56,6 +56,9 @@ c1-checkpoint-decode-state-internal_sexpr
 c1-checkpoint-encode-c2-owned-state-internal
 c1-checkpoint-encode-c2-owned-state-internal__eshkol_internal_abi
 c1-checkpoint-encode-c2-owned-state-internal_sexpr
+c1-checkpoint-encode-c2-owned-state-with-sha-internal
+c1-checkpoint-encode-c2-owned-state-with-sha-internal__eshkol_internal_abi
+c1-checkpoint-encode-c2-owned-state-with-sha-internal_sexpr
 c1-checkpoint-encode-projection-internal
 c1-checkpoint-encode-projection-internal_sexpr
 c1-checkpoint-encode-state-internal
@@ -121,6 +124,9 @@ c1-dtype-width_sexpr
 c1-encode-aliases
 c1-encode-aliases__eshkol_internal_abi
 c1-encode-aliases_sexpr
+c1-encode-digest
+c1-encode-digest__eshkol_internal_abi
+c1-encode-digest_sexpr
 c1-encode-path
 c1-encode-path__eshkol_internal_abi
 c1-encode-path_sexpr
@@ -524,6 +530,9 @@ c2-model-checkpoint-codec-internal
 c2-model-checkpoint-encode
 c2-model-checkpoint-encode__eshkol_internal_abi
 c2-model-checkpoint-encode_sexpr
+c2-model-checkpoint-sha256
+c2-model-checkpoint-sha256__eshkol_internal_abi
+c2-model-checkpoint-sha256_sexpr
 c2-model-encode-c2-owned-state-internal
 c2-model-encode-c2-owned-state-internal__eshkol_internal_abi
 c2-model-encode-c2-owned-state-internal_sexpr
@@ -1286,6 +1295,7 @@ et_c2_private_checkpoint_save_measure_v1
 et_c2_private_i2_state_owned_copy_bytes_v1
 et_c2_private_metadata_factory_authenticate_v1
 et_c2_private_metadata_factory_register_v1
+et_c2_private_model_sha256_v1
 et_c2_private_o2_state_copy_moment_bits_v1
 et_c2_private_o2_state_preflight_transfer_v1
 et_c2_private_o2_state_reconstruct_abort_v1
@@ -3631,6 +3641,18 @@ tr3-lease-cursor-position!_sexpr
 tr3-lease-d2-idle!
 tr3-lease-d2-idle!__eshkol_internal_abi
 tr3-lease-d2-idle!_sexpr
+tr3-lease-e3-byte-profile?
+tr3-lease-e3-byte-profile?__eshkol_internal_abi
+tr3-lease-e3-byte-profile?_sexpr
+tr3-lease-evaluation-admit-internal
+tr3-lease-evaluation-admit-internal__eshkol_internal_abi
+tr3-lease-evaluation-admit-internal_sexpr
+tr3-lease-evaluation-enter-internal!
+tr3-lease-evaluation-enter-internal!__eshkol_internal_abi
+tr3-lease-evaluation-enter-internal!_sexpr
+tr3-lease-evaluation-exit-internal!
+tr3-lease-evaluation-exit-internal!__eshkol_internal_abi
+tr3-lease-evaluation-exit-internal!_sexpr
 tr3-lease-evaluation-modes-internal
 tr3-lease-evaluation-modes-internal__eshkol_internal_abi
 tr3-lease-evaluation-modes-internal_sexpr

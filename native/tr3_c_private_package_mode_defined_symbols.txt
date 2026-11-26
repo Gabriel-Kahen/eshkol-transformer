@@ -41,6 +41,8 @@ c1-checkpoint-decode-state-internal
 c1-checkpoint-decode-state-internal_sexpr
 c1-checkpoint-encode-c2-owned-state-internal
 c1-checkpoint-encode-c2-owned-state-internal_sexpr
+c1-checkpoint-encode-c2-owned-state-with-sha-internal
+c1-checkpoint-encode-c2-owned-state-with-sha-internal_sexpr
 c1-checkpoint-encode-projection-internal
 c1-checkpoint-encode-projection-internal_sexpr
 c1-checkpoint-encode-state-internal
@@ -86,6 +88,8 @@ c1-dtype-width
 c1-dtype-width_sexpr
 c1-encode-aliases
 c1-encode-aliases_sexpr
+c1-encode-digest
+c1-encode-digest_sexpr
 c1-encode-path
 c1-encode-path_sexpr
 c1-entry-descriptor
@@ -373,6 +377,8 @@ c2-load-u64_sexpr
 c2-model-checkpoint-codec-internal
 c2-model-checkpoint-encode
 c2-model-checkpoint-encode_sexpr
+c2-model-checkpoint-sha256
+c2-model-checkpoint-sha256_sexpr
 c2-model-encode-c2-owned-state-internal
 c2-model-encode-c2-owned-state-internal_sexpr
 c2-model-encode-state-internal
@@ -2243,6 +2249,14 @@ tr3-lease-cursor-position!
 tr3-lease-cursor-position!_sexpr
 tr3-lease-d2-idle!
 tr3-lease-d2-idle!_sexpr
+tr3-lease-e3-byte-profile?
+tr3-lease-e3-byte-profile?_sexpr
+tr3-lease-evaluation-admit-internal
+tr3-lease-evaluation-admit-internal_sexpr
+tr3-lease-evaluation-enter-internal!
+tr3-lease-evaluation-enter-internal!_sexpr
+tr3-lease-evaluation-exit-internal!
+tr3-lease-evaluation-exit-internal!_sexpr
 tr3-lease-evaluation-modes-internal
 tr3-lease-evaluation-modes-internal_sexpr
 tr3-lease-fail
