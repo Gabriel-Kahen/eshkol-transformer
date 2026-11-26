@@ -179,6 +179,7 @@ class FakeDocker:
         self.interrupt, self.cidfile = False, True
         self.mutate = lambda: None
         self.occupied = False
+        self.preflight = False
         self.cid = '4' * 64
 
     def absent(self, stderr):
@@ -197,8 +198,13 @@ class FakeDocker:
     def execute(self, argv, stdout, stderr, timeout):
         self.f.assert_locks()
         self.calls.append((argv, timeout))
-        assert argv[:5] == [str(self.f.client), '--host', 'unix://' + str(self.f.sockpath),
-                            '--config', str(self.f.package / 'out/docker-config')]
+        assert argv[:4] == [str(self.f.client), '--host', 'unix://' + str(self.f.sockpath), '--config']
+        config = Path(argv[4])
+        if self.preflight:
+            assert config.is_dir() and config.parent == Path('/tmp')
+            assert {p.name for p in self.f.package.iterdir()} == {'preparation'}
+        else:
+            assert config == self.f.package / 'out/docker-config'
         args = argv[5:]
         if args[:2] == ['info', '--format']:
             stdout.write((b'["name=rootless"]\n' if 'SecurityOptions' in args[2]
@@ -374,10 +380,40 @@ class OneUseGateTests(unittest.TestCase):
                 data = f.sample(inputs)
                 data[key] -= 1
                 return data
-            with self.subTest(key=key), self.assertRaisesRegex(gate.Hold, key):
-                f.runner(sample=low).run()
-            self.assertFalse((f.package / 'CLAIM.json').exists())
+            for action in ('preflight', 'run'):
+                with self.subTest(key=key, action=action), self.assertRaisesRegex(gate.ResourceHold, key):
+                    getattr(f.runner(sample=low), action)()
+                self.assertEqual({p.name for p in f.package.iterdir()}, {'preparation'})
         self.assertFalse(f.process.calls)
+
+    def test_preflight_readiness_preserves_unclaimed_package(self):
+        f = self.fixture
+        f.process.preflight = True
+        result = f.runner().preflight()
+        self.assertEqual(result, {
+            'schema': gate.SCHEMA, 'status': 'READY', 'gate': f.profile,
+            'source_head': f.config['source']['head'], 'source_tree': f.config['source']['tree'],
+            'preparation_sha256': f.expected,
+            'resources': {'mem_available_kib': gate.MEM_KIB, 'swap_free_kib': gate.SWAP_KIB,
+                          'scratch_free_bytes': gate.DISK_BYTES, 'docker_free_bytes': gate.DISK_BYTES},
+        })
+        self.assertEqual([args[5:7] for args, _ in f.process.calls],
+                         [['info', '--format'], ['info', '--format'],
+                          ['image', 'inspect'], ['container', 'inspect']])
+        self.assertTrue(all(not Path(args[4]).exists() for args, _ in f.process.calls))
+        self.assertEqual({p.name for p in f.package.iterdir()}, {'preparation'})
+        self.assertEqual(f.process.run_calls, 0)
+        f.process.preflight = False
+        self.assertEqual(f.runner().run()['status'], 'PASS')
+
+    def test_preflight_name_conflict_preserves_unclaimed_package(self):
+        f = self.fixture
+        f.process.preflight = True
+        f.process.occupied = True
+        with self.assertRaisesRegex(gate.Hold, 'occupied'):
+            f.runner().preflight()
+        self.assertEqual({p.name for p in f.package.iterdir()}, {'preparation'})
+        self.assertEqual(f.process.run_calls, 0)
 
     def test_busy_lock_never_claims(self):
         f = self.fixture
