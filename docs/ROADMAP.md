@@ -62,8 +62,10 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   rejects any P1 source change from reviewed `dee51487`, and uploads a
   checksummed diagnostic-only receipt with source head/tree, prototype identity,
   trigger head, run identity, step outcomes and full suite log. To trigger it,
-  open a PR from a `codex/p1-two-compiler-trigger-*` branch with a documentation
-  change into that diagnostic branch; the tested source is the PR base commit.
+  open a PR from a `codex/p1-two-compiler-trigger-*` branch with only a reviewed
+  documentation change into that diagnostic branch; the tested source is the
+  PR base commit. Review the trigger diff before opening because GitHub reads
+  the workflow definition from the PR merge commit.
   No hosted run has been launched. Default serial CI and full-suite evidence
   remain unchanged; hosted parameter-state completion is the next gate.
 
