@@ -2,7 +2,23 @@
 
 ## Current accepted scope
 
-The latest independently replayed artifact is `15083982610`
+Artifact `15095929578` (`cli3-fixed-binary-45773952998-1`, GitHub artifact
+digest `sha256:e8da9eba8e829a181e2e68af644737717ab28a1bd23b1a68ff309ec9348eed75`)
+came from [PR #255 run 45773952998](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773952998).
+GitHub built synthetic merge `6ca6e432e565bcf1e5e0e3393ae969159f06c81d`
+from PR head `28c9e80443322cf51f6289977eb695d29ed4f66a`, exact tree
+`a00f10337f86e67e3ae29298d08da496d1d0f215`. All 26 required jobs passed,
+and the same tree became main at `513d2edefa0d949955b3d4144c7d24a0669286e0`.
+The tarball SHA-256 is
+`d34de38737ef44d236c7c8147819fa828011eb014bf21e85f8037b08c3724144` and
+the tested executable SHA-256 is
+`5eb2528b4b57a1659c8dc38bfb6bee10cb9a108583d85f38f09de3b61e657162`.
+The downloaded artifact runner verified the archive seals and exact source
+tree in a network-disabled Ubuntu 22.04 container. The DATA4 v2, checkpoint
+continuation, evaluation, and one-byte generation fixture passed without
+compiling.
+
+The preceding independently replayed artifact is `15083982610`
 (`cli3-fixed-binary-45745765085-1`, GitHub artifact digest
 `sha256:4aca539b9e6fdc7895702117fd0386a1dc3e319bcf669dd09c584cfabc113f7b`)
 from [PR #251 run 45745765085](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45745765085).

@@ -4,6 +4,25 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 
 ## Current integration
 
+- The private C2 model checksum and opt-in P1 compiler pairing landed
+  together at `513d2ede`/tree `a00f1033`. Both the C2 candidate and the
+  combined tree passed 26 required jobs. The combined run used the default
+  serial P1 schedule. The downloaded CLI3 binary passed the fixed-profile
+  replay on the same source tree.
+  [C2 PR #254](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/254)
+  [Combined PR #255](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/255)
+  [Required run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773952998)
+  [Artifact record](CLI3_FIXED_BINARY_ARTIFACT.md)
+- [PR #253](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/253)
+  admitted the fixed CPU-f32 MOD5-C live training and lossless interchange
+  witness at `46204807`/tree `5e5848da`. The tied and untied variants each
+  ran 12 SGD updates and crossed five lossless IO5 routes with byte-identical
+  C1 checkpoints and exact fresh-evaluation bits. All
+  [26 required jobs](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45755755178)
+  passed, and the
+  [main run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45764903430)
+  reused the exact-tree evidence. Optimizer resume and additional device,
+  dtype, and quantized paths remain open.
 - [PR #251](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/251)
   merged the lossless MOD5 model mapping and live C1 interchange witness,
   the downloaded CLI3 artifact runner, and #249's three development witnesses
@@ -46,7 +65,11 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   public terminal generation, and supported E3 numerical and resource
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
   tracks the combined gate. The [E3 runner measurement](e3/E3_HOSTED_QUALIFICATION_20261115.md)
-  records the resource shortfall on the standard hosted runner.
+  records the resource shortfall on the standard hosted runner. Both one-use
+  SAVE and replay packages were prepared and reviewed for the frozen
+  [source tree `19506579`](https://github.com/Gabriel-Kahen/eshkol-transformer/tree/4d31964456212f84837387c2ba2bb23803438f69).
+  They remain unclaimed. Launch requires at least 16 GiB available memory,
+  8 GiB free swap, and 32 GiB free at each Docker and scratch location.
 - On accepted `8d185344`, [hosted run 45646675969](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45646675969)
   passed `parameter-state`: 100m16s in the suite, after 2m10s of pinned
   toolchain verification. Its log has a 90m52s gap after the sanitized identity
