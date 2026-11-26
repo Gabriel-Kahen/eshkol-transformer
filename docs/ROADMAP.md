@@ -41,6 +41,47 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
   tracks the combined gate. The [E3 runner measurement](e3/E3_HOSTED_QUALIFICATION_20261115.md)
   records the resource shortfall on the standard hosted runner.
+- On accepted `8d185344`, [hosted run 45646675969](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45646675969)
+  passed `parameter-state`: 100m16s in the suite, after 2m10s of pinned
+  toolchain verification. Its log has a 90m52s gap after the sanitized identity
+  build and before the registry proof result. The P1 diagnostic candidate adds
+  phase durations across that gap; it does not change assertions or establish
+  a runtime reduction. A supported run with the same P1 inputs and these
+  markers is needed to localize the cost.
+- The exact diagnostic tree `ba0c02b0` at `22a28382` passed one isolated
+  Ubuntu 22.04.5 / Clang 21.1.8 `parameter-state` run on 2026-11-25. The
+  pinned toolchain check took 34s; the full P1 suite took 96m08s. The
+  deterministic compile matrix dominated at 76m42s, followed by package
+  builds at 9m51s, runtime/determinism at 6m53s, and the registry proof at
+  2m06s. The 110-line compiler timing log recorded a 3,146,840 KiB peak RSS.
+  This local timing is characterization, not a hosted CI result or speedup
+  claim. The full receipt is sealed at
+  `/home/gabe/.codex/evidence/eshkol-p1-exact-phase-run-20261125/SHA256SUMS`.
+  An isolated, default-off `P1_TWO_COMPILERS=1` prototype pairs independent
+  public object compiles and the trusted test object with the registry AOT.
+  Each has a separate cache/output/depfile/log path; timing lines retain their
+  format. The heavy pair requires 8 GiB available memory headroom, while the
+  169de76c serial peaks for those tasks were 2,784,368 and 3,008,724 KiB.
+  Mock overlap, failure-status and child cleanup checks pass. The exact
+  `8923e368` tree passed one isolated, network-disabled Ubuntu 22.04.5 / Clang
+  21.1.8 `parameter-state` run with `P1_TWO_COMPILERS=1` and the same pinned
+  compiler, build cache, limits, and sanitizer settings as the serial case.
+  Both repeats, byte comparisons, sanitizer checks, negatives, and registry
+  proof passed. The suite took 76m19s, including a 57m27s deterministic compile
+  matrix, versus 96m08s and 76m42s in the serial local run. The sampled peak
+  container-process RSS sum was 4,667,904 KiB; cgroup memory.peak was
+  4,797,132,800 bytes. These are container-wide observations, not a compiler-only
+  or serial-memory comparison. Host contention and initial memory differed, so
+  this one local comparison is not a hosted speedup claim. Exact receipt:
+  `/home/gabe/.codex/evidence/eshkol-p1-two-compiler-exact-20261125/SHA256SUMS`.
+- The opt-in two-compiler [hosted diagnostic](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45743747737)
+  passed the complete parameter-state suite with the pinned Ubuntu 22.04 and
+  Clang/LLVM 21.1.8 toolchain. It checked out `261b8196`/tree `5be22737`.
+  The suite ran in 64m17s, including a 49m08s compile matrix. Both scheduled
+  heavy pairs passed their 8 GiB pre-launch check. The receipt measures
+  single-compiler peak RSS and initial host headroom. A sustained hosted
+  memory trace and a matched serial comparison remain open. Default compile
+  scheduling stays serial.
 
 ## Parallel execution strategy
 

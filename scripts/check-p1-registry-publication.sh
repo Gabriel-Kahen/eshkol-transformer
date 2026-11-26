@@ -16,6 +16,12 @@ cxx="$(tsv_value "${provenance}" cxx_path)"
 compiler_timeout="${P1_REGISTRY_PROOF_COMPILER_TIMEOUT_SECONDS:-360}"
 [[ "${compiler_timeout}" =~ ^[1-9][0-9]*$ ]] || \
   die "P1_REGISTRY_PROOF_COMPILER_TIMEOUT_SECONDS must be a positive integer"
+phase_started=$SECONDS
+phase_done() {
+  printf 'P1 registry proof phase=%s elapsed_s=%d\n' \
+    "$1" "$((SECONDS - phase_started))"
+  phase_started=$SECONDS
+}
 
 template="${PROJECT_ROOT}/templates/p1/module_roots.esk.tmpl"
 generated="${PROJECT_ROOT}/internal/p1/lib/transformer/module.esk"
@@ -116,6 +122,7 @@ if compaction.index("(active-record-unlink-record! 4 record)") > \
         compaction.index("(vector-set! record 2 dead-state-entry-raw)"):
     raise SystemExit("active raw records survive state release")
 PY
+phase_done source-checks-complete
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/p1-registry-publication.XXXXXX")"
 cleanup() {
@@ -136,6 +143,7 @@ mkdir -p "${tmp}/native" "${tmp}/aot" "${tmp}/overlay/transformer" \
   -o "${tmp}/native/p1_identity.o"
 ar rcsD "${tmp}/native/libeshkol_transformer_p1_identity.a" \
   "${tmp}/native/p1_identity.o"
+phase_done native-identity-build-complete
 
 (cd "${tmp}/aot" &&
   env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -154,6 +162,7 @@ ar rcsD "${tmp}/native/libeshkol_transformer_p1_identity.a" \
 test -x "${tmp}/aot/registry-proof"
 test -s "${tmp}/aot/registry-proof.ll"
 test ! -s "${tmp}/aot/compile.stderr"
+phase_done ir-compile-complete
 
 python3 - "${tmp}/aot/registry-proof.ll" "${tmp}/publication-witness.txt" <<'PY'
 import collections
@@ -427,6 +436,7 @@ witness.append(f"ir-sha256={digest.hexdigest()}")
 with open(witness_path, "w", encoding="utf-8") as stream:
     stream.write("\n".join(witness) + "\n")
 PY
+phase_done ir-analysis-complete
 
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
   30s "${tmp}/aot/registry-proof" \
@@ -434,6 +444,7 @@ ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
 test ! -s "${tmp}/runtime.stderr"
 grep -Fx "P1 REGISTRY PUBLICATION PASS: 24 checks" \
   "${tmp}/runtime.stdout" >/dev/null
+phase_done poison-runtime-complete
 
 # The diagnostic copy differs from the trusted root only at four asserted
 # insertion sites. Its extra slot is private to this test; the production
@@ -493,6 +504,7 @@ source += "\n(define (p1-index-test-control! mode)\n"
 source += "  ((vector-ref p1-trusted-surface 73) mode))\n"
 Path(sys.argv[2]).write_text(source)
 PY
+phase_done fallback-overlay-complete
 
 (cd "${tmp}/fallback" &&
   env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -511,12 +523,14 @@ PY
       2>"${tmp}/fallback/compile.stderr")
 test -x "${tmp}/fallback/index-fallback"
 test ! -s "${tmp}/fallback/compile.stderr"
+phase_done fallback-compile-complete
 ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=2s \
   30s "${tmp}/fallback/index-fallback" \
   >"${tmp}/fallback/runtime.stdout" 2>"${tmp}/fallback/runtime.stderr"
 test ! -s "${tmp}/fallback/runtime.stderr"
 grep -Fx "P1 INDEX FALLBACK PASS: 11 checks" \
   "${tmp}/fallback/runtime.stdout" >/dev/null
+phase_done fallback-runtime-complete
 
 cat "${tmp}/publication-witness.txt"
 printf 'poison-nested-sibling-runtime=true\n'
