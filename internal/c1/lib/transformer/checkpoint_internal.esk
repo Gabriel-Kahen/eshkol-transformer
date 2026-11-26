@@ -613,8 +613,11 @@
       (c1-fail 'invalid-argument
                'c1-checkpoint-encode-c2-owned-state-internal
                "C2 model encode operation must be a symbol"))
-  (c1-checkpoint-encode-c2-owned-state-with-sha-internal
-    state owner-token policy codec c1-sha256 operation))
+  ;; Keep this compatibility call out of tail position to preserve the
+  ;; standalone C2 aggregate's runtime imports.
+  (let ((result (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+                  state owner-token policy codec c1-sha256 operation)))
+    result))
 
 ;;; The guarded C2 sibling may supply a private digest delegate. The callback
 ;;; receives the complete domain-prefixed preimage and must return a fresh
