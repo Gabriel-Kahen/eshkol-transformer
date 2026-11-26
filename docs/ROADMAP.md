@@ -28,6 +28,15 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   phase durations across that gap; it does not change assertions or establish
   a runtime reduction. A supported run with the same P1 inputs and these
   markers is needed to localize the cost.
+- The exact diagnostic tree `ba0c02b0` at `22a28382` passed one isolated
+  Ubuntu 22.04.5 / Clang 21.1.8 `parameter-state` run on 2026-11-25. The
+  pinned toolchain check took 34s; the full P1 suite took 96m08s. The
+  deterministic compile matrix dominated at 76m42s, followed by package
+  builds at 9m51s, runtime/determinism at 6m53s, and the registry proof at
+  2m06s. The 110-line compiler timing log recorded a 3,146,840 KiB peak RSS.
+  This local timing is characterization, not a hosted CI result or speedup
+  claim. The full receipt is sealed at
+  `/home/gabe/.codex/evidence/eshkol-p1-exact-phase-run-20261125/SHA256SUMS`.
 
 ## Parallel execution strategy
 
