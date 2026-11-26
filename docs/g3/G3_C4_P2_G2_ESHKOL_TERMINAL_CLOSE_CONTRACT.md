@@ -77,6 +77,16 @@ independent review and pinned compiled evidence for any held-lease capability
 it uses, plus the close and detached-result gates below. [Qualified
 predecessor source](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/12598d3bc01c155eab0eeb89b26c11304ee3fcbd).
 
+Run `python3 -B -m unittest tests.g3c4.test_p2_g2_constructor_reservation_boundary`
+to check the predecessor boundary. The generic reserve constructs its own
+auxiliary pair before enrollment, the abort-only scopes allocate their own
+first and second pairs, and the constructor root authenticates its eight
+allocations independently. The check preserves those ownership boundaries,
+feature-off loading, and the existing order of pending enrollment and native
+failure cleanup. A separately reviewed private entry must connect the
+constructor bundle at first enrollment. The source check does not exercise
+a constructor-bound reservation at runtime.
+
 ## Actual same-region sampling, decode, and rollback
 
 Reserve the sole pending output before first sampling. Use the EOS-capable authentic first carrier on the original P2 input. Authenticate the complete LE i64 ID, then perform genuine same-registry T1 decode into the original first raw carrier; reauthenticate every original identity/edge and payload after each recoverable step. Do not provide logits, sampled IDs, RNG words, or cache candidates from Eshkol.

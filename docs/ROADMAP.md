@@ -3814,9 +3814,15 @@ publication, public G2 and continuation remain pending.
   would install the original carrier bundle when the sole private pending
   output is enrolled. It defines reservation rollback, same-owner lease
   release and abort retry, and transfer of selected text to the surviving
-  anchor without allocating after native terminal commit. Contract review,
-  reservation implementation, and held-lease and same-call qualification
-  remain pending.
+  anchor without allocating after native terminal commit. Independent
+  source review accepted the proposal. Reservation implementation and
+  held-lease and same-call qualification remain pending.
+
+  The source preflight preserves the separate constructor and existing
+  reservation authorities, feature-off loading, and abort ordering. Its four
+  checks and the 29 predecessor mutations pass on the rehearsal source.
+  First-enrollment composition still needs an independently reviewed private
+  entry before compiled qualification.
 
 ## Wave 4 — practical pretraining and performance
 
