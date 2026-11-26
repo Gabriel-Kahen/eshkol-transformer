@@ -31,8 +31,11 @@ resolve_provenance_compilers cc cxx \
 runner="$(eshkol_build_dir)/eshkol-run"
 development="${C2_OPERATIONAL_DEVELOPMENT_JOINT_ONLY:-0}"
 seam_timing="${C2_OPERATIONAL_DEVELOPMENT_SEAM_TIMING:-0}"
+native_sha="${C2_OPERATIONAL_DEVELOPMENT_NATIVE_SHA:-0}"
 [[ "${seam_timing}" == 0 || ( "${seam_timing}" == 1 && "${development}" == 1 ) ]] || \
   die "seam timing requires the single-compiler development gate"
+[[ "${native_sha}" == 0 || ( "${native_sha}" == 1 && "${seam_timing}" == 1 ) ]] || \
+  die "native SHA feasibility requires the development seam gate"
 read -r -a development_modes <<< \
   "${C2_OPERATIONAL_DEVELOPMENT_MODE:-joint}"
 if [[ "${development}" != 0 && "${development}" != 1 ]]; then
@@ -231,6 +234,11 @@ runtime_native_inputs=(
   "${PROJECT_ROOT}/tests/c2/c2_checkpoint_save_test_bridge.c"
   "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_metrics.c"
 )
+if [[ "${native_sha}" == 1 ]]; then
+  python3 "${PROJECT_ROOT}/tests/c2/c2_native_sha_feasibility.py" native \
+    "${tmp}/c2_checkpoint_format_development.c"
+  runtime_native_inputs+=("${tmp}/c2_checkpoint_format_development.c")
+fi
 "${cc}" "${runtime_cflags[@]}" -DET_I2_NATIVE_HELPERS_ONLY \
   -DET_C2_I2_MODEL_COPY -c \
   "${PROJECT_ROOT}/native/i2_wave2_package_bridge.c" -o "${runtime}/i2.o"
@@ -243,7 +251,11 @@ runtime_native_inputs=(
 for source in data_io kernel_abi t1_i64_shell f32_tensor i64_tensor \
               d2_native o2_optimizer c2_x1_canonical c2_checkpoint_codec \
               c2_checkpoint_format; do
-  "${cc}" "${runtime_cflags[@]}" -c "${PROJECT_ROOT}/native/${source}.c" \
+  source_path="${PROJECT_ROOT}/native/${source}.c"
+  if [[ "${source}" == c2_checkpoint_format && "${native_sha}" == 1 ]]; then
+    source_path="${tmp}/c2_checkpoint_format_development.c"
+  fi
+  "${cc}" "${runtime_cflags[@]}" -c "${source_path}" \
     -o "${runtime}/${source}.o"
 done
 "${cc}" "${runtime_cflags[@]}" -DET_CHECKPOINT_IO_TESTING -c \
@@ -357,6 +369,11 @@ write_development_manifest() {
         "${runtime_source}" "${tmp}/clang-a/overlay/"*.esk \
         "${tmp}/clang-a/overlay/transformer/checkpoint_internal.esk"
     fi
+    if [[ "${native_sha}" == 1 ]]; then
+      printf 'substitution=c2-c1-native-sha-feasibility-v1\n'
+      sha256sum "${PROJECT_ROOT}/tests/c2/c2_native_sha_feasibility.py" \
+        "${tmp}/c2_checkpoint_format_development.c"
+    fi
     printf 'aot-depfile=%s\naot-output=%s\n' "${depfile}" \
       "${tmp}/clang-a/operational"
     printf 'source-and-native-inputs:\n'
@@ -386,6 +403,10 @@ compile_runtime() {
     runtime_source="${tmp}/${label}/c2_checkpoint_operational_timed.esk"
     python3 "${PROJECT_ROOT}/tests/c2/c2_joint_seam_timing.py" generate \
       "${runtime_source}"
+    if [[ "${native_sha}" == 1 ]]; then
+      python3 "${PROJECT_ROOT}/tests/c2/c2_native_sha_feasibility.py" overlay \
+        "${tmp}/${label}/overlay/transformer/checkpoint_internal.esk"
+    fi
     overlay_args=(-I "${tmp}/${label}/overlay")
   fi
   phase_begin aot_compile

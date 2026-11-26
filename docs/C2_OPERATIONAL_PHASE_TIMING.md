@@ -131,3 +131,30 @@ any replacement, speedup, or full supported C2 qualification.
 
 The sealed receipt is
 `/home/gabe/.codex/evidence/eshkol-transformer/c2-c1-sha-attribution-20261125`.
+
+## Test-only native C1 checksum feasibility
+
+The opt-in `C2_OPERATIONAL_DEVELOPMENT_NATIVE_SHA=1` successor generates a
+private copy of `c2_checkpoint_format.c` with a whole-input digest entry point
+using that file's existing SHA-256 core. It validates Eshkol bytevector headers
+and length bounds before hashing payload bytes. A generated C1 overlay replaces
+only the two timed SAVE checksum sites; checked-in C1/C2 production sources,
+domains, checkpoint format, ownership, reader and writer gates, and default
+execution are unchanged. Four focused tests cover known answers, padding edges,
+invalid FFI boundaries, and the exact joint fixture bytes. Independent source
+and test review found no remaining issues.
+
+The pinned network-none Ubuntu 22.04, Clang 21.1.8, Eshkol `fe9dfd5241`
+single-compiler developmental replay passed 26 checks and 25 ordered progress
+markers. Both 16,777,216-byte outputs match the existing fixture exactly
+(SHA-256 `23affcc0b05c8cc431f10357fa15e8ac9c2e0fa0a323a69a020efe586bdcef07`).
+The joint process reported 138,540 ms elapsed and 396,464 KiB peak RSS, below
+the unchanged 1,800-second and 524,288 KiB bounds. Across the six measured
+model encodes, 378 checksum calls over 201,302,880 input bytes consumed
+5,309 ms of 5,594 ms total model time; input assembly consumed 64 ms.
+The strict AOT compile took 114 seconds. These are one-run developmental
+measurements and do not establish a host-matched or production speedup.
+Full supported C2 qualification and a reviewed production design remain open.
+
+The retained receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/c2-c1-sha-feasibility-20261125`.

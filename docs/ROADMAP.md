@@ -762,6 +762,14 @@ assembly took 0.054 s and the remaining model interval was 0.193 s at
 millisecond resolution. This is a single instrumented diagnostic, not a
 measured replacement or production change. Full supported C2 admission and
 any optimization decision remain separate.
+The [test-only native checksum feasibility](C2_OPERATIONAL_PHASE_TIMING.md)
+generates a private C2 SHA entry point and substitutes only the timed C1 SAVE
+checksum call. Independent source/tests review and four focused parity and
+boundary tests passed. The pinned one-Clang joint replay passed 26 checks,
+25 markers, exact comparison of both 16 MiB outputs, and the unchanged RSS
+and timeout limits. Its measured runtime was 138.540 s, with 5.309 s in 378
+SHA calls; this is developmental evidence, not a host-matched or production
+speedup. Supported C2 qualification and production design review remain open.
 
 ## Wave 3 — first complete language model
 
