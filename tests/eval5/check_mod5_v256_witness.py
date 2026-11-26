@@ -1,6 +1,7 @@
 """Compare live audit and score lines with the exact C1/D1 reference fixture."""
 
 import math
+import hashlib
 from pathlib import Path
 import struct
 import sys
@@ -29,11 +30,51 @@ def expected_probes(root):
     return probes
 
 
+def expected_manifest(record, metrics, counts, audit):
+    def bits(value):
+        return struct.pack(">d", value).hex()
+
+    fields = (
+        ("suite", "mod5-v256-development"), ("task", "lm-mc"),
+        ("split", "eval-clean"),
+        ("train_dataset_sha256", record["splits"]["train"]["dataset_sha256"]),
+        ("eval_dataset_sha256", record["splits"]["eval-clean"]["dataset_sha256"]),
+        ("tokenizer_sha256", record["tokenizer_sha256"]),
+        ("checkpoint_sha256", record["checkpoint_sha256"]),
+        ("context_length", "8"), ("max_samples", "0"),
+        ("contamination.ngram_mode", "2"),
+        ("contamination.ngram_order", "3"),
+        ("contamination.forbid_exact_match", "1"),
+        ("contamination.min_ngram_overlap", bits(0.25)),
+        ("contamination.max_allowed_rate", bits(0.0)),
+        ("metric_mask", "3"), ("mc_normalize_by_length", "1"),
+        ("lm.token_count", "16"), ("lm.byte_count", "16"),
+        ("lm.total_nll", bits(metrics[0])),
+        ("lm.mean_nll", bits(metrics[1])),
+        ("lm.perplexity", bits(metrics[2])),
+        ("lm.bits_per_byte", bits(metrics[3])),
+        ("mc.correct_count", str(counts[0])),
+        ("mc.total_count", str(counts[1])),
+        ("mc.accuracy", bits(metrics[4])),
+        ("audit.eval_documents", str(audit[1])),
+        ("audit.contaminated_documents", str(audit[2])),
+        ("audit.exact_doc_matches", str(audit[3])),
+        ("audit.ngram_contaminated_docs", str(audit[4])),
+        ("audit.total_eval_ngrams", str(audit[5])),
+        ("audit.matched_eval_ngrams", str(audit[6])),
+        ("audit.contamination_rate", bits(0.0)),
+    )
+    payload = "EVAL5_MANIFEST_V1\nversion=1.0\n" + "".join(
+        f"{key}={value}\n" for key, value in fields)
+    return payload + "manifest_sha256=" + hashlib.sha256(
+        payload.encode("ascii")).hexdigest() + "\n"
+
+
 def check(root, stdout):
     record = fixture.verify(root)
     lines = stdout.splitlines()
-    if len(lines) != 2:
-        raise ValueError("expected live AUDIT then SCORE lines")
+    if len(lines) < 6 or not stdout.endswith("\n") or lines[2] != "MANIFEST_BEGIN" or lines[-1] != "MANIFEST_END":
+        raise ValueError("expected live AUDIT, SCORE, and in-memory MANIFEST")
     audit = record["score_reference"]["audit"]
     wanted_audit = [0, *(audit[key] for key in (
         "eval_documents", "contaminated_documents", "exact_doc_matches",
@@ -69,6 +110,9 @@ def check(root, stdout):
         if not math.isfinite(actual) or not math.isclose(actual, wanted,
                 rel_tol=REL_TOL, abs_tol=PROBE_ABS_TOL):
             raise ValueError(f"live f32 logit probe {index} differs from reference")
+    actual_manifest = "\n".join(lines[3:-1]) + "\n"
+    if actual_manifest != expected_manifest(record, metrics, counts, actual_audit):
+        raise ValueError("in-memory manifest differs from owner identities or live outputs")
     return max(abs(actual - wanted) for actual, wanted in zip(metrics, wanted_metrics))
 
 

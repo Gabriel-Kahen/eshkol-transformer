@@ -376,12 +376,22 @@ outputs untouched. The bridge performs no file I/O or publication.
 
 The focused C test uses exact fixture digests, a fresh direct EVAL5 audit,
 and score values recorded by the earlier sealed V=256 AOT run. It passes
-normal and sanitizer builds, but it does not run the model again or bind the
-new source to a compiled Eshkol call. The next Eshkol change must retain the
-actual parsed T1 fingerprint, both D1 validator summary fingerprints and
-manifest bytevector digests, the same-byte checked C1 digest, the eight audit
-counts, and the score metrics/counts until the bridge call after scoring.
-It must pass those values to the bridge, compare the parsed fields, and keep
-the canonical text in test scratch only. That call must remain unreachable
-after a nonclean audit or identity failure. No EVAL5 manifest has been
-published.
+normal and sanitizer builds, but it does not run the model again or prove
+a compiled same-run Eshkol call. No EVAL5 manifest has been published.
+
+The next opt-in source candidate connects this bridge to the same compiled
+V=256 witness through a fixed eight-pointer test-only FFI seam. The Eshkol
+path retains the parsed T1 fingerprint, both D1 summary fingerprints and
+SHA-256 digests of the validated manifest bytevectors, and the SHA-256 of
+the same C1 bytes passed to decoding. After a clean live audit and LM/MC
+score, it passes those values and the native score buffers to the in-memory
+round-trip bridge. The canonical text is emitted between `MANIFEST_BEGIN`
+and `MANIFEST_END` on stdout and retained only in the test evidence stream.
+The comparator independently checks canonical field order, owner-sourced
+digests, exact binary64 metric bits, and final SHA-256. The contaminated
+control and T1/D1/C1 identity failures have no manifest-output call. This
+source has only light C/Python/source checks so far, including byte-for-byte
+parity between C-formatted text and the independent Python fixture comparator;
+a pinned AOT run and
+independent review are required before claiming a live compiled manifest
+round trip. No external publication is added.
