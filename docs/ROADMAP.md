@@ -37,6 +37,14 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   This local timing is characterization, not a hosted CI result or speedup
   claim. The full receipt is sealed at
   `/home/gabe/.codex/evidence/eshkol-p1-exact-phase-run-20261125/SHA256SUMS`.
+  An isolated, default-off `P1_TWO_COMPILERS=1` prototype pairs independent
+  public object compiles and the trusted test object with the registry AOT.
+  Each has a separate cache/output/depfile/log path; timing lines retain their
+  format. The heavy pair requires 8 GiB available memory headroom, while the
+  169de76c serial peaks for those tasks were 2,784,368 and 3,008,724 KiB.
+  Mock overlap, failure-status and child cleanup checks pass. The full suite
+  has not been rerun with this option; deterministic output, actual concurrent
+  peak RSS, and any speedup remain unqualified.
 
 ## Parallel execution strategy
 
