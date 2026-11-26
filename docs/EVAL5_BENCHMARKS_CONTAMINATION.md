@@ -337,3 +337,26 @@ its verified `SHA256SUMS` digest is
 This replay proves the corrected fixed development witness, not an independent
 second build of the same source, live C contamination audit, benchmark manifest,
 external evaluation, training, or production runtime behavior.
+
+### Development-only V=256 live audit candidate
+
+The successor witness retains the same validated T1 artifact, canonical D1
+manifest and ordered shards, and original nine-byte documents. Its test-only
+C bridge calls `et_eval5_audit_contamination` with those original bytes and
+their raw-byte T1/D1 token IDs. The fixed policy is token 3-grams, minimum
+overlap `0.25`, maximum contamination rate `0.0`, and exact matches
+forbidden. The normal train/eval pair must produce status `0`, two evaluation
+documents, 14 windows, and zero exact, n-gram, or matched-window counts
+before the C1 load or scoring call. A separate `--audit-control` invocation
+uses the already validated training documents as evaluation input; it must
+produce status `ET_EVAL5_ERR_CONTAMINATED` (`-7`), two exact and n-gram
+matches, all 14 windows matched, and matching indices `0,1`. That control
+returns without loading C1, computing logits, or writing a manifest.
+
+The bridge's direct C11 and ASan/UBSan tests and the generated-source and
+comparator checks pass locally. The source-only check orders the audit before
+C1 load. This is not yet a compiled Eshkol audit result. The next gate is a
+pinned, resource-coordinated AOT replay of the successor source, including
+the clean and rejected control outputs. A fixture-only canonical manifest
+format/parse round trip with live metrics and owner-sourced identity digests
+remains separate; neither path publishes an EVAL5 manifest or external claim.

@@ -51,6 +51,11 @@ class Mod5V256SourceTests(unittest.TestCase):
             self.assertIn("(c1-sha256 bytes) expected-model-sha", source)
             self.assertIn("(c1-checkpoint-decode-state-internal\n                    bytes policy", source)
             self.assertIn("(weights (load-checked-weights model-path))", source)
+            self.assertIn("(audit-splits train evaluation 0)", source)
+            self.assertLess(source.index("(audit-splits train evaluation 0)"),
+                            source.index("(weights (load-checked-weights model-path))"))
+            self.assertIn("(audit-splits train train -7)", source)
+            self.assertNotIn("et_eval5_manifest_", source)
             self.assertNotIn("(check-file-sha model-path", source)
             self.assertIn("(load-weights (caddr args))", source)
             self.assertEqual(source.count("(define vocab 256)"), 1)
