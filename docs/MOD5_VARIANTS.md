@@ -23,16 +23,17 @@ row is an exact min=max shape and applies to both operations in its capability.
 
 | Capability | Operations | Exact request shapes |
 |---|---|---|
-| `kernel.rmsnorm` | `rmsnorm.forward`, `rmsnorm.backward` | `[1,1,1]`, `[1,1,4]`, `[1,2,4]`, `[2,3,4]`, `[2,3,8]` |
-| `kernel.swiglu` | `swiglu.forward`, `swiglu.backward` | `[1,1,1]`, `[1,1,8]`, `[1,2,4]`, `[2,3,4]`, `[2,3,8]` |
-| `kernel.variant-attention` | `variant-attention.forward`, `variant-attention.backward` | `[1,2,1,2,2,2]`, `[1,4,1,3,3,2]`, `[2,4,1,2,3,4]`, `[1,4,2,3,3,2]`, `[2,4,2,2,3,4]`, `[1,2,2,3,3,2]` |
+| `kernel.rmsnorm` | `rmsnorm.forward`, `rmsnorm.backward` | `[1,1,1]`, `[1,1,4]`, `[1,2,4]`, `[2,3,4]`, `[2,3,8]`, `[1,8,16]`, `[2,8,16]`, `[1,16,32]` |
+| `kernel.swiglu` | `swiglu.forward`, `swiglu.backward` | `[1,1,1]`, `[1,1,8]`, `[1,2,4]`, `[2,3,4]`, `[2,3,8]`, `[1,8,16]`, `[1,8,32]`, `[2,8,32]`, `[1,16,64]` |
+| `kernel.variant-attention` | `variant-attention.forward`, `variant-attention.backward` | `[1,2,1,2,2,2]`, `[1,4,1,3,3,2]`, `[2,4,1,2,3,4]`, `[1,4,2,3,3,2]`, `[2,4,2,2,3,4]`, `[1,2,2,3,3,2]`, `[1,4,1,8,8,4]`, `[1,4,2,8,8,4]`, `[2,4,2,8,8,4]`, `[1,4,1,16,16,8]`, `[1,4,2,16,16,8]` |
 
 ## Tensor schemas
 
 RMSNorm and SwiGLU use request shape `[N,T,D]`. Variant attention uses
 `[N,Hq,Hkv,Tq,Tk,Dh]`, with positive extents and `Hq % Hkv == 0`. The attention
 rows cover MQA (`Hkv == 1`), GQA (`1 < Hkv < Hq`), and MHA (`Hkv == Hq`),
-including two-batch rectangular MQA and GQA. Query head `h` uses KV head
+including two-batch rectangular MQA and GQA and 16-token MQA and GQA with
+four query heads of width eight. Query head `h` uses KV head
 `h / (Hq / Hkv)` by integer division.
 
 | Operation | Inputs in order | Outputs in order |
@@ -146,13 +147,21 @@ environment. On x86-64, both x87 and MXCSR must use round-to-nearest and mask
 all exceptions. MXCSR must have FTZ and DAZ disabled. Preexisting exception
 flags are allowed.
 
-Validation runs the evaluator into fixed-size automatic buffers, restoring the
-caller's floating-point environment and `errno` on either numeric outcome.
-Invoke repeats the evaluator and publishes the complete output spans. As required
-by K1, inputs, descriptors, and floating-point controls stay stable across the
-two phases. Under this contract invoke is non-failing. The K1 dispatch boundary
-leaves all input and output bytes unchanged on a recoverable failure. Invoke may
-set sticky exception flags or update `errno` as a result of finite libm evaluation.
+Validation dry-runs the serial evaluator without writing outputs. SwiGLU
+checks one element at a time. RMSNorm retains only the dGamma feature
+reduction. Attention retains one query row and the shared dK and dV
+reductions for one batch and KV head, with space for up to 16 keys and
+eight features per head. This catches late accumulation overflow while
+preserving query-head and token order. Validation restores the caller's
+floating-point environment and `errno` on either numeric outcome.
+
+Invoke snapshots every output address and byte length, zeroes its reduction
+outputs, and repeats the same evaluation directly into caller storage. K1
+requires inputs, descriptors, and floating-point controls to stay stable
+across both phases. Under this contract invoke is non-failing and the K1
+dispatch boundary leaves all input and output bytes unchanged on a
+recoverable failure. Successful invoke may set sticky exception flags or
+update `errno` during finite libm evaluation.
 
 | Condition | Error category | Error code |
 |---|---|---|
@@ -197,16 +206,18 @@ on failure. It does not change the default K1 resolver, enroll MOD5 in
 the required full-suite inventory, or establish live model integration.
 
 The focused suite passed with Clang 21.1.8 on Ubuntu 22.04 x86-64, including
-C++17 linkage, ASan, UBSan, LSan, Python isolation, and CI topology. It covers all 16 exact
-shape rows and both operations per row, unsupported capabilities, malformed views
-and tables, float controls and status preservation, aliasing, byte-for-byte
-failure atomicity, and deterministic repeatability. Central finite differences
-check all 2,324 gradient elements. Attention cases cover each head layout with zero
-and nonzero ALiBi, a one-position window, wider windows, selective and fully
-masked rows, and the largest exact position difference.
+C++17 linkage, ASan, UBSan, LSan, Python isolation, and CI topology. It covers
+all 28 exact shape rows and both operations per row, unsupported capabilities,
+malformed views and tables, float controls and status preservation, aliasing,
+byte-for-byte failure atomicity, and deterministic repeatability. It runs
+8,924 central finite differences, fully checking RMSNorm, SwiGLU, and the
+original attention rows, and checking up to 24 positions per gradient tensor
+on each wider attention case. Attention cases cover each head layout with
+zero and nonzero ALiBi, a one-position window, wider windows, selective and
+fully masked rows, and the largest exact position difference.
 
-The independent double-precision Python oracle compared 3,478 forward and
-backward values in 40 cases with maximum absolute error `1.03e-7`. The native
+The independent double-precision Python oracle compared 32,534 forward and
+backward values in 72 cases with maximum absolute error `2.67e-7`. The native
 training smoke composed two RMSNorms, Q/K/V and output projections, ALiBi
 sliding-window attention, SwiGLU projections, and two residual paths. It checked
 416 MQA and 448 GQA input and parameter derivatives and required all gradients
@@ -219,9 +230,49 @@ decreased the loss.
 | MQA | 0.000956520166 | 0.000770789451 |
 | GQA | 0.00113966946 | 0.000730001387 |
 
-Dispatch uses fixed-size stack scratch and has no allocator, foreign runtime,
-or device fallback. The training smoke's projections and gradient descent are
-test code. Python runs only as a development oracle. Support is bounded to
-the listed serial CPU f32 rows and the reviewed x86-64 libm lane. Production
-carrier and model wiring, compiler reverse AD, GPU, mixed precision, arbitrary
-shapes, and performance measurements are outside this provider scope.
+## Eshkol AOT training
+
+Run `CC=clang-21 bash scripts/test-mod5-aot.sh` with the pinned Eshkol toolchain
+from `toolchain/eshkol.lock`. It builds `mod5_eshkol_bridge.o` and compiles
+`tests/mod5/mod5_aot_training.esk` twice with `eshkol-run --strict-types
+--no-stdlib` and independent caches. The executable links the bridge,
+the MOD5 and K1 archives, and libm. The bridge explicitly resolves MOD5
+through K1 discovery, builds borrowed views, and returns K1 status categories
+to Eshkol. Discovery owns heap-backed metadata. A native harness runs the
+bridge, provider, and K1 under ASan, UBSan, and LSan, and traps any call to
+K1's allocator entry points during dispatch.
+
+The Eshkol program trains one pre-norm decoder block at `N=1, T=8, D=16,
+F=32, Hq=4, Hkv=1 or 2, Dh=4`. The projections, residuals, loss, gradient
+composition, and parameter updates use Eshkol CPU f64 tensors with explicit
+f32 marshaling for the six MOD5 operations. Projections use
+`X[T,In] * W[In,Out]`, with backward products `dY * W^T` and `X^T * dY`.
+The attention transport packs and unpacks the two head layouts and uses
+ALiBi, a four-position causal window, and a selective keep mask. Each variant
+checks 30 central differences across the input and all nine parameter
+tensors. The compiled caller checks explicit errors for negative epsilon,
+unsupported KV heads, and a negative window, with an output sentinel.
+
+On the reviewed MOD5-B source branch `43a58cad`, both fresh executables
+produced byte-identical ELF files and stdout. Each of the 16
+deterministic SGD updates decreased the loss for both attention variants.
+The final parameter checksum sums each tensor and weights that sum by the
+tensor's one-based position in the parameter list.
+
+| AOT training variant | Initial loss | Final loss | Parameter checksum |
+|---|---:|---:|---:|
+| MQA | 0.008395704115932417 | 0.004524844149234992 | 271.59334016169555 |
+| GQA | 0.008879557896747705 | 0.004289885267436509 | 272.5524322746628 |
+
+The exact reconciliation `e91014cd` onto provider base `b49d177c` passed the
+pinned Ubuntu 22.04/Clang 21.1.8 native and strict AOT rerun. The composed
+AC4/MOD5-B stack also passed those focused gates, including two fresh AOT
+compilations with byte-identical ELF and stdout. Use the opt-in
+`make test-mod5-aot` target for the strict AOT check. Hosted qualification and
+live C1/IO5 integration remain pending.
+
+Provider support is bounded to the listed serial CPU f32 rows and the reviewed
+x86-64 libm lane. The bridge has a fixed training shape, the compiled block
+uses explicit backward calls, and Python is a development oracle. Production
+model wiring, compiler reverse AD, GPU, mixed-precision training, arbitrary
+shapes, and performance measurements are outside this scope.
