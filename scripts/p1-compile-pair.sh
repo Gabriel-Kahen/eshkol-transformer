@@ -4,6 +4,17 @@
 # failure or interruption also terminates timeout and compiler descendants.
 p1_pair_pids=()
 p1_pair_timing_files=()
+p1_pair_memory_pid=
+p1_pair_memory_index=0
+
+p1_stop_pair_memory() {
+  local status=0
+  [[ -n "${p1_pair_memory_pid}" ]] || return 0
+  kill -TERM "${p1_pair_memory_pid}" 2>/dev/null || true
+  wait "${p1_pair_memory_pid}" || status=$?
+  p1_pair_memory_pid=
+  return "${status}"
+}
 
 p1_require_pair_memory() {
   local available_kib limit used
@@ -46,7 +57,7 @@ p1_stop_pair() {
 
 p1_compile_pair() {
   local -a first=() second=() remaining=()
-  local first_timing second_timing pid finished status=0
+  local first_timing second_timing memory_trace pid finished status=0
   while [[ "$1" != -- ]]; do first+=("$1"); shift; done
   shift
   second=("$@")
@@ -60,6 +71,26 @@ p1_compile_pair() {
   (p1_timing="${second_timing}"; "${second[@]}") &
   p1_pair_pids+=("$!")
   set +m
+
+  if [[ "${p1_pair_memory_trace:-0}" == 1 ]]; then
+    p1_pair_memory_index=$((p1_pair_memory_index + 1))
+    memory_trace="${p1_tmp}/pair-${p1_pair_memory_index}-memory.tsv"
+    python3 -B "${PROJECT_ROOT}/scripts/p1-pair-memory.py" \
+      "${memory_trace}" \
+      "${p1_pair_pids[0]}" "${p1_pair_pids[1]}" &
+    p1_pair_memory_pid=$!
+    for ((pid=0; pid<100; ++pid)); do
+      [[ -s "${memory_trace}" ]] && break
+      kill -0 "${p1_pair_memory_pid}" 2>/dev/null || break
+      sleep 0.01
+    done
+    if [[ ! -s "${memory_trace}" ]]; then
+      p1_stop_pair
+      p1_stop_pair_memory || true
+      p1_flush_pair_timing
+      return 1
+    fi
+  fi
 
   while ((${#p1_pair_pids[@]})); do
     finished=
@@ -81,6 +112,9 @@ p1_compile_pair() {
     [[ "${status}" == 0 ]] || break
   done
   if [[ "${status}" != 0 ]]; then p1_stop_pair; fi
+  if [[ "${p1_pair_memory_trace:-0}" == 1 ]]; then
+    p1_stop_pair_memory || { [[ "${status}" != 0 ]] || status=1; }
+  fi
   # Deterministic planned order; each time invocation keeps its existing line.
   p1_flush_pair_timing
   return "${status}"

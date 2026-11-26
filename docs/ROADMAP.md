@@ -111,6 +111,12 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   single-compiler peak RSS and initial host headroom. A sustained hosted
   memory trace and a matched serial comparison remain open. Default compile
   scheduling stays serial.
+  A separate default-off `P1_PAIR_MEMORY_TRACE=1` development candidate samples
+  resident bytes for both compiler process groups and descendants at 250 ms
+  intervals, with timestamped per-pair TSV and summary files. It rejects
+  missing Linux `/proc` support and leaves default scheduling and compiler
+  evidence unchanged. A short synthetic overlap test passes; a full P1 run,
+  sustained hosted trace and matched serial comparison remain open.
 
 ## Parallel execution strategy
 

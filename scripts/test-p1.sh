@@ -28,6 +28,18 @@ p1_lsan="${P1_LSAN:-0}"
 p1_two_compilers="${P1_TWO_COMPILERS:-0}"
 [[ "${p1_two_compilers}" == 0 || "${p1_two_compilers}" == 1 ]] || \
   die "P1_TWO_COMPILERS must be 0 or 1"
+p1_pair_memory_trace="${P1_PAIR_MEMORY_TRACE:-0}"
+[[ "${p1_pair_memory_trace}" == 0 || "${p1_pair_memory_trace}" == 1 ]] || \
+  die "P1_PAIR_MEMORY_TRACE must be 0 or 1"
+if [[ "${p1_pair_memory_trace}" == 1 ]]; then
+  [[ "${p1_two_compilers}" == 1 ]] || \
+    die "P1_PAIR_MEMORY_TRACE requires P1_TWO_COMPILERS=1"
+  [[ "${P1_KEEP_TMP:-0}" == 1 ]] || \
+    die "P1_PAIR_MEMORY_TRACE requires P1_KEEP_TMP=1 to retain evidence"
+  require_command python3
+  python3 -B "${PROJECT_ROOT}/scripts/p1-pair-memory.py" --check || \
+    die "P1 pair memory trace requires readable Linux /proc process data"
+fi
 if [[ "${p1_two_compilers}" == 1 ]]; then
   source "${PROJECT_ROOT}/scripts/p1-compile-pair.sh"
 fi
@@ -44,6 +56,7 @@ p1_cleanup() {
   local status=$?
   if [[ "${p1_two_compilers}" == 1 ]]; then
     p1_stop_pair
+    p1_stop_pair_memory || true
     p1_flush_pair_timing
   fi
   if [[ -s "${p1_timing}" ]]; then
