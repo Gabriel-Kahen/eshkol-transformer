@@ -360,3 +360,28 @@ pinned, resource-coordinated AOT replay of the successor source, including
 the clean and rejected control outputs. A fixture-only canonical manifest
 format/parse round trip with live metrics and owner-sourced identity digests
 remains separate; neither path publishes an EVAL5 manifest or external claim.
+
+### In-memory V=256 manifest round-trip candidate
+
+The successor test-only C bridge `et_eval5_v256_manifest_roundtrip` accepts
+the validated T1 and D1 summary fingerprint spans, SHA-256 of each canonical
+D1 manifest and the checked C1 bytes, the live audit status and counts, and
+the LM/MC score outputs. It calls the accepted
+`et_eval5_bind_tokenizer_identity`, formats a fixed development suite/task/
+split manifest in local memory, parses it, and requires byte-identical
+canonical reformatting. It copies text and size to the caller only after all
+checks pass. Contamination, an inconsistent clean audit, tokenizer identity
+rejection, invalid metrics, and insufficient output capacity leave both
+outputs untouched. The bridge performs no file I/O or publication.
+
+The focused C test uses exact fixture digests, a fresh direct EVAL5 audit,
+and score values recorded by the earlier sealed V=256 AOT run. It passes
+normal and sanitizer builds, but it does not run the model again or bind the
+new source to a compiled Eshkol call. The next Eshkol change must retain the
+actual parsed T1 fingerprint, both D1 validator summary fingerprints and
+manifest bytevector digests, the same-byte checked C1 digest, the eight audit
+counts, and the score metrics/counts until the bridge call after scoring.
+It must pass those values to the bridge, compare the parsed fields, and keep
+the canonical text in test scratch only. That call must remain unreachable
+after a nonclean audit or identity failure. No EVAL5 manifest has been
+published.
