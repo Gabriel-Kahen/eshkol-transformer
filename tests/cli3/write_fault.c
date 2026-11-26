@@ -1,6 +1,8 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +12,34 @@
 
 typedef ssize_t (*write_fn)(int, const void *, size_t);
 typedef int (*fsync_fn)(int);
+typedef int (*openat_fn)(int, const char *, int, ...);
+
+int openat(int directory, const char *name, int flags, ...) {
+  static openat_fn real_openat;
+  mode_t mode = 0;
+
+  if (real_openat == NULL) {
+    void *symbol = dlsym(RTLD_NEXT, "openat");
+    memcpy(&real_openat, &symbol, sizeof(real_openat));
+    if (real_openat == NULL) {
+      errno = EIO;
+      return -1;
+    }
+  }
+  if (getenv("CLI3_TEST_MANIFEST_READ_FAIL") != NULL &&
+      (flags & O_NOFOLLOW) != 0 && (flags & O_ACCMODE) == O_RDONLY &&
+      strcmp(name, "manifest.etm") == 0) {
+    errno = EIO;
+    return -1;
+  }
+  if ((flags & O_CREAT) != 0 || (flags & O_TMPFILE) == O_TMPFILE) {
+    va_list arguments;
+    va_start(arguments, flags);
+    mode = va_arg(arguments, mode_t);
+    va_end(arguments);
+  }
+  return real_openat(directory, name, flags, mode);
+}
 
 ssize_t write(int descriptor, const void *buffer, size_t length) {
   static write_fn real_write;

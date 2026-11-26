@@ -29,6 +29,13 @@ fi
 verify_eshkol_checkout
 
 mkdir -p "${build_dir}"
+generated_header="${build_dir}/generated/eshkol/build_config.h"
+header_snapshot=""
+trap '[[ -z "${header_snapshot}" ]] || rm -f -- "${header_snapshot}"' EXIT
+if [[ -f "${generated_header}" ]]; then
+  header_snapshot="$(mktemp "${build_dir}/.build_config.h.XXXXXX")"
+  cp -p -- "${generated_header}" "${header_snapshot}"
+fi
 configure_log="${build_dir}/eshkol-transformer-configure.log"
 CC="${cc}" CXX="${cxx}" cmake \
   -S "${source_dir}" \
@@ -47,6 +54,10 @@ CC="${cc}" CXX="${cxx}" cmake \
 
 if grep -F 'Manually-specified variables were not used' "${configure_log}" >/dev/null; then
   die "pinned Eshkol ignored one or more required CMake options; see ${configure_log}"
+fi
+# CMake may write an intermediate header and then restore identical final bytes.
+if [[ -n "${header_snapshot}" ]]; then
+  restore_mtime_if_same_contents "${header_snapshot}" "${generated_header}"
 fi
 cache_file="${build_dir}/CMakeCache.txt"
 cache_cc="$(awk -F= '$1 == "CMAKE_C_COMPILER:FILEPATH" { print $2 }' "${cache_file}")"

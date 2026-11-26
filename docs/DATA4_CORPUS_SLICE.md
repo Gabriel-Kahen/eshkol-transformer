@@ -32,8 +32,9 @@ Filtered documents cannot suppress a later passing one.
 
 ## D1/T2 composition and report
 
-`(data4-corpus-write! tokenizer directory shard-token-limit prepared)` accepts
-the trusted same-aggregate T2 tokenizer identity and the prepared value. It
+`(data4-corpus-write! tokenizer directory shard-token-limit prepared read-manifest)`
+accepts the trusted same-aggregate T2 tokenizer identity, the prepared value,
+and a manifest reader. It
 encodes each kept document separately through T2's private i64-le staging seam,
 so configured prefix and suffix specials occur once per kept document. It
 concatenates the resulting IDs in kept input order, rejects more than 65,536
@@ -41,23 +42,34 @@ encoded IDs, and passes the flat list plus T2 fingerprint and vocabulary to the
 accepted D1 writer. D1's format and publication semantics remain unchanged.
 The shard-token limit is 1..65,536.
 
-The result is `#(D1-summary report-bytes)`. Report bytes are canonical UTF-8
-ASCII TSV with LF records. They start with `format`, `version 1 0`, filter and
+The result is `#(D1-summary report-bytes)`. Report bytes are canonical ASCII
+TSV with LF records. They start with `format`, `version<TAB>2<TAB>0`, filter and
 dedup policy identifiers, bounds, tokenizer fingerprint/vocabulary, input and
 kept counts/bytes, shard-token limit, derived shard count, and total tokens.
-One `document` record follows for every input document in ordinal order, with
+The next record is `manifest-sha256<TAB><64 lowercase hex>`. Its SHA-256 covers
+the complete bytes of `DIRECTORY/manifest.etm`, including its checksum. The
+D1 manifest records commit to the shard digests and token counts. One
+`document` record follows for every input document in ordinal order, with
 the six row fields above. The final two records are
 `checksum-algorithm<TAB>sha256` and `checksum<TAB><64 lowercase hex>`. The
-digest is SHA-256 of every report byte preceding the `checksum` record. The
-report is constructed before D1 publication; after D1 returns, only assignment
-of its summary into the preallocated result remains.
+digest is SHA-256 of every report byte preceding the `checksum` record.
 
-The report is returned in memory. The caller must persist it if needed; this
-slice provides no sidecar publication or reader, no independent manifest-digest
-binding, and no claim that the report and D1 directory are atomically published
-together. D1 has no document boundaries, so the report is the only record of
-which retained source contributed each flat segment. Token offsets are not
-recorded in this slice. Content SHA-256 records support exact contamination
+D1 commits before the helper calls `read-manifest` with the output directory.
+The callback must return the exact committed manifest as a bytevector. The
+installed and native callers use checked reads capped at 1 MiB. A D1 failure
+prevents the callback from running. A manifest read failure propagates after
+D1 commits, leaving the corpus published and no report bytes returned. The
+caller is responsible for persisting the in-memory report.
+
+`(data4-report-validate bytes summary manifest-bytes)` checks the canonical
+non-executable v2.0 format, D1 summary, and manifest digest. The caller supplies
+a validated D1 summary and exact manifest bytes from the same trusted corpus.
+An unbound v1.0 report fails with `version-mismatch`. Regenerate the v2.0 report
+from the original documents, tokenizer and options in a fresh directory.
+
+D1 stores one flat token stream. The report gives the retained source IDs in
+input order. Token offsets and document boundaries are outside the format.
+Content SHA-256 records support exact contamination
 matching only; benchmark-aware contamination checks remain EVAL5 work.
 
 ## Limits and next gate
@@ -68,7 +80,15 @@ claim. T2's strict/raw behavior and per-document prefix/suffix semantics apply
 unchanged. D1's trusted directory, checked-write, no-fsync, and summary-lifetime
 limits apply unchanged.
 
-The pinned local source gate passed 28 Eshkol checks, using genuine T2 BPE
+The pinned local DATA4-C source gate passed 42 Eshkol checks, including legacy
+version rejection, checksummed malformed manifest fields, a same-summary
+manifest mismatch, checksum tampering, and the post-commit read boundary.
+The same-aggregate native gate passed in 1:31.98 at 3,398,032 KiB peak RSS in
+the pinned Ubuntu 22.04/LLVM 21.1.8 container. It independently checked the
+exact manifest digest, two-run report/manifest/shard byte parity, T2 token
+readback, existing-target rejection, and corrupt-shard detection.
+
+The earlier DATA4-A source gate passed 28 Eshkol checks, using genuine T2 BPE
 encoding and a D1 writer stub. From clean commit `6b885150`, the corrected
 one-command same-aggregate native gate passed in the pinned offline Ubuntu
 22.04/LLVM 21.1.8 image: compiler 1:12.86, whole gate 1:13.97, peak compiler
@@ -83,14 +103,14 @@ P1 link repair and strict source compile remain historical evidence, not the
 basis for this clean-gate result. These are local measurements, not release
 acceptance.
 
-The required shared CI engine now registers the dedicated `data4-corpus` suite
-with `make test-ci-data4-after-build`. It runs the unchanged source gate first
+The required shared CI engine registers the dedicated `data4-corpus` suite
+with `make test-ci-data4-after-build`. It runs the source gate first
 (including malformed shape, limit, cycle, and token-overflow negatives), then
-the unchanged same-aggregate native gate. Its prerequisite plan is clean and
+the same-aggregate native gate. Its prerequisite plan is clean and
 configuration only: both gates build their own inputs and consume no canonical
 package artifacts. Both commands also remain mandatory in the full test and
 acceptance-predecessor entry points. The engine and exact-evidence inventories
-now require 22 suites and 38 commands; prior evidence without DATA4 is rejected.
+require the DATA4 suite and its two commands.
 DATA4 code, gate, and oracle changes retain fail-closed full-suite selection,
 while allowlisted prose-only changes retain the existing selection rules.
 

@@ -5,6 +5,7 @@
 (define data4-max-documents 128)
 (define data4-max-input-bytes 65536)
 (define data4-max-tokens 65536)
+(define data4-manifest-maximum-bytes 1048576)
 
 (define (data4-fail category message)
   (t1-core-fail category 'data4-corpus message))
@@ -132,10 +133,10 @@
         (else (data4-fail 'invalid-argument "invalid prepared report row"))))
 
 (define (data4-report-prefix prepared fingerprint vocab shard-limit shard-count
-                             token-count)
+                             token-count manifest-digest)
   (let ((header
          (string-append
-          "format\teshkol-data4-corpus-report\nversion\t1\t0\n"
+          "format\teshkol-data4-corpus-report\nversion\t2\t0\n"
           "filter\traw-byte-length-inclusive\n"
           "dedup\traw-exact-first-passing\n"
           "minimum-bytes\t" (number->string (vector-ref prepared 6))
@@ -149,6 +150,7 @@
           "\nshard-token-limit\t" (number->string shard-limit)
           "\nshard-count\t" (number->string shard-count)
           "\ntotal-tokens\t" (number->string token-count)
+          "\nmanifest-sha256\t" manifest-digest
           "\n")))
     (let loop ((rows (vector-ref prepared 1)) (parts (list header)))
       (if (null? rows)
@@ -169,13 +171,16 @@
                     (vector-ref row 5) "\n")
                    parts)))))))
 
-;;; Returns #(D1-summary canonical-report-bytes) only after D1 publication.
-;;; The caller owns persistence of the report; this helper writes no sidecar.
-(define (data4-corpus-write! tokenizer directory shard-token-limit prepared)
+;;; After D1 commits, read-manifest receives the directory and returns its exact
+;;; manifest bytes. A reader failure leaves D1 published without a report.
+;;; The caller owns persistence of the returned #(D1-summary report-bytes).
+(define (data4-corpus-write! tokenizer directory shard-token-limit prepared
+                             read-manifest)
   (if (or (not (vector? prepared)) (not (= (vector-length prepared) 8))
           (not (integer? shard-token-limit)) (not (exact? shard-token-limit))
           (not (real? shard-token-limit)) (<= shard-token-limit 0)
-          (> shard-token-limit data4-max-tokens))
+          (> shard-token-limit data4-max-tokens)
+          (not (procedure? read-manifest)))
       (data4-fail 'invalid-argument "invalid prepared corpus or shard limit"))
   (let* ((tokens (data4-encode-selected tokenizer (vector-ref prepared 0)))
          (token-count (data4-bounded-length tokens (+ data4-max-tokens 1)))
@@ -183,14 +188,12 @@
                           (+ (quotient (- token-count 1) shard-token-limit) 1)))
          (fingerprint (t2-private-tokenizer-fingerprint tokenizer))
          (vocab (t2-private-tokenizer-vocab-size tokenizer))
-         (prefix (data4-report-prefix prepared fingerprint vocab
-                                      shard-token-limit shard-count token-count))
-         (digest (t1-core-hex (t1-core-sha256 (string->utf8 prefix))))
-         (report (string->utf8
-                  (string-append prefix "checksum\t" digest "\n")))
-         (result (vector #f report))
          (summary (et-d1-private-token-corpus-write
-                   directory fingerprint vocab shard-token-limit tokens)))
-    ;; This assignment is the only work after D1's manifest commit.
-    (vector-set! result 0 summary)
-    result))
+                   directory fingerprint vocab shard-token-limit tokens))
+         (manifest (read-manifest directory))
+         (prefix (data4-report-prefix prepared fingerprint vocab
+                                      shard-token-limit shard-count token-count
+                                      (t1-core-hex (t1-core-sha256 manifest))))
+         (digest (t1-core-hex (t1-core-sha256 (string->utf8 prefix)))))
+    (vector summary (string->utf8
+                     (string-append prefix "checksum\t" digest "\n")))))
