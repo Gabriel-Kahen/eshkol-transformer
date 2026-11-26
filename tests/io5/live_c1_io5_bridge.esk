@@ -1,0 +1,165 @@
+;;; Test entry point using the trusted C1/P1 roots and production I2 codec.
+(load "i2_wave2_root.esk")
+
+;;; Canonical M3 paths, shapes and payload seeds. C1 stores the two ties as
+;;; separate payloads with a logical alias; they deliberately share a seed.
+(define io5-roster
+  '((("blocks" "0" "attention" "key" "weight") (4 4) 0)
+    (("blocks" "0" "attention" "output" "weight") (4 4) 1)
+    (("blocks" "0" "attention" "query" "weight") (4 4) 2)
+    (("blocks" "0" "attention" "value" "weight") (4 4) 3)
+    (("blocks" "0" "ffn" "down" "weight") (4 8) 4)
+    (("blocks" "0" "ffn" "up" "weight") (8 4) 5)
+    (("blocks" "0" "norm1" "bias") (4) 6)
+    (("blocks" "0" "norm1" "weight") (4) 7)
+    (("blocks" "0" "norm2" "bias") (4) 8)
+    (("blocks" "0" "norm2" "weight") (4) 9)
+    (("head" "weight") (256 4) 10)
+    (("norm_final" "bias") (4) 11)
+    (("norm_final" "weight") (4) 12)
+    (("position_embedding" "weight") (2 4) 13)
+    (("token_embedding" "weight") (256 4) 10)))
+
+(define io5-aliases '((("head" "weight") ("token_embedding" "weight"))))
+(define io5-adapter '(transformer-tensor-provider 2 0 i2-dense-cpu-f32-v1))
+(define io5-layout 'dense-row-major-contiguous)
+(define io5-policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+;; Negative zero, minimum and maximum positive subnormal, both infinities,
+;; quiet and signaling NaN payloads, and +1.0.
+(define io5-f32-bits
+  (vector #x80000000 #x00000001 #x007fffff #x7f800000
+          #xff800000 #x7fc01234 #x7f800001 #x3f800000))
+
+(define (io5-payload shape seed)
+  (let* ((count (c1-shape-product shape 'io5-live))
+         (bytes (make-bytevector (* count 4) 0)))
+    (let fill ((index 0))
+      (if (= index count)
+          bytes
+          (begin
+            (c1-write-u32! bytes (* index 4)
+              (vector-ref io5-f32-bits
+                          (modulo (+ index seed) (vector-length io5-f32-bits))))
+            (fill (+ index 1)))))))
+
+(define (io5-build-state)
+  ;; Feed in-memory fixture bytes to the real codec. P1 adopts the resulting
+  ;; native I2 carriers with the same logical ownership contract as C1 load.
+  (let ((ownership (vector '())))
+    (guard (caught
+             (#t
+               (let release ((remaining (vector-ref ownership 0)))
+                 (if (pair? remaining)
+                     (begin
+                       (tensor-provider-release-owned-internal!
+                         i2-provider-name 2 0 (car remaining))
+                       (release (cdr remaining)))))
+               (raise caught)))
+      (let build ((remaining io5-roster) (records '()))
+        (if (null? remaining)
+            (begin
+              (vector-set! ownership 0 (i2-reverse (vector-ref ownership 0)))
+              (state-dict-adopt-owned-internal!
+                (i2-reverse records) io5-aliases i2-provider-name 2 0 ownership))
+            (let* ((row (car remaining))
+                   (path (car row))
+                   (shape (cadr row))
+                   (request
+                     (vector (io5-payload shape (caddr row)) 'parameter shape
+                             'f32 'cpu io5-layout 'io5-live #f))
+                   (envelope (vector #f 'parameter 'io5-live #f))
+                   (next-owned (cons envelope (vector-ref ownership 0))))
+              (i2-checkpoint-decode request)
+              (let ((carrier (vector-ref request 7)))
+                (vector-set! envelope 0 carrier)
+                (vector-set! ownership 0 next-owned)
+                (build (cdr remaining)
+                  (cons (vector path 'parameter shape 'f32 'cpu io5-layout carrier)
+                        records)))))))))
+
+(define (io5-check condition message path)
+  (if condition #t
+      (transformer-error-raise
+        'corrupt-data 'io5-live message (list (list 'path path)) #f)))
+
+(define (io5-state-payload state path shape)
+  (let* ((handle (state-dict-tensor state path))
+         (carrier (state-dict-tensor-borrow-begin-internal state handle))
+         (bytes
+           (guard (caught
+                    (#t
+                      (state-dict-tensor-borrow-end-internal state handle)
+                      (raise caught)))
+             (i2-checkpoint-encode
+               (vector carrier 'parameter shape 'f32 'cpu io5-layout 'io5-live)))))
+    (state-dict-tensor-borrow-end-internal state handle)
+    bytes))
+
+(define (io5-verify-state state)
+  (io5-check (equal? io5-adapter (state-dict-adapter-internal state))
+             "unexpected provider identity" '())
+  (io5-check (equal? (map car io5-roster) (state-dict-paths state))
+             "unexpected M3 tensor paths" '())
+  (io5-check (equal? io5-aliases (state-dict-alias-groups state))
+             "unexpected head/embedding alias group" '())
+  (let verify ((rows io5-roster) (entries (state-dict-entries-internal state)))
+    (if (null? rows)
+        (io5-check (null? entries) "unexpected extra tensor entry" '())
+        (let* ((row (car rows))
+               (entry (car entries))
+               (path (car row))
+               (shape (cadr row)))
+          (io5-check (and (equal? path (state-entry-path-internal entry))
+                          (eq? 'parameter (state-entry-kind-internal entry))
+                          (equal? shape (state-entry-shape-internal entry))
+                          (eq? 'f32 (state-entry-dtype-internal entry))
+                          (eq? 'cpu (state-entry-device-internal entry))
+                          (eq? io5-layout (state-entry-layout-internal entry)))
+                     "unexpected tensor metadata" path)
+          (io5-check (c1-bytes=? (io5-payload shape (caddr row))
+                                 (io5-state-payload state path shape))
+                     "unexpected F32 payload bytes" path)
+          (verify (cdr rows) (cdr entries))))))
+
+(define (io5-run mode path)
+  (let ((state (if (string=? mode "write")
+                   (io5-build-state)
+                   (c1-checkpoint-load-state-internal
+                     path io5-policy i2-checkpoint-codec-internal i2-provider-name))))
+    (guard (caught
+             (#t (state-dict-release! state) (raise caught)))
+      (io5-verify-state state)
+      (if (string=? mode "write")
+          (c1-checkpoint-save-state-internal!
+            state path io5-policy i2-checkpoint-codec-internal #f)
+          #t))
+    (state-dict-release! state)
+    (display (if (string=? mode "write") "WROTE M3 C1" "VERIFIED M3 C1"))
+    (newline)))
+
+(let ((arguments (command-line)))
+  (if (and (equal? (c1-list-length-bounded arguments 4) 3)
+           (or (string=? (cadr arguments) "write")
+               (string=? (cadr arguments) "verify")))
+      (guard (caught
+               (#t
+                 (display "IO5 live C1 ERROR: ")
+                 (if (transformer-error? caught)
+                     (begin
+                       (display (transformer-error-category caught))
+                       (display ": ")
+                       (display (transformer-error-message caught))
+                       (if (eq? 'io5-live (transformer-error-operation caught))
+                           (begin
+                             (display " ")
+                             (write (transformer-error-details caught)))))
+                     (write caught))
+                 (newline)
+                 (exit 2)))
+        (io5-run (cadr arguments) (caddr arguments))
+        (exit 0))
+      (begin
+        (display "Usage: live-c1-io5 write <output.etcp> | verify <input.etcp>")
+        (newline)
+        (exit 2))))

@@ -760,27 +760,42 @@ class QuantizedInterchangeTests(unittest.TestCase):
         with self.assertRaisesRegex(safe.InteropError, "profile mismatch"):
             qi.decode_quantized_gguf(gg_good, profile=mapping.M3)
 
-        # 4. The merged mapping has no MOD5 profile; requests fail closed.
-        with self.assertRaisesRegex(safe.InteropError, "supported profile"):
+        # 4. Lossless MOD5 mapping must not authorize quantized MOD5.
+        self.assertIn(mapping.MOD5, mapping.PROFILES)
+        self.assertNotIn(mapping.MOD5, qi.QUANTIZED_PROFILES)
+        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
             qi.encode_quantized_safetensors(
-                self.large_decoder_c1, "F16", profile="eshkol-mod5-v1", scheme="huggingface"
+                self.large_decoder_c1, "F16", profile=mapping.MOD5, scheme="huggingface"
             )
-        with self.assertRaisesRegex(safe.InteropError, "supported profile"):
+        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
             qi.encode_quantized_gguf(
-                self.large_decoder_c1, "Q8_0", profile="eshkol-mod5-v1", scheme="gguf"
+                self.large_decoder_c1, "Q8_0", profile=mapping.MOD5, scheme="gguf"
             )
         unknown_profile_header, unknown_profile_data = unpack_safetensors(st_good)
-        unknown_profile_header["__metadata__"][mapping.PROFILE] = "eshkol-mod5-v1"
-        with self.assertRaisesRegex(safe.InteropError, "supported profile"):
+        unknown_profile_header["__metadata__"][mapping.PROFILE] = mapping.MOD5
+        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
             qi.decode_quantized_safetensors(
                 safetensors_wire(unknown_profile_header, unknown_profile_data)
             )
         unknown_profile_meta = [
-            (key, kind, "eshkol-mod5-v1" if key == mapping.PROFILE else value)
+            (key, kind, mapping.MOD5 if key == mapping.PROFILE else value)
             for key, (kind, value) in sorted(meta.items())
         ]
-        with self.assertRaisesRegex(safe.InteropError, "supported profile"):
+        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
             qi.decode_quantized_gguf(build_raw_gguf(unknown_profile_meta, rows))
+        plain_header, plain_data = unpack_safetensors(st_good)
+        plain_header.pop("__metadata__")
+        plain_st = safetensors_wire(plain_header, plain_data)
+        plain_gg = build_raw_gguf(
+            [("general.architecture", gg.STRING, "llama"),
+             ("general.alignment", gg.UINT32, 32)], rows
+        )
+        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
+            qi.decode_quantized_safetensors(plain_st, external=True, profile=mapping.MOD5,
+                                            scheme="huggingface", provider=PROVIDER)
+        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
+            qi.decode_quantized_gguf(plain_gg, external=True, profile=mapping.MOD5,
+                                     scheme="gguf", provider=PROVIDER)
         # A bare state cannot be mapped as a decoder, and the large decoder
         # cannot be mapped as fixed M3 (wrong shapes and missing biases).
         with self.assertRaises(safe.InteropError):

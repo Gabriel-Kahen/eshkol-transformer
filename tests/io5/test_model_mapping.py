@@ -42,6 +42,22 @@ M3_ROWS = (
     ("position_embedding.weight", "model.embed_positions.weight", "position_embd.weight", (2, 4)),
     ("token_embedding.weight", "model.embed_tokens.weight", "token_embd.weight", (256, 4)),
 )
+MOD5_ROOT_ROWS = (
+    ("head.weight", "lm_head.weight", "output.weight", (17, 8)),
+    ("norm_final.weight", "model.norm.weight", "output_norm.weight", (8,)),
+    ("token_embedding.weight", "model.embed_tokens.weight", "token_embd.weight", (17, 8)),
+)
+MOD5_BLOCK_ROWS = (
+    ("attention.key.weight", "self_attn.k_proj.weight", "attn_k.weight", (0, 8)),
+    ("attention.output.weight", "self_attn.o_proj.weight", "attn_output.weight", (8, 8)),
+    ("attention.query.weight", "self_attn.q_proj.weight", "attn_q.weight", (8, 8)),
+    ("attention.value.weight", "self_attn.v_proj.weight", "attn_v.weight", (0, 8)),
+    ("ffn.down.weight", "mlp.down_proj.weight", "ffn_down.weight", (8, 12)),
+    ("ffn.gate.weight", "mlp.gate_proj.weight", "ffn_gate.weight", (12, 8)),
+    ("ffn.up.weight", "mlp.up_proj.weight", "ffn_up.weight", (12, 8)),
+    ("norm1.weight", "input_layernorm.weight", "attn_norm.weight", (8,)),
+    ("norm2.weight", "post_attention_layernorm.weight", "ffn_norm.weight", (8,)),
+)
 
 
 def tensor(name, shape, seed=0):
@@ -70,6 +86,20 @@ def decoder_fixture(*, tied=False):
     paths = [t.path for t in tensors]
     groups = (tuple(paths.index(p) for p in (("head", "weight"), ("token_embedding", "weight"))),) if tied else ()
     return safe.State(PROVIDER, tuple(tensors), groups)
+
+
+def mod5_fixture(kv_width, *, tied):
+    rows = [
+        (f"blocks.{i}.{path}", f"model.layers.{i}.{hf}", f"blk.{i}.{gguf}",
+         shape if shape[0] else (kv_width, shape[1]))
+        for i in range(2)
+        for path, hf, gguf, shape in MOD5_BLOCK_ROWS
+    ] + list(MOD5_ROOT_ROWS)
+    tensors = [tensor(path, shape, index) for index, (path, _, _, shape) in enumerate(rows)]
+    head, embedding = len(rows) - 3, len(rows) - 1
+    if tied:
+        tensors[embedding] = replace(tensors[embedding], data=tensors[head].data)
+    return safe.State(PROVIDER, tuple(tensors), ((head, embedding),) if tied else ()), rows
 
 
 def c1_bytes(state):
@@ -174,6 +204,301 @@ class ModelMappingTests(unittest.TestCase):
         files = self.build(original, profile=mapping.DECODER, scheme="gguf", max_shard_bytes=900)
         self.install(files)
         self.assertEqual(mapping.read_sharded(self.index, scheme="gguf"), original)
+
+    def test_mod5_multilayer_mqa_gqa_mha_mapped_and_sharded_round_trips(self):
+        for kv_width in (2, 4, 8):
+            for tied in (False, True):
+                state, rows = mod5_fixture(kv_width, tied=tied)
+                original = c1_bytes(state)
+                for format_name, scheme, name_column in (
+                    ("safetensors", "huggingface", 1), ("gguf", "gguf", 2),
+                ):
+                    with self.subTest(kv_width=kv_width, tied=tied, scheme=scheme):
+                        encoded = mapping.encode_mapped(original, format_name, mapping.MOD5, scheme)
+                        if format_name == "safetensors":
+                            header, _ = unpack(encoded)
+                            metadata = header.pop("__metadata__")
+                            actual = {name: tuple(entry["shape"]) for name, entry in header.items()}
+                        else:
+                            fields, infos, _, _ = unpack_export(encoded)
+                            metadata = {key: value for key, _, value in fields}
+                            actual = {name: dims[::-1] for name, dims, _, _, _ in infos}
+                        self.assertEqual(actual, {row[name_column]: row[3] for row in rows})
+                        self.assertEqual(metadata[mapping.PROFILE], mapping.MOD5)
+                        self.assertEqual(mapping.decode_mapped(encoded, format_name), original)
+                        files = self.build(original, profile=mapping.MOD5, scheme=scheme, max_shard_bytes=900)
+                        self.assertGreater(len(files), 2)
+                        self.install(files)
+                        self.assertEqual(mapping.read_sharded(self.index, profile=mapping.MOD5,
+                                                              scheme=scheme), original)
+
+    def test_mod5_plain_external_import_and_exact_tie(self):
+        for tied in (False, True):
+            state, rows = mod5_fixture(4, tied=tied)
+            for format_name, scheme, name_column, plain in (
+                ("safetensors", "huggingface", 1, safetensors_plain),
+                ("gguf", "gguf", 2, gguf_plain),
+            ):
+                with self.subTest(tied=tied, scheme=scheme):
+                    options = dict(external=True, profile=mapping.MOD5, scheme=scheme, provider=PROVIDER)
+                    original = c1_bytes(state)
+                    encoded = mapping.encode_mapped(original, format_name, mapping.MOD5, scheme)
+                    imported = mapping.decode_mapped(plain(encoded), format_name, tie=tied, **options)
+                    self.assertEqual(imported, original)
+                    if tied:
+                        self.assertEqual(mapping.decode_mapped(plain(encoded), format_name, **options),
+                                         c1_bytes(replace(state, aliases=())))
+                        with self.assertRaisesRegex(safe.InteropError, "equal shapes and exact bits"):
+                            mapping.decode_mapped(plain(encoded, mismatch=flip), format_name, tie=True, **options)
+                        shape_mismatch = replace(state.tensors[-3], shape=(8, 17))
+                        unexpected = replace(state, tensors=state.tensors[:-3] + (shape_mismatch,) + state.tensors[-2:],
+                                             aliases=())
+                        external = mapping.encode_mapped(c1_bytes(unexpected), format_name, mapping.MOD5, scheme)
+                        with self.assertRaisesRegex(safe.InteropError, "equal shapes and exact bits"):
+                            mapping.decode_mapped(plain(external), format_name, tie=True, **options)
+
+    def test_mod5_rejects_incompatible_rosters_on_export_and_external_import(self):
+        fixture, _ = mod5_fixture(2, tied=False)
+        tensors = fixture.tensors
+        for label, invalid in (
+            ("final norm bias", tensors + (tensor("norm_final.bias", (8,)),)),
+            ("norm1 bias", tensors + (tensor("blocks.0.norm1.bias", (8,)),)),
+            ("norm2 bias", tensors + (tensor("blocks.0.norm2.bias", (8,)),)),
+            ("attention bias", tensors + (tensor("blocks.0.attention.query.bias", (8,)),)),
+            ("SwiGLU bias", tensors + (tensor("blocks.0.ffn.gate.bias", (12,)),)),
+            ("learned positions", tensors + (tensor("position_embedding.weight", (2, 8)),)),
+            ("missing gate", tuple(t for t in tensors if t.path != ("blocks", "1", "ffn", "gate", "weight"))),
+            ("no layers", tuple(t for t in tensors if t.path[0] != "blocks")),
+            ("missing layer 0", tuple(t for t in tensors if t.path[:2] != ("blocks", "0"))),
+            ("missing root", tuple(t for t in tensors if t.path[0] != "norm_final")),
+            ("wrong norm rank", tuple(replace(t, shape=(1, 8)) if t.path == ("norm_final", "weight") else t
+                                     for t in tensors)),
+        ):
+            raw = c1_bytes(replace(fixture, tensors=tuple(sorted(invalid, key=lambda t: t.path))))
+            for format_name, scheme, plain in (
+                ("safetensors", "huggingface", safetensors_plain), ("gguf", "gguf", gguf_plain),
+            ):
+                with self.subTest(case=label, scheme=scheme):
+                    with self.assertRaises(safe.InteropError):
+                        mapping.encode_mapped(raw, format_name, mapping.MOD5, scheme)
+                    if label in ("missing layer 0", "missing root", "wrong norm rank"):
+                        continue  # These rosters also fail legacy decoder export.
+                    encoded = mapping.encode_mapped(raw, format_name, mapping.DECODER, scheme)
+                    with self.assertRaises(safe.InteropError):
+                        mapping.decode_mapped(plain(encoded), format_name, external=True,
+                                              profile=mapping.MOD5, scheme=scheme, provider=PROVIDER)
+
+    def test_mod5_import_rejects_missing_extra_biased_wrong_rank_and_corrupted(self):
+        state, _ = mod5_fixture(2, tied=False)
+        original = c1_bytes(state)
+
+        def rebuild_safetensors(header, data):
+            entries = {k: v for k, v in header.items() if k != "__metadata__"}
+            payload = bytearray()
+            new_header = {}
+            if "__metadata__" in header:
+                new_header["__metadata__"] = dict(header["__metadata__"])
+            for name in sorted(entries):
+                entry = entries[name]
+                start, end = entry["data_offsets"]
+                chunk = data[start:end]
+                offset = len(payload)
+                payload.extend(chunk)
+                new_header[name] = {
+                    "dtype": entry["dtype"],
+                    "shape": list(entry["shape"]),
+                    "data_offsets": [offset, len(payload)],
+                }
+            return safetensors_wire(new_header, bytes(payload))
+
+        def mutate_safetensors(raw_bytes, case):
+            header, data = unpack(raw_bytes)
+            if case == "missing_root":
+                header.pop("model.norm.weight")
+            elif case == "missing_block":
+                header.pop("model.layers.1.mlp.gate_proj.weight")
+            elif case == "extra":
+                end = len(data)
+                data += struct.pack("<4f", 1.0, 2.0, 3.0, 4.0)
+                header["model.extra.weight"] = {"dtype": "F32", "shape": [4], "data_offsets": [end, len(data)]}
+            elif case == "biased":
+                end = len(data)
+                data += struct.pack("<8f", *([0.5] * 8))
+                header["model.norm.bias"] = {"dtype": "F32", "shape": [8], "data_offsets": [end, len(data)]}
+            elif case == "wrong_rank":
+                header["model.norm.weight"]["shape"] = [1, 8]
+            elif case == "corrupted":
+                return raw_bytes[:-1] + bytes([raw_bytes[-1] ^ 0xFF])
+            return rebuild_safetensors(header, data)
+
+        def mutate_gguf(raw_bytes, case):
+            if case == "corrupted":
+                return raw_bytes[:-4] + bytes([raw_bytes[-4] ^ 0xFF]) + raw_bytes[-3:]
+            fields, rows, _, _ = unpack_export(raw_bytes)
+            mutated = list(rows)
+            if case == "missing_root":
+                mutated = [row for row in mutated if row[0] != "output_norm.weight"]
+            elif case == "missing_block":
+                mutated = [row for row in mutated if row[0] != "blk.1.ffn_gate.weight"]
+            elif case == "extra":
+                mutated.append(("extra.weight", (4,), 0, 0, struct.pack("<4f", 1.0, 2.0, 3.0, 4.0)))
+            elif case == "biased":
+                mutated.append(("output_norm.bias", (8,), 0, 0, struct.pack("<8f", *([0.5] * 8))))
+            elif case == "wrong_rank":
+                mutated = [
+                    (name, (8, 1), kind, offset, payload) if name == "output_norm.weight"
+                    else (name, shape, kind, offset, payload)
+                    for name, shape, kind, offset, payload in mutated
+                ]
+            repacked = []
+            offset = 0
+            for name, shape, kind, _, payload in mutated:
+                repacked.append((name, shape, kind, offset, payload))
+                offset += len(payload) + ((-len(payload)) % 32)
+            return wire(metadata=fields, tensors=repacked)
+
+        def mutate_sharded(files, case):
+            mutated = dict(files)
+            index = json.loads(mutated[mapping.INDEX_NAME])
+            weight_map = dict(index["weight_map"])
+            checksums = dict(index["metadata"][mapping.SHARD_SHA256])
+            if case == "corrupted":
+                shard_name = next(iter(checksums))
+                raw = mutated[shard_name]
+                mutated[shard_name] = raw[:-1] + bytes([raw[-1] ^ 0xFF])
+                return mutated
+            if case == "missing_root":
+                target = "model.norm.weight"
+            elif case == "missing_block":
+                target = "model.layers.1.mlp.gate_proj.weight"
+            elif case == "wrong_rank":
+                target = "model.norm.weight"
+            else:
+                target = next(iter(weight_map))
+            shard_name = weight_map[target]
+            header, data = unpack(mutated[shard_name])
+            if case in ("missing_root", "missing_block"):
+                entry = header.pop(target)
+                weight_map.pop(target)
+                start, end = entry["data_offsets"]
+                index["metadata"]["total_size"] -= end - start
+            elif case == "extra":
+                end = len(data)
+                data += struct.pack("<4f", 1.0, 2.0, 3.0, 4.0)
+                header["model.extra.weight"] = {"dtype": "F32", "shape": [4], "data_offsets": [end, len(data)]}
+                weight_map["model.extra.weight"] = shard_name
+                index["metadata"]["total_size"] += 16
+            elif case == "biased":
+                end = len(data)
+                data += struct.pack("<8f", *([0.5] * 8))
+                header["model.norm.bias"] = {"dtype": "F32", "shape": [8], "data_offsets": [end, len(data)]}
+                weight_map["model.norm.bias"] = shard_name
+                index["metadata"]["total_size"] += 32
+            elif case == "wrong_rank":
+                header[target]["shape"] = [1, 8]
+            if any(k != "__metadata__" for k in header):
+                rebuilt = rebuild_safetensors(header, data)
+                mutated[shard_name] = rebuilt
+                checksums[shard_name] = hashlib.sha256(rebuilt).hexdigest()
+            else:
+                mutated.pop(shard_name)
+                checksums.pop(shard_name)
+            index["weight_map"] = weight_map
+            index["metadata"][mapping.SHARD_SHA256] = checksums
+            mutated[mapping.INDEX_NAME] = json.dumps(index, sort_keys=True, separators=(",", ":")).encode()
+            return mutated
+
+        def signed_invalid_sharded(files, case):
+            mutated = mutate_sharded(files, case)
+            index = json.loads(mutated[mapping.INDEX_NAME])
+            base_tensors = list(state.tensors)
+            if case == "missing_root":
+                bad_tensors = [t for t in base_tensors if t.path != ("norm_final", "weight")]
+            elif case == "missing_block":
+                bad_tensors = [t for t in base_tensors if t.path != ("blocks", "1", "ffn", "gate", "weight")]
+            elif case == "extra":
+                bad_tensors = sorted(
+                    base_tensors + [safe.Tensor(("extra", "weight"), "parameter", (4,),
+                                                struct.pack("<4f", 1.0, 2.0, 3.0, 4.0))],
+                    key=lambda t: t.path,
+                )
+            elif case == "biased":
+                bad_tensors = sorted(
+                    base_tensors + [safe.Tensor(("norm_final", "bias"), "parameter", (8,),
+                                                struct.pack("<8f", *([0.5] * 8)))],
+                    key=lambda t: t.path,
+                )
+            else:
+                bad_tensors = [replace(t, shape=(1, 8)) if t.path == ("norm_final", "weight") else t
+                               for t in base_tensors]
+            bad_state = replace(state, tensors=tuple(bad_tensors), aliases=())
+            bad_c1 = c1_bytes(bad_state)
+            path_to_ext = {
+                tuple(row[0].split(".")): row[1]
+                for row in mod5_fixture(2, tied=False)[1]
+            }
+            path_to_ext[("extra", "weight")] = "model.extra.weight"
+            path_to_ext[("norm_final", "bias")] = "model.norm.bias"
+            ext_names = tuple(path_to_ext[t.path] for t in bad_state.tensors)
+            index["metadata"][safe.MANIFEST_KEY] = safe.make_manifest(bad_state, ext_names)
+            index["metadata"][safe.DIGEST_KEY] = hashlib.sha256(bad_c1).hexdigest()
+            mutated[mapping.INDEX_NAME] = json.dumps(index, sort_keys=True, separators=(",", ":")).encode()
+            return mutated
+
+        expected_plain_regex = {
+            "missing_root": "missing MOD5 root tensor",
+            "missing_block": "missing MOD5 block tensor",
+            "extra": "unmapped external tensor name",
+            "biased": "unmapped external tensor name",
+            "wrong_rank": "decoder tensor rank/extent mismatch",
+        }
+        expected_roster_regex = {
+            "missing_root": "missing MOD5 root tensor",
+            "missing_block": "missing MOD5 block tensor",
+            "extra": "unknown canonical path",
+            "biased": "unknown canonical path",
+            "wrong_rank": "decoder tensor rank/extent mismatch",
+        }
+        cases = ("missing_root", "missing_block", "extra", "biased", "wrong_rank", "corrupted")
+        st_encoded = mapping.encode_mapped(original, "safetensors", mapping.MOD5, "huggingface")
+        gguf_encoded = mapping.encode_mapped(original, "gguf", mapping.MOD5, "gguf")
+        sharded_files = self.build(original, profile=mapping.MOD5, scheme="huggingface", max_shard_bytes=900)
+
+        for case in cases:
+            with self.subTest(route="safetensors-mapped", case=case):
+                mutated = mutate_safetensors(st_encoded, case)
+                with self.assertRaises(safe.InteropError) as ctx:
+                    mapping.decode_mapped(mutated, "safetensors", profile=mapping.MOD5, scheme="huggingface")
+                if case != "corrupted":
+                    self.assertNotIn("noncontiguous", str(ctx.exception))
+                    with self.assertRaisesRegex(safe.InteropError, expected_plain_regex[case]):
+                        mapping.decode_mapped(safetensors_plain(mutated), "safetensors", external=True,
+                                              profile=mapping.MOD5, scheme="huggingface", provider=PROVIDER)
+            with self.subTest(route="gguf-mapped", case=case):
+                mutated = mutate_gguf(gguf_encoded, case)
+                with self.assertRaises(safe.InteropError) as ctx:
+                    mapping.decode_mapped(mutated, "gguf", profile=mapping.MOD5, scheme="gguf")
+                self.assertNotIn("noncontiguous", str(ctx.exception))
+                if case != "corrupted":
+                    with self.assertRaisesRegex(safe.InteropError, expected_plain_regex[case]):
+                        mapping.decode_mapped(gguf_plain(mutated), "gguf", external=True,
+                                              profile=mapping.MOD5, scheme="gguf", provider=PROVIDER)
+            with self.subTest(route="sharded-safetensors", case=case):
+                mutated_dir = self.root / f"mod5_bad_{case}"
+                mutated_dir.mkdir()
+                for name, blob in mutate_sharded(sharded_files, case).items():
+                    (mutated_dir / name).write_bytes(blob)
+                with self.assertRaises(safe.InteropError) as ctx:
+                    mapping.read_sharded(mutated_dir / mapping.INDEX_NAME, profile=mapping.MOD5, scheme="huggingface")
+                if case != "corrupted":
+                    self.assertNotIn("coverage", str(ctx.exception))
+                    self.assertNotIn("checksum", str(ctx.exception))
+                    signed_dir = self.root / f"mod5_signed_bad_{case}"
+                    signed_dir.mkdir()
+                    for name, blob in signed_invalid_sharded(sharded_files, case).items():
+                        (signed_dir / name).write_bytes(blob)
+                    with self.assertRaisesRegex(safe.InteropError, expected_roster_regex[case]):
+                        mapping.read_sharded(signed_dir / mapping.INDEX_NAME, profile=mapping.MOD5, scheme="huggingface")
 
     def test_unmapped_shards_preserve_arbitrary_paths_kinds_and_empty_state(self):
         for state in (safe.State("utf8 λ", ()),
