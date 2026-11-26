@@ -1540,6 +1540,13 @@ fault tuple's test-only pins. A source-only successor repins just that fault
 tuple's exact sanitizer inventories and cardinality checks. No sanitized
 runtime, repeat, poison or E3 §9 acceptance follows without a fresh gate.
 
+The `2223dea6` repin run built both packages and AOT executables, then its
+first normal runtime trapped in the E1B box validator: the stage-3 fixture
+passed a six-element scenario where the bridge requires a one-element outer
+vector. This source-only successor boxes that mutable scenario for all three
+fault calls. The original failed result is retained; a fresh normal/repeat/
+poison/sanitizer execution and E3 §9 acceptance remain pending.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained

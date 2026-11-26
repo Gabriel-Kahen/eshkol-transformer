@@ -26,6 +26,15 @@ def isolated(source: str) -> bool:
             report.index('(vector-set! record 18 #t)'))
 
 
+def boxed_runtime(source: str) -> bool:
+    return ("(define scenario (vector 'fault 'prepare present? 4 7 1))" in source and
+            '(define boxed-scenario (vector scenario))' in source and
+            source.count('(e3-fault-run boxed-scenario input output)') == 3 and
+            '(e3-fault-run scenario input output)' not in source and
+            "(vector-set! scenario 1 'execute)" in source and
+            "(vector-set! scenario 1 'report)" in source)
+
+
 class Stage3OneShotSourceTest(unittest.TestCase):
     def test_stage3_site4_ordinal7_uses_bounded_report(self):
         driver = DRIVER.read_text()
@@ -35,6 +44,16 @@ class Stage3OneShotSourceTest(unittest.TestCase):
         self.assertIn("'e3-r1-stage3-one-shot-v1", runtime)
         self.assertNotIn("'e3-retention-result-v1", runtime)
         self.assertIn("(e3-retention-run teardown input output)", runtime)
+
+    def test_fault_calls_pass_one_element_box_around_mutable_scenario(self):
+        runtime = RUNTIME.read_text()
+        self.assertTrue(boxed_runtime(runtime))
+        self.assertFalse(boxed_runtime(runtime.replace(
+            '(e3-fault-run boxed-scenario input output)',
+            '(e3-fault-run scenario input output)', 1)))
+        self.assertFalse(boxed_runtime(runtime.replace(
+            '(define boxed-scenario (vector scenario))',
+            '(define boxed-scenario scenario)', 1)))
 
     def test_retention_reconciliation_mutant_is_rejected(self):
         original = DRIVER.read_text()
