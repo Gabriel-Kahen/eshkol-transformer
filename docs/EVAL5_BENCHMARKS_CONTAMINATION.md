@@ -190,3 +190,43 @@ The current MOD5 fixture has vocabulary 16, while accepted T1/T2 tokenizer
 identities require at least 256 IDs. A real T1/T2 benchmark therefore needs
 a corresponding 256-or-larger-vocabulary live MOD5 model and matching D1
 corpora, or a separately specified and validated non-T1/T2 tokenizer owner.
+
+### V=256 provenance-correct reference fixture
+
+`python3 -m tests.eval5.mod5_v256_fixture build DIR` creates a fresh
+development fixture without an Eshkol compiler. `verify DIR` checks it;
+`python3 -m unittest -v tests.eval5.test_mod5_reference_oracle
+tests.eval5.test_mod5_v256_fixture` runs the small negative and scoring cases.
+The generator reuses the accepted T1 reference artifact and byte encoder,
+the existing D1 reference writer/validator, and the IO5 C1 encoder/decoder.
+It stores two original nine-byte documents per train/clean split and encodes
+those exact bytes as raw T1 IDs. Three ordered six-token D1 shards form each
+split. `fixture.json` binds the canonical tokenizer fingerprint and artifact,
+the untrained deterministic C1 checkpoint, each original document, the full
+D1 manifest, and every ordered shard by SHA-256. The complete D1 manifest is
+the dataset inventory whose own records bind shard order and digests. The C1
+head and token embedding each have shape `[256,16]`; the block dimensions
+remain `[D=16,F=32,Hq=4,Hkv=2,Dh=4,T=8]`.
+
+The fixed reference hashes are: T1 artifact
+`62e2aa0feef161ec7115f50f172bc24b3b4c51847150d6a663ab71ce9cb001cd`,
+C1 checkpoint `505358be27f676998816c9d2ed194358edb017be4ccb2050069c1e22d9279eae`,
+train D1 manifest `71e4c68f07866a317aa091575ef555ecda37c04347381dbc795adcb5371023b6`,
+and clean D1 manifest `b2e31837e5094b79d95c5ac30a799a54e1c117f60e12511d3853f5ef5bfd69e2`.
+The accepted T1 fingerprint is
+`sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704`.
+The Python reference on this untrained model finds zero contamination matches
+among 14 token three-grams, LM total NLL `90.78076731811535` over 16 targets
+and 16 original target bytes, and MC accuracy `2/4`. Python computes model
+logits in binary64 and rounds each logit to binary32 before scoring; the
+values are a tolerance target, not a measured compiled-model result.
+
+The opt-in MOD5 provider advertises the fixed block shapes used here and has
+no vocabulary dimension. The existing compiled MOD5-C and old EVAL5 AOT
+fixtures hardcode V=16 in their model rosters, so they have not executed this
+V=256 checkpoint. The next live gate must make a development-only V=256
+Eshkol runner load these exact C1/D1 resources, source the tokenizer
+fingerprint and vocabulary from validated T1 and D1 owners, bind the complete
+D1 manifest inventory hashes, compare its scored logits and metrics to the
+reference, and only then publish an EVAL5 manifest. The reference fixture
+itself publishes no benchmark manifest and provides no external-corpus claim.
