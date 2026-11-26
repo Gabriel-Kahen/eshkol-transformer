@@ -1,0 +1,20 @@
+;;; Causal control for the authentic C2 SAVE gate. It uses the same public
+;;; LOAD owner lifecycle but deliberately has no SAVE operation.
+(require transformer.capabilities)
+(require transformer.persistence)
+(require transformer.trainer)
+
+(define (proper-length values)
+  (let loop ((remaining values) (count 0))
+    (if (null? remaining) count
+        (loop (cdr remaining) (+ count 1)))))
+
+(define args (command-line))
+(if (not (= (proper-length args) 4)) (exit 2))
+(define input (car (cdr args)))
+(define policy (persistence-policy 16777216 524288 8388608 64 'cpu))
+(define owner
+  (with-region ('g3r-no-save-control 65536)
+    (checkpoint-load input policy (capability-discover))))
+(if (not (trainer-state-release! owner)) (exit 1))
+(display "G3-R NO-SAVE CONTROL PASS") (newline)

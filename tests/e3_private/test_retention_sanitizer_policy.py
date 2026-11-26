@@ -56,7 +56,7 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
     def test_verified_split_inventories_reach_published_evidence(self):
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
         start = builder.index('if [[ "${e3_retention_sanitizer_inventory_verified}" == 1 ]]; then')
-        end = builder.index('if [[ -n "${package_source_closure}" ]]; then', start)
+        end = builder.index('\nfi\n', start) + len('\nfi\n')
         publication = builder[start:end]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -90,7 +90,8 @@ class RetentionSanitizerPolicyTests(unittest.TestCase):
                               'if [[ "${e3_private_test_sanitize}" == 1 ]]; then')
         end = builder.index('if grep -E ', start)
         sanitized = builder[start:end]
-        self.assertIn('if [[ "${e3_tuple_kind:-}" == retention ]]; then', sanitized)
+        self.assertIn('if [[ "${e3_tuple_kind:-}" == fault ||\n'
+                      '        "${e3_tuple_kind:-}" == retention ]]; then', sanitized)
         self.assertIn('e3_retention_verify_sanitizer_imports', sanitized)
         self.assertIn('die "E3 sanitized private test object adds noninstrumentation imports"', sanitized)
         self.assertIn('e1b_compare_exact_undefined_allowlist', sanitized)
