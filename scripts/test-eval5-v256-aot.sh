@@ -23,13 +23,14 @@ if [[ -n "${EVAL5_V256_EVIDENCE_DIR:-}" ]]; then
   scratch="$(realpath -- "${EVAL5_V256_EVIDENCE_DIR}")"
 else
   scratch="$(mktemp -d "${build}/.eval5-v256.XXXXXX")"
-  trap 'rm -rf -- "${scratch}"' EXIT
+  trap 'if [[ -d "${scratch}/fixture" ]]; then chmod -R u+w -- "${scratch}/fixture"; fi; rm -rf -- "${scratch}"' EXIT
 fi
 
 fixture="${scratch}/fixture"
 python3 -m tests.eval5.mod5_v256_fixture build "${fixture}" > "${scratch}/fixture.json"
 python3 -m tests.eval5.mod5_v256_fixture verify "${fixture}" > /dev/null
 python3 -m tests.eval5.build_mod5_v256_witness "${fixture}" "${scratch}/witness.esk"
+chmod -R a-w -- "${fixture}"
 
 bash scripts/build-eval5.sh "${build}/eval5" normal
 bash scripts/build-mod5.sh
@@ -92,12 +93,18 @@ PY
 set +e
 "${scratch}/witness" --check-c1 "${scratch}/wrong-shape.etcp" > "${scratch}/c1-bad.out"
 shape_status=$?
+"${scratch}/witness" "${fixture}/tokenizer.etok" "${fixture}/train" \
+  "${fixture}/eval-clean" "${scratch}/wrong-shape.etcp" > "${scratch}/c1-identity-bad.out"
+checkpoint_identity_status=$?
 "${scratch}/witness" "${fixture}/tokenizer.etok" "${fixture}/eval-clean" \
   "${fixture}/train" "${fixture}/model.etcp" > "${scratch}/split-bad.out"
 identity_status=$?
 set -e
-[[ "${shape_status}" -eq 2 && "${identity_status}" -eq 2 ]] ||
-  die "negative C1 shape or D1 split identity was accepted"
-! grep -q '^SCORE' "${scratch}/c1-bad.out" "${scratch}/split-bad.out" ||
+[[ "${shape_status}" -eq 2 && "${checkpoint_identity_status}" -eq 2 && "${identity_status}" -eq 2 ]] ||
+  die "negative C1 shape, C1 identity, or D1 split identity was accepted"
+grep -Fq 'unexpected MOD5 parameter metadata' "${scratch}/c1-bad.out"
+grep -Fq 'C1 checkpoint SHA-256 mismatch' "${scratch}/c1-identity-bad.out"
+grep -Fq 'D1 manifest SHA-256 mismatch' "${scratch}/split-bad.out"
+! grep -q '^SCORE' "${scratch}/c1-bad.out" "${scratch}/c1-identity-bad.out" "${scratch}/split-bad.out" ||
   die "rejected input produced a SCORE line"
-printf 'EVAL5 V256 AOT live score, C1 shape, and D1 identity: PASS\n'
+printf 'EVAL5 V256 AOT live score, C1 shape/identity, and D1 identity: PASS\n'
