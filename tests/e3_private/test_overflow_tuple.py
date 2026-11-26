@@ -105,7 +105,7 @@ printf '%s\n' "$e3_tuple_kind"
 
     def test_exact_tuple_delta_and_ordinary_driver_unchanged(self) -> None:
         self.assertEqual(hashlib.sha256((PRIVATE / "retention_driver.esk").read_bytes()).hexdigest(),
-                         "44d64a8bd96d48ae3faea18d437fb5ee4934016da7f75a3011c666bd0a35be09")
+                         "5c2d5dcd28219e5977e574a75c983366b7fcd243e6ba100a5c9b0eee1ed9c97d")
         for suffix, added, removed in (
             ("source_closure", {"tests/e3_private/overflow_driver_root.esk",
                                 "tests/e3_private/overflow_driver.esk"},
@@ -138,7 +138,7 @@ printf '%s\n' "$e3_tuple_kind"
         self.assertIn("frame->phase != E3_IDLE", guarded)
         self.assertIn("selector < 0 || selector > 1", guarded)
         retention_flags = builder.split(
-            '"${e3_tuple_kind}" == retention-first-eval-mutant ) ]]; then\n'
+            '"${e3_tuple_kind}" == fault ) ]]; then\n'
             '    package_native_cflags+=(-DET_E3_RETENTION_TESTING)', 1)[1]
         retention_flags = retention_flags.split("fi", 1)[0]
         self.assertNotIn("ET_E3_OVERFLOW_TESTING", retention_flags)

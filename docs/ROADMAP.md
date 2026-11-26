@@ -70,6 +70,15 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   [source tree `19506579`](https://github.com/Gabriel-Kahen/eshkol-transformer/tree/4d31964456212f84837387c2ba2bb23803438f69).
   They remain unclaimed. Launch requires at least 16 GiB available memory,
   8 GiB free swap, and 32 GiB free at each Docker and scratch location.
+- The [first CPU-v1 source reconciliation](CPU_V1_SOURCE_RECONCILIATION_20261125.md)
+  combined the Wave 3 source, focused tests, and evidence repair over
+  `8d185344`. Generated G3/C2, public terminal continuation, E3 section 9,
+  and exact-tree hosted qualification remain open. A separate source
+  reconciliation onto `dd3a7792` keeps the frozen `4d319644` qualification
+  tree intact. Forty focused G3-R tests, 50 E3/Q0 integration checks, and CI
+  topology passed. The merged CLI3 cross-command script also passed a replay
+  of the previously published PR #255 binary. A fresh build for the
+  reconciled tree and the frozen generated Wave 3 gates are still pending.
 - On accepted `8d185344`, [hosted run 45646675969](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45646675969)
   passed `parameter-state`: 100m16s in the suite, after 2m10s of pinned
   toolchain verification. Its log has a 90m52s gap after the sanitized identity
@@ -865,6 +874,20 @@ network-disabled Ubuntu 22.04/LLVM 21 build and the focused CLI3-B executable
 gate (`cli3b-exact-63aec93d-20261125-fresh/SHA256SUMS`). This remains a
 fixed-profile continuation witness; hosted integration remains pending.
 
+The current Wave 3 composition candidate `9c7f3b7` failed the hosted
+model-composition contract checks: the E3-only partial-pin declaration had
+entered the exact shared M3 header, and the E1B consumer script pin predated
+the E3 fault-tuple selector. This isolated CI repair keeps the shared header
+exact, declares the test-only seam only in its participating source files,
+and refreshes the script checksum to the candidate's exact bytes. Focused
+checks pass. The [2026-11-14 PR #214 evidence review](WAVE3_PR214_ADMISSION_REVIEW.md)
+verifies supported run `38661209451` on the identical `c71d39a` tree,
+including compiled CLI3 production-generate/cross-command resume parity and
+E3 native frame/parity gates. That review also found and repaired the
+first-evaluation mutant's stale `e3_frame.c` checksum after this declaration
+move; 65 focused source tests pass. Generated Eshkol G3-R/C2 SAVE and E3 §9
+gates remain open; no full Wave 3 admission follows.
+
 The [D1 corpus validate command slice](CLI3_CORPUS_VALIDATE.md) is staged from
 `93ea6258` on this current-main source union. It adds a standalone Eshkol-native
 `corpus validate` executable and a retained-evidence gate with source,
@@ -874,11 +897,12 @@ identified the former public D1 package and command-contract blocker. A
 stages the validator, six read-only summary accessors, and one shared public
 command handler for the installed app. The installed entry intercepts only
 `corpus validate`; the required production-generate gate now checks its
-command contract and the existing commands. Exact-tree compiled package,
-installed runtime, and hosted gates remain pending. Source-only tests cover
-evidence-path and dirty checkout rejection. The exact composed head has not
-passed the compiled D1 and command gate; this does not establish full CLI3
-acceptance. The required CLI3 suite's
+command contract and the existing commands. Supported PR #214 run
+`38661209451` subsequently passes the production package/D1 dispatch and
+command gates on the identical `c71d39a` tree; see the
+[bounded evidence review](WAVE3_PR214_ADMISSION_REVIEW.md). Source-only tests
+also cover evidence-path and dirty checkout rejection. Full CLI3 acceptance
+remains open beyond the fixed profile. The required CLI3 suite's
 production-generate and cross-command gates now retain evidence in separate
 directories so their identically named output files cannot overwrite each other.
 The single-build CI candidate passes the production gate's fresh executable to
@@ -932,6 +956,15 @@ training and held-out D1 corpora, and a new fixed-profile C2 checkpoint, then
 inspects, evaluates, and generates from that same checkpoint in separate
 processes. It checks exact X1/T1/C2 identities, unchanged checkpoint bytes,
 fixed-profile and cross-config rejection, and corrupt-checkpoint diagnostics.
+The source-only follow-up on PR #212 head `05e3bec` compares a one-update
+checkpoint resumed for one more update with two uninterrupted updates. It
+requires complete C2 byte equality and identical separate-process evaluate
+and generate JSON for both final checkpoints, while retaining the original
+one-update checks. Successful reads and wrong-tokenizer, wrong-config, and
+corrupt-image rejections must leave checkpoint bytes unchanged. This added
+parity path was subsequently exercised successfully by PR #214 supported run
+`38661209451` on the identical `c71d39a` tree; see the
+[bounded evidence review](WAVE3_PR214_ADMISSION_REVIEW.md).
 The test is registered after the production generate gate in the required
 CLI3 CI suite. The accepted J result (`/home/gabe/.codex/evidence/eshkol-transformer/cli3-union-j-result-independent-review-20261012-a/VERDICT.md`)
 validates both compiled gates on exact source `18693b4` (tree `3a7f76e5`)
@@ -945,7 +978,23 @@ runtime-source normalization could admit it. An isolated source-only policy
 repair admits dependencies under that exact authenticated runtime root while
 preserving traversal and symlink rejection for each root. Focused policy tests
 and the compiled J production-generate/cross-command gates pass on repaired
-source `18693b4`; composed-head compiled and hosted exact-head checks remain open.
+source `18693b4`; the subsequent identical-tree `c71d39a` supported result
+is recorded in the [PR #214 evidence review](WAVE3_PR214_ADMISSION_REVIEW.md).
+
+The CLI3/G3-G source contract compares the complete installed executable entry
+with its test fixture after accounting for the public D1 `corpus validate`
+intercept. The corrected test constructs that exact successor and retains
+full-entry equality, including native dispatch and fallback. It passed the
+focused 18-test source suite on `5b2fe64`; the reviewed PR #210 candidate
+`5f4ff8d` preserved that test and the installed entry. The earlier PR #212
+source/docs union was based on repaired M2 PR #211 head `9098d4d` and retained
+its N3 and M2 evidence, including the predecessor-checksum repair. The current
+source-only union carries PR #212 head `05e3bec` and resume-parity child
+`1004a5e` onto exact main `ee24ef4`, retaining main's E3 N1 roadmap status.
+All 19 focused CLI3 generate source tests, shell syntax, native closure policy,
+and required CI registration pass. Independent source review, a fresh
+exact-tree compiled installed/cross-command seal, and hosted checks remain
+open before integration.
 
 The test-only CLI3/G3-G checkpoint-to-generation prerequisite has passed its
 exact fe9/f31 supported linked/runtime gate at `ab479f5`/tree `1102384`.
@@ -1115,6 +1164,14 @@ role/CE/state/final verification and byte equality for identical packed
 emissions. Its three compiled mutants remain on packed-single. Local parser
 and shell checks do not substitute for independent source/test review or a
 fresh supported compiled gate; this extension has no runtime evidence yet.
+The existing second-normalization mutant's numerical gate now has a bounded
+causal verifier after the strict final-metric rejection. It requires unchanged
+three-batch rows and all 63 role records, recomputes the binary32 accumulator
+from independently admitted D2 rows and validated CE words, then requires the
+second exact division's loss and a two-ULP perplexity bound with unchanged
+weight, accuracy and counters. Focused synthetic negative controls pass; this
+source change has no fresh compiled result. Supported exact-source AOT,
+poison/sanitizer execution and independent review remain the M2 proving gate.
 An isolated all-correct/all-wrong source candidate adds two fixed raw V256
 six-byte D1 corpora, authentic packed D2 rows, seed-1729 M3 selection proof,
 and a separate two-case private numerical runner. The new versioned manifest
@@ -1380,6 +1437,14 @@ completed warmup, calibration, success and retry call. The evaluator's measured
 region-byte interval is unchanged. Source mutation controls check the baseline
 order and comparison topology; a compiled first-call bit-mutation witness and
 supported complete-call gate remain pending, so this is not §9 acceptance.
+The separate post-report teardown phase now closes D2 before its 29-probe
+baseline, unbinds the idle E3 frame, destroys all four caller destinations,
+and compares a second 29-probe snapshot. It requires 41 fewer live I2 tensors,
+one fewer live frame and one additional dead-frame tombstone, zero transient
+borrows/batches/FDs, and unchanged model-owned counts and full model image.
+Focused source tests reject skip-unbind and skip-one-destination mutations.
+Compiled 1,024/8,192-call resource and sanitizer gates remain pending; this
+test-only source leaf does not establish their runtime outcome.
 An isolated noninstalled first-evaluation mutant tuple now derives a private
 driver mechanically from that baseline and replaces only the E3 frame test
 object with a feature-gated, fixed one-shot helper. Source controls cover
@@ -1486,6 +1551,141 @@ under `/tmp`. Focused N1 host tests (112 private, 24 broker), 107 CI source
 tests and CI topology pass. This is source-only generated evidence: protected
 custody, real OCI read, trusted actor closure, the 30-second/256-MiB attempt
 predicate, compiled E3 and full §9 acceptance remain **HOLD**.
+
+The [E3 §9 stage-cut inventory](e3/E3_STAGE_CUT_INVENTORY.md) and
+[R1/R2 selector topology](e3/E3_R1_SELECTOR_TOPOLOGY.md) define a source-only,
+noninstalled fault route. A guarded native candidate implements only the
+forward-role preinvoke selector on an authentic idle frame. Host Clang 22 native
+checks and feature-off frame-object parity pass. A bounded current-main source
+union now adds the retention-derived, noninstalled Eshkol tuple, exact lexical
+policy, source-pinned manifests and a feature-private phase identity binding
+for site, role, occurrence, gradient choice and corpus path. Host-only policy
+and mismatch/order checks pass; the manifests remain compiler-unverified.
+Supported Clang 21/LSan, compiled failure/retry and resource proof remain open.
+This candidate does not admit E3 §9 R1/R2.
+
+A separate bounded source union adds the `ET_E3_TESTING` one-shot selector for
+the six actual K1 provider discoveries during frame bind and the reviewed
+runtime-lifetime witness. The selector replaces only the selected provider
+with null before the real K1 discovery call; it is independent of the
+`ET_E3_FAULT_TESTING` per-frame forward-role selector. A source-composed native
+test counts each successful discovery and destruction around failed bind
+indices 0–5, preserves the preexisting model runtimes, and checks a fresh
+bind and forward retry. The skipped-destroy mutant fails at the lifetime
+assertion. On the local unsupported Clang 22 host, the normal native gate
+passed 11,562 checks, a separate ASan/UBSan run passed 11,562 checks with
+leak detection disabled, and 51 adjacent private tuple/policy tests passed;
+LeakSanitizer could not start under ptrace. This is setup-time, test-only
+source evidence. Supported Clang 21/LSan, compiled Eshkol failure/retry,
+resource proof, and E3 §9 R1/R2 admission remain open.
+
+The bounded stage-7 fault-driver successor on the published K1 source child
+captures six actual pre-call output words, saved D2 cursor, 17-mode mask,
+14 parameter/gradient word and metadata images, initializer algorithm/four
+successor words, and all 29 native probes immediately before the armed call.
+It checks the first mapped stage-7/internal table index and native tuple,
+restores exact live state, reconciles borrow/retired-control event deltas,
+resets the one-shot arm, and retries a complete call on the same authorities.
+Focused host source tests include wrong-selector and owner-event mutants,
+value/gradient/metadata changes across all 14 owners, and omission mutants.
+This remains a noninstalled source
+candidate: supported compiled Eshkol
+normal/poison/LSan failure/retry and resource evidence are still pending.
+The repeated fixed corpus gives the same six result words before and after a
+successful call, so stage-12 byte-atomic publication needs distinguishable
+pre-call values and its own genuine preflight cut. Other R1/R2 stages,
+tie identity, graph-producing mutations, and complete-call horizons remain
+open; no §9 admission follows from this source slice.
+
+A bounded noninstalled stage-12 successor extends the existing
+`ET_E3_FAULT_TESTING` frame selector with site 2, ordinal 0, occurrence 1.
+It fires after all four destination and four result view checks, count
+validation and final destination metadata checks, before the first output
+write; the cut releases all opened destination views and returns the existing
+internal/invariant error. A guarded idle-frame fixture seeds distinct finite
+I2 words and valid prior counters `(7,4)` after a successful warmup. The
+fault driver compares all six actual pre-call words, first stage-12 error,
+cursor/mode/model/RNG/owner state and same-authority retry against the fixed
+`(5,3)` result. Focused host source tests and the unsupported-host Clang 22
+normal native frame run pass; the local sanitizer run cannot start LeakSanitizer
+under ptrace. Independent source/test review accepted the composed E3 union at
+`9aed9c65`/tree `55377da7`; supported optimized Eshkol AOT
+normal/poison/sanitizer evidence and the remaining R1/R2 stage cuts stay open.
+
+A bounded noninstalled stage-3 successor holds an authentic model parameter
+value borrow through the existing private fault tuple. The real M3 pin
+preflight denies acquisition before any of the 14 pins are committed, and the
+driver checks mapped stage 3/invalid-state (table index 42), native domain 3/
+category 4/code 8, exact saved cursor, modes, model/gradient/RNG image, all six
+distinct seeded output words and owner counts while the external borrow remains
+held. It then releases that borrow and retries with the same model, dataset,
+frame and destinations against a separate fixed-seed model/frame/dataset
+twin's six outputs and end cursor. This is a source-only external-borrow
+admission witness; it does not prove rollback after a partial pin acquisition.
+Focused source tests and independent source review pass; a supported compiled
+normal/poison/sanitizer gate and other stage-3/4 cuts remain open for R1.
+
+The next bounded E3 §9 stage-3 source candidate adds frame-owned site 4,
+ordinal 0–13, occurrence 1. Its noninstalled M3 begin entry takes an explicit
+fail-before index, uses the ordinary admission and prefix-drain path, and
+returns domain 3/category 6/code 6 after consuming the E3 selector before
+the M3 call. The fault driver checks mapped stage 3/internal (table index 47),
+unchanged cursor, all 17 modes, model/gradient/RNG and six seeded outputs,
+zero live pins/borrows, and same-authority retry against an independent twin.
+The host included-TU M3 test exercises all 14 indices and rejects index 14;
+the host native E3 frame test checks every prefix, pin and borrow release,
+selector negatives, and retry. Focused lexical/source and native
+symbol/feature-off checks pass. Independent source/test review accepted the E3
+union at `9aed9c65`/tree `55377da7`. This remains a source candidate;
+supported optimized Eshkol AOT normal, poison and sanitizer gates are the next
+admission gate.
+
+The bounded E3 §9 stage-8 source candidate adds noninstalled frame-owned
+site 5, ordinal 0, occurrences 1 or 2. After all 21 forward roles, it
+consumes the one-shot selector before L2 CE dispatch and returns the existing
+internal/invariant status (mapped E1 stage 8, table index 107). The private
+fault tuple compares the saved cursor, 17 modes, all model/gradient/RNG and
+owner observations, six seeded output words, and a same-frame retry against
+an independent twin. Host source and native checks cover invalid, duplicate,
+unreached and both reached occurrences; a dispatch-before-denial mutant fails
+at the CE dispatch count. This remains source/host evidence on an unsupported
+Clang 22 host. Independent source/test review accepted the E3 union at
+`9aed9c65`/tree `55377da7`; supported compiled Eshkol normal, poison and
+sanitizer gates remain open; no §9 R1 admission follows.
+
+The stage-8 fault candidate and retention post-report teardown now share a
+source-only branch based on the independently reviewed CLI3 `baf0a03f` union.
+The shared E3 lexical fault sequence is applied once; the accepted stage-8 and
+retention source heads follow without changing the installed training path.
+Focused host source and native checks pass on an unsupported CachyOS/Clang 22
+host. Independent source/test review accepted this E3 union at `9aed9c65`;
+supported compiled Eshkol normal, poison, and sanitizer evidence remains
+required; E3 §9 admission remains **HOLD**.
+
+The [2026-11-15 bounded stage-3 successor](e3/E3_STAGE3_ADMISSION_20261115.md)
+selects only `188169be`/`761cb395`/`48bc75a6` over reviewed PR216 `70220bbe`.
+Its noninstalled fault tuple isolates site 4, ordinal 7, occurrence 1 (after
+seven pins are acquired) for absent/present gradient images; external-borrow,
+other prefixes and the complete R1/R2 matrix remain open. Source/custody tests
+pass; the fresh supported normal/repeat/poison/leak-enabled sanitizer gate is
+pending with explicit 6 GiB memory/7 GiB memory-plus-swap experimental caps and
+scratch under `/home`. Two launch attempts stopped before compilation on
+nested-mountpoint and global Git-environment defects; the focused launcher
+fix is source-tested. Attempt 3 is **NOT RUN** under the orchestrator
+headroom hold (final local checkpoint: about 9.5 GiB available RAM, 797 MiB
+free swap; `/home` about 93 GiB free).
+Earlier accepted numerical F/mode leaves and failed complete-call retention
+remain separate evidence. E3 §9 stays **HOLD**.
+
+The [2026-11-25 Wave 3 stage-3 source reconciliation](e3/E3_STAGE3_WAVE3_RECONCILIATION_20261125.md)
+replays the existing PR #223 gate over composed Wave 3 source `4ff24845a`
+without changing its E3 runtime, test or package blobs. Focused launcher and
+one-shot tests pass. The shared-build lock and preserved 16 GiB available
+RAM, 8 GiB free swap, 32 GiB actual scratch and 4 GiB `/tmp` qualification
+floors now fail closed before Docker create. This host currently misses the
+RAM/swap floors, and no measured configured hosted runner qualifies. The
+compiled normal/repeat/poison/sanitizer gate and independent result review
+remain pending; E3 §9 stays **HOLD**.
 
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
@@ -2256,6 +2456,16 @@ publication transaction. Full G3-R still requires a separately admitted larger
 repeated-decode and later-EOS continuation profile. No persistence implementation
 or save/reload equivalence is claimed.
 
+The [private replayed P1/G1 generated-call candidate](g3/G3_R_REPLAYED_P1_G1_PRIVATE_LEAF.md)
+adds a source-only native/Eshkol transition from an authentic idle manual P1
+commit to one generated G1. Its host synthetic state witness and causal source
+checks cover admission, ordinary-route isolation, pending output, abort and
+retry. The current-main G3 leaf union was independently source-reviewed at
+`c812b019`/tree `0d237093`; the genuine same-process sampling fixture remains
+unrun and pinned normal/repeat/sanitizer compiled acceptance is required
+before this private seam is accepted. This does not bind a C2 pair, expose a
+public route, or prove resumed generation.
+
 The [private G3-R fixed-record codec leaf](g3/G3_R_RECORD_CODEC_LEAF.md)
 stages an in-memory 288-byte encoder/decoder using the existing C1 SHA-256.
 It validates the exact policy, G3-S words, history/EOS partition, T1
@@ -2372,6 +2582,59 @@ Hosted exact-head checks and integration remain pending. This private in-memory
 pair admission does not read or publish the companion file, authenticate live
 model/tokenizer identity, restore parameters, replay a generator, or discharge
 the remaining G3-R C2/SAVE and Wave 3 obligations.
+
+The [private G3RCV1 companion file-read candidate]
+(g3/G3_R_C2_PAIR_FILE_READ_LEAF.md) composes the accepted in-memory C2/SHA
+pair decoder with C1's exact 288-byte file read into fresh staging. Host-only
+source mutations and independently generated short/long/symlink/FIFO/wrong-
+digest fixtures pass; a genuine same-registry Eshkol file/receipt fixture is
+prepared but unrun. It adds no SAVE writer, C2 owner transfer, model restore,
+public generation or continuation. The current-main G3 leaf union was
+independently source-reviewed at `c812b019`/tree `0d237093`; pinned compiled
+normal/repeat/sanitizer acceptance remains pending.
+
+The G3-R authentic C2 SAVE test gate is prepared at
+`scripts/test-g3r-c2-authentic-save.sh`. It compiles the accepted public C2
+LOAD→SAVE→release fixture, retains a fresh `roundtrip.c2` with archive,
+facade, build, size, hash and byte-equality evidence, and first runs a
+compiled LOAD/release control without SAVE that must leave the output absent.
+It derives G3RCV1 companions from the retained saved bytes and invokes the
+existing private file reader against that image in normal, repeat and
+sanitizer modes. Source and host checks are complete; the compiled gate is
+unrun and does not establish restored model or public continuation.
+
+The source-only current-main union of these G3-R leaves starts from the
+reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
+commits `2569ccf`, `c63951e`, `b8b64b9`, `f3e1485`, and `308dd596`.
+It retains the CLI3 resume-parity source and E3 N1 roadmap status on that
+base. The private replay host checks, companion fixture/source checks, SAVE
+gate source checks, and shell syntax pass in the union. Independent source
+review accepted `c812b019`/tree `0d237093`; compiled G3-R
+normal/repeat/sanitizer gates, CLI3 compiled cross-command validation, and
+hosted checks remain open. The Wave 3 G3, C2/SAVE, TR3, and CLI3 acceptance
+rows remain open.
+
+A conditional current-main Wave 3 source candidate combines that G3/C2 head
+with the independently source-reviewed E3 `9aed9c65` head over the exact
+reviewed CLI3 `baf0a03f` base. The G3 and E3 source/test blobs are retained
+unchanged. The [2026-11-14 independent review](WAVE3_PR214_ADMISSION_REVIEW.md)
+found no production source defect and verified all 24 successful hosted checks
+for `c71d39a`, including compiled production CLI3 cross-command resume parity and E3
+native frame/parity execution on its exact tree. A stale first-evaluation
+mutant source pin is repaired separately with passing focused tests. The
+generated Eshkol G3-R replay, authentic C2 SAVE/reader and E3 §9 gates remain
+open. Retained one-use leaf preparations are not runtime evidence; the
+32 GiB disk floor also prevents a new heavy attempt on this host at review
+time. G3, C2/SAVE, E3 §9, TR3, full CLI3 and Wave 3 acceptance remain **HOLD**.
+
+The [G3-R/C2 one-use controller](G3R_ONE_USE_LAUNCHER.md) supplies exact
+input/seal checks, locked resource rechecks, exclusive claims, owned-container
+custody and complete output/artifact validation. Its focused controls are
+source-level evidence only; 34 focused control/oracle and Q0 tests pass on the
+reconciled source. The historical `aece425d` preparations are sealed but stale
+for this tree; fresh preparations repinned to the final composed tree,
+independent recipe/seal review, and resource-qualified generated replay/SAVE
+runs remain required. G3/C2 generated runtime and E3 §9 admission remain **HOLD**.
 
 The private idle G3-T RNG equality predicate at exact source `daca071d`
 passed the pinned fe9/f31 Clang 21 gate. Its five-argument status-only entry
@@ -3485,6 +3748,67 @@ publication, public G2 and continuation remain pending.
   after native commit. Native terminal integration and logical I1 clone code
   are prerequisites; Eshkol implementation and compiled same-call proof remain
   pending. No public G2 or continuation acceptance is claimed.
+
+- **Private P2/G2 terminal pending-allocation precursor:** The
+  [abort-only anchor candidate](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
+  reserves the original output and second/text carriers before sampling. An
+  independent lexical root detects paired carrier replacement and changed
+  list nodes/successors before abort. On the `c71d39a984` worktree candidate,
+  the pinned `fe9dfd5` Ubuntu 22.04/Clang 21 normal, repeat and sanitizer
+  fixtures pass 23 private and four feature-off checks with identical stdout
+  and empty stderr; seven static mutations pass. The runner's final Git check
+  failed because the container lacked the external worktree Git directory;
+  host postflight passed. Evidence is sealed under
+  `build/g3c4-p2g2-terminal-pending-anchor-20261114/SHA256SUMS` pending
+  independent result review and integration. Actual bytevector backing
+  extent, allocation failure cuts, same-call EOS/second-token publication,
+  detached clones, public G2 and save/reload remain open.
+
+- **Standalone P2/G2 constructor-owned carrier prerequisite:** The
+  [private carrier bundle candidate](g3/G3_C4_P2_G2_TERMINAL_CARRIERS_LEAF.md)
+  captures all eight literal constructor returns in an inaccessible lexical
+  root, authenticates original bundle/carrier identities and fixed extents,
+  and provides authenticated scrub/unlink retirement. Pinned normal, repeat
+  and sanitizer runs pass 530 identical checks each, including eight guarded
+  allocation cuts with earlier-bundle preservation and retry; sixteen
+  unguarded cuts match the exact pinned emergency exit 1 diagnostic.
+  Unchanged pending/feature-off predecessors pass 23/4 per mode; 22+7 static
+  mutations and Q0's four tests pass. Evidence is under
+  `build/g3c4-p2g2-terminal-carriers-20261115-attempt3/`; integration remains
+  pending. Its development allocator
+  witness is evidence only; the production helper never converts carriers
+  to native pointers. Existing protected/prefix wrappers and native ABI
+  remain unchanged. Composition into the sole native pending output and
+  actual terminal close, public G2, trained-G2 sanitizer acceptance and
+  save/reload remain open.
+
+  Wave 3 source reconciliation replays both published leaves onto `4ff24845`
+  without changing their Eshkol source, fixtures, or native shim. The carrier
+  closure additionally records `pa4_attention_candidate.h`, included by the
+  Wave 3 A2 provider. Both static mutation checkers, Q0 isolation, and the
+  call-entry source check pass; an independent source-and-test review found no
+  issue in this bounded replay. The earlier compiled seals have different
+  inputs and do not qualify this tree. Fresh pinned normal, repeat, and
+  sanitizer runs of both terminal-pending-anchor and terminal-carriers scripts
+  completed under the shared heavy-build lock with exact-tree source, compiler,
+  runtime, resource, and output seals.
+
+  That scoped gate passed on unchanged candidate `12598d3bc01c155eab0eeb89b26c11304ee3fcbd`
+  (tree `d6338d1b0632864c9672a9458c7989893ab8bac9`) using the verified
+  `fe9dfd5` Eshkol build, Ubuntu 22.04 and Clang 21.1.8. The pending-anchor
+  script passed seven static mutations, four feature-off and 23 protected
+  checks per normal/repeat/sanitizer run; the carrier script passed seven plus
+  22 static mutations and 530 checks per mode. All corresponding stdout matched
+  byte-for-byte and successful compile/run stderr was empty. The carrier gate
+  classified all eight unguarded allocation cuts in each normal and sanitizer
+  mode as the pinned emergency exit 1. Peak script RSS was 4,024,772 and
+  3,776,440 KiB respectively; both scripts exited zero, and the exact source
+  worktree stayed clean. The 83-file seal is
+  `/home/gabe/.codex/evidence/eshkol-transformer/g3c4-carrier-wave3-12598d3-20261125/SHA256SUMS-RUN`
+  (`59496ab7...`), with separate normal, repeat, sanitizer, and failpoint
+  manifests. This qualifies the two standalone carrier leaves on the reconciled
+  Wave 3 tree; terminal composition and the separate G3/C2 and E3 gates remain
+  pending.
 
 ## Wave 4 — practical pretraining and performance
 

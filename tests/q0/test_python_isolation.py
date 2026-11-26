@@ -47,6 +47,9 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-p2g2-second-frame.py",
         "check-g3c4-p2g2-terminal.py",
         "check-g3c4-p2g2-terminal-ids-clone.py",
+        "check-g3c4-p2g2-terminal-pending-anchor.py",
+        "check-g3c4-p2g2-terminal-carriers.py",
+        "check-g3c4-terminal-carrier-failures.py",
         "check-g3c4-p2g2-ownership.py",
         "check-g3c4-p2g2-protected-scope.py",
         "check-g3c4-p2g2-t1-prefix-coordinator.py",
@@ -70,6 +73,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-p1-native-index.py",
     ROOT / "scripts" / "e3-atomic-publish.py",
     ROOT / "scripts" / "run-cli3-downloaded-artifact.py",
+    ROOT / "scripts" / "launch-e3-r1-stage3-compiled.py",
     ROOT / "scripts" / "check-g3t-model-admission.py",
     ROOT / "scripts" / "check-g3t-native-context.py",
     ROOT / "scripts" / "check-g3t-generator-constructor.py",
@@ -105,6 +109,7 @@ DEVELOPMENT_SCRIPTS = frozenset({
     ROOT / "scripts" / "check-g3g-manual-package.py",
     ROOT / "scripts" / "check-g3r-record-codec.py",
     ROOT / "scripts" / "check-g3r-p1-roster.py",
+    ROOT / "scripts" / "check-g3r-replayed-p1-g1.py",
 }) | G3C4_DEVELOPMENT_SCRIPTS
 INTEROPERABILITY_TOOLS = frozenset({ROOT / "tools" / "io5" / name for name in (
     "safetensors_interop.py", "gguf_interop.py", "model_mapping.py",
@@ -154,6 +159,8 @@ class PythonIsolationTests(unittest.TestCase):
             "scripts/e3-atomic-publish.py.extra.py",
             "scripts/run-cli3-downloaded-artifact.py.extra.py",
             "native/run-cli3-downloaded-artifact.py",
+            "scripts/launch-e3-r1-stage3-compiled.py.extra.py",
+            "native/launch-e3-r1-stage3-compiled.py",
             "scripts/generate-e3-overflow-clamp-overlay.py.extra.py",
             "scripts/generate-e3-overflow-clamp-overlay-v2.py",
             "scripts/nested/generate-e3-overflow-clamp-overlay.py",
@@ -167,6 +174,10 @@ class PythonIsolationTests(unittest.TestCase):
             "scripts/nested/generate-e3-d2-source.py",
             "src/generate-e3-d2-source.py", "lib/runtime.py",
             "internal/e3/runtime.py", "native/runtime.py",
+            "scripts/check-g3r-replayed-p1-g1.py.extra.py",
+            "scripts/nested/check-g3r-replayed-p1-g1.py",
+            "src/check-g3r-replayed-p1-g1.py",
+            "native/check-g3r-replayed-p1-g1.py",
         ):
             with self.subTest(path=relative):
                 self.assertFalse(development_python(ROOT / relative))

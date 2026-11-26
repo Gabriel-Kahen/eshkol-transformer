@@ -1,0 +1,184 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_p2g2_terminal_carriers_extension.esk")
+
+;;; These development-only predicates observe actual allocator requests;
+;;; production authentication never calls them or converts carriers to ptr.
+(extern i64 extent-arm :real et_g3c4_terminal_extent_arm_v1)
+(extern i64 extent-seal :real et_g3c4_terminal_extent_seal_v1)
+(extern i64 extent-match i64 ptr i64 i64
+        :real et_g3c4_terminal_extent_match_v1)
+(extern i64 extent-fail-arm i64 :real et_g3c4_terminal_extent_fail_arm_v1)
+(extern i64 extent-recover-arm i64 :real et_g3c4_terminal_extent_recover_arm_v1)
+(extern i64 extent-failure-disarm
+        :real et_g3c4_terminal_extent_failure_disarm_v1)
+(extern i64 extent-length-set i64 i64
+        :real et_g3c4_terminal_extent_length_set_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P2/G2 terminal carriers FAIL: ")
+             (display label) (newline) (exit 1))))
+(define (reject label thunk)
+  (check label
+    (guard (caught
+             (#t (and (transformer-error? caught)
+                      (eq? (transformer-error-category caught) 'invalid-state))))
+      (thunk) #f)))
+(define arguments (cdr (command-line)))
+(if (pair? arguments)
+    (begin
+      (extent-fail-arm (string->number (car arguments)))
+      (g3c4-p2g2-terminal-carriers-create)
+      (exit 90)))
+
+(check "arm" (= (extent-arm) 0))
+(define original (g3c4-p2g2-terminal-carriers-create))
+(check "exactly eight original allocations" (= (extent-seal) 1))
+(define other (g3c4-p2g2-terminal-carriers-create))
+(define expected (vector 9 16 10 24 9 16 9 10))
+(define (valid bundle) (g3c4-p2g2-terminal-carriers-check bundle 'test))
+(check "original authenticated" (valid original))
+(check "independent constructor authenticated" (valid other))
+(reject "foreign object rejected" (lambda () (valid (vector 'foreign))))
+(reject "procedure rejected" (lambda () (valid (lambda () #t))))
+(let ((copy (vector (vector-ref original 0) (vector-ref original 1)
+                    (vector-ref original 2) (vector-ref original 3)
+                    (vector-ref original 4) (vector-ref original 5)
+                    (vector-ref original 6) (vector-ref original 7)
+                    (vector-ref original 8) 'live)))
+  (reject "copied bundle cannot import original allocations"
+    (lambda () (valid copy)))
+  (reject "foreign disposal rejected"
+    (lambda () (g3c4-p2g2-terminal-carriers-retire! copy))))
+(let each ((i 0))
+  (if (< i 8)
+      (let* ((bytes (vector-ref original i))
+             (extent (vector-ref expected i))
+             (backing (if (= i 3) 32 24))
+             (extents (vector-ref original 8)))
+        (check "compiled extern ptr matches original backing allocation"
+          (= (extent-match i bytes extent backing) 1))
+        (check "wrong declared extent rejected"
+          (= (extent-match i bytes (+ extent 1) backing) 0))
+        (check "wrong backing extent rejected"
+          (= (extent-match i bytes extent (+ backing 8)) 0))
+        (bytevector-u8-set! bytes 0 100)
+        (vector-set! original i (vector-ref other i))
+        (reject "equal-length genuine foreign carrier rejected"
+          (lambda () (valid original)))
+        (reject "failed disposal preserves original allocation"
+          (lambda () (g3c4-p2g2-terminal-carriers-retire! original)))
+        (vector-set! original i bytes)
+        (check "rejected disposal leaves original bytes unchanged"
+          (= (bytevector-u8-ref bytes 0) 100))
+        (check "rejected disposal leaves foreign bytes unchanged"
+          (= (bytevector-u8-ref (vector-ref other i) 0) 0))
+        (check "original repair succeeds" (valid original))
+        (vector-set! extents i (+ extent 1))
+        (reject "mutable expected extent cannot redefine allocation"
+          (lambda () (valid original)))
+        (vector-set! extents i 'forged)
+        (reject "noninteger expected extent rejects before arithmetic"
+          (lambda () (valid original)))
+        (vector-set! extents i extent)
+        (check "length fault injected into original header"
+          (= (extent-length-set i (+ (- extent 8) 1)) 1))
+        (reject "changed length header cannot enlarge backing"
+          (lambda () (valid original)))
+        (check "length header restored"
+          (= (extent-length-set i (- extent 8)) 1))
+        (check "header repair succeeds" (valid original))
+        (bytevector-u8-set! bytes 0 (+ i 1))
+        (each (+ i 1)))))
+(let ((saved (vector (vector-ref original 0) (vector-ref original 1)
+                     (vector-ref original 2) (vector-ref original 3)
+                     (vector-ref original 4) (vector-ref original 5)
+                     (vector-ref original 6) (vector-ref original 7))))
+  (let replace ((i 0))
+    (if (< i 8)
+        (begin (vector-set! original i (vector-ref other i))
+               (replace (+ i 1)))))
+  (reject "all eight equal-length replacements cannot redefine originals"
+    (lambda () (valid original)))
+  (let restore ((i 0))
+    (if (< i 8)
+        (begin (vector-set! original i (vector-ref saved i))
+               (restore (+ i 1))))))
+(let ((first (vector-ref original 0)) (second (vector-ref original 4)))
+  (vector-set! original 0 second)
+  (vector-set! original 4 first)
+  (reject "paired same-length originals swapped" (lambda () (valid original)))
+  (vector-set! original 0 first)
+  (vector-set! original 4 second)
+  (vector-set! original 4 first)
+  (reject "duplicate alias rejected" (lambda () (valid original)))
+  (vector-set! original 4 second))
+(let ((extents (vector-ref original 8)))
+  (vector-set! original 8 (vector 9 16 10 24 9 16 9 10))
+  (reject "equal-valued extent vector substitution rejected"
+    (lambda () (valid original)))
+  (vector-set! original 8 extents))
+(vector-set! original 9 'dead)
+(reject "diagnostic tag cannot revoke hidden authority" (lambda () (valid original)))
+(vector-set! original 9 'live)
+(check "authenticated retirement" (g3c4-p2g2-terminal-carriers-retire! original))
+(let each ((i 0))
+  (if (< i 8)
+      (begin
+        (let bytes ((j 0))
+          (if (< j (- (vector-ref expected i) 8))
+              (begin
+                (check "retirement scrubs original bytes"
+                  (= (bytevector-u8-ref (vector-ref original i) j) 0))
+                (bytes (+ j 1)))))
+        (each (+ i 1)))))
+(reject "retired original rejected" (lambda () (valid original)))
+(reject "retirement root removed"
+  (lambda () (g3c4-p2g2-terminal-carriers-retire! original)))
+(vector-set! original 9 'live)
+(reject "diagnostic tag cannot revive removed root" (lambda () (valid original)))
+(check "other constructor unaffected" (valid other))
+(let mark ((slot 0))
+  (if (< slot 8)
+      (begin
+        (let bytes ((j 0))
+          (if (< j (- (vector-ref expected slot) 8))
+              (begin
+                (bytevector-u8-set! (vector-ref other slot) j (+ 1 slot j))
+                (bytes (+ j 1)))))
+        (mark (+ slot 1)))))
+(let failures ((i 0))
+  (if (< i 8)
+      (let ((caught #f) (answer #f))
+        ;; Install the real hosted guard before arming the allocator cut.
+        (guard (condition (#t (set! caught #t)))
+          (extent-recover-arm i)
+          (set! answer (g3c4-p2g2-terminal-carriers-create)))
+        (check "constructor null-return emergency caught" caught)
+        (check "constructor failure publishes no bundle" (not answer))
+        (check "exact bytevector allocation cut consumed"
+          (= (extent-failure-disarm) i))
+        (check "genuine earlier bundle survives allocation failure" (valid other))
+        (let unchanged ((slot 0))
+          (if (< slot 8)
+              (begin
+                (let bytes ((j 0))
+                  (if (< j (- (vector-ref expected slot) 8))
+                      (begin
+                        (check "earlier original bytes unchanged by allocation cut"
+                          (= (bytevector-u8-ref (vector-ref other slot) j)
+                             (+ 1 slot j)))
+                        (bytes (+ j 1)))))
+                (unchanged (+ slot 1)))))
+        (let ((retry (g3c4-p2g2-terminal-carriers-create)))
+          (check "constructor retry succeeds after disarm" (valid retry))
+          (check "retry retires independently"
+            (g3c4-p2g2-terminal-carriers-retire! retry)))
+        (failures (+ i 1)))))
+(check "other retirement" (g3c4-p2g2-terminal-carriers-retire! other))
+(display "G3-C4 P2/G2 terminal carriers PASS: checks=")
+(display checks)
+(newline)

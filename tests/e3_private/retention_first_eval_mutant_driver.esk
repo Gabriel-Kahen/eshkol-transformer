@@ -273,7 +273,7 @@
              (before (e3-test-retention-probes))
              (record (vector model destinations frame dataset cursor modes
                              model-image rng before horizon present? 0 0 #f
-                             calibrated-region-bytes 0 0)))
+             calibrated-region-bytes 0 0 #f #f)))
         (e3-test-retention-check 'calibrated-region-budget
           (and (>= calibrated-region-bytes 0)
                (<= calibrated-region-bytes 262144)))
@@ -336,19 +336,59 @@
     (e3-test-retention-check 'completed-identity
       (and (vector? record) (= (vector-ref record 9) horizon)
            (eq? (vector-ref record 10) present?)
-           (vector-ref record 13)))
+           (vector-ref record 13) (not (vector-ref record 18))))
     (let* ((before (vector-ref record 8))
            (after (e3-test-retention-probes))
            (growth (e3-test-retention-reconcile! before after))
            (dataset (vector-ref record 3)))
       (d2-token-dataset-close! dataset)
-      (vector-set! e3-test-retention-root 0 #f)
       (e3-test-retention-check 'dataset-close
         (= (e3-test-retention-probe 22) 0))
+      (vector-set! record 17 (e3-test-retention-probes))
+      (vector-set! record 18 #t)
       (vector 'e3-retention-result-v1 horizon present?
               (vector-ref record 11) (vector-ref record 12)
               before after growth (vector-ref record 14)
               (vector-ref record 15) (vector-ref record 16)))))
+
+(define (e3-test-retention-teardown horizon present?)
+  (let ((record (vector-ref e3-test-retention-root 0)))
+    (e3-test-retention-check 'reported-identity
+      (and (vector? record) (= (vector-ref record 9) horizon)
+           (eq? (vector-ref record 10) present?)
+           (vector-ref record 13) (vector-ref record 18)))
+    (let* ((model (vector-ref record 0))
+           (destinations (vector-ref record 1))
+           (frame (vector-ref record 2))
+           (before (vector-ref record 17)))
+      (e3-test-retention-check 'teardown-live-frame
+        (and (= (vector-ref before 17) 1) (= (vector-ref before 20) 0)))
+      (e3-test-retention-check 'teardown-model-before
+        (e3-test-retention-model=? model (vector-ref record 6)))
+      (e3-frame-unbind! frame)
+      (e3-test-destinations-destroy! destinations)
+      (let ((after (e3-test-retention-probes)))
+        (e3-test-retention-check 'teardown-frame-tombstone
+          (and (= (vector-ref after 17) (- (vector-ref before 17) 1))
+               (= (vector-ref after 18) (+ (vector-ref before 18) 1))
+               (> (vector-ref after 19) (vector-ref before 19))
+               (= (vector-ref after 20) 0)))
+        ;; The frame owns 37 scratch tensors; the four destinations are caller-owned.
+        (e3-test-retention-check 'teardown-all-41-tensors
+          (= (- (vector-ref before 0) (vector-ref after 0)) 41))
+        (e3-test-retention-check 'teardown-model-ownership
+          (and (= (vector-ref before 1) (vector-ref after 1))
+               (= (vector-ref before 2) (vector-ref after 2))
+               (e3-test-retention-model=? model (vector-ref record 6))))
+        (e3-test-retention-check 'teardown-zero-transients
+          (and (= (vector-ref after 3) 0) (= (vector-ref after 21) 0)
+               (= (vector-ref after 22) 0) (= (vector-ref after 23) 0)
+               (= (vector-ref after 24) 0) (= (vector-ref after 25) 0)
+               (= (vector-ref after 26) 0)))
+        (vector-set! e3-test-fixture-root 2 #f)
+        (vector-set! e3-test-fixture-root 3 #f)
+        (vector-set! e3-test-retention-root 0 #f)
+        (vector 'e3-retention-teardown-v1 before after)))))
 
 (define (e3-test-retention-run phase horizon present? corpus-path mutation)
   (cond ((eq? phase 'prepare)
@@ -357,6 +397,8 @@
          (e3-test-retention-execute horizon present?))
         ((eq? phase 'report)
          (e3-test-retention-report horizon present?))
+        ((eq? phase 'teardown)
+         (e3-test-retention-teardown horizon present?))
         (else (e3-test-retention-check 'phase #f))))
 
 (define (e3-test-retention-dispatch scenario corpus-path)
