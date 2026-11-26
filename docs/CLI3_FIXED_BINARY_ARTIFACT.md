@@ -15,6 +15,8 @@ reused that exact-tree evidence. The downloaded tarball SHA-256 is
 `eca537dbdc7abb8db2539d40568c81391f98b98cbf447dace74df7829f7b5687`.
 The network-disabled Ubuntu 22.04 replay checked the seals and the DATA4 v2,
 checkpoint continuation, evaluation, and one-byte generation fixture.
+Use the [downloaded artifact runner](CLI3_DOWNLOADED_ARTIFACT_RUNNER.md)
+to repeat these checks with a clean checkout of the same source tree.
 
 The preceding tested-binary artifact is `15073929426`
 (`cli3-fixed-binary-45723832757-1`, GitHub artifact digest

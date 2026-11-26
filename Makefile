@@ -109,6 +109,14 @@ test-doc5-source:
 test-doc5:
 	/usr/bin/bash scripts/test-doc5-walkthrough.sh
 
+# Optional downloaded-binary check; no compiler or default CI dependency.
+.PHONY: test-cli3-downloaded-artifact
+test-cli3-downloaded-artifact:
+	@test -n "$(CLI3_DOWNLOAD_DIR)" -a -n "$(CLI3_EXPECTED_SOURCE)" || \
+	  { echo 'set CLI3_DOWNLOAD_DIR and CLI3_EXPECTED_SOURCE' >&2; exit 2; }
+	python3 scripts/run-cli3-downloaded-artifact.py \
+	  "$(CLI3_DOWNLOAD_DIR)" "$(CLI3_EXPECTED_SOURCE)"
+
 test-after-build:
 	/usr/bin/bash scripts/test.sh
 	/usr/bin/bash scripts/check_a0_api_contract.sh

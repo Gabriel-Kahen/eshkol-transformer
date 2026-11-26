@@ -931,6 +931,16 @@ historical artifact supplied no trained SAN, EOS, continuation, or CPU-v1
 admission. PR #243 subsequently admitted the bounded four-update continuation;
 broader SAN, EOS, and CPU-v1 admission remain open.
 
+The optional [downloaded CLI3 artifact runner](CLI3_DOWNLOADED_ARTIFACT_RUNNER.md)
+checks the exact archive inventory and member types, streams the executable,
+and rechecks the extracted hashes before replaying the fixed profile. It
+accepts a clean checkout at the exact source tree and verifies the recorded
+build commit's tree when that commit exists locally. A
+network-disabled Ubuntu 22.04 replay of the DATA4 v2 artifact from run
+`45718652932` passed report binding, checkpoint continuation, evaluation, and
+one-byte generation. Focused local checks also reject incorrect archive
+structure and malformed generation with ambient Python optimization enabled.
+
 The Wave 3 production CLI3 `generate` candidate moves the reviewed fixed
 CPU-f32 P1/G1 command into an exact installed CLI3 successor tuple. It retains
 the executable's dispatch/fallback ABI (two exports, eight globals), uses the
