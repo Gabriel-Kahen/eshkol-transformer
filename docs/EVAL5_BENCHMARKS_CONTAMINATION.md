@@ -235,3 +235,21 @@ fingerprint and vocabulary from validated T1 and D1 owners, bind the complete
 D1 manifest inventory hashes, compare its scored logits and metrics to the
 reference, and only then publish an EVAL5 manifest. The reference fixture
 itself publishes no benchmark manifest and provides no external-corpus claim.
+
+The read-only hosted CLI receipt at
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-native-input-replay-20261126.w6iFhy`
+contains the accepted T1 artifact and both native D1 corpora. Its
+`SHA256SUMS` verifies, and all nine T1/D1 artifact files are byte-identical
+to fresh compiler-free fixture output. This establishes input byte parity;
+the receipt does not execute the V=256 model.
+
+`tests/eval5/build_mod5_v256_witness.py` is the bounded source preparation
+for the next gate. It requires SHA-256
+`593d9de4dc03521359941bacece2d159c7e022f96f4b0752943b83fc6ae3c31c`
+for the accepted MOD5-C E2E source, reuses that source's decoder, K1 calls,
+and trusted C1/P1/I2 loader, and only specializes the head/embedding roster
+to `[256,16]`, vocabulary to 256, and f32 scratch span to cover the largest
+weight. Its appended test-only entry point checks the T1 owner identity,
+three authenticated D1 shards, original document bytes, and full manifest
+and C1 hashes before scoring. The source-only gate checks these extraction
+contracts and balanced generated Eshkol forms; it is not an AOT build result.
