@@ -253,3 +253,25 @@ weight. Its appended test-only entry point checks the T1 owner identity,
 three authenticated D1 shards, original document bytes, and full manifest
 and C1 hashes before scoring. The source-only gate checks these extraction
 contracts and balanced generated Eshkol forms; it is not an AOT build result.
+
+The test-only C bridge `tests/eval5/mod5_v256_score_bridge.c` passes four
+`[8,256]` binary32 live logit matrices to the existing EVAL5 LM and MC C
+scorers. It validates 18 D1 token IDs and finite logits, leaves outputs
+untouched on failure, and returns total/mean NLL, perplexity, bits per byte,
+MC accuracy/counts, and eight binary32 logit probes. The standalone C test
+passes under normal Clang 22 and ASan/UBSan/LSan; this is a bridge test, not a
+model execution. The comparator checks live metrics against the fixed Python
+reference with relative tolerance `5e-4` and absolute tolerance `5e-3`, and
+the eight f32 probes with relative tolerance `5e-4` and absolute tolerance
+`2e-3`; MC counts must match exactly. These are provisional numerical
+acceptance bounds for the first AOT witness, subject to the actual measured
+run. A mismatched or nonfinite value fails closed.
+
+`scripts/test-eval5-v256-aot.sh` prepares one strict CPU-f32 AOT build using
+the same pinned MOD5-C native bridge, trusted C1/P1/I2 archives, and EVAL5
+scorer. It compares the live score and probes, then exercises a correctly
+checksummed C1 shape mutant and swapped D1 split identity. Its explicit
+`EVAL5_V256_AOT_SLOT=1` guard prevents an uncoordinated full AOT build. This
+gate has not run; a build slot and its exact compiler result are still needed.
+Set `EVAL5_V256_EVIDENCE_DIR` to a fresh directory to retain its compiled
+source, compiler log, score line, fixture, and negative-path outputs.
