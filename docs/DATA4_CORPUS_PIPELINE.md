@@ -8,6 +8,18 @@ staging path. No compatibility between this report and the installed DATA4-A
 version-1 report is claimed. Integration requires an explicit contract for how
 quality-filtered documents enter the accepted T2/D1 aggregate.
 
+The development-only `scripts/test-data4-quality-t2-d1.sh` witness consumes
+the AOT bridge's actual per-ordinal DATA4-Q dispositions, preserves the
+corresponding original source IDs and bytes in order, verifies the independent
+quality report, and stages only kept bytes through the accepted T2 encoder and
+D1 writer. It checks the exact selected IDs and token IDs before publication,
+then validates D1 and compares the complete T2 readback. A duplicate source ID
+must fail the quality run before any D1 target is created. This is a test-only
+composition: no installed command, public ABI, DATA4-A report conversion, or
+general-purpose ownership transfer is added. D1 stores flat token IDs; document
+IDs and boundaries are established before publication and cannot be recovered
+from the D1 readback alone.
+
 ## Public C11/C++17 ABI and Eshkol AOT Bridge
 
 - Core ABI: `include/eshkol_transformer/data4_pipeline_abi.h` and `native/data4_pipeline.c`
@@ -96,6 +108,17 @@ decisions without the original raw documents. The checksum detects accidental
 change, not adversarial re-signing or a swap with another valid report.
 
 ## Measured Validation Results
+
+The development-only DATA4-Q -> T2/D1 witness passed in the pinned
+`eshkol-r0-debug:20260928` Ubuntu 22.04 / LLVM 21.1.8 environment with the
+`fe9dfd52` toolchain. The quality run kept `alpha`, `bravo`, `charlie` in
+ordinal order, rejected invalid UTF-8, low quality and an exact duplicate,
+and yielded the expected 20 T2 token IDs. D1 validated and T2 read back all
+20 IDs in order. A duplicate source ID failed before a D1 target appeared.
+The retained local receipt is
+`/home/gabe/.cache/eshkol-data4-q-t2-d1-witness-20261125-r5/SHA256SUMS`
+(8/8 hashes verified). Independent source-and-test delta review found no
+blocker. This is local integration evidence, not hosted acceptance.
 
 Historical `60093c6e` evidence was recorded offline in
 `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, pinned Eshkol toolchain

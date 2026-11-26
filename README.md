@@ -9,11 +9,13 @@ development oracles for numerical parity tests and conversion tools.
 ## Project status
 
 Pre-alpha. The supported Ubuntu 22.04 CPU-f32 CLI can build a byte-tokenized
-corpus, perform one fixed-profile training update, save a checkpoint, and generate
-one byte using greedy or categorical sampling. The
+corpus, train and resume the fixed context-two profile, save a checkpoint, and
+generate one byte using greedy or categorical sampling. A four-update witness
+produces byte-identical checkpoints across uninterrupted and resumed schedules. The
 [fixed-profile binary artifact](docs/CLI3_FIXED_BINARY_ARTIFACT.md) records the
-tested build and reproduction steps. The [roadmap](docs/ROADMAP.md) tracks broader
-model, evaluation, and resume support.
+tested build. The [downloaded artifact runner](docs/CLI3_DOWNLOADED_ARTIFACT_RUNNER.md)
+verifies and exercises that binary without rebuilding it. The
+[roadmap](docs/ROADMAP.md) tracks broader model, evaluation, and resume support.
 
 The [corpus-to-model tutorial](docs/DOC5_CORPUS_TO_MODEL_TUTORIAL.md) walks
 through DATA4 preparation, one training update, evaluation, and one-byte

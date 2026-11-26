@@ -1,6 +1,66 @@
 # CLI3 fixed-profile binary artifact
 
-Status: bounded fixed-profile artifact accepted. PR #233 merged at
+## Current accepted scope
+
+The latest independently replayed artifact is `15079014750`
+(`cli3-fixed-binary-45735042703-1`, GitHub artifact digest
+`sha256:5328a303a0e7191416779dfcf76338b5f6d887e58d7f31f2bdc3a9b97b270fbf`)
+from [PR #248 run 45735042703](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45735042703).
+The recorded build commit is `7ce36916973a7853cafdcf6548e408bf993cfe0d`,
+the GitHub synthetic merge of PR head `8c8081d987fd399a85b7eea1663a093bfb070ee4`.
+The exact tree `06312986c41569044700d8639ead8eaa08da32ac` passed all 26
+required jobs and became main at `738a4c19594b11c6a073cfd63c4f4ac02a8a76ae`.
+[The main run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45744526579)
+reused that exact-tree evidence. The downloaded tarball SHA-256 is
+`eca537dbdc7abb8db2539d40568c81391f98b98cbf447dace74df7829f7b5687`.
+The network-disabled Ubuntu 22.04 replay checked the seals and the DATA4 v2,
+checkpoint continuation, evaluation, and one-byte generation fixture.
+Use the [downloaded artifact runner](CLI3_DOWNLOADED_ARTIFACT_RUNNER.md)
+to repeat these checks with a clean checkout of the same source tree.
+
+The preceding tested-binary artifact is `15073929426`
+(`cli3-fixed-binary-45723832757-1`, GitHub artifact digest
+`sha256:60874332df23d738296cac360fae5e8e4daba4c8a82919801199e97dddc107ee`)
+from [PR #247 run 45723832757](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45723832757).
+The recorded build commit is `65fd2bb47fc4c8a005c13d90ed663caccab5331d`,
+the GitHub synthetic merge of PR head `b7a7c8ceb8bd23f17ad3086cece3d62f929b24fb`.
+The tree `cd85d8f2ba44776f416a23c164b5a3884499fddc` became main at
+`c96697efb4152dc0c70dd007cd31ef81c17612fc`. All 26 required hosted
+jobs passed. This record comes from the CI upload metadata and the verified
+downloaded identity receipt.
+
+An earlier independently downloaded DATA4 v2 walkthrough used the exact tested-tree
+[PR #245 run 45718652932](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45718652932)
+artifact `15071319148` (`cli3-fixed-binary-45718652932-1`, GitHub artifact
+digest `sha256:c3252df4bba3520a69cef6a851cdf41348c9585de38af5fd9023307aa5dbc91c`).
+The recorded build commit is `1b3c719ddb1b50c093144ed964d915fb4d25a8e0`,
+the GitHub synthetic merge of PR head `6e1049a957103da743052980d347de0264c96075`.
+The tree `76e6128de9aedcee6593a1e964d224f56e842d49` merged as `5744dc44`.
+All 26 required jobs passed; [merged-main run 45729653136](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45729653136)
+reused exact-tree evidence. Independent downloaded-binary validation in a
+network-disabled Ubuntu 22.04 container passed DATA4 v2 binding to the exact
+D1 manifest bytes, same-summary report-swap rejection, one training update,
+evaluation and one-byte generation. Legacy DATA4 v1 reports require regeneration.
+
+The prior [PR #243 run 45702533296](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45702533296)
+uploaded artifact `15065156707` (`cli3-fixed-binary-45702533296-1`, GitHub
+artifact digest
+`sha256:1df8f17fd8aa97d674968dd0d813bf4fc23dec529e1ae974cca43b9a3483da36`).
+The recorded build commit is `1a5cab7d4b7be2a1b0527e61d8c5d474d58386ce`,
+the GitHub synthetic merge of PR head `e63e4e3a835bc9ae31d2694186e61cf4aab5bdba`.
+The tree `4478b10ee9e84caa75d878c0cbd57622312b1fed` merged as `417918d0`.
+[merged-main run 45717837006](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45717837006)
+reused exact-tree evidence. Independent download verified the outer and inner
+checksums, tested-binary receipt and source identity. The same binary repeated
+the four-update witness in a fresh network-disabled Ubuntu 22.04 container:
+uninterrupted four updates, one-plus-three resumed updates and chained
+one-update resumes produced byte-identical C2 checkpoints. This is a fixed
+CPU-f32, context-two, byte-tokenizer profile. Multi-token/EOS generation,
+general trained-model resume and CPU-v1 admission remain open.
+
+## Historical one-update artifact
+
+The original bounded fixed-profile artifact from PR #233 merged at
 `f0f56a8afaa38d28e9e9f4ecc123a3d779f8998e` (tree `3fe5e0e6`). Its
 exact-head run `43952346894` and merged-main run `43965845021` each passed
 25 required jobs with two intended diagnostic skips. The merged-main run
@@ -55,7 +115,8 @@ run. The binary depends on the recorded Ubuntu 22.04 x86-64 shared-library
 environment; the artifact
 does not bundle those libraries or claim portability to another host.
 
-This is a fixed CPU-f32, context-two, byte-tokenizer, one-byte diagnostic
-binary. It is not a trained SAN release. Held-out exact resume, multi-token and
-EOS persistence, evaluator/resource gates, a full trained-model walkthrough,
-and CPU-v1 admission remain separate.
+At that historical gate, this was a fixed CPU-f32, context-two, byte-tokenizer,
+one-byte diagnostic binary with a one-update walkthrough. It was not a trained
+SAN release. The later PR #243 four-update witness supersedes that resume
+limit for the same fixed profile; multi-token and EOS persistence, a full
+trained-model walkthrough, and CPU-v1 admission remain separate.

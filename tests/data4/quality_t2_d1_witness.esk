@@ -1,0 +1,164 @@
+;;; Development-only DATA4-Q selection -> accepted T2 staging -> D1 publication.
+;;; The DATA4-Q report is verified independently; it is not a DATA4-A report.
+(load "t2_wave2_root.esk")
+(load "data4_corpus.esk")
+
+(extern ptr allocate i64 :real malloc)
+(extern void release ptr :real free)
+(extern ptr q-create :real et_data4_aot_session_create)
+(extern void q-destroy ptr :real et_data4_aot_session_destroy)
+(extern i32 q-limits ptr i64 i64 i64 i64 :real et_data4_aot_set_limits)
+(extern i32 q-quality ptr f64 f64 f64 f64 i32 :real et_data4_aot_set_quality)
+(extern i32 q-add ptr ptr i64 ptr i64 :real et_data4_aot_add_doc)
+(extern i32 q-run ptr :real et_data4_aot_run)
+(extern i64 q-stat ptr i32 :real et_data4_aot_get_stat)
+(extern i32 q-disposition ptr i64 :real et_data4_aot_get_doc_disposition)
+(extern i32 q-copy-report ptr ptr i64 :real et_data4_aot_copy_report)
+(extern i32 q-verify-report ptr i64 :real et_data4_aot_verify_report)
+(extern i32 q-store ptr i64 i64 i64 :real et_data4_aot_buf_store_u8)
+
+(define (witness-fail reason)
+  (display "FAIL quality T2/D1 witness: ") (display reason) (newline) (exit 1))
+(define (witness-check reason condition)
+  (if (not condition) (witness-fail reason)))
+(define (witness-pointer pointer) (ptr-add pointer 0))
+(define (witness-copy-to-pointer bytes)
+  (let* ((size (bytevector-length bytes))
+         (buffer (allocate (if (= size 0) 1 size))))
+    (witness-check "allocation" (not (= (ptr->usize buffer) 0)))
+    (let loop ((index 0))
+      (if (< index size)
+          (begin
+            (witness-check "byte marshal"
+                           (= (q-store (witness-pointer buffer) size index
+                                       (bytevector-u8-ref bytes index)) 0))
+            (loop (+ index 1)))))
+    buffer))
+
+(define (witness-add! session document)
+  (let* ((id (string->utf8 (car document)))
+         (body (car (cdr document)))
+         (id-buffer (witness-copy-to-pointer id))
+         (body-buffer (witness-copy-to-pointer body))
+         (status (q-add (witness-pointer session)
+                        (witness-pointer id-buffer) (bytevector-length id)
+                        (witness-pointer body-buffer) (bytevector-length body))))
+    (release id-buffer)
+    (release body-buffer)
+    (witness-check "add document" (= status 0))))
+
+(define (witness-selected session documents)
+  (let loop ((rest documents) (ordinal 0) (selected '()))
+    (if (null? rest) (data4-reverse selected)
+        (let ((disposition (q-disposition (witness-pointer session) ordinal)))
+          (witness-check "valid disposition" (>= disposition 0))
+          (loop (cdr rest) (+ ordinal 1)
+                (if (= disposition 0)
+                    (cons (cons (car (car rest))
+                                (car (cdr (car rest)))) selected)
+                    selected))))))
+
+(define (witness-ids selected)
+  (let loop ((rest selected) (ids '()))
+    (if (null? rest) (data4-reverse ids)
+        (loop (cdr rest) (cons (car (car rest)) ids)))))
+
+(define (witness-staging=? staging ids)
+  (and (= (bytevector-length staging)
+          (* (data4-bounded-length ids 65537) 8))
+       (let loop ((rest ids) (offset 0))
+         (if (null? rest) #t
+             (and (= (t1-core-read-u64-le staging offset) (car rest))
+                  (loop (cdr rest) (+ offset 8)))))))
+
+(define witness-documents
+  (list (list "alpha" (string->utf8 "alpha"))
+        (list "invalid-utf8" (bytevector 237 160 128 97 98))
+        (list "exact-duplicate" (string->utf8 "alpha"))
+        (list "low-quality" (string->utf8 "!!!!!"))
+        (list "bravo" (string->utf8 "bravo"))
+        (list "charlie" (string->utf8 "charlie"))))
+
+(define (witness-run mode directory)
+  (let ((session (q-create)))
+    (witness-check "session" (not (= (ptr->usize session) 0)))
+    (witness-check "limits" (= (q-limits (witness-pointer session) 5 40 5 40) 0))
+    (witness-check "quality"
+                   (= (q-quality (witness-pointer session) 0.8 0.5 1.0 1.0 3) 0))
+    (let ((documents
+           (if (string=? mode "reject")
+               (list (list "same" (string->utf8 "alpha"))
+                     (list "same" (string->utf8 "bravo")))
+               witness-documents)))
+      (let add-loop ((rest documents))
+        (if (not (null? rest))
+            (begin (witness-add! session (car rest))
+                   (add-loop (cdr rest)))))
+      (let ((status (q-run (witness-pointer session))))
+        (if (string=? mode "reject")
+            (begin
+              (witness-check "duplicate source rejected before D1" (= status -6))
+              (q-destroy (witness-pointer session))
+              (display "duplicate-source rejected before D1 publication")
+              (newline))
+            (begin
+              (witness-check "quality run" (= status 0))
+              (witness-check "input count" (= (q-stat (witness-pointer session) 0) 6))
+              (witness-check "kept count" (= (q-stat (witness-pointer session) 1) 3))
+              (witness-check "UTF-8 rejection" (= (q-disposition (witness-pointer session) 1) 1))
+              (witness-check "exact duplicate" (= (q-disposition (witness-pointer session) 2) 5))
+              (witness-check "quality rejection" (= (q-disposition (witness-pointer session) 3) 3))
+              (let* ((report-size (q-stat (witness-pointer session) 10))
+                     (report (allocate report-size)))
+                (witness-check "report allocation" (not (= (ptr->usize report) 0)))
+                (witness-check "copy quality report"
+                               (= (q-copy-report (witness-pointer session)
+                                                 (witness-pointer report) report-size) 0))
+                (witness-check "verify quality report"
+                               (= (q-verify-report (witness-pointer report) report-size) 0))
+                (release report))
+              (let* ((selected (witness-selected session documents))
+                     (tokenizer (t2-private-register-core
+                                 (t2-bpe-train-core '() 0 1 'raw
+                                                    (list (list "bos" 'omit))
+                                                    (list "bos") '())))
+                     (tokens (data4-encode-selected tokenizer selected)))
+                (witness-check "selected identity/order"
+                               (equal? (witness-ids selected)
+                                       '("alpha" "bravo" "charlie")))
+                (witness-check "selected tokens"
+                               (equal? tokens
+                                       '(256 97 108 112 104 97
+                                         256 98 114 97 118 111
+                                         256 99 104 97 114 108 105 101)))
+                (let* ((summary (et-d1-private-token-corpus-write
+                               directory (t2-private-tokenizer-fingerprint tokenizer)
+                               (t2-private-tokenizer-vocab-size tokenizer)
+                               6 tokens))
+                     (read-summary (et-d1-private-token-corpus-validate
+                                    directory 1048576 1048576 65536))
+                     (staging (t2-token-corpus-read-i64-le
+                               tokenizer directory 1048576 1048576 65536)))
+                (witness-check "token count" (= (et-d1-private-token-corpus-summary-total-tokens
+                                                  summary) 20))
+                (witness-check "readback count" (= (et-d1-private-token-corpus-summary-total-tokens
+                                                     read-summary) 20))
+                (witness-check "readback fingerprint"
+                               (string=?
+                                (et-d1-private-token-corpus-summary-tokenizer-fingerprint
+                                 read-summary)
+                                (t2-private-tokenizer-fingerprint tokenizer)))
+                (witness-check "selected token order/readback"
+                               (witness-staging=? staging tokens)))
+              (q-destroy (witness-pointer session))
+              (display "quality-selected alpha bravo charlie; T2/D1 tokens=20 readback=20 PASS")
+              (newline))))))))
+
+(define witness-args (cdr (command-line)))
+(if (or (not (pair? witness-args))
+        (not (pair? (cdr witness-args)))
+        (not (null? (cdr (cdr witness-args)))))
+    (witness-fail "expected MODE DIRECTORY"))
+(let ((mode (car witness-args)))
+  (witness-check "mode" (or (string=? mode "write") (string=? mode "reject")))
+  (witness-run mode (car (cdr witness-args))))

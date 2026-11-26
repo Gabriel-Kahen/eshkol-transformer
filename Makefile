@@ -30,6 +30,7 @@ SHELL := /usr/bin/bash
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-t2-trainer test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
+	test-beam-cd-composition test-spec-paged-witness test-data4-quality-t2-d1 \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
@@ -107,6 +108,14 @@ test-doc5-source:
 
 test-doc5:
 	/usr/bin/bash scripts/test-doc5-walkthrough.sh
+
+# Optional downloaded-binary check; no compiler or default CI dependency.
+.PHONY: test-cli3-downloaded-artifact
+test-cli3-downloaded-artifact:
+	@test -n "$(CLI3_DOWNLOAD_DIR)" -a -n "$(CLI3_EXPECTED_SOURCE)" || \
+	  { echo 'set CLI3_DOWNLOAD_DIR and CLI3_EXPECTED_SOURCE' >&2; exit 2; }
+	python3 scripts/run-cli3-downloaded-artifact.py \
+	  "$(CLI3_DOWNLOAD_DIR)" "$(CLI3_EXPECTED_SOURCE)"
 
 test-after-build:
 	/usr/bin/bash scripts/test.sh
@@ -397,6 +406,15 @@ test-paged-kv:
 
 test-spec-decode:
 	/usr/bin/bash scripts/test-spec-decode.sh
+
+test-beam-cd-composition:
+	/usr/bin/bash scripts/test-beam-cd-composition.sh
+
+test-spec-paged-witness:
+	/usr/bin/bash scripts/test-spec-paged-witness.sh
+
+test-data4-quality-t2-d1:
+	/usr/bin/bash scripts/test-data4-quality-t2-d1.sh
 
 .PHONY: test-io5-gguf-native
 test-io5-gguf-native:
