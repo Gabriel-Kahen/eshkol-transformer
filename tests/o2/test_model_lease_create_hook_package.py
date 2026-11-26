@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 EXTENSION = ROOT / "native" / "o2_wave2_extension.esk"
 PREDECESSOR_SHA256 = "4ae490979328499bb96f9d6cb3e13ae61398300275b7bfd83361e72d597ad590"
 PUBLIC_HEADER_TREE_SHA256 = (
-    "c2fec8a43b776cde7fe0f35a26addf2d593bdccc807c9ffb5b79e24df1bfdef9"
+    "327c0e11ecb983b41579186fe5a3eea213f28620b1c8f3fecfd0cfeb6eeb5112"
 )
 PUBLIC_FACADE_SHA256 = "b2f96c6119cf51388221dd541c7eda3fefb564c14934e46dede310d0ab9c98b0"
 
