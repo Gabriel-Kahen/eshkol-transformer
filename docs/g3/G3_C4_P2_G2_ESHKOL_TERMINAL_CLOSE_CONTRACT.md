@@ -87,6 +87,47 @@ failure cleanup. A separately reviewed private entry must connect the
 constructor bundle at first enrollment. The source check does not exercise
 a constructor-bound reservation at runtime.
 
+### Held-lease EOS diagnostic
+
+The sealed `4774d540` run completed feature-on/off compilation. Its first
+runtime case reached `eos.native.return` and failed before
+`eos.check.return`. The trace records both the real carrier and wrapper
+return markers but omits their numeric values. It leaves the origin of the
+nonzero status unresolved. The reviewed `bffb4ab6` successor records the
+real carrier status and native domain/category/code before the observer,
+then reports the observer branch and result and the final wrapper status.
+The separate `14ae8395` line tests a later unmarked case at
+`case=2 phase=eos.guard.enter` after successful real EOS return.
+[Failed source](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/4774d5406c36f8060cc6094ed42a3d2a631a5c1f),
+[status provenance](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/bffb4ab6f1a5a601f4644ab066376ae1734352d3),
+[later-case test](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/14ae8395ed41306c3151281a67a91eae9b999b25).
+
+Keep the diagnostic separate from the rehearsal. Combining the 210-path
+static seal with the emitted feature-on/off Eshkol dependency lists and the
+direct composer C fixture identifies 226 source paths. On `bcff170e` 19
+are absent, including the private holder root, the holder native header,
+and the three composer sources used by the feature-off build. Ten present
+paths have different contents, including the native owner, C1 helper,
+and coordinator fixture. The historical gate authenticates the entire
+clean Git tree in addition to the explicit source hash inventory.
+
+The next pinned run is the unclaimed historical package at
+`/home/gabe/.codex/evidence/eshkol-transformer/p2g2-eos-status-bffb4ab6-compiled-20261014-a/result`.
+Its read-only static verifier passed again with 210 source paths, four
+dependency hashes, and eight negative controls. The invocation SHA-256 is
+`fec2efb77ba51815c75061b0be15802d6b8cc96f5665af79824a4e8e66b19968`.
+It pins Eshkol `fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9` and image
+`sha256:f31d1db76958339e6ebd2a2f667052cdb85aeb5229914ffb10ac4fcdc6db22e6`.
+On the supported build slot, run the sealed launcher with
+`python3 -B run-once.py preflight <preflight-release>` and inspect its
+toolchain receipt before `python3 -B run-once.py gate <gate-release>`. The gate invokes
+`scripts/test-g3c4-p2g2-held-holder-compiled.sh` with read-only source and
+dependencies, network disabled, and outputs under the package's result
+directory. In the first normal-on fd-4 trace, a nonzero real-carrier status
+identifies a carrier rejection. A zero real-carrier status followed by
+`guard-reject` or `observer-reject` identifies the corresponding fixture
+rejection. Production held-lease retry remains a separate compiled gate.
+
 ## Actual same-region sampling, decode, and rollback
 
 Reserve the sole pending output before first sampling. Use the EOS-capable authentic first carrier on the original P2 input. Authenticate the complete LE i64 ID, then perform genuine same-registry T1 decode into the original first raw carrier; reauthenticate every original identity/edge and payload after each recoverable step. Do not provide logits, sampled IDs, RNG words, or cache candidates from Eshkol.

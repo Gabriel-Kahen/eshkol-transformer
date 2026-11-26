@@ -3824,6 +3824,12 @@ publication, public G2 and continuation remain pending.
   First-enrollment composition still needs an independently reviewed private
   entry before compiled qualification.
 
+  The [held-lease EOS diagnostic](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#held-lease-eos-diagnostic)
+  has a verified, unclaimed historical `bffb4ab6` package that can identify
+  the source of the first EOS rejection. Its exact held-holder and composer
+  inputs remain separate from the rehearsal. Compiled diagnosis and
+  production same-call retry remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
