@@ -5,7 +5,34 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/scripts/p1-com
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 p1_tmp="$(mktemp -d)"
 p1_timing="${p1_tmp}/timing.log"
-trap 'p1_stop_pair; rm -rf -- "${p1_tmp}"' EXIT
+trap 'p1_stop_pair; p1_stop_pair_memory || true; rm -rf -- "${p1_tmp}"' EXIT
+
+if [[ "${P1_TEST_INTERRUPT_TRACE:-0}" == 1 ]]; then
+  python3 -B "${PROJECT_ROOT}/tests/p1/pair_memory_trace.py" \
+    "${p1_tmp}/interrupt-memory.tsv" 99999998 99999999 &
+  p1_pair_memory_pid=$!
+  for ((attempt=0; attempt<100; ++attempt)); do
+    [[ -s "${p1_tmp}/interrupt-memory.tsv" ]] && break
+    sleep 0.01
+  done
+  [[ -s "${p1_tmp}/interrupt-memory.tsv" ]]
+  printf '%s\n' "${p1_pair_memory_pid}" >"${P1_TEST_INTERRUPT_PIDFILE}"
+  kill -TERM "${BASHPID}"
+  exit 1
+fi
+
+interrupt_status=0
+{
+  P1_TEST_INTERRUPT_TRACE=1 P1_TEST_INTERRUPT_PIDFILE="${p1_tmp}/interrupt-monitor.pid" \
+    timeout 5 bash "$0" >/dev/null 2>&1 || interrupt_status=$?
+} 2>/dev/null
+[[ "${interrupt_status}" == 143 ]]
+interrupt_pid="$(cat "${p1_tmp}/interrupt-monitor.pid")"
+if kill -0 "${interrupt_pid}" 2>/dev/null; then
+  printf 'P1 pair left a live memory sampler after interruption: %s\n' \
+    "${interrupt_pid}" >&2
+  exit 1
+fi
 
 mock_compile() {
   local name="$1" peer="$2"

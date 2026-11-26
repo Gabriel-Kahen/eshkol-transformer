@@ -117,6 +117,8 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   missing Linux `/proc` support and leaves default scheduling and compiler
   evidence unchanged. A short synthetic overlap test passes; a full P1 run,
   sustained hosted trace and matched serial comparison remain open.
+  A test-only successor now stops and reaps the sampler from the P1 pair
+  fixture's EXIT trap; a bounded self-termination probe verifies that cleanup.
 
 ## Parallel execution strategy
 
