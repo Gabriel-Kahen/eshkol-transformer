@@ -3824,6 +3824,11 @@ publication, public G2 and continuation remain pending.
   First-enrollment composition still needs an independently reviewed private
   entry before compiled qualification.
 
+  An isolated development fixture projects the constructor's actual carrier
+  objects and extents into a lexical pending-layout draft with vacant ownership
+  slots. Static checks pin the ordering and isolation. Compiled fixture cases
+  and first-enrollment composition remain pending.
+
 ## Wave 4 — practical pretraining and performance
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |

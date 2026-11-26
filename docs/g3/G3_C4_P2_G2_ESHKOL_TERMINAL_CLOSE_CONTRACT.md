@@ -1,6 +1,6 @@
 # Private Eshkol P2/G2 terminal close and same-call coordinator contract
 
-Status: independently reviewed private close contract with a proposed constructor-bound reservation prerequisite below. The native terminal commit and snapshot are merged, and the native logical I1 clone, copy, and release entries are present on the Wave 3 rehearsal. Reservation review, same-call implementation, and compiled proof are pending. Public G2, installed dispatch, and continuation remain separate acceptance gates. [Native terminal merge](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/d48eda71b63ec54f643b4779ec497a82d61d2c9d).
+Status: independently reviewed private close contract and constructor-bound reservation proposal. The native terminal commit and snapshot are merged, and the native logical I1 clone, copy, and release entries are present on the Wave 3 rehearsal. Same-call implementation and compiled proof are pending. Public G2, installed dispatch, and continuation remain separate acceptance gates. [Native terminal merge](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/d48eda71b63ec54f643b4779ec497a82d61d2c9d).
 
 ## Existing authority and distinct private entry
 
@@ -86,6 +86,17 @@ feature-off loading, and the existing order of pending enrollment and native
 failure cleanup. A separately reviewed private entry must connect the
 constructor bundle at first enrollment. The source check does not exercise
 a constructor-bound reservation at runtime.
+
+The experimental development fixture
+[`p2_g2_pre_enrollment_draft_test.esk`](../../tests/g3c4/p2_g2_pre_enrollment_draft_test.esk)
+projects the constructor's eight original objects and extents into a lexical
+draft with the accepted pending layout. Its seven ownership slots stay vacant
+and its explicit `unbound` state has fixture scope. The cases reject a false
+owner, an equal-length replacement, reuse of the first pair, an altered extent,
+and the live pending state. The fixture retires its new bundle before returning
+the diagnostic result. The accompanying Python checks pin the source layout and
+isolation. The Eshkol fixture still needs compiled execution. First enrollment
+still requires the reviewed production ownership seam and compiled proof above.
 
 ## Actual same-region sampling, decode, and rollback
 
