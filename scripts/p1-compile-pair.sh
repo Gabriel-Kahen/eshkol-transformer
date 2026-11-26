@@ -75,7 +75,7 @@ p1_compile_pair() {
   if [[ "${p1_pair_memory_trace:-0}" == 1 ]]; then
     p1_pair_memory_index=$((p1_pair_memory_index + 1))
     memory_trace="${p1_tmp}/pair-${p1_pair_memory_index}-memory.tsv"
-    python3 -B "${PROJECT_ROOT}/scripts/p1-pair-memory.py" \
+    python3 -B "${PROJECT_ROOT}/tests/p1/pair_memory_trace.py" \
       "${memory_trace}" \
       "${p1_pair_pids[0]}" "${p1_pair_pids[1]}" &
     p1_pair_memory_pid=$!

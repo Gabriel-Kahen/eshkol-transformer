@@ -18,6 +18,8 @@ Short peaks between samples can be missed, and summing RSS can count shared
 pages more than once. This is process RSS, not cgroup
 `memory.current`, swap, private proportional memory, or a memory-cap proof.
 The sampler itself is excluded from the pair sum.
+The development sampler lives in `tests/p1/pair_memory_trace.py`; it is not a
+delivered training-path dependency.
 
 For a matched serial/paired comparison, use the same pinned source, toolchain,
 runner, limits, host class, input paths and `P1_KEEP_TMP=1` in separate runs.

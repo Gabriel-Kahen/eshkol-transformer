@@ -37,7 +37,7 @@ if [[ "${p1_pair_memory_trace}" == 1 ]]; then
   [[ "${P1_KEEP_TMP:-0}" == 1 ]] || \
     die "P1_PAIR_MEMORY_TRACE requires P1_KEEP_TMP=1 to retain evidence"
   require_command python3
-  python3 -B "${PROJECT_ROOT}/scripts/p1-pair-memory.py" --check || \
+  python3 -B "${PROJECT_ROOT}/tests/p1/pair_memory_trace.py" --check || \
     die "P1 pair memory trace requires readable Linux /proc process data"
 fi
 if [[ "${p1_two_compilers}" == 1 ]]; then

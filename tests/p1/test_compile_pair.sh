@@ -39,7 +39,7 @@ fi
 [[ "$(tail -n 1 "${p1_timing}")" == failure ]]
 
 p1_pair_memory_trace=1
-python3 -B "${PROJECT_ROOT}/scripts/p1-pair-memory.py" --check
+python3 -B "${PROJECT_ROOT}/tests/p1/pair_memory_trace.py" --check
 mock_memory_compile() {
   python3 -B -c 'import time; payload = bytearray(b"x" * (8 * 1024 * 1024)); time.sleep(0.8); assert payload[0] == 120'
 }
