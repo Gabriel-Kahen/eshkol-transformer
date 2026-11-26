@@ -86,6 +86,15 @@ progress_file_valid() {
     END { if (NR == 0) exit 1 }
   ' "${path}"
 }
+report_joint_progress() {
+  local label=$1 progress="${tmp}/$1/joint.progress"
+  if progress_file_valid "${progress}"; then
+    printf 'C2 OPERATIONAL PROGRESS: %s/joint\n' "${label}" >&2
+    sed -n '1,32p' "${progress}" >&2
+  else
+    printf 'C2 OPERATIONAL PROGRESS UNAVAILABLE: %s/joint\n' "${label}" >&2
+  fi
+}
 cleanup() {
   local status=$? label progress
   if [[ "${development}" == 1 ]]; then
@@ -437,6 +446,7 @@ run_runtime() {
       "${tmp}/${label}/${mode}.stdout" >/dev/null
     cmp "${fixtures}/joint-exact.c2" "${output}/joint-a.c2"
     cmp "${fixtures}/joint-exact.c2" "${output}/joint-b.c2"
+    report_joint_progress "${label}"
   else
     test ! -e "${output}/${mode}-reject.c2"
   fi

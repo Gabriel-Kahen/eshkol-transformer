@@ -169,6 +169,40 @@ class OperationalProgressTest(unittest.TestCase):
             self.assertEqual(outside.read_text(),
                              "C2 OPERATIONAL PROGRESS: phase=23 monotonic-ms=1\n")
 
+    def test_success_dump_keeps_stdout_and_rejects_unsafe_progress(self):
+        source = (ROOT / "scripts/test-c2-checkpoint-operational.sh").read_text()
+        functions = ("progress_file_valid() {" +
+                     source.split("progress_file_valid() {", 1)[1]
+                     .split("cleanup() {", 1)[0])
+        joint_branch = source.split('if [[ "${mode}" == joint ]]; then', 1)[1]
+        self.assertIn('report_joint_progress "${label}"',
+                      joint_branch.split("else", 1)[0])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            progress = root / "clang-a/joint.progress"
+            progress.parent.mkdir()
+            progress.write_text("C2 OPERATIONAL PROGRESS: phase=1 monotonic-ms=100\n"
+                                "C2 OPERATIONAL PROGRESS: phase=2 monotonic-ms=200\n")
+            env = {**os.environ, "tmp": str(root)}
+            command = ["bash", "-c", functions + "report_joint_progress clang-a\n"]
+            result = subprocess.run(command, env=env, text=True,
+                                    capture_output=True, check=True)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("C2 OPERATIONAL PROGRESS: clang-a/joint", result.stderr)
+            self.assertIn("phase=2 monotonic-ms=200", result.stderr)
+
+            progress.unlink()
+            outside = root / "outside"
+            outside.write_text("C2 OPERATIONAL PROGRESS: phase=1 monotonic-ms=100\n")
+            progress.symlink_to(outside)
+            result = subprocess.run(command, env=env, text=True,
+                                    capture_output=True, check=True)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(result.stderr,
+                             "C2 OPERATIONAL PROGRESS UNAVAILABLE: clang-a/joint\n")
+            self.assertEqual(outside.read_text(),
+                             "C2 OPERATIONAL PROGRESS: phase=1 monotonic-ms=100\n")
+
 
 if __name__ == "__main__":
     unittest.main()

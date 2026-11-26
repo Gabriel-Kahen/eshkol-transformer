@@ -736,6 +736,13 @@ caps evidence at 32 records/2,048 bytes; unsafe or unavailable evidence is
 reported explicitly. The 1,800-second limit, checks and resource thresholds are
 unchanged. Current-main union review and a supported diagnostic run remain gates;
 the old-head failure does not establish current-main runtime behavior.
+The completed #245 run on the same tree as merged main spent 2,101.733 seconds
+in two joint processes and 876.627 seconds in two file processes; success logs
+do not split the joint LOAD/SAVE phases. The scoped
+[phase timing candidate](C2_OPERATIONAL_PHASE_TIMING.md) exposes the existing
+bounded joint progress records on successful runs through driver stderr, without
+changing runtime stdout, workload, memory ceiling, or watchdog. Its focused
+checks are local only; a later supported gate must provide phase-level evidence.
 
 ## Wave 3 — first complete language model
 
