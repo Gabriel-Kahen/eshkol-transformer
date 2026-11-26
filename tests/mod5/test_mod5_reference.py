@@ -87,7 +87,7 @@ def verify(binary):
     for header in lines:
         operation, *extents = header.split()
         shape = tuple(map(int, extents))
-        seen[operation] += 1
+        seen[operation, shape] += 1
         if operation == "rmsnorm.forward":
             x, gamma = read_vector(lines), read_vector(lines)
             (epsilon,) = read_vector(lines)
@@ -116,7 +116,28 @@ def verify(binary):
                     )
                 largest_error = max(largest_error, abs(value - target))
                 comparisons += 1
-    if seen != {"rmsnorm.forward": 5, "swiglu.forward": 5, "variant-attention.forward": 30}:
+    rows = {
+        "rmsnorm.forward": (
+            (1, 1, 1), (1, 1, 4), (1, 2, 4), (2, 3, 4), (2, 3, 8),
+            (1, 8, 16), (2, 8, 16), (1, 16, 32),
+        ),
+        "swiglu.forward": (
+            (1, 1, 1), (1, 1, 8), (1, 2, 4), (2, 3, 4), (2, 3, 8),
+            (1, 8, 16), (1, 8, 32), (2, 8, 32), (1, 16, 64),
+        ),
+        "variant-attention.forward": (
+            (1, 2, 1, 2, 2, 2), (1, 4, 1, 3, 3, 2), (2, 4, 1, 2, 3, 4),
+            (1, 4, 2, 3, 3, 2), (2, 4, 2, 2, 3, 4), (1, 2, 2, 3, 3, 2),
+            (1, 4, 1, 8, 8, 4), (1, 4, 2, 8, 8, 4), (2, 4, 2, 8, 8, 4),
+            (1, 4, 1, 16, 16, 8), (1, 4, 2, 16, 16, 8),
+        ),
+    }
+    expected_cases = {
+        (operation, shape): 5 if operation == "variant-attention.forward" else 1
+        for operation, shapes in rows.items()
+        for shape in shapes
+    }
+    if seen != expected_cases:
         raise AssertionError(f"unexpected case roster {seen}")
     print(f"MOD5 Python reference: PASS ({sum(seen.values())} cases, "
           f"{comparisons} values, maximum absolute error {largest_error:.3g})")

@@ -8,15 +8,19 @@
 #pragma STDC FENV_ACCESS ON
 #pragma STDC FP_CONTRACT OFF
 
-enum { ELEMENTS = 64 };
+enum { ELEMENTS = 1024, MAX_POSITIONS = 16, MAX_MASK = 256 };
 
 static const uint64_t rms_rows[][3] = {
-    {1, 1, 1}, {1, 1, 4}, {1, 2, 4}, {2, 3, 4}, {2, 3, 8}};
+    {1, 1, 1}, {1, 1, 4}, {1, 2, 4}, {2, 3, 4}, {2, 3, 8},
+    {1, 8, 16}, {2, 8, 16}, {1, 16, 32}};
 static const uint64_t swi_rows[][3] = {
-    {1, 1, 1}, {1, 1, 8}, {1, 2, 4}, {2, 3, 4}, {2, 3, 8}};
+    {1, 1, 1}, {1, 1, 8}, {1, 2, 4}, {2, 3, 4}, {2, 3, 8},
+    {1, 8, 16}, {1, 8, 32}, {2, 8, 32}, {1, 16, 64}};
 static const uint64_t attention_rows[][6] = {
     {1, 2, 1, 2, 2, 2}, {1, 4, 1, 3, 3, 2}, {2, 4, 1, 2, 3, 4},
-    {1, 4, 2, 3, 3, 2}, {2, 4, 2, 2, 3, 4}, {1, 2, 2, 3, 3, 2}};
+    {1, 4, 2, 3, 3, 2}, {2, 4, 2, 2, 3, 4}, {1, 2, 2, 3, 3, 2},
+    {1, 4, 1, 8, 8, 4}, {1, 4, 2, 8, 8, 4}, {2, 4, 2, 8, 8, 4},
+    {1, 4, 1, 16, 16, 8}, {1, 4, 2, 16, 16, 8}};
 
 typedef struct fixture {
   et_kernel_request_v1 forward_request, backward_request;
@@ -25,8 +29,8 @@ typedef struct fixture {
   uint64_t q[4], kv[4], qp[2], kp[2], mask_shape[3];
   float operands[3][ELEMENTS], upstream[ELEMENTS], slopes[4], epsilon;
   float result[ELEMENTS], gradients[3][ELEMENTS];
-  int64_t query_pos[6], key_pos[6], window;
-  uint8_t mask[18];
+  int64_t query_pos[MAX_POSITIONS], key_pos[MAX_POSITIONS], window;
+  uint8_t mask[MAX_MASK];
 } fixture;
 
 static void set_views(fixture *f, const char *cap, const char *forward,
@@ -85,7 +89,7 @@ static void attention_fixture(fixture *f, const uint64_t *s, int mode) {
   /* Mode 0 has selective masking and ALiBi, 1 leaves zeros and a
      one-position window, 2 masks all, 3 uses the largest exact delta,
      and 4 disables ALiBi with a wide window. */
-  f->window = mode == 1 ? 1 : mode == 3 ? INT64_MAX : 8;
+  f->window = mode == 1 ? 1 : mode >= 3 ? INT64_MAX : 8;
   for (size_t n = 0; n < s[0]; ++n) {
     for (size_t t = 0; t < s[3]; ++t) {
       f->query_pos[n * s[3] + t] =
@@ -141,8 +145,8 @@ static double objective(const et_kernel_runtime *runtime, fixture *f) {
   return sum;
 }
 
-static void check_repeat_and_gradients(const et_kernel_runtime *runtime,
-                                       fixture *f, int fully_masked) {
+static size_t check_repeat_and_gradients(const et_kernel_runtime *runtime,
+                                         fixture *f, int fully_masked) {
   float saved_result[ELEMENTS], saved_grads[3][ELEMENTS];
   dispatch(runtime, &f->forward);
   dispatch(runtime, &f->backward);
@@ -163,8 +167,13 @@ static void check_repeat_and_gradients(const et_kernel_runtime *runtime,
             0);
   }
   const float step = 0x1p-10f;
+  const int wide_attention = f->forward_request.rank == 6u && f->q[2] >= 8u;
+  size_t checked = 0;
   for (size_t field = 0; field < f->backward.output_count; ++field) {
-    for (size_t i = 0; i < f->grads[field].byte_length / sizeof(float); ++i) {
+    const size_t elements = f->grads[field].byte_length / sizeof(float);
+    const size_t samples = wide_attention && elements > 24u ? 24u : elements;
+    for (size_t sample = 0; sample < samples; ++sample) {
+      const size_t i = samples == 1u ? 0u : sample * (elements - 1u) / (samples - 1u);
       const float original = f->operands[field][i];
       f->operands[field][i] = original + step;
       const double plus = objective(runtime, f);
@@ -173,8 +182,10 @@ static void check_repeat_and_gradients(const et_kernel_runtime *runtime,
       f->operands[field][i] = original;
       check_close(f->gradients[field][i], (plus - minus) / (2.0 * step),
                   0.00045, 0.002);
+      ++checked;
     }
   }
+  return checked;
 }
 
 static void dump_view(const et_kernel_tensor_view_v1 *view) {
@@ -210,13 +221,14 @@ static void dump_fixture(const et_kernel_runtime *runtime, fixture *f) {
 
 static void check_cases(const et_kernel_runtime *runtime, int oracle) {
   fixture f;
+  size_t checked = 0;
   for (size_t i = 0; i < ARRAY_COUNT(rms_rows); ++i) {
     elementwise_fixture(&f, rms_rows[i], 0);
     seed_values(&f);
     if (oracle)
       dump_fixture(runtime, &f);
     else
-      check_repeat_and_gradients(runtime, &f, 0);
+      checked += check_repeat_and_gradients(runtime, &f, 0);
   }
   for (size_t i = 0; i < ARRAY_COUNT(swi_rows); ++i) {
     elementwise_fixture(&f, swi_rows[i], 1);
@@ -224,7 +236,7 @@ static void check_cases(const et_kernel_runtime *runtime, int oracle) {
     if (oracle)
       dump_fixture(runtime, &f);
     else
-      check_repeat_and_gradients(runtime, &f, 0);
+      checked += check_repeat_and_gradients(runtime, &f, 0);
   }
   for (size_t i = 0; i < ARRAY_COUNT(attention_rows); ++i) {
     for (int mode = 0; mode < 5; ++mode) {
@@ -233,9 +245,11 @@ static void check_cases(const et_kernel_runtime *runtime, int oracle) {
       if (oracle)
         dump_fixture(runtime, &f);
       else
-        check_repeat_and_gradients(runtime, &f, mode == 2);
+        checked += check_repeat_and_gradients(runtime, &f, mode == 2);
     }
   }
+  if (!oracle)
+    printf("MOD5 primitive finite differences: %zu checks\n", checked);
 }
 
 static void check_capability(const et_kernel_runtime *runtime, const char *name,
@@ -545,6 +559,87 @@ static void check_numeric_errors(const et_kernel_runtime *runtime) {
   NUMERIC(&f.backward); /* Two query heads overflow one shared dV element. */
 }
 
+static void check_wide_numeric_errors(const et_kernel_runtime *runtime) {
+  fixture f;
+  for (size_t row = 5u; row < ARRAY_COUNT(rms_rows); ++row) {
+    elementwise_fixture(&f, rms_rows[row], 0);
+    const size_t last = f.output.byte_length / sizeof(float) - 1u;
+    seed_values(&f);
+    f.operands[0][last] = NAN;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+    f.operands[0][last] = FLT_MAX;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+    f.operands[0][last] = 1.0f;
+    f.epsilon = -1.0f;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+    f.epsilon = 0.0625f;
+
+    /* Make the final two rows overflow one dGamma element with finite dX. */
+    const size_t width = rms_rows[row][2];
+    memset(f.upstream, 0, sizeof(f.upstream));
+    for (size_t i = 0; i <= last; ++i)
+      f.operands[0][i] = 1.0f;
+    f.operands[1][width - 1u] = 0.0f;
+    f.upstream[last - width] = f.upstream[last] = 0.75f * FLT_MAX;
+    NUMERIC(&f.backward);
+  }
+
+  for (size_t row = 5u; row < ARRAY_COUNT(swi_rows); ++row) {
+    elementwise_fixture(&f, swi_rows[row], 1);
+    const size_t last = f.output.byte_length / sizeof(float) - 1u;
+    seed_values(&f);
+    f.operands[0][last] = INFINITY;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+    f.operands[0][last] = -100.0f;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+    f.operands[0][last] = 8.0f;
+    f.operands[1][last] = FLT_MAX;
+    f.upstream[last] = 2.0f;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+  }
+
+  for (size_t row = 6u; row < ARRAY_COUNT(attention_rows); ++row) {
+    const uint64_t *shape = attention_rows[row];
+    attention_fixture(&f, shape, 4);
+    const size_t last = f.output.byte_length / sizeof(float) - 1u;
+    seed_values(&f);
+    f.operands[0][last] = NAN;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+    f.operands[0][last] = 1.0f;
+    f.window = -1;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+    f.window = INT64_MAX;
+    f.mask[f.inputs[5].byte_length - 1u] = 2u;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+    f.mask[f.inputs[5].byte_length - 1u] = 1u;
+    f.operands[0][last] = FLT_MAX;
+    const size_t last_group = (shape[0] * shape[2] - 1u) * shape[4] * shape[5];
+    f.operands[1][last_group + shape[5] - 1u] = 2.0f;
+    NUMERIC(&f.forward);
+    NUMERIC(&f.backward);
+
+    /* One key at token zero gets two last-group, same-row contributions. */
+    attention_fixture(&f, shape, 4);
+    const size_t query_row = shape[3] * shape[5];
+    const size_t q_batch = (shape[0] - 1u) * shape[1];
+    const size_t q_token = shape[3] - 1u;
+    for (size_t k = 1; k < shape[4]; ++k)
+      f.mask[((shape[0] - 1u) * shape[3] + q_token) * shape[4] + k] = 0;
+    const size_t index = (q_batch + shape[1] - 1u) * query_row + q_token * shape[5];
+    f.upstream[index] = f.upstream[index - query_row] = 0.75f * FLT_MAX;
+    NUMERIC(&f.backward);
+  }
+}
+
 static uint16_t read_x87(void) {
   uint16_t word;
   __asm__ volatile("fnstcw %0" : "=m"(word));
@@ -787,6 +882,7 @@ int main(int argc, char **argv) {
     check_malformed(runtime);
     check_metadata_aliasing(runtime);
     check_numeric_errors(runtime);
+    check_wide_numeric_errors(runtime);
     check_fenv(runtime);
     check_strided_tables(runtime);
     check_attention_accumulation_order(runtime);
