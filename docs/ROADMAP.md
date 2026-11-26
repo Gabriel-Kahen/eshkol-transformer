@@ -54,6 +54,18 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   or serial-memory comparison. Host contention and initial memory differed, so
   this one local comparison is not a hosted speedup claim. Exact receipt:
   `/home/gabe/.codex/evidence/eshkol-p1-two-compiler-exact-20261125/SHA256SUMS`.
+- A branch-only `P1 two-compiler diagnostic` workflow is staged on
+  `codex/p1-two-compiler-hosted-diagnostic-20261125`. It runs only the supported
+  Ubuntu 22.04/Clang 21 parameter-state lane with the existing 120-minute job,
+  1,200-second compiler, leak and prerequisite settings, plus opt-in
+  `P1_TWO_COMPILERS=1`. The workflow checks out its target branch's exact commit,
+  rejects any P1 source change from reviewed `dee51487`, and uploads a
+  checksummed diagnostic-only receipt with source head/tree, prototype identity,
+  trigger head, run identity, step outcomes and full suite log. To trigger it,
+  open a PR from a `codex/p1-two-compiler-trigger-*` branch with a documentation
+  change into that diagnostic branch; the tested source is the PR base commit.
+  No hosted run has been launched. Default serial CI and full-suite evidence
+  remain unchanged; hosted parameter-state completion is the next gate.
 
 ## Parallel execution strategy
 

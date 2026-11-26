@@ -1,0 +1,145 @@
+name: P1 two-compiler diagnostic (non-admission)
+on:
+  pull_request:
+    branches: [codex/p1-two-compiler-hosted-diagnostic-20261125]
+permissions:
+  contents: read
+concurrency:
+  group: p1-two-compiler-diagnostic-${{ github.event.pull_request.base.sha }}
+  cancel-in-progress: false
+jobs:
+  parameter-state:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'codex/p1-two-compiler-trigger-') }}
+    name: Supported parameter-state only (non-admission)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      CC: clang-21
+      CXX: clang++-21
+      ESHKOL_CXX_COMPILER: clang++-21
+      LLVM_CONFIG_EXECUTABLE: llvm-config-21
+      ESHKOL_JOBS: '2'
+      A0_COMPILER_TIMEOUT_SECONDS: '60'
+      P1_COMPILER_TIMEOUT_SECONDS: '1200'
+      T1_COMPILER_TIMEOUT_SECONDS: '600'
+      T2_COMPILER_TIMEOUT_SECONDS: '600'
+      D2_COMPILER_TIMEOUT_SECONDS: '900'
+      K2_COMPILER_TIMEOUT_SECONDS: '900'
+      O2_COMPILER_TIMEOUT_SECONDS: '1200'
+      P1_LSAN: '1'
+      C1_LSAN: '1'
+      I2_ASAN_DETECT_LEAKS: '1'
+      K2_ASAN_DETECT_LEAKS: '1'
+      D2_ASAN_DETECT_LEAKS: '1'
+      N2_ASAN_DETECT_LEAKS: '1'
+      O2_ASAN_DETECT_LEAKS: '1'
+      N3K_ASAN_DETECT_LEAKS: '1'
+      L3S_ASAN_DETECT_LEAKS: '1'
+      G3S_ASAN_DETECT_LEAKS: '1'
+      M3T_ASAN_DETECT_LEAKS: '1'
+      M3_ASAN_DETECT_LEAKS: '1'
+      G3N_ASAN_DETECT_LEAKS: '1'
+      G3C4_ASAN_DETECT_LEAKS: '1'
+      P1_TWO_COMPILERS: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+      - name: Verify exact diagnostic source and record identity
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          root="$RUNNER_TEMP/p1-two-compiler-diagnostic"
+          test ! -e "$root" && test ! -L "$root"
+          mkdir -m 0700 "$root"
+          test "$GITHUB_BASE_REF" = codex/p1-two-compiler-hosted-diagnostic-20261125
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          git merge-base --is-ancestor dee51487413b7caa11958575866d13c8591de619 HEAD
+          while IFS= read -r changed; do
+            case "$changed" in
+              .github/workflows/p1-two-compiler-diagnostic.yml|docs/ROADMAP.md|tests/ci/test_p1_two_compiler_diagnostic.py) ;;
+              *) echo "Unreviewed diagnostic source delta: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only dee51487413b7caa11958575866d13c8591de619 HEAD)
+          test -z "$(git status --porcelain --untracked-files=all)"
+          printf 'mode\tP1_TWO_COMPILERS=1\nstatus\tstarted\nref\t%s\nsource_head\t%s\nsource_tree\t%s\nprototype_head\t%s\nprototype_tree\t%s\ntrigger_head\t%s\nrun_id\t%s\nrun_attempt\t%s\n' \
+            "$GITHUB_BASE_REF" "$BASE_SHA" "$(git rev-parse 'HEAD^{tree}')" \
+            dee51487413b7caa11958575866d13c8591de619 \
+            a49f7739b4c43562bc33f9d9f85c492f0e21174b \
+            "$PR_HEAD_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$root/identity.tsv"
+          git diff --name-only dee51487413b7caa11958575866d13c8591de619 HEAD \
+            > "$root/source-delta.txt"
+          sha256sum toolchain/eshkol.lock scripts/bootstrap-eshkol.sh scripts/common.sh \
+            scripts/test-p1.sh scripts/p1-compile-pair.sh \
+            > "$root/source-inputs.sha256"
+          cat /etc/os-release > "$root/host-os.txt"
+          grep '^MemAvailable:' /proc/meminfo > "$root/initial-memory.txt"
+          echo 'P1 parameter-state diagnostic only; not full-suite or admission evidence.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install host dependencies
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+          sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y \
+            build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
+            ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
+            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
+            ripgrep time
+          test "$(llvm-config-21 --version)" = '21.1.8'
+          clang-21 --version | head -1 >> "$RUNNER_TEMP/p1-two-compiler-diagnostic/toolchain.txt"
+          llvm-config-21 --version >> "$RUNNER_TEMP/p1-two-compiler-diagnostic/toolchain.txt"
+      - name: Restore pinned Eshkol toolchain
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .deps
+          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
+      - name: Verify pinned Eshkol toolchain
+        id: toolchain
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          make toolchain > "$RUNNER_TEMP/p1-two-compiler-diagnostic/toolchain.log" 2>&1
+          cp .deps/eshkol-build/eshkol-transformer-provenance.tsv \
+            "$RUNNER_TEMP/p1-two-compiler-diagnostic/toolchain-provenance.tsv"
+      - name: Build parameter-state prerequisites
+        id: prerequisites
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash scripts/ci-build-prerequisites.sh parameter-state > "$RUNNER_TEMP/p1-two-compiler-diagnostic/prerequisites.log" 2>&1
+      - name: Run complete parameter-state suite
+        id: suite
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          trap 'cp "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/p1-two-compiler-diagnostic/p1-step-summary.md" 2>/dev/null || true' EXIT
+          make test-ci-parameters-after-build > "$RUNNER_TEMP/p1-two-compiler-diagnostic/parameter-state.log" 2>&1
+      - name: Seal diagnostic receipt
+        if: always()
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          JOB_STATUS: ${{ job.status }}
+          TOOLCHAIN_OUTCOME: ${{ steps.toolchain.outcome }}
+          PREREQUISITES_OUTCOME: ${{ steps.prerequisites.outcome }}
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+        run: |
+          root="$RUNNER_TEMP/p1-two-compiler-diagnostic"
+          test -d "$root" && test ! -L "$root"
+          printf 'toolchain_outcome\t%s\nprerequisites_outcome\t%s\nsuite_outcome\t%s\nfinal_job_status\t%s\n' \
+            "$TOOLCHAIN_OUTCOME" "$PREREQUISITES_OUTCOME" "$SUITE_OUTCOME" "$JOB_STATUS" \
+            >> "$root/identity.tsv"
+          (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | \
+            LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$root/SHA256SUMS"
+          (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
+      - name: Upload diagnostic-only receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: p1-two-compiler-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/p1-two-compiler-diagnostic/
+          if-no-files-found: error
+          retention-days: 30
