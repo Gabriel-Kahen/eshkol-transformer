@@ -742,7 +742,9 @@ do not split the joint LOAD/SAVE phases. The scoped
 [phase timing candidate](C2_OPERATIONAL_PHASE_TIMING.md) exposes the existing
 bounded joint progress records on successful runs through driver stderr, without
 changing runtime stdout, workload, memory ceiling, or watchdog. Its focused
-checks are local only; a later supported gate must provide phase-level evidence.
+Ubuntu single-compiler joint gate passed 26 checks and exact checkpoint
+comparison. Its three SAVE calls spent 371.216 s measuring, 387.703 s
+encoding, and 0.299 s publishing. The full supported C2 gate remains open.
 
 ## Wave 3 — first complete language model
 
