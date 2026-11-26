@@ -41,7 +41,7 @@ cmp "${scratch}/resumed.c2" "${scratch}/uninterrupted.c2"
 "${binary}" generate --config "${scratch}/config.json" --tokenizer "${scratch}/byte.t1" \
   --train-corpus "${scratch}/train" --checkpoint "${scratch}/first.c2" \
   --prompt-hex 41 --sampling greedy --seed 1729 >"${scratch}/generate.json"
-python3 - "${scratch}" <<'PY'
+python3 -E - "${scratch}" <<'PY'
 from pathlib import Path
 import hashlib
 import json

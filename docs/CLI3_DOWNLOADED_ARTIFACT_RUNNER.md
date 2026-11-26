@@ -15,8 +15,16 @@ The verifier checks the outer SHA-256 receipt, the complete archive member
 inventory and safe paths, all inner file hashes, the tested executable digest,
 both gate receipts, and the source commit, tree, lock, and five package
 manifests. It rejects a dirty or different source checkout before extraction.
-It then unpacks only regular files and directories into a private temporary
-directory and checks their hashes again before launching the binary.
+The verifier accepts only the expected regular-file and directory archive
+entries and rejects sparse files and extension headers.
+The outer receipt is limited to 1 KiB and each non-binary member to 1 MiB.
+The executable is streamed. The verifier unpacks into a private temporary
+directory and checks all extracted file hashes again before launching the binary.
+
+The accompanying seals check consistency across the archive, receipts, and
+executable. Download the artifact from a trusted GitHub CI run or compare its
+outer SHA-256 with a matching digest obtained independently from a trusted
+source before running it.
 
 The deterministic fixture checks version, byte tokenizer, DATA4 v2 report
 validation and manifest binding, one CPU-f32 training update, checkpoint

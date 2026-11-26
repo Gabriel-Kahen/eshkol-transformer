@@ -910,6 +910,14 @@ independent download verified its outer and 24 inner hashes, tested-binary
 receipt, source identity and fixed-profile fresh-container walkthrough. This
 supplies no trained SAN, EOS, continuation, or CPU-v1 admission.
 
+The optional [downloaded CLI3 artifact runner](CLI3_DOWNLOADED_ARTIFACT_RUNNER.md)
+checks the exact archive inventory and member types, streams the executable,
+and rechecks the extracted hashes before replaying the fixed profile. A
+network-disabled Ubuntu 22.04 replay of the DATA4 v2 artifact from run
+`45718652932` passed report binding, checkpoint continuation, evaluation, and
+one-byte generation. Focused local checks also reject incorrect archive
+structure and malformed generation with ambient Python optimization enabled.
+
 The Wave 3 production CLI3 `generate` candidate moves the reviewed fixed
 CPU-f32 P1/G1 command into an exact installed CLI3 successor tuple. It retains
 the executable's dispatch/fallback ABI (two exports, eight globals), uses the

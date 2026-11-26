@@ -8,6 +8,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -62,6 +63,8 @@ class DownloadedArtifactTests(unittest.TestCase):
                 f"{RUNNER.digest(self.files[name])}  ./{name}\n".encode()
                 for name in sorted(RUNNER.FILES - {"SHA256SUMS"}))
         with tarfile.open(self.archive, "w", format=tarfile.USTAR_FORMAT) as tar:
+            if extra is not None:
+                tar.addfile(extra, io.BytesIO(b"x" * extra.size) if extra.size else None)
             for name in ("cli3-binary-artifact", "cli3-binary-artifact/metadata",
                          "cli3-binary-artifact/smoke"):
                 item = tarfile.TarInfo(name)
@@ -72,14 +75,32 @@ class DownloadedArtifactTests(unittest.TestCase):
                 item.size = len(content)
                 item.mode = 0o755 if name == "eshkol-transformer" else 0o644
                 tar.addfile(item, io.BytesIO(content))
-            if extra:
-                tar.addfile(extra, io.BytesIO(b"x") if extra.isfile() else None)
         (self.download / (self.archive.name + ".sha256")).write_text(
             f"{RUNNER.digest_file(self.archive)}  {self.archive.name}\n")
 
     def test_accepts_sealed_fixture(self):
         self.write_archive()
         _, _, hashes = RUNNER.verify_archive(self.download, self.source)
+        self.assertEqual(hashes["eshkol-transformer"], RUNNER.digest(self.files["eshkol-transformer"]))
+
+    def test_uses_the_same_archive_for_outer_hash_and_member_verification(self):
+        self.write_archive()
+        replacement = self.root / "replacement.tar"
+        replacement.write_bytes(b"different archive")
+        real_digest_stream = RUNNER.digest_stream
+        replaced = False
+
+        def swap_after_first_digest(stream):
+            nonlocal replaced
+            digest = real_digest_stream(stream)
+            if not replaced:
+                replacement.replace(self.archive)
+                replaced = True
+            return digest
+
+        with mock.patch.object(RUNNER, "digest_stream", side_effect=swap_after_first_digest):
+            _, _, hashes = RUNNER.verify_archive(self.download, self.source)
+        self.assertTrue(replaced)
         self.assertEqual(hashes["eshkol-transformer"], RUNNER.digest(self.files["eshkol-transformer"]))
 
     def test_rejects_outer_and_inner_corruption(self):
@@ -122,6 +143,58 @@ class DownloadedArtifactTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "unsafe or duplicate archive member"):
                     RUNNER.verify_archive(self.download, self.source)
                 self.assertFalse((self.root / "escape").exists())
+
+    def test_rejects_unknown_or_mistyped_entries_before_reading_members(self):
+        for name, kind, message in (
+            ("extra", tarfile.REGTYPE, "unsafe or duplicate archive member"),
+            ("metadata", tarfile.REGTYPE, "archive member type or size differs"),
+            ("metadata/pretrain.json", tarfile.DIRTYPE, "archive member type or size differs"),
+        ):
+            with self.subTest(name=name, kind=kind):
+                extra = tarfile.TarInfo("cli3-binary-artifact/" + name)
+                extra.type = kind
+                extra.size = int(kind == tarfile.REGTYPE)
+                self.write_archive(extra=extra)
+                with mock.patch.object(tarfile.TarFile, "extractfile") as extract:
+                    with self.assertRaisesRegex(ValueError, message):
+                        RUNNER.verify_archive(self.download, self.source)
+                    extract.assert_not_called()
+
+    def test_rejects_special_headers_for_known_entry(self):
+        for kind in (tarfile.CONTTYPE, tarfile.AREGTYPE, tarfile.GNUTYPE_SPARSE,
+                     tarfile.XHDTYPE, tarfile.XGLTYPE):
+            with self.subTest(kind=kind):
+                extra = tarfile.TarInfo("cli3-binary-artifact/metadata/pretrain.json")
+                extra.type = kind
+                extra.size = 1
+                self.write_archive(extra=extra)
+                with mock.patch.object(tarfile.TarFile, "extractfile") as extract:
+                    with self.assertRaisesRegex(ValueError, "unsafe or duplicate archive member"):
+                        RUNNER.verify_archive(self.download, self.source)
+                    extract.assert_not_called()
+
+    def test_rejects_oversized_metadata_before_reading_it(self):
+        extra = tarfile.TarInfo("cli3-binary-artifact/metadata/pretrain.json")
+        extra.size = RUNNER.MAX_METADATA_BYTES + 1
+        self.write_archive(extra=extra)
+        with mock.patch.object(tarfile.TarFile, "extractfile") as extract:
+            with self.assertRaisesRegex(ValueError, "archive member exceeds size limit"):
+                RUNNER.verify_archive(self.download, self.source)
+            extract.assert_not_called()
+
+    def test_rejects_oversized_outer_receipt(self):
+        self.write_archive()
+        (self.download / (self.archive.name + ".sha256")).write_bytes(
+            b"x" * (RUNNER.MAX_OUTER_SEAL_BYTES + 1))
+        with self.assertRaisesRegex(ValueError, "outer SHA-256 receipt exceeds size limit"):
+            RUNNER.verify_archive(self.download, self.source)
+
+    def test_rejects_dot_dot_archive_root(self):
+        self.write_archive()
+        self.archive.rename(self.download / "...tar")
+        (self.download / (self.archive.name + ".sha256")).rename(self.download / "...tar.sha256")
+        with self.assertRaisesRegex(ValueError, "archive root name is invalid"):
+            RUNNER.verify_archive(self.download, self.source)
 
 
 if __name__ == "__main__":

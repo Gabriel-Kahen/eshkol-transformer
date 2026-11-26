@@ -3,7 +3,7 @@
 
 import argparse
 import hashlib
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import platform
 import re
 import subprocess
@@ -16,6 +16,8 @@ MANIFESTS = (
     "source_closure", "native_source_closure", "public_strings",
     "public_exports", "undefined_symbols",
 )
+MAX_OUTER_SEAL_BYTES = 1024
+MAX_METADATA_BYTES = 1024 * 1024
 FILES = {
     "eshkol-transformer", "SHA256SUMS",
     *(f"metadata/{name}.txt" for name in MANIFESTS),
@@ -38,12 +40,28 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def digest_file(path: Path) -> str:
+def digest_stream(stream) -> str:
     hasher = hashlib.sha256()
-    with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            hasher.update(chunk)
+    while chunk := stream.read(1024 * 1024):
+        hasher.update(chunk)
     return hasher.hexdigest()
+
+
+def digest_file(path: Path) -> str:
+    with path.open("rb") as stream:
+        return digest_stream(stream)
+
+
+class ArtifactMember(tarfile.TarInfo):
+    @classmethod
+    def fromtarfile(cls, archive):
+        header = archive.fileobj.read(tarfile.BLOCKSIZE)
+        member = cls.frombuf(header, archive.encoding, archive.errors)
+        # Check the raw USTAR typeflag before tarfile can consume an extension's body.
+        if header[156:157] not in (tarfile.REGTYPE, tarfile.DIRTYPE):
+            fail(f"unsafe or duplicate archive member: {member.name}")
+        member.offset = archive.fileobj.tell() - tarfile.BLOCKSIZE
+        return member._proc_member(archive)
 
 
 def receipt(data: bytes, filename: str) -> str:
@@ -82,8 +100,6 @@ def verify_source(source: Path, files: dict[str, bytes]) -> None:
 
 
 def verify_files(files: dict[str, bytes], hashes: dict[str, str]) -> None:
-    if set(files) != FILES:
-        fail(f"artifact file inventory differs: missing={sorted(FILES-set(files))}, extra={sorted(set(files)-FILES)}")
     lines = files["SHA256SUMS"].splitlines(keepends=True)
     seen: set[str] = set()
     for line in lines:
@@ -118,40 +134,54 @@ def verify_archive(directory: Path, source: Path) -> tuple[Path, list[tarfile.Ta
     if len(archives) != 1:
         fail("artifact directory must contain one tar archive")
     archive = archives[0]
-    seal = directory / f"{archive.name}.sha256"
-    if seal not in entries or receipt(seal.read_bytes(), archive.name) != digest_file(archive):
-        fail("outer archive SHA-256 mismatch")
     root = archive.name[:-4]
+    if root in ("", ".", ".."):
+        fail("archive root name is invalid")
+    seal = directory / f"{archive.name}.sha256"
+    if seal not in entries:
+        fail("outer archive SHA-256 mismatch")
+    with seal.open("rb") as stream:
+        outer_seal = stream.read(MAX_OUTER_SEAL_BYTES + 1)
+    if len(outer_seal) > MAX_OUTER_SEAL_BYTES:
+        fail("outer SHA-256 receipt exceeds size limit")
+    outer_hash = receipt(outer_seal, archive.name)
+    directories = {root, f"{root}/metadata", f"{root}/smoke"}
+    file_names = {f"{root}/{name}": name for name in FILES}
+    expected = directories | file_names.keys()
     files: dict[str, bytes] = {}
     hashes: dict[str, str] = {}
     members: list[tarfile.TarInfo] = []
-    with tarfile.open(archive, "r:") as tar:
-        seen: set[str] = set()
-        for member in tar:
-            raw = member.name.rstrip("/")
-            parts = PurePosixPath(raw).parts
-            if (not raw or raw.startswith("/") or parts[0] != root or
-                    any(part in (".", "..", "") for part in raw.split("/")) or
-                    raw in seen or not (member.isdir() or member.isfile())):
-                fail(f"unsafe or duplicate archive member: {member.name}")
-            seen.add(raw)
-            members.append(member)
-            if member.isfile():
-                stream = tar.extractfile(member)
-                assert stream is not None
-                name = "/".join(parts[1:])
-                hasher = hashlib.sha256()
-                data = bytearray()
-                while chunk := stream.read(1024 * 1024):
-                    hasher.update(chunk)
-                    if name != "eshkol-transformer":
-                        data.extend(chunk)
-                files[name] = bytes(data)
-                hashes[name] = hasher.hexdigest()
-        if set(seen) != {root, f"{root}/metadata", f"{root}/smoke"} | {f"{root}/{p}" for p in FILES}:
-            fail("archive member inventory differs")
-        if any(m.isfile() and (m.mode & 0o111) != (0o111 if m.name == f"{root}/eshkol-transformer" else 0) for m in members):
-            fail("archive executable modes differ")
+    with archive.open("rb") as archive_stream:
+        if digest_stream(archive_stream) != outer_hash:
+            fail("outer archive SHA-256 mismatch")
+        archive_stream.seek(0)
+        with tarfile.open(fileobj=archive_stream, mode="r:", tarinfo=ArtifactMember) as tar:
+            seen: set[str] = set()
+            for member in tar:
+                if member.name not in expected or member.name in seen:
+                    fail(f"unsafe or duplicate archive member: {member.name}")
+                seen.add(member.name)
+                members.append(member)
+                if member.type == tarfile.DIRTYPE:
+                    if member.name not in directories or member.size != 0:
+                        fail(f"archive member type or size differs: {member.name}")
+                    continue
+                if member.name not in file_names:
+                    fail(f"archive member type or size differs: {member.name}")
+                name = file_names[member.name]
+                binary = name == "eshkol-transformer"
+                if member.size < 0 or (not binary and member.size > MAX_METADATA_BYTES):
+                    fail(f"archive member exceeds size limit: {member.name}")
+                if (member.mode & 0o111) != (0o111 if binary else 0):
+                    fail("archive executable modes differ")
+                with tar.extractfile(member) as stream:
+                    if binary:
+                        hashes[name] = digest_stream(stream)
+                    else:
+                        files[name] = stream.read()
+                        hashes[name] = digest(files[name])
+            if seen != expected:
+                fail("archive member inventory differs")
     verify_files(files, hashes)
     verify_source(source, files)
     return archive, members, hashes
@@ -180,14 +210,13 @@ def main() -> None:
     # directory; only regular files and directories are admitted.
     with tempfile.TemporaryDirectory(prefix="cli3-downloaded-") as temporary:
         base = Path(temporary)
-        with tarfile.open(archive, "r:") as tar:
+        with tarfile.open(archive, "r:", tarinfo=ArtifactMember) as tar:
             for member in members:
-                target = base.joinpath(*PurePosixPath(member.name).parts)
-                if member.isdir():
+                target = base / member.name
+                if member.type == tarfile.DIRTYPE:
                     target.mkdir(mode=0o700)
                 else:
                     with tar.extractfile(member) as src, target.open("xb") as dst:
-                        assert src is not None
                         while chunk := src.read(1024 * 1024):
                             dst.write(chunk)
                     target.chmod(0o755 if member.name.endswith("/eshkol-transformer") else 0o600)
