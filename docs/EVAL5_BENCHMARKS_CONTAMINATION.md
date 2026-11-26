@@ -308,3 +308,14 @@ reproducibility proof, training run, external corpus evaluation, live C
 contamination audit, or EVAL5 manifest publication.
 A full benchmark runner still needs a live contamination gate and admitted
 manifest publication over its scored data and owner-sourced identities.
+
+The measured AOT receipt above remains evidence for its exact source commit.
+A subsequent witness-source correction removes two independent path reopens:
+the D1 manifest digest now checks the validated `metadata[6]` bytevector,
+and the C1 digest checks the one bytevector passed to the accepted internal
+decoder. Its state and weight release path matches the existing MOD5 loader;
+the separate `--check-c1` path still tests a validly checksummed wrong-shape
+checkpoint. The AOT script makes its staged fixture files read-only after
+source generation and requires separate C1 shape, C1 identity, and D1 split
+identity failures. Source and fixture negative tests cover the correction;
+the corrected source awaits a separately pinned AOT replay before integration.
