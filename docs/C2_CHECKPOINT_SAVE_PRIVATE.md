@@ -93,3 +93,9 @@ Both 16 MiB outputs matched the existing fixture byte for byte, with SHA-256
 The earlier scalar diagnostic took 875.441 seconds in a separate run. These
 are fixture measurements with different run conditions. The complete hosted
 C2 and repository suites remain admission gates.
+
+The focused public C2 package gate on `8204e315` passed both deterministic
+rebuilds, the installed save/load/release calls, arity and private-binding
+negatives, and the retention check. The built archive retained the exact
+81 global definitions, 75 package exports, 81 name strings, and 162 original
+undefined symbols. Its SHA-256 bridge is local and hidden.
