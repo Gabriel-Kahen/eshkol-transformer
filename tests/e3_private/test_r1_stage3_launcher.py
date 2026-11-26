@@ -141,7 +141,8 @@ class Stage3LauncherCustodyTest(unittest.TestCase):
     def test_runtime_routes_stage3_partial_pin_denial(self):
         runtime = (SCRIPT.parents[1] / 'tests/e3_private/r1_stage3_runtime.esk').read_text()
         self.assertIn("(define scenario (vector 'fault 'prepare present? 4 7 1))", runtime)
-        self.assertIn("(e3-fault-run scenario input output)", runtime)
+        self.assertIn('(define boxed-scenario (vector scenario))', runtime)
+        self.assertEqual(runtime.count('(e3-fault-run boxed-scenario input output)'), 3)
         self.assertIn("E3-R1-STAGE3-PASS gradient=", runtime)
 
     def test_stopped_owned_cid_is_removed_before_absence_receipt(self):
