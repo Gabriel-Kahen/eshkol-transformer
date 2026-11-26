@@ -129,7 +129,7 @@ class WorkflowGateTests(unittest.TestCase):
         self.assertIn('if [[ "$CI_EVENT" == pull_request ]]; then', topology)
         self.assertIn("if: needs.topology.outputs.run_full == 'true'", blocking)
         self.assertIn(
-            "if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) }}",
+            "if: ${{ always() && (github.event_name != 'workflow_dispatch' || (!inputs.wave5_tooling_diagnostic && inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic)) }}",
             gate,
         )
         self.assertIn("needs: [topology, blocking]", gate)

@@ -28,7 +28,9 @@ SHELL := /usr/bin/bash
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics \
 	test-mod5 test-mp4 test-pa4-wider test-n2 test-n3k \
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
-	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore \
+	test-reference-formats test-t1 test-t2 test-t2-trainer test-data4-pipeline \
+	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
+	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
 	benchmark-attention-supported test-amd4 test-dist5 test-eval5 clean
@@ -377,6 +379,19 @@ test-eval5:
 test-io5-gguf:
 	/usr/bin/bash scripts/test-io5-gguf.sh
 
+# Optional Wave 5 leaf gates; no default build or CI suite consumes them.
+test-beam-search:
+	/usr/bin/bash scripts/test-beam-search.sh
+
+test-constrained-decode:
+	/usr/bin/bash scripts/test-constrained-decode.sh
+
+test-paged-kv:
+	/usr/bin/bash scripts/test-paged-kv.sh
+
+test-spec-decode:
+	/usr/bin/bash scripts/test-spec-decode.sh
+
 .PHONY: test-io5-gguf-native
 test-io5-gguf-native:
 	test -n "$${IO5_GGUF_NATIVE_PREFIX:-}"
@@ -432,6 +447,12 @@ test-t1: build
 
 test-t2: build
 	/usr/bin/bash scripts/test-t2.sh
+
+test-t2-trainer:
+	/usr/bin/bash scripts/test-t2-trainer.sh
+
+test-data4-pipeline:
+	/usr/bin/bash scripts/test-data4-pipeline.sh
 
 test-q0: build
 	/usr/bin/bash scripts/test-q0.sh

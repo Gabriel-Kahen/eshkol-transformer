@@ -30,6 +30,19 @@ on:
         description: Exact DATA4 branch tree
         required: false
         type: string
+      wave5_tooling_diagnostic:
+        description: Run only the six optional Wave 5 tooling gates (non-admission)
+        required: false
+        default: false
+        type: boolean
+      wave5_expected_head:
+        description: Exact Wave 5 branch commit
+        required: false
+        type: string
+      wave5_expected_tree:
+        description: Exact Wave 5 branch tree
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -37,13 +50,13 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.wave5_tooling_diagnostic && 'wave5-tooling-diagnostic' || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !inputs.wave5_tooling_diagnostic }}
 
 jobs:
   topology:
     name: CI topology
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic }}
+    if: ${{ github.event_name != 'workflow_dispatch' || (!inputs.wave5_tooling_diagnostic && inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) || (inputs.wave5_tooling_diagnostic && (inputs.attention_supported_diagnostic || inputs.data4_installed_diagnostic)) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 3
     outputs:
@@ -54,7 +67,10 @@ jobs:
         env:
           ATTENTION_DIAGNOSTIC: ${{ inputs.attention_supported_diagnostic }}
           DATA4_DIAGNOSTIC: ${{ inputs.data4_installed_diagnostic }}
-        run: test "$ATTENTION_DIAGNOSTIC:$DATA4_DIAGNOSTIC" != true:true
+          WAVE5_DIAGNOSTIC: ${{ inputs.wave5_tooling_diagnostic }}
+        run: |
+          test "$ATTENTION_DIAGNOSTIC:$DATA4_DIAGNOSTIC" != true:true
+          test "$WAVE5_DIAGNOSTIC" != true || test "$ATTENTION_DIAGNOSTIC:$DATA4_DIAGNOSTIC" = false:false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
@@ -124,15 +140,23 @@ jobs:
 
   data4-diagnostic:
     name: DATA4 installed command diagnostic (non-admission)
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic && !inputs.attention_supported_diagnostic }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.data4_installed_diagnostic && !inputs.attention_supported_diagnostic && !inputs.wave5_tooling_diagnostic }}
     uses: ./.github/workflows/data4-installed-diagnostic.yml
     with:
       expected_head: ${{ inputs.data4_expected_head }}
       expected_tree: ${{ inputs.data4_expected_tree }}
 
+  wave5-tooling-diagnostic:
+    name: Wave 5 tooling diagnostic (non-admission)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.wave5_tooling_diagnostic && !inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic }}
+    uses: ./.github/workflows/wave5-tooling-diagnostic.yml
+    with:
+      expected_head: ${{ inputs.wave5_expected_head }}
+      expected_tree: ${{ inputs.wave5_expected_tree }}
+
   f0-linux:
     name: Ubuntu 22.04 x86-64 / Clang-LLVM 21.1.8
-    if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic) }}
+    if: ${{ always() && (github.event_name != 'workflow_dispatch' || (!inputs.wave5_tooling_diagnostic && inputs.attention_supported_diagnostic == inputs.data4_installed_diagnostic)) }}
     needs: [topology, blocking]
     runs-on: ubuntu-22.04
     timeout-minutes: 2
@@ -152,7 +176,7 @@ jobs:
 
   attention-supported-diagnostic:
     name: A2 attention benchmark only (non-admission)
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.attention_supported_diagnostic && !inputs.data4_installed_diagnostic && !inputs.wave5_tooling_diagnostic }}
     runs-on: ubuntu-22.04
     timeout-minutes: 75
     env:
