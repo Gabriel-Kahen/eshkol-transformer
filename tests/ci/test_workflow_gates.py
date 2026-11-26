@@ -43,6 +43,10 @@ class WorkflowGateTests(unittest.TestCase):
             "test_invalid_profiles_paths_shapes_and_layer_rosters",
             "test_m3_exact_roster_and_all_bitwise_round_trips",
             "test_metadata_names_are_bound_to_paths_and_reject_coincidences",
+            "test_mod5_import_rejects_missing_extra_biased_wrong_rank_and_corrupted",
+            "test_mod5_multilayer_mqa_gqa_mha_mapped_and_sharded_round_trips",
+            "test_mod5_plain_external_import_and_exact_tie",
+            "test_mod5_rejects_incompatible_rosters_on_export_and_external_import",
             "test_shard_checksums_symlinks_missing_files_and_disjoint_coverage",
             "test_unmapped_shards_preserve_arbitrary_paths_kinds_and_empty_state",
         })
