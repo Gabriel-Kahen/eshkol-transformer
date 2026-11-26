@@ -118,7 +118,18 @@ mismatches, peer exits and stalls during metadata, payload, or result
 acknowledgment, descriptor cleanup after rejected bootstrap, and the call-wide
 deadline during a slow payload transfer.
 
-This is a standalone local CPU collective candidate. The historical MOD5
-block training harness depends on a provider absent from current `main` and
-is excluded from this gate. TR3 integration, AOT training, throughput and
-hosted CI admission remain pending.
+`bash scripts/test-dist5-mod5.sh` is a separate development-only composition
+witness. It reuses the accepted MOD5 GQA block backward fixture and its K1
+provider on current `main`. Two forked ranks compute gradients from distinct,
+equal-sized two-sequence minibatches. For each of three updates, the test
+compares every active synchronized gradient and SGD parameter against the
+serial mean of the two independently computed minibatch gradients, using
+absolute tolerance `1e-7` and relative tolerance `1e-6`. On an intervening
+nonfinite-gradient injection, both collectives reject, destination buffers
+and model parameters stay unchanged, and a later barrier and SGD step succeed.
+This gate links the existing MOD5 and DIST5 archives without a new runtime ABI.
+
+The composition witness does not implement a general trainer, unequal-batch
+weighting, AOT path, persistent optimizer state, or recovery across process
+death. It was not added to the standalone `test-dist5.sh` gate. TR3 integration,
+throughput, and hosted CI validation for this composition remain pending.
