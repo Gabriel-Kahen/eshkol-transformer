@@ -37,4 +37,4 @@ docker run --rm --network none --pull never --cpus=3 \
   -e ESHKOL_SOURCE_DIR=/tc/src -e ESHKOL_BUILD_DIR=/tc/build \
   -e CC=/usr/bin/clang-21 -e CXX=/usr/bin/clang++-21 \
   -e PYTHONDONTWRITEBYTECODE=1 \
-  "$image" python3 -B scripts/test-c2-sha-span-composition.py
+  "$image" python3 -B tests/c2/test_c2_sha_span_composition.py

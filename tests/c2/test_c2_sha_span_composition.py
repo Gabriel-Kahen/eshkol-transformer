@@ -8,7 +8,7 @@ import re
 import subprocess
 import tempfile
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def replace_once(source: str, before: str, after: str) -> str:
