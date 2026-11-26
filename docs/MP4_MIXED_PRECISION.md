@@ -155,9 +155,14 @@ updating f32 master weights. The four accepted SGD updates are compared with a
 direct f32 baseline at every active parameter and gradient. Tolerances are
 `atol=2e-5, rtol=0.005` for f16 and `atol=1e-4, rtol=0.02` for bf16.
 
-Between the second and third accepted updates, a finite extreme target
-produces real finite MOD5 gradients whose scaled tile is rejected by MP4
-narrowing in each format. The scaler backs off by half, all master parameters
+Between the second and third accepted updates, a deterministic target offset
+is calibrated against the real MOD5 gradient maximum. For f16, the scaled
+gradient exceeds 65,504; for bf16, it exceeds the finite-to-infinity rounding
+boundary `0x1.ffp127f`. The witness separately checks that every active raw gradient
+and every scaled f32 value is finite. MP4 narrowing rejects the out-of-range
+tile in each format, rather than receiving an f32 infinity. The optimized and
+sanitized gates both measured peak scaled values of 70,400 (f16) and
+`3.3995006e38` (bf16). The scaler backs off by half, all master parameters
 remain byte-identical, and the next normal attempt succeeds. The opt-in gate
 passed locally in optimized and ASan/UBSan/LSan builds with leak detection
 enabled; it leaves the standalone `test-mp4` and default test suites unchanged.

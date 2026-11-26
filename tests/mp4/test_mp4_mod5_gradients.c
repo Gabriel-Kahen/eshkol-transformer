@@ -6,20 +6,27 @@
 
 #pragma STDC FP_CONTRACT OFF
 
-enum { TILE = 8, ACCEPTED_STEPS = 4 };
+enum {
+  TILE = 8,
+  ACCEPTED_STEPS = 4,
+  GRAD_CLEAN = 0,
+  GRAD_NARROW_REJECT = 1,
+  GRAD_UNSCALE_OVERFLOW = 2,
+  GRAD_F32_SCALE_OVERFLOW = 3
+};
 static const uint64_t tile_shape[] = {TILE};
 static const float learning_rate = 0.25f;
 
 typedef struct format {
   const char *dtype, *cast, *unscale;
-  float scale, fault_target, atol, rtol;
+  float scale, desired_raw_fault, finite_narrow_limit, atol, rtol;
 } format;
 
 static const format formats[] = {
-    {"f16", "cast.f32-to-f16", "grad.unscale-f16-to-f32", 32.0f, 1e8f,
-     2e-5f, 0.005f},
-    {"bf16", "cast.f32-to-bf16", "grad.unscale-bf16-to-f32", 65536.0f,
-     1e37f, 1e-4f, 0.02f},
+    {"f16", "cast.f32-to-f16", "grad.unscale-f16-to-f32", 32.0f, 2200.0f,
+     65504.0f, 2e-5f, 0.005f},
+    {"bf16", "cast.f32-to-bf16", "grad.unscale-bf16-to-f32", 0x1p127f,
+     0x1.ff8p0f, 0x1.ffp127f, 1e-4f, 0.02f},
 };
 
 static const et_kernel_provider_v1 *resolve_mp4(void *context,
@@ -102,14 +109,16 @@ static uint8_t store_and_unscale(const et_kernel_runtime *runtime,
     for (size_t i = 0; i < TILE; ++i) {
       CHECK(isfinite(source[offset + i]));
       scaled[i] = source[offset + i] * scaler->scale;
+      if (!isfinite(scaled[i]))
+        return GRAD_F32_SCALE_OVERFLOW;
     }
     if (cast_tile(runtime, fmt, scaled, narrow) != 0)
-      return 1u;
+      return GRAD_NARROW_REJECT;
     if (unscale_tile(runtime, fmt, narrow, 1.0f / scaler->scale,
                      destination + offset) != 0)
-      return 2u;
+      return GRAD_UNSCALE_OVERFLOW;
   }
-  return 0u;
+  return GRAD_CLEAN;
 }
 
 static void apply_sgd(weights *model, const weights *gradient) {
@@ -139,39 +148,96 @@ static void initialize(weights *w, float *x, float *target) {
   }
 }
 
+static float max_gradient(const et_kernel_runtime *mod5, const weights *model,
+                          float *x, const float *target) {
+  weights copy = *model, gradient;
+  float dx[ELEMENTS];
+  CHECK(isfinite(block_loss(mod5, 2u, &copy, x, target, &gradient, dx)));
+  float largest = 0.0f;
+  for (size_t p = 0; p < PARAMETERS; ++p)
+    for (size_t i = 0; i < param_size(p, 2u); ++i) {
+      CHECK(isfinite(gradient.data[p][i]));
+      largest = fmaxf(largest, fabsf(gradient.data[p][i]));
+    }
+  return largest;
+}
+
+static void make_fault_target(const et_kernel_runtime *mod5,
+                              const weights *model, float *x,
+                              const float *normal, float *fault,
+                              const format *fmt) {
+  float low = 0.0f, high = 1.0f;
+  CHECK(max_gradient(mod5, model, x, normal) < fmt->desired_raw_fault);
+  for (unsigned expansion = 0; expansion < 32u; ++expansion) {
+    for (size_t i = 0; i < ELEMENTS; ++i)
+      fault[i] = normal[i] + high;
+    if (max_gradient(mod5, model, x, fault) >= fmt->desired_raw_fault)
+      break;
+    low = high;
+    high *= 2.0f;
+    CHECK(isfinite(high) && expansion < 31u);
+  }
+  for (unsigned i = 0; i < 32u; ++i) {
+    const float middle = (low + high) * 0.5f;
+    if (middle == low || middle == high)
+      break;
+    for (size_t j = 0; j < ELEMENTS; ++j)
+      fault[j] = normal[j] + middle;
+    if (max_gradient(mod5, model, x, fault) < fmt->desired_raw_fault)
+      low = middle;
+    else
+      high = middle;
+  }
+  for (size_t i = 0; i < ELEMENTS; ++i)
+    fault[i] = normal[i] + high;
+}
+
 static void run_format(const et_kernel_runtime *mod5,
                        const et_kernel_runtime *mp4, const format *fmt) {
   weights baseline, master;
   float x[ELEMENTS], target[ELEMENTS], fault_target[ELEMENTS], dx[ELEMENTS];
   initialize(&baseline, x, target);
   master = baseline;
-  for (size_t i = 0; i < ELEMENTS; ++i)
-    fault_target[i] = fmt->fault_target;
   et_mp4_loss_scaler_v1 scaler;
   CHECK(et_mp4_loss_scaler_init(&scaler, fmt->scale, 2.0f, 0.5f, 100u, 1.0f,
                                 fmt->scale) == ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
 
   unsigned accepted = 0;
+  float fault_peak_scaled = 0.0f;
   for (unsigned attempt = 0; attempt < ACCEPTED_STEPS + 1u; ++attempt) {
     const int fault = attempt == 2u;
+    if (fault)
+      make_fault_target(mod5, &master, x, target, fault_target, fmt);
     weights raw, unscaled;
     const weights before = master;
     const double loss = block_loss(mod5, 2u, &master, x,
                                    fault ? fault_target : target, &raw, dx);
     CHECK(isfinite(loss));
+    if (fault) {
+      float largest_scaled = 0.0f;
+      for (size_t p = 0; p < PARAMETERS; ++p)
+        for (size_t i = 0; i < param_size(p, 2u); ++i) {
+          const float scaled = raw.data[p][i] * scaler.scale;
+          CHECK(isfinite(raw.data[p][i]) && isfinite(scaled));
+          largest_scaled = fmaxf(largest_scaled, fabsf(scaled));
+        }
+      CHECK(largest_scaled > fmt->finite_narrow_limit);
+      fault_peak_scaled = largest_scaled;
+    }
     const uint8_t overflow = store_and_unscale(mp4, fmt, &scaler, &raw,
                                                 &unscaled);
     const float prior_scale = scaler.scale;
     const et_mp4_loss_scaler_status outcome =
         et_mp4_loss_scaler_update(&scaler, overflow != 0u);
     if (fault) {
-      CHECK(overflow == 1u &&
+      CHECK(overflow == GRAD_NARROW_REJECT &&
             outcome == ET_MP4_LOSS_SCALER_OVERFLOW_BACKOFF);
       CHECK(memcmp(&master, &before, sizeof(master)) == 0);
       CHECK(scaler.scale == prior_scale * 0.5f && scaler.clean_steps == 0u);
       continue;
     }
-    CHECK(overflow == 0u && outcome == ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
+    CHECK(overflow == GRAD_CLEAN &&
+          outcome == ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
     weights reference_gradient;
     CHECK(isfinite(block_loss(mod5, 2u, &baseline, x, target,
                               &reference_gradient, dx)));
@@ -185,8 +251,9 @@ static void run_format(const et_kernel_runtime *mod5,
     ++accepted;
   }
   CHECK(accepted == ACCEPTED_STEPS);
-  printf("MP4/MOD5 %s real-gradient storage: PASS (%u updates, overflow "
-         "backoff, recovery)\n", fmt->dtype, accepted);
+  printf("MP4/MOD5 %s real-gradient storage: PASS (%u updates, finite "
+         "scaled cast rejection at %.9g, backoff, recovery)\n",
+         fmt->dtype, accepted, fault_peak_scaled);
 }
 
 int main(void) {
