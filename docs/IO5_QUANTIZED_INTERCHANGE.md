@@ -155,7 +155,7 @@ Ubuntu 22.04 LLVM 21.1.8 container for the native and GGML checks:
 - The tests cover the merged M3 and decoder mappings, a bare state, framed
   payload checksums, reshape/manifest/byte corruption, invalid scale and
   geometry, explicit Q8_0 fallback, unavailable native library, and an
-  unmerged MOD5 profile request that fails closed.
+  MOD5 profile requests that fail closed despite the separate lossless mapping.
 
 Measured examples from deterministic finite C1 fixtures with the default F32
 Q8_0 fallback:
@@ -179,6 +179,7 @@ Q8_0 fallback:
   4-bit/sub-byte GGML quantizers (`Q4_0`, `Q4_K`, etc.), sharded quantized
   indexes, live runtime dequantized matmul kernels, and GPU execution are
   outside this slice.
-- The merged mapping supports only M3 and decoder profiles. `eshkol-mod5-v1`
-  fails closed until a separately reviewed profile is merged. This work does
-  not add live model ingress or change the lossless C1/IO5 contracts.
+- This quantized tool supports only M3 and decoder profiles. The separate
+  lossless `eshkol-mod5-v1` mapping does not enable quantized MOD5 export,
+  tagged import, or plain external import. This work does not add live model
+  ingress or change the lossless C1/IO5 contracts.

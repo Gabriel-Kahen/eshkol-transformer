@@ -50,6 +50,7 @@ GGUF_QUANTIZATION_VERSION = 2
 SAFETENSORS_STORAGE_DTYPES = ("F16", "BF16")
 GGUF_STORAGE_DTYPES = ("F16", "Q8_0")
 Q8_FALLBACK_DTYPES = ("F32", "F16")
+QUANTIZED_PROFILES = (mapping.M3, mapping.DECODER)
 
 QUANT_VERSION_KEY = "eshkol.io5.quant_version"
 STORAGE_DTYPE_KEY = "eshkol.io5.storage_dtype"
@@ -216,8 +217,13 @@ def _resolve_names(state: State, profile: str | None, scheme: str | None, defaul
     if profile is None:
         require(scheme is None, "--scheme requires --profile")
         return mapping.synthetic_names(state), None
+    _require_quantized_profile(profile)
     chosen_scheme = default_scheme if scheme is None else scheme
     return mapping.mapped_names(state, profile, chosen_scheme), chosen_scheme
+
+
+def _require_quantized_profile(profile: str | None) -> None:
+    require(profile in QUANTIZED_PROFILES, "unsupported quantized profile")
 
 
 def _payload_digest(
@@ -375,6 +381,7 @@ def decode_quantized_safetensors(
         selected_scheme: str | None = None
         if mapping.MAPPING_VERSION in metadata:
             selected_profile, selected_scheme = mapping.selection_from_metadata(metadata, profile, scheme)
+            _require_quantized_profile(selected_profile)
         else:
             require(profile is None and scheme is None, "unmapped quantized safetensors has no profile/scheme")
 
@@ -428,6 +435,7 @@ def decode_quantized_safetensors(
 
     if external:
         require(plain_provider is None, "cannot combine --external with --plain-provider")
+        _require_quantized_profile(profile)
         mapping.check_selection(profile, scheme)
         assert profile is not None and scheme is not None
         safe.text_bytes(provider, 127, "explicit external provider")
@@ -712,6 +720,7 @@ def decode_quantized_gguf(
         selected_scheme: str | None = None
         if mapping.MAPPING_VERSION in metadata:
             selected_profile, selected_scheme = mapping.selection_from_metadata(metadata, profile, scheme)
+            _require_quantized_profile(selected_profile)
         else:
             require(profile is None and scheme is None, "unmapped quantized GGUF has no profile/scheme")
 
@@ -773,6 +782,7 @@ def decode_quantized_gguf(
 
     if external:
         require(plain_provider is None, "cannot combine --external with --plain-provider")
+        _require_quantized_profile(profile)
         mapping.check_selection(profile, scheme)
         assert profile is not None and scheme is not None
         safe.text_bytes(provider, 127, "explicit external provider")
@@ -843,7 +853,7 @@ def main() -> int:
     p_st_exp.add_argument("source", type=Path)
     p_st_exp.add_argument("destination", type=Path)
     p_st_exp.add_argument("--dtype", choices=SAFETENSORS_STORAGE_DTYPES, required=True)
-    p_st_exp.add_argument("--profile", choices=mapping.PROFILES)
+    p_st_exp.add_argument("--profile", choices=QUANTIZED_PROFILES)
     p_st_exp.add_argument("--scheme", choices=mapping.SCHEMES)
     p_st_exp.add_argument("--overwrite", action="store_true")
     _add_limits(p_st_exp)
@@ -851,7 +861,7 @@ def main() -> int:
     p_st_imp = sub.add_parser("safetensors-to-c1")
     p_st_imp.add_argument("source", type=Path)
     p_st_imp.add_argument("destination", type=Path)
-    p_st_imp.add_argument("--profile", choices=mapping.PROFILES)
+    p_st_imp.add_argument("--profile", choices=QUANTIZED_PROFILES)
     p_st_imp.add_argument("--scheme", choices=mapping.SCHEMES)
     p_st_imp.add_argument("--external", action="store_true")
     p_st_imp.add_argument("--provider")
@@ -865,7 +875,7 @@ def main() -> int:
     p_gg_exp.add_argument("destination", type=Path)
     p_gg_exp.add_argument("--dtype", choices=GGUF_STORAGE_DTYPES, required=True)
     p_gg_exp.add_argument("--q8-fallback", choices=Q8_FALLBACK_DTYPES, default="F32")
-    p_gg_exp.add_argument("--profile", choices=mapping.PROFILES)
+    p_gg_exp.add_argument("--profile", choices=QUANTIZED_PROFILES)
     p_gg_exp.add_argument("--scheme", choices=mapping.SCHEMES)
     p_gg_exp.add_argument("--overwrite", action="store_true")
     _add_limits(p_gg_exp)
@@ -873,7 +883,7 @@ def main() -> int:
     p_gg_imp = sub.add_parser("gguf-to-c1")
     p_gg_imp.add_argument("source", type=Path)
     p_gg_imp.add_argument("destination", type=Path)
-    p_gg_imp.add_argument("--profile", choices=mapping.PROFILES)
+    p_gg_imp.add_argument("--profile", choices=QUANTIZED_PROFILES)
     p_gg_imp.add_argument("--scheme", choices=mapping.SCHEMES)
     p_gg_imp.add_argument("--external", action="store_true")
     p_gg_imp.add_argument("--provider")

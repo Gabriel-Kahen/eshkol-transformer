@@ -26,7 +26,7 @@ bijective mapping. Unknown names, wrong segment boundaries and collisions fail.
 | `blocks.i.norm2` | `model.layers.i.post_attention_layernorm` | `blk.i.ffn_norm` | [4] |
 | `blocks.i.ffn.up` | `model.layers.i.mlp.up_proj` | `blk.i.ffn_up` | [8,4] |
 | `blocks.i.ffn.down` | `model.layers.i.mlp.down_proj` | `blk.i.ffn_down` | [4,8] |
-| `blocks.i.ffn.gate` | `model.layers.i.mlp.gate_proj` | `blk.i.ffn_gate` | Decoder only |
+| `blocks.i.ffn.gate` | `model.layers.i.mlp.gate_proj` | `blk.i.ffn_gate` | Absent |
 | `norm_final` | `model.norm` | `output_norm` | [4] |
 | `head` | `lm_head` | `output` | [256,4] |
 
@@ -44,8 +44,18 @@ bijective mapping. Unknown names, wrong segment boundaries and collisions fail.
   Embeddings, projections and the head are rank two. Extents must be positive.
   The profile validates names and ranks independently of architecture-specific
   hidden dimensions, head counts and projection layouts.
-- Both profiles accept parameters only. A head/embedding tie requires both
-  entries and identical shapes and F32 bytes. The decoder retains a C1 tie
+- **`eshkol-mod5-v1`** requires one or more layers and exactly the
+  `token_embedding.weight`, `norm_final.weight` and `head.weight` roots.
+  Every layer requires both RMSNorm weights, the query, key, value and output
+  projection weights, and all three SwiGLU projection weights (`up`, `down`
+  and `gate`). It rejects biases and all learned `position_embedding` paths.
+  Norm weights are rank one. Embedding, head and projection weights are rank
+  two. All extents must be positive. The profile accommodates MQA, GQA and
+  MHA projection shapes. It validates names and ranks and leaves validation
+  of head counts, inter-tensor dimensions, and ALiBi/RoPE configuration to
+  the model runtime.
+- All profiles accept parameters only. A head/embedding tie requires both
+  entries and identical shapes and F32 bytes. Both decoder profiles retain a C1 tie
   when present and preserves distinct entries when C1 has no alias, including
   distinct entries with equal bytes. Other alias groups fail. Wire payloads
   include both tensors even when C1 marks a tie.
@@ -74,7 +84,7 @@ Plain external import requires `--external`, `--profile`, `--scheme` and
 `--provider`. Files carrying any `eshkol.io5.*` metadata fail external import.
 Names must exactly match the selected scheme. The importer creates a C1
 parameter for each tensor, discards other supported metadata, and uses the
-supplied provider spelling. In the decoder profile,
+supplied provider spelling. In both decoder profiles,
 `--tie-head-to-embedding` requests a tie and checks shape and exact bit
 equality. The M3 profile always performs that check and creates its required
 tie. Inputs omitting one of the two tensors fail. The plain import has no
@@ -174,7 +184,7 @@ python3 tools/io5/model_mapping.py c1-to-mapped-gguf input.c1 model.gguf \
   --profile eshkol-m3-v1
 python3 tools/io5/model_mapping.py mapped-gguf-to-c1 model.gguf restored.c1
 python3 tools/io5/model_mapping.py mapped-gguf-to-c1 external.gguf imported.c1 \
-  --external --profile eshkol-decoder-v1 --scheme gguf --provider i2-dense-cpu-f32-v1 \
+  --external --profile eshkol-mod5-v1 --scheme gguf --provider i2-dense-cpu-f32-v1 \
   --tie-head-to-embedding
 python3 tools/io5/model_mapping.py c1-to-sharded-safetensors input.c1 output/model.safetensors.index.json \
   --profile eshkol-m3-v1 --scheme huggingface --max-shard-bytes 4200
@@ -198,3 +208,6 @@ packages are used only in these development tests.
 The native GGML witness also reads and rewrites a mapped decoder file. It checks
 the literal names, reversed dimensions and F32 bytes through GGML, then checks
 that the rewritten file restores the complete C1 bytes and head/embedding tie.
+
+The [live C1 gate](IO5_LIVE_C1_INTEROP.md) covers compiled write and reload
+through the fixed M3 profile and the unmapped and sharded formats.
