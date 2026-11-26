@@ -67,35 +67,33 @@ int main(int argc, char **argv) {
   }
   input.length = 1024;
   memset(output.bytes, 0xa5, sizeof(output.bytes));
-  CHECK(et_c2_private_model_sha256_v1(&input, 55, &output) == 0);
-  CHECK(matches(output.bytes, cases[2].hex));
-
-  memset(output.bytes, 0xa5, sizeof(output.bytes));
   CHECK(et_c2_private_model_sha256_v1(NULL, 0, &output) == 1);
   CHECK(et_c2_private_model_sha256_v1(&input, 0, NULL) == 1);
   CHECK(et_c2_private_model_sha256_v1(&input, -1, &output) == 1);
+  CHECK(et_c2_private_model_sha256_v1(&input, 55, &output) == 1);
   CHECK(et_c2_private_model_sha256_v1(&input, 1025, &output) == 1);
   output.length = 31;
-  CHECK(et_c2_private_model_sha256_v1(&input, 32, &output) == 1);
+  CHECK(et_c2_private_model_sha256_v1(&input, 1024, &output) == 1);
   output.length = 33;
-  CHECK(et_c2_private_model_sha256_v1(&input, 32, &output) == 1);
+  CHECK(et_c2_private_model_sha256_v1(&input, 1024, &output) == 1);
   output.length = 32;
   input.length = -1;
   CHECK(et_c2_private_model_sha256_v1(&input, 0, &output) == 1);
   input.length = INT64_MAX;
   CHECK(et_c2_private_model_sha256_v1(&input, INT64_MAX, &output) == 1);
-  input.length = 1024;
+  input.length = 32;
   before_alias = input;
   CHECK(et_c2_private_model_sha256_v1(&input, 32, &input) == 1);
   CHECK(memcmp(&input, &before_alias, sizeof(input)) == 0);
+  input.length = 1024;
   memcpy(input.bytes + 8, &output.length, sizeof(output.length));
   before_alias = input;
-  CHECK(et_c2_private_model_sha256_v1(&input, 32, input.bytes + 8) == 1);
+  CHECK(et_c2_private_model_sha256_v1(&input, 1024, input.bytes + 8) == 1);
   CHECK(memcmp(&input, &before_alias, sizeof(input)) == 0);
   /* An output in the input tail is still an alias of the owned bytevector. */
   memcpy(input.bytes + 600, &output.length, sizeof(output.length));
   before_alias = input;
-  CHECK(et_c2_private_model_sha256_v1(&input, 32, input.bytes + 600) == 1);
+  CHECK(et_c2_private_model_sha256_v1(&input, 1024, input.bytes + 600) == 1);
   CHECK(memcmp(&input, &before_alias, sizeof(input)) == 0);
   for (i = 0; i < sizeof(output.bytes); ++i) CHECK(output.bytes[i] == 0xa5);
   CHECK(output.length == 32);

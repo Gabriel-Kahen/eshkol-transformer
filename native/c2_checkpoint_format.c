@@ -137,7 +137,7 @@ static void sha256_final(sha256_state *state, uint8_t digest[32]) {
   }
 }
 
-/* Private Eshkol bytevector bridge. The caller owns both live objects. */
+/* Private whole-bytevector bridge. The caller owns both live objects. */
 int64_t et_c2_private_model_sha256_v1(const void *input_bv,
                                       int64_t input_bytes, void *digest_bv) {
   int64_t input_length, digest_length;
@@ -147,15 +147,17 @@ int64_t et_c2_private_model_sha256_v1(const void *input_bv,
   uint8_t digest[32];
   if (input_bv == NULL || digest_bv == NULL || input_bytes < 0)
     return 1;
+  input_start = (uintptr_t)input_bv;
+  digest_start = (uintptr_t)digest_bv;
+  if (input_start > UINTPTR_MAX - sizeof(input_length) ||
+      digest_start > UINTPTR_MAX - sizeof(digest_length))
+    return 1;
   memcpy(&input_length, input_bv, sizeof(input_length));
   memcpy(&digest_length, digest_bv, sizeof(digest_length));
-  if (input_length < 0 || digest_length != 32 ||
-      input_bytes > input_length ||
+  if (input_bytes != input_length || digest_length != 32 ||
       (uint64_t)input_bytes > UINT64_MAX / UINT64_C(8) ||
       (uint64_t)input_length > SIZE_MAX - sizeof(input_length))
     return 1;
-  input_start = (uintptr_t)input_bv;
-  digest_start = (uintptr_t)digest_bv;
   input_span = sizeof(input_length) + (size_t)input_length;
   digest_span = sizeof(digest_length) + 32u;
   if (input_span > UINTPTR_MAX - input_start ||

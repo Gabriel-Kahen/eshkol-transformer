@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 verify_toolchain
-for command in cc cmp python3 realpath sha256sum tail; do require_command "${command}"; done
+for command in cc cmp grep python3 realpath sha256sum tail; do require_command "${command}"; done
 [[ $# == 1 ]] || die "usage: $0 DISK_BACKED_EVIDENCE_DIR"
 evidence="$(realpath -m -- "$1")"
 mkdir -p -- "${evidence}"
@@ -48,6 +48,9 @@ cmp "${PROJECT_ROOT}/native/cli3_generate_public_exports.txt" \
   "${scratch}/cli3.o.evidence/package-exports.txt"
 cmp "${PROJECT_ROOT}/native/cli3_generate_undefined_symbols.txt" \
   "${scratch}/cli3.o.evidence/undefined.txt"
+grep -Eq '[[:space:]]LOCAL[[:space:]].*[[:space:]]et_c2_private_model_sha256_v1$' \
+  "${scratch}/cli3.o.evidence/readelf-symbols.txt" || \
+  die "CLI3 aggregate must localize the private model SHA-256 helper"
 sha256sum "${scratch}/eshkol-transformer" >"${evidence}/binary-before.sha256"
 cat >"${scratch}/config.json" <<'JSON'
 {"config-schema-major":1,"config-schema-minor":0,"model.context-length":2,"model.hidden-size":4,"model.layer-count":1,"model.query-head-count":2,"model.vocabulary-size":256,"run.seed":1729,"training.accumulation-steps":2}

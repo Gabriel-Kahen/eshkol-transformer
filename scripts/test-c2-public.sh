@@ -51,6 +51,9 @@ for evidence_name in "${evidence_names[@]}"; do
   [[ -s "${evidence}/${evidence_name}" ]] || \
     die "C2 aggregate evidence omits ${evidence_name}"
 done
+grep -Eq '[[:space:]]LOCAL[[:space:]].*[[:space:]]et_c2_private_model_sha256_v1$' \
+  "${evidence}/readelf-symbols.txt" || \
+  die "C2 aggregate must localize the private model SHA-256 helper"
 
 manifest_pairs=(
   c2_wave2_defined_symbols.txt:global-defined.txt

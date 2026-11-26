@@ -39,9 +39,23 @@ fi
   -I "${PROJECT_ROOT}/native" \
   "${PROJECT_ROOT}/tests/c2/c2_format_header_cpp.cpp" \
   -o "${temporary_dir}/header-cpp"
+"${cc}" "${cflags[@]}" "${sources[@]}" \
+  "${PROJECT_ROOT}/tests/c2/c2_model_sha_unit.c" \
+  -o "${temporary_dir}/model-sha"
+for source in "${sources[@]}"; do
+  "${cc}" "${cflags[@]}" -c "${source}" \
+    -o "${temporary_dir}/$(basename "${source}" .c).o"
+done
+"${cxx}" -std=c++17 -Wall -Wextra -Werror -Wpedantic \
+  "${PROJECT_ROOT}/tests/c2/c2_model_sha_cpp.cpp" \
+  "${temporary_dir}/c2_checkpoint_format.o" \
+  "${temporary_dir}/c2_x1_canonical.o" -o "${temporary_dir}/model-sha-cpp"
 
 "${temporary_dir}/unit"
 "${temporary_dir}/header-cpp"
+"${temporary_dir}/model-sha-cpp"
+python3 "${PROJECT_ROOT}/tests/c2/test_c2_model_sha.py" \
+  "${temporary_dir}/model-sha"
 timeout --foreground --signal=TERM --kill-after=5s 60s \
   python3 "${PROJECT_ROOT}/tests/c2/test_checkpoint_format.py" \
   "${temporary_dir}/driver"
@@ -60,8 +74,15 @@ cmp "${temporary_dir}/fixture-a.c2" "${temporary_dir}/fixture-b.c2"
   -fno-omit-frame-pointer "${sources[@]}" \
   "${PROJECT_ROOT}/tests/c2/c2_format_driver.c" \
   -o "${temporary_dir}/driver-sanitized"
+"${cc}" "${cflags[@]}" -O1 -fsanitize=address,undefined \
+  -fno-omit-frame-pointer "${sources[@]}" \
+  "${PROJECT_ROOT}/tests/c2/c2_model_sha_unit.c" \
+  -o "${temporary_dir}/model-sha-sanitized"
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   "${temporary_dir}/unit-sanitized"
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+  python3 "${PROJECT_ROOT}/tests/c2/test_c2_model_sha.py" \
+  "${temporary_dir}/model-sha-sanitized"
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
   timeout --foreground --signal=TERM --kill-after=5s 90s \
   python3 "${PROJECT_ROOT}/tests/c2/test_checkpoint_format.py" \
