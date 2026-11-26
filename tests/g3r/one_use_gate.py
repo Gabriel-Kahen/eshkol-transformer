@@ -31,6 +31,11 @@ MEM_KIB, SWAP_KIB, DISK_BYTES = 16 * 1024**2, 8 * 1024**2, 32 * 1024**3
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+SAVE_APP_CALL = re.compile(
+    rb'(?m)^[ \t]*%[A-Za-z0-9._-]+[ \t]*=[ \t]*call[ \t]+'
+    rb'%eshkol_tagged_value[ \t]+@"checkpoint-save!"\(')
+SAVE_NATIVE_CALL = re.compile(
+    rb'(?m)^[ \t]*call void @et_e1b_public_c2_checkpoint_save_v1\(')
 
 
 class Hold(RuntimeError):
@@ -634,9 +639,11 @@ def validate_evidence(inputs: Inputs) -> dict[str, str]:
         base = out / "authentic-save"
         for rel in ("no-save/program", "producer/program", "private-normal/pair-file-reader", "private-sanitize/pair-file-reader"):
             elf(base / rel)
-        call = b"et_e1b_public_c2_checkpoint_save_v1"
-        require(call in read_file(base / "producer/program.ll")
-                and call not in read_file(base / "no-save/program.ll"), "SAVE call/no-SAVE IR identity")
+        producer_ir = read_file(base / "producer/program.ll")
+        control_ir = read_file(base / "no-save/program.ll")
+        require(SAVE_NATIVE_CALL.search(producer_ir), "SAVE native bridge call")
+        require(SAVE_APP_CALL.search(producer_ir) and not SAVE_APP_CALL.search(control_ir),
+                "SAVE application call/no-SAVE IR identity")
         saved, companion = read_file(base / "roundtrip.c2"), read_file(base / "companions/valid.g3r")
         require(0 < len(saved) <= 1048576 and saved == read_file(base / "seed/valid.c2"), "fresh C2 SAVE bytes")
         require(len(saved) >= 288 and saved[:16] == bytes.fromhex("894553484b54524e53544154450d0a00")

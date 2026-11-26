@@ -67,11 +67,16 @@ compile_public() {
 }
 compile_public no-save "$PROJECT_ROOT/tests/g3r/public_without_save.esk"
 compile_public producer "$PROJECT_ROOT/tests/c2/public_runtime.esk"
-rg 'et_e1b_public_c2_checkpoint_save_v1' \
-  "$out/producer/program.ll" >"$out/producer/save-call-ir.txt"
-if rg 'et_e1b_public_c2_checkpoint_save_v1' \
+save_app_call='^[[:space:]]*%[A-Za-z0-9._-]+[[:space:]]*=[[:space:]]*call[[:space:]]+%eshkol_tagged_value[[:space:]]+@"checkpoint-save!"\('
+rg -n "$save_app_call" \
+  "$out/producer/program.ll" >"$out/producer/save-call-ir.txt" || \
+  die "public SAVE producer has no application call"
+rg -n '^[[:space:]]*call void @et_e1b_public_c2_checkpoint_save_v1\(' \
+  "$out/producer/program.ll" >"$out/producer/native-save-bridge-ir.txt" || \
+  die "public SAVE producer has no native bridge call"
+if rg -n "$save_app_call" \
     "$out/no-save/program.ll" >"$out/no-save/unexpected-save-ir.txt"; then
-  die "missing-SAVE control unexpectedly references public SAVE"
+  die "missing-SAVE control unexpectedly calls public SAVE"
 fi
 
 saved="$out/roundtrip.c2"

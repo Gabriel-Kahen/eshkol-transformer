@@ -2447,7 +2447,7 @@ compiled LOAD/release control without SAVE that must leave the output absent.
 It derives G3RCV1 companions from the retained saved bytes and invokes the
 existing private file reader against that image in normal, repeat and
 sanitizer modes. Source and host checks are complete; the compiled gate is
-unrun and does not establish restored model or public continuation.
+not accepted and does not establish restored model or public continuation.
 
 The frozen `4d319644` one-use REPLAY completed, but its separate SAVE stopped
 at the C2 native source-closure check before producing a saved roundtrip. A
@@ -2455,6 +2455,14 @@ source-only successor projects four authenticated Eshkol headers from the
 external pinned dependency mount into the existing 53-path C2 manifest. An
 exact-image Clang 21 dependency probe matches that manifest in order; a fresh
 one-use SAVE and independent result review remain required.
+
+The repaired `5bdf7ee7` SAVE passed C2 archive/source inventory and both
+public AOT builds, then stopped at an overbroad no-SAVE IR substring check:
+the imported persistence module emits its native SAVE wrapper in both programs.
+A source-only successor checks direct application `checkpoint-save!` calls,
+which occur twice in the producer IR and not in the no-SAVE control IR, while
+still requiring the producer's native bridge call. Compiled no-SAVE absence,
+fresh SAVE bytes and private reader modes remain unverified in that attempt.
 
 The source-only current-main union of these G3-R leaves starts from the
 reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf

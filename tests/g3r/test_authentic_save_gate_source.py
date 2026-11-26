@@ -1,5 +1,7 @@
 """Source checks for the prepared authentic SAVE producer gate."""
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 
 from tests.c2.test_handler_order import parse
@@ -41,8 +43,10 @@ def verify(gate: str, producer: str, control: str) -> None:
     if -1 in positions or positions != sorted(positions):
         raise ValueError("SAVE provenance and private-reader gate order changed")
     for marker in ("et_e1b_public_c2_checkpoint_save_v1",
+                   'call[[:space:]]+%eshkol_tagged_value',
                    "et_c2_private_checkpoint_load_stage_with_sha_v1",
                    '"$out/producer/program.ll" >"$out/producer/save-call-ir.txt"',
+                   '"$out/producer/program.ll" >"$out/producer/native-save-bridge-ir.txt"',
                    '"$out/no-save/program.ll" >"$out/no-save/unexpected-save-ir.txt"',
                    'build_reader normal', 'build_reader sanitize',
                    'cmp "$out/private-normal/run.stdout" "$out/private-normal/repeat.stdout"',
@@ -67,6 +71,30 @@ class AuthenticSaveGateSourceTest(unittest.TestCase):
             verify(gate, producer, control.replace("checkpoint-load", "load", 1))
         with self.assertRaises(ValueError):
             verify(gate, producer.replace("checkpoint-save!", "save", 1), control)
+
+    def test_application_ir_probe_distinguishes_imported_wrapper(self):
+        gate = GATE.read_text()
+        probe = "save_app_call=" + gate.split("save_app_call=", 1)[1].split("\nsaved=", 1)[0]
+        script = ('set -euo pipefail; die() { echo "$*" >&2; exit 1; }; '
+                  'out=$1; ' + probe)
+        native = '  call void @et_e1b_public_c2_checkpoint_save_v1(ptr %27)\n'
+        app = '  %9 = call %eshkol_tagged_value @"checkpoint-save!"(%eshkol_tagged_value %owner)\n'
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            (out / "producer").mkdir()
+            (out / "no-save").mkdir()
+            def run(producer_ir, control_ir):
+                (out / "producer/program.ll").write_text(producer_ir)
+                (out / "no-save/program.ll").write_text(control_ir)
+                return subprocess.run(["bash", "-c", script, "probe", str(out)],
+                                      capture_output=True, text=True)
+            self.assertEqual(run(native + app, native).returncode, 0)
+            self.assertEqual((out / "producer/save-call-ir.txt").read_text().count("checkpoint-save!"), 1)
+            self.assertEqual((out / "producer/native-save-bridge-ir.txt").read_text().count("et_e1b_public_c2_checkpoint_save_v1"), 1)
+            self.assertEqual((out / "no-save/unexpected-save-ir.txt").read_text(), "")
+            self.assertNotEqual(run(native, native).returncode, 0)
+            self.assertNotEqual(run(native + app, native + app).returncode, 0)
+            self.assertNotEqual(run(app, native).returncode, 0)
 
 
 if __name__ == "__main__":
