@@ -22,3 +22,20 @@ pinned compiler instead compares it with the differently typed C thunk and
 rejects before IR publication. A reviewed upstream fix and a genuine linked
 package, bridge, localization and hostile-link gate must precede public TR3
 exports.
+
+## Supported reference fixture
+
+The maintained runtime witness uses `tests/tr3_snapshot/runtime_smoke.esk` to
+construct an independent C2 reference state. Its `record-controls` helper
+projects the lease record's three-field tokenizer identity to C2's two-field
+`(fingerprint vocabulary-size)` control. The lease record and production
+snapshot path retain their existing contracts. The historical unprojected
+fixture remains in its sealed evidence directory. A separate supported
+fe9/LLVM 21.1.8 scratch replay of this exact projection on C2 candidate
+`e3280e3b` passed all 151 private-root checks. A fresh replay of the
+maintained fixture at `26fe11ca` on the same supported toolchain also passed
+151 checks, including exact C2 bytes, SAVE/LOAD, and live result-cell restore.
+The staged source matches the scratch witness after removing diagnostic
+wrappers, with identical corpus inputs and assertion labels. Compilation
+took 2:08.56 at 5,514,468 KiB peak RSS. Full package and hosted CI
+qualification remain open.

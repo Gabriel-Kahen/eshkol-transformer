@@ -117,7 +117,9 @@
 (define (record-controls tuple record)
   (vector
     (vector-ref record 18)
-    (vector-ref record 7)
+    (let ((live-tokenizer (vector-ref record 7)))
+      (vector (vector-ref live-tokenizer 0)
+              (vector-ref live-tokenizer 1)))
     (vector (d2-token-dataset-cursor (vector-ref tuple 2))
             (vector-ref record 17))
     (vector (string->utf8
