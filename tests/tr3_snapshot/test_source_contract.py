@@ -127,6 +127,18 @@ class SnapshotComposerContract(unittest.TestCase):
         ):
             self.assertIn(witness, RUNTIME)
 
+    def test_reference_controls_project_c2_tokenizer_identity(self) -> None:
+        controls = RUNTIME.split("(define (record-controls tuple record)", 1)[1].split(
+            "(define (compose-owner tuple controls)", 1
+        )[0]
+        self.assertIn("(let ((live-tokenizer (vector-ref record 7)))", controls)
+        self.assertIn(
+            "(vector (vector-ref live-tokenizer 0)\n"
+            "              (vector-ref live-tokenizer 1))",
+            controls,
+        )
+        self.assertNotIn("(vector-ref live-tokenizer 2)", controls)
+
     def test_private_root_has_one_identity_universe(self) -> None:
         self.assertEqual(ROOT_ESK.count('(load "d2_wave2_root.esk")'), 1)
         self.assertEqual(ROOT_ESK.count('(load "c2_training_state_extension.esk")'), 1)
