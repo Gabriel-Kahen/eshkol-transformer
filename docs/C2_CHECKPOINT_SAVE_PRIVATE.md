@@ -99,3 +99,26 @@ rebuilds, the installed save/load/release calls, arity and private-binding
 negatives, and the retention check. The built archive retained the exact
 81 global definitions, 75 package exports, 81 name strings, and 162 original
 undefined symbols. Its SHA-256 bridge is local and hidden.
+
+### Matched joint fixture measurement
+
+The native candidate `e3280e3b` and a scalar control `9a26cf32` ran the
+same one-compiler joint checkpoint fixture in fresh scratch directories on
+the same host under a continuous build reservation. The control differs
+only in the explicit digest callback. Both passed all 26 assertions and
+wrote two 16 MiB outputs identical to the original fixture.
+
+| Measure | Native candidate | Scalar control |
+| --- | ---: | ---: |
+| Joint runtime | 140.908 s | 880.920 s |
+| Peak runtime RSS | 278,840 KiB | 231,096 KiB |
+| Retained runtime RSS | 125,640 KiB | 22,652 KiB |
+| Command elapsed including AOT | 4m19.50s | 16m38.56s |
+
+The joint fixture ran 6.25 times as fast with the native callback and used
+47,744 KiB more peak runtime RSS. Both arms stayed below the existing
+524,288 KiB runtime ceiling. The native arm ran first. A single pair with
+uncontrolled background host activity measures this fixture only.
+The sealed receipt `c2-sha-matched-pair-e3280e3-20261126` records exact
+inputs and outputs. Its `SHA256SUMS` digest is
+`744c1ab759c08cbc24ea0f75b7099f7a39e16e5cf43878cc8b9c96217304541f`.
