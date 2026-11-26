@@ -42,9 +42,18 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   Each has a separate cache/output/depfile/log path; timing lines retain their
   format. The heavy pair requires 8 GiB available memory headroom, while the
   169de76c serial peaks for those tasks were 2,784,368 and 3,008,724 KiB.
-  Mock overlap, failure-status and child cleanup checks pass. The full suite
-  has not been rerun with this option; deterministic output, actual concurrent
-  peak RSS, and any speedup remain unqualified.
+  Mock overlap, failure-status and child cleanup checks pass. The exact
+  `8923e368` tree passed one isolated, network-disabled Ubuntu 22.04.5 / Clang
+  21.1.8 `parameter-state` run with `P1_TWO_COMPILERS=1` and the same pinned
+  compiler, build cache, limits, and sanitizer settings as the serial case.
+  Both repeats, byte comparisons, sanitizer checks, negatives, and registry
+  proof passed. The suite took 76m19s, including a 57m27s deterministic compile
+  matrix, versus 96m08s and 76m42s in the serial local run. The sampled peak
+  container-process RSS sum was 4,667,904 KiB; cgroup memory.peak was
+  4,797,132,800 bytes. These are container-wide observations, not a compiler-only
+  or serial-memory comparison. Host contention and initial memory differed, so
+  this one local comparison is not a hosted speedup claim. Exact receipt:
+  `/home/gabe/.codex/evidence/eshkol-p1-two-compiler-exact-20261125/SHA256SUMS`.
 
 ## Parallel execution strategy
 
