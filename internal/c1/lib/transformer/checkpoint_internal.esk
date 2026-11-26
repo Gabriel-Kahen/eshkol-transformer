@@ -359,6 +359,23 @@
                  "checkpoint SHA callback returned a malformed digest"))
     digest))
 
+;;; A C2-private tagged callback receives the same preimage as ordered spans.
+;;; Ordinary procedure callbacks still receive one assembled bytevector.
+(define (c1-private-span-sha? sha)
+  (and (vector? sha) (= (vector-length sha) 2)
+       (eq? (vector-ref sha 0) 'c1-private-span-sha)
+       (procedure? (vector-ref sha 1))))
+
+(define (c1-encode-digest-parts sha parts operation)
+  (if (c1-private-span-sha? sha)
+      (let ((digest ((vector-ref sha 1) parts)))
+        (if (or (not (bytevector? digest))
+                (not (= (bytevector-length digest) c1-checksum-bytes)))
+            (c1-fail 'internal operation
+                     "checkpoint SHA callback returned a malformed digest"))
+        digest)
+      (c1-encode-digest sha (c1-concat parts) operation)))
+
 (define (c1-build-record descriptor sha operation)
   (let* ((path (vector-ref descriptor 0))
          (shape (vector-ref descriptor 2))
@@ -385,9 +402,8 @@
             (c1-write-u64! record offset (car remaining))
             (dims (cdr remaining) (+ offset 8)))))
     (c1-copy-into! record (+ c1-record-prefix-bytes (* rank 8)) path-bytes)
-    (let ((digest (c1-encode-digest
-                   sha (c1-concat (list c1-tensor-domain record payload))
-                   operation)))
+    (let ((digest (c1-encode-digest-parts
+                   sha (list c1-tensor-domain record payload) operation)))
       (c1-copy-into! record 48 digest))
     record))
 
@@ -558,9 +574,8 @@
               (c1-write-u16! header 96 2)
               (c1-write-u16! header 98 0)
               (let* ((unsigned (c1-concat (list header metadata payload)))
-                     (digest (c1-encode-digest
-                               sha (c1-concat
-                                     (list c1-container-domain unsigned))
+                     (digest (c1-encode-digest-parts
+                               sha (list c1-container-domain unsigned)
                                operation)))
                 (c1-concat (list unsigned digest)))))
           (let* ((descriptor (c1-entry-descriptor
@@ -628,7 +643,7 @@
       (c1-fail 'invalid-argument
                'c1-checkpoint-encode-c2-owned-state-with-sha-internal
                "C2 model encode operation must be a symbol"))
-  (if (not (procedure? sha))
+  (if (not (or (procedure? sha) (c1-private-span-sha? sha)))
       (c1-fail 'invalid-argument operation
                "C2 model SHA callback must be a procedure"))
   (let ((projection

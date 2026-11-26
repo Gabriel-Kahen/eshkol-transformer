@@ -1,0 +1,98 @@
+;;; Appended before the ordinary model-encode witness releases its live state.
+(define span-owned-state (module-state-dict module))
+(define span-owner-token (vector 'c2-span-owner))
+(define span-access-token (vector 'c2-span-access))
+(define span-borrow (vector #f #f #f #f #f (vector #f #f #f #f #f)))
+(check "span witness claims detached P1 state"
+       (state-dict-claim-c2-internal! span-owned-state span-owner-token))
+(check "span witness activates C2 borrow"
+       (state-dict-c2-owned-borrow-activate-internal!
+         span-owned-state span-owner-token span-access-token span-borrow
+         'checkpoint-save!))
+
+(define span-calls 0)
+(define span-encoded
+  (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+    span-owned-state span-access-token policy c2-model-checkpoint-codec-internal
+    (vector 'c1-private-span-sha
+      (lambda (parts)
+        (set! span-calls (+ span-calls 1))
+        (let ((count (c1-list-length-bounded parts 4)))
+          (check "C1 supplies three tensor or two container SHA spans"
+                 (if (= span-calls 4) (= count 2) (= count 3)))
+          (check "C1 supplies the exact domain bytes"
+                 (c1-bytes=? (car parts)
+                   (if (= count 2)
+                       (bytevector 101 115 104 107 111 108 45 99 104 101
+                         99 107 112 111 105 110 116 45 99 111 110 116 97
+                         105 110 101 114 45 118 49 0)
+                       (bytevector 101 115 104 107 111 108 45 99 104 101
+                         99 107 112 111 105 110 116 45 116 101 110 115
+                         111 114 45 118 49 0))))
+          (if (= count 3)
+              (let ((record (car (cdr parts))))
+                (check "C1 tensor digest slot is zero before SHA"
+                       (let loop ((index 48))
+                         (if (= index 80) #t
+                             (and (= (bytevector-u8-ref record index) 0)
+                                  (loop (+ index 1))))))))
+          (c2-model-sha256-spans-experiment parts))))
+    'checkpoint-save!))
+(check "span delegate called for three tensors and container" (= span-calls 4))
+(check "span delegate preserves exact C1 checkpoint bytes"
+       (c1-bytes=? reference span-encoded))
+(check "opt-in C2 composition preserves exact C1 checkpoint bytes"
+       (c1-bytes=? reference
+         (c2-model-encode-c2-owned-state-spans-experiment-internal
+           span-owned-state span-access-token policy 'checkpoint-save!)))
+
+(define span-failure-calls 0)
+(define span-failure
+  (guard (caught (#t caught))
+    (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+      span-owned-state span-access-token policy c2-model-checkpoint-codec-internal
+      (vector 'c1-private-span-sha
+        (lambda (parts)
+          (set! span-failure-calls (+ span-failure-calls 1))
+          (raise 'c2-span-original-failure)))
+      'checkpoint-save!)
+    #f))
+(check "span delegate retains original exception"
+       (eq? span-failure 'c2-span-original-failure))
+(check "span delegate failure has no retry" (= span-failure-calls 1))
+(define span-container-failure-calls 0)
+(define span-container-failure
+  (guard (caught (#t caught))
+    (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+      span-owned-state span-access-token policy c2-model-checkpoint-codec-internal
+      (vector 'c1-private-span-sha
+        (lambda (parts)
+          (set! span-container-failure-calls
+                (+ span-container-failure-calls 1))
+          (if (= span-container-failure-calls 4)
+              (raise 'c2-span-container-failure)
+              (c2-model-sha256-spans-experiment parts))))
+      'checkpoint-save!)
+    #f))
+(check "container span delegate retains original exception"
+       (eq? span-container-failure 'c2-span-container-failure))
+(check "container span delegate failure has no retry"
+       (= span-container-failure-calls 4))
+(expect-error "span delegate malformed digest keeps C1 error" 'internal
+              'checkpoint-save!
+  (lambda ()
+    (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+      span-owned-state span-access-token policy c2-model-checkpoint-codec-internal
+      (vector 'c1-private-span-sha (lambda (parts) #f))
+      'checkpoint-save!)))
+(check "span failures leave tensor access inactive"
+       (equal? (vector-ref span-borrow 5) (vector #f #f #f #f #f)))
+(check "span witness deactivates C2 borrow"
+       (state-dict-c2-owned-borrow-deactivate-internal!
+         span-owned-state span-owner-token span-access-token span-borrow
+         'checkpoint-save!))
+(check "span witness returns state to live ownership"
+       (state-dict-claim-c2-rollback-internal!
+         span-owned-state span-owner-token))
+(check "span witness releases detached state"
+       (state-dict-release! span-owned-state))

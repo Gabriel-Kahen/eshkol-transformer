@@ -1,0 +1,33 @@
+;;; Opt-in C2-owned C1 digest delegate. Loaded only by the composition gate.
+(extern i64 c2-span-native-sha256 ptr i64 ptr i64 ptr i64 ptr
+        :real et_c2_private_model_sha256_spans_experiment_v1)
+
+(define c2-span-empty (make-bytevector 0 0))
+
+(define (c2-model-sha256-spans-experiment parts)
+  (let ((count (c1-list-length-bounded parts 4)))
+    (if (not (and count (or (= count 2) (= count 3))
+                  (bytevector? (car parts))
+                  (bytevector? (car (cdr parts)))
+                  (or (= count 2)
+                      (bytevector? (car (cdr (cdr parts)))))))
+        (i2-fail 'internal 'c2-model-checkpoint-sha256
+                 "private C2 model SHA spans are malformed"))
+    (let* ((first (car parts))
+           (second (car (cdr parts)))
+           (third (if (= count 3) (car (cdr (cdr parts))) c2-span-empty))
+           (digest (make-bytevector 32 0)))
+      (if (not (= (c2-span-native-sha256
+                    first (bytevector-length first)
+                    second (bytevector-length second)
+                    third (bytevector-length third) digest) 0))
+          (i2-fail 'internal 'c2-model-checkpoint-sha256
+                   "native C2 model SHA spans rejected its bytevector inputs"))
+      digest)))
+
+(define (c2-model-encode-c2-owned-state-spans-experiment-internal
+          state owner-token policy operation)
+  (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+    state owner-token policy c2-model-checkpoint-codec-internal
+    (vector 'c1-private-span-sha c2-model-sha256-spans-experiment)
+    operation))
