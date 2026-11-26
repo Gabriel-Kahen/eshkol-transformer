@@ -342,3 +342,8 @@ its verified `SHA256SUMS` digest is
 This replay proves the corrected fixed development witness, not an independent
 second build of the same source, live C contamination audit, benchmark manifest,
 external evaluation, training, or production runtime behavior.
+
+A second network-disabled Ubuntu container independently replayed the
+corrected executable. Its score and all three rejection outputs matched
+the sealed run byte for byte. The invalid C1 shape, C1 identity and D1
+manifest identity cases each exited with status 2.

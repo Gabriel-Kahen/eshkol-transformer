@@ -159,8 +159,8 @@ Between the second and third accepted updates, a deterministic target offset
 is calibrated against the real MOD5 gradient maximum. For f16, the scaled
 gradient exceeds 65,504; for bf16, it exceeds the finite-to-infinity rounding
 boundary `0x1.ffp127f`. The witness separately checks that every active raw gradient
-and every scaled f32 value is finite. MP4 narrowing rejects the out-of-range
-tile in each format, rather than receiving an f32 infinity. The optimized and
+and every scaled f32 value is finite. MP4 narrowing rejects a finite out-of-range
+tile in each format. The optimized and
 sanitized gates both measured peak scaled values of 70,400 (f16) and
 `3.3995006e38` (bf16). The scaler backs off by half, all master parameters
 remain byte-identical, and the next normal attempt succeeds. The opt-in gate
