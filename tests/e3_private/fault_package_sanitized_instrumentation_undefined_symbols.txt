@@ -1,7 +1,11 @@
 __asan_after_dynamic_init
+__asan_alloca_poison
+__asan_allocas_unpoison
 __asan_before_dynamic_init
 __asan_handle_no_return
 __asan_init
+__asan_load1
+__asan_load8
 __asan_memcpy
 __asan_memmove
 __asan_memset
@@ -33,6 +37,10 @@ __asan_stack_malloc_5
 __asan_stack_malloc_6
 __asan_stack_malloc_7
 __asan_stack_malloc_8
+__asan_store1
+__asan_store2
+__asan_store4
+__asan_store8
 __asan_unregister_elf_globals
 __asan_version_mismatch_check_v8
 __start_asan_globals
