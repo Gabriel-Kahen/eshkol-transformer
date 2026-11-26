@@ -29,7 +29,8 @@ joint SAVEs each build the model twice, so the span arm skips 378 temporary
 preimage allocations totaling 201,302,880 bytes. These are cumulative
 allocation sizes, not concurrent live bytes or an
 RSS estimate. The tensor payload copies, model image, outer SAVE allocation,
-writer snapshot, and other C1 concatenations remain.
+writer snapshot, and other C1 concatenations remain. The recipe asserts these
+exact per-model and six-build totals against its generated joint fixture.
 
 Light source checks:
 
@@ -37,6 +38,7 @@ Light source checks:
 PYTHONDONTWRITEBYTECODE=1 python3 -B tests/c2/test_c2_sha_span_save_trial.py --check
 PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.q0.test_python_isolation
 bash -n scripts/launch-c2-sha-span-save-trial.sh
+PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests.c2.test_c2_sha_span_save_receipt
 ```
 
 After an orchestrator-assigned build slot and host resource check, the exact
@@ -60,6 +62,9 @@ only measured numeric fields, records per-arm hashes, and seals logs. Raw
 stdout remains in the evidence. Order is fixed, one run per arm;
 host activity and cache state remain possible confounders. A pass would be a
 fixture-local observation, not a production dispatch or full C2 admission.
+Exit 0 requires a nonempty checksum manifest and a successful
+`sha256sum -c`; an existing trial failure keeps its original exit code even
+when evidence sealing also fails.
 
 Before integration, review the selector and staged script transformations,
 run the supported C1/C2 package and joint operational gates on an exact

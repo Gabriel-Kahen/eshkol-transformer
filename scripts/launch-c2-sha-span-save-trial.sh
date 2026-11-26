@@ -51,14 +51,24 @@ snapshot() {
   } > "$evidence/host-$label.txt"
 }
 finish() {
-  local rc=$?
+  local trial_rc=$? receipt_rc=0
   trap - EXIT
-  printf 'end_utc=%s\nexit=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$rc" >> "$evidence/run-status.txt"
+  if ! printf 'end_utc=%s\nexit=%s\n' \
+      "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$trial_rc" \
+      >> "$evidence/run-status.txt"; then
+    receipt_rc=1
+  fi
   snapshot end || true
-  (cd "$evidence" && find . -type f ! -name SHA256SUMS \
-    ! -path './*/dev/cache-*/*' -print0 | sort -z | \
-    xargs -0 -r sha256sum > SHA256SUMS) || true
-  exit "$rc"
+  if ! (cd "$evidence" &&
+        find . -type f ! -name SHA256SUMS \
+          ! -path './*/dev/cache-*/*' -print0 | sort -z | \
+          xargs -0 -r sha256sum > SHA256SUMS &&
+        [[ -s SHA256SUMS ]] && sha256sum -c SHA256SUMS --status); then
+    echo 'C2 span SAVE trial evidence seal failed' >&2
+    receipt_rc=1
+  fi
+  if (( trial_rc != 0 )); then exit "$trial_rc"; fi
+  exit "$receipt_rc"
 }
 trap finish EXIT
 printf 'start_utc=%s\norder=whole,spans\nsource_head=%s\nsource_tree=%s\n' \

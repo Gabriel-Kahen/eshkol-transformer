@@ -120,12 +120,20 @@ def estimate_preimages(path: Path) -> None:
             or payload_bytes != u64(model, 72)):
         raise SystemExit("joint C1 tensor layout differs from trial contract")
     container_preimage_bytes = len(C1_DOMAIN) + model_bytes - 32
+    per_model_bytes = tensor_preimage_bytes + container_preimage_bytes
+    skipped_bytes = 6 * per_model_bytes
+    if (model_bytes != 16774462 or tensor_preimage_bytes != 16776019
+            or container_preimage_bytes != 16774461
+            or per_model_bytes != 33550480
+            or skipped_bytes != 201302880):
+        raise SystemExit("exact joint SHA preimage budget changed")
     print(f"model_bytes={model_bytes}")
     print(f"tensor_count={count}")
     print(f"tensor_preimage_bytes_per_model={tensor_preimage_bytes}")
     print(f"container_preimage_bytes_per_model={container_preimage_bytes}")
+    print(f"preimage_bytes_per_model={per_model_bytes}")
     print(f"preimage_allocations_skipped_six_models={6 * (count + 1)}")
-    print(f"preimage_bytes_skipped_six_models={6 * (tensor_preimage_bytes + container_preimage_bytes)}")
+    print(f"preimage_bytes_skipped_six_models={skipped_bytes}")
 
 
 def normalized_stdout(path: Path) -> bytes:
