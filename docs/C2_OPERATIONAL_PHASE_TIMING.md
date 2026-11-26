@@ -39,6 +39,6 @@ one local host and the single-compiler joint workload. The full supported
 C2 gate remains a separate qualification.
 
 The retained receipt `c2-joint-timing-2086112-20261125.niacTO` includes
-the source and toolchain identity, command, 25 markers, and signed-off
+the source and toolchain identity, command, 25 markers, and verified
 fixture checks. The SHA-256 of `SHA256SUMS` is
 `73d2c75dfcc0bc9daa7f1be354607385d5d49187ab8227d385d5b410baf64635`.

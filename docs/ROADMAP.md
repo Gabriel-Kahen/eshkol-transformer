@@ -744,7 +744,8 @@ bounded joint progress records on successful runs through driver stderr, without
 changing runtime stdout, workload, memory ceiling, or watchdog. Its focused
 Ubuntu single-compiler joint gate passed 26 checks and exact checkpoint
 comparison. Its three SAVE calls spent 371.216 s measuring, 387.703 s
-encoding, and 0.299 s publishing. The full supported C2 gate remains open.
+encoding, and 0.299 s publishing. This instrumentation still needs the full
+supported C2 gate.
 
 ## Wave 3 — first complete language model
 
