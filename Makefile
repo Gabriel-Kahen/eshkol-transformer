@@ -24,12 +24,13 @@ SHELL := /usr/bin/bash
 	test-c2-x1-canonical test-d1 test-d2 test-e3-d2 test-e3-native-frame \
 	test-e3-native-parity test-e3-private-package test-e3-private-runtime \
 	test-e1 test-e1b \
-	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics test-n2 test-n3k \
+	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics \
+	test-mod5 test-mp4 test-pa4-wider test-n2 test-n3k \
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
-	benchmark-attention-supported clean
+	benchmark-attention-supported test-amd4 test-dist5 test-eval5 clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -263,6 +264,9 @@ test-ci-data4-after-build:
 test-ci-topology:
 	/usr/bin/bash scripts/check-ci-topology.sh
 
+test-mp4:
+	/usr/bin/bash scripts/test-mp4.sh
+
 test-a0: build
 	/usr/bin/bash scripts/check_a0_api_contract.sh
 
@@ -271,6 +275,12 @@ test-a2: build
 
 test-b0:
 	/usr/bin/bash scripts/test-b0.sh
+
+test-mod5:
+	/usr/bin/bash scripts/test-mod5.sh
+
+test-pa4-wider:
+	/usr/bin/bash scripts/test-pa4-wider.sh
 
 test-k1: build
 	/usr/bin/bash scripts/test-k1.sh
@@ -346,6 +356,15 @@ test-c1: build
 .PHONY: test-io5
 test-io5:
 	/usr/bin/bash scripts/test-io5.sh
+
+test-amd4:
+	/usr/bin/bash scripts/test-amd4.sh
+
+test-dist5:
+	/usr/bin/bash scripts/test-dist5.sh
+
+test-eval5:
+	/usr/bin/bash scripts/test-eval5.sh
 
 .PHONY: test-io5-gguf
 test-io5-gguf:
