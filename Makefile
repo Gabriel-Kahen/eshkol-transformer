@@ -30,6 +30,7 @@ SHELL := /usr/bin/bash
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-t2-trainer test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
+	test-beam-cd-composition test-spec-paged-witness \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
@@ -397,6 +398,12 @@ test-paged-kv:
 
 test-spec-decode:
 	/usr/bin/bash scripts/test-spec-decode.sh
+
+test-beam-cd-composition:
+	/usr/bin/bash scripts/test-beam-cd-composition.sh
+
+test-spec-paged-witness:
+	/usr/bin/bash scripts/test-spec-paged-witness.sh
 
 .PHONY: test-io5-gguf-native
 test-io5-gguf-native:
