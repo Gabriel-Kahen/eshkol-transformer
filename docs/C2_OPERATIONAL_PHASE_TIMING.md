@@ -42,3 +42,47 @@ The retained receipt `c2-joint-timing-2086112-20261125.niacTO` includes
 the source and toolchain identity, command, 25 markers, and verified
 fixture checks. The SHA-256 of `SHA256SUMS` is
 `73d2c75dfcc0bc9daa7f1be354607385d5d49187ab8227d385d5b410baf64635`.
+
+## Development-only component seam diagnostic
+
+An opt-in single-Clang overlay (`C2_OPERATIONAL_DEVELOPMENT_SEAM_TIMING=1`)
+times the existing C2 model and O2 staging indirections, the actual native
+LOAD measure/stage and SAVE measure/encode call sites, and the O2 LOAD parse
+indirection. It generates source copies in the developer artifact directory;
+the checked-in production source, ABI, and default operational runtime are
+unchanged. The validator requires the exact 26-check joint PASS, 25 ordered
+progress records, all 21 seam observations, and their order and containment
+inside this run's own LOAD/measure/encode endpoints. An overflow is rejected
+without intercepting the underlying call.
+
+The pinned Ubuntu 22.04, Clang 21.1.8, Eshkol `fe9dfd5241` network-none
+developmental run passed with both build locks. The strict AOT compile took
+109 s; the joint runtime took 863,273 ms and peaked at 455,868 KiB, 68,420
+KiB below the unchanged 524,288 KiB bound. Both 16,777,216-byte output files
+match the deterministic fixture byte for byte (SHA-256 `23affcc0b05c8cc4...`).
+Compile and runtime stderr were empty, the outer command had 5,267,960 KiB
+peak RSS and zero swaps, and the 1,800-second runtime watchdog was unchanged.
+
+| Pass | Measure parent | Model | O2 | Native measure | Encode parent | Model | O2 | Native encode and validate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| First | 122,678 ms | 121,729 | 58 | 884 | 126,444 ms | 121,903 | 87 | 4,423 |
+| Second | 122,631 ms | 121,692 | 59 | 880 | 126,119 ms | 121,625 | 57 | 4,413 |
+| Overwrite | 122,862 ms | 121,922 | 58 | 882 | 126,287 ms | 121,792 | 58 | 4,414 |
+
+The six model component calls total 730,663 ms, or 97.8% of the measured
+747,021 ms measure and encode parent intervals. LOAD took 116,034 ms; its
+native measure and stage calls took 1,357 and 1,331 ms, and the O2 parse
+indirection registered 0 ms at the 1-ms clock resolution. These are nested
+intervals from one instrumented run; they are not a speed comparison with the
+earlier uninstrumented run. The model seam includes C1 serialization, payload
+copying, and checksum work. This diagnostic does not isolate checksum time,
+so it does not justify a checksum implementation change. The next narrow
+measurement, if optimization is pursued, is inside C1 model encoding.
+
+The retained receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/c2-seam-timing-20261125-v3`.
+Its `SHA256SUMS` digest is `522b5bc3019dff9ee4f3baa582f8d813f458f5a7d12d193c27f217ba13928d76`.
+The run-time manifest has stale default AOT source/flag fields; the receipt's
+`SUPPLEMENTAL_PROVENANCE.txt` pins the actual generated source and overlay.
+This is developmental measurement, not full C2 qualification or production
+admission.

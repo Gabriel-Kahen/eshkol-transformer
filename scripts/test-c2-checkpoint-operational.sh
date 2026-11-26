@@ -30,6 +30,9 @@ resolve_provenance_compilers cc cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
 development="${C2_OPERATIONAL_DEVELOPMENT_JOINT_ONLY:-0}"
+seam_timing="${C2_OPERATIONAL_DEVELOPMENT_SEAM_TIMING:-0}"
+[[ "${seam_timing}" == 0 || ( "${seam_timing}" == 1 && "${development}" == 1 ) ]] || \
+  die "seam timing requires the single-compiler development gate"
 read -r -a development_modes <<< \
   "${C2_OPERATIONAL_DEVELOPMENT_MODE:-joint}"
 if [[ "${development}" != 0 && "${development}" != 1 ]]; then
@@ -37,6 +40,9 @@ if [[ "${development}" != 0 && "${development}" != 1 ]]; then
 fi
 [[ "${#development_modes[@]}" -gt 0 ]] || \
   die "C2_OPERATIONAL_DEVELOPMENT_MODE must name at least one mode"
+if [[ "${seam_timing}" == 1 && ( ${#development_modes[@]} -ne 1 || ${development_modes[0]} != joint ) ]]; then
+  die "seam timing requires only the joint development mode"
+fi
 for development_mode in "${development_modes[@]}"; do
   case "${development_mode}" in
     joint|k2-fail|rank|alias|models) ;;
@@ -319,7 +325,7 @@ done
 fi
 
 write_development_manifest() {
-  local depfile=$1 archive=$2
+  local depfile=$1 archive=$2 runtime_source=$3
   {
     printf 'mode=C2_OPERATIONAL_DEVELOPMENT_JOINT_ONLY\n'
     printf 'acceptance=false\n'
@@ -338,10 +344,18 @@ write_development_manifest() {
     printf ' -I %q' "${PROJECT_ROOT}/internal/p1/lib" \
       "${PROJECT_ROOT}/internal/c1/lib" "${PROJECT_ROOT}/internal/t2/lib" \
       "${PROJECT_ROOT}/internal/t1/lib" "${PROJECT_ROOT}/internal/d2/lib" \
-      "${PROJECT_ROOT}/src" "${PROJECT_ROOT}/lib" "${PROJECT_ROOT}/native"
+      "${PROJECT_ROOT}/src" "${PROJECT_ROOT}/lib"
+    if [[ "${seam_timing}" == 1 ]]; then
+      printf ' -I %q' "${tmp}/clang-a/overlay"
+    fi
+    printf ' -I %q' "${PROJECT_ROOT}/native"
     printf ' -L %q --lib eshkol_transformer_c2_operational\n' "${runtime}"
-    printf 'aot-source=%s\n' \
-      "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk"
+    printf 'aot-source=%s\n' "${runtime_source}"
+    if [[ "${seam_timing}" == 1 ]]; then
+      printf 'diagnostic=c2-joint-seam-timing-v1\n'
+      sha256sum "${PROJECT_ROOT}/tests/c2/c2_joint_seam_timing.py" \
+        "${runtime_source}" "${tmp}/clang-a/overlay/"*.esk
+    fi
     printf 'aot-depfile=%s\naot-output=%s\n' "${depfile}" \
       "${tmp}/clang-a/operational"
     printf 'source-and-native-inputs:\n'
@@ -361,9 +375,17 @@ compile_runtime() {
   local label=$1 compiler=$2
   local compile_status=0
   local depfile_args=()
+  local overlay_args=()
+  local runtime_source="${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk"
   mkdir -p "${tmp}/${label}/output"
   if [[ "${development}" == 1 ]]; then
     depfile_args=(--emit-depfile "${tmp}/${label}/operational.d")
+  fi
+  if [[ "${seam_timing}" == 1 ]]; then
+    runtime_source="${tmp}/${label}/c2_checkpoint_operational_timed.esk"
+    python3 "${PROJECT_ROOT}/tests/c2/c2_joint_seam_timing.py" generate \
+      "${runtime_source}"
+    overlay_args=(-I "${tmp}/${label}/overlay")
   fi
   phase_begin aot_compile
   (cd "${tmp}/${label}" &&
@@ -379,15 +401,15 @@ compile_runtime() {
         -I "${PROJECT_ROOT}/internal/t1/lib" \
         -I "${PROJECT_ROOT}/internal/d2/lib" \
         -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/lib" \
-        -I "${PROJECT_ROOT}/native" -L "${runtime}" \
+        "${overlay_args[@]}" -I "${PROJECT_ROOT}/native" -L "${runtime}" \
         --lib eshkol_transformer_c2_operational \
-        "${PROJECT_ROOT}/tests/c2/c2_checkpoint_operational_runtime.esk" \
+        "${runtime_source}" \
         -o "${tmp}/${label}/operational" \
         >"${tmp}/${label}/compile.stdout" \
         2>"${tmp}/${label}/compile.stderr") || compile_status=$?
   if [[ "${development}" == 1 ]]; then
     write_development_manifest "${tmp}/${label}/operational.d" \
-      "${runtime}/libeshkol_transformer_c2_operational.a"
+      "${runtime}/libeshkol_transformer_c2_operational.a" "${runtime_source}"
   fi
   if (( compile_status != 0 )); then
     phase_end "${compile_status}"
@@ -447,6 +469,12 @@ run_runtime() {
     cmp "${fixtures}/joint-exact.c2" "${output}/joint-a.c2"
     cmp "${fixtures}/joint-exact.c2" "${output}/joint-b.c2"
     report_joint_progress "${label}"
+    if [[ "${seam_timing}" == 1 ]]; then
+      python3 "${PROJECT_ROOT}/tests/c2/c2_joint_seam_timing.py" validate \
+        "${tmp}/${label}/${mode}.stdout" "${tmp}/${label}/${mode}.progress" \
+        >"${tmp}/${label}/seam-validation.txt"
+      cat "${tmp}/${label}/seam-validation.txt"
+    fi
   else
     test ! -e "${output}/${mode}-reject.c2"
   fi

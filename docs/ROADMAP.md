@@ -746,6 +746,13 @@ Ubuntu single-compiler joint gate passed 26 checks and exact checkpoint
 comparison. Its three SAVE calls spent 371.216 s measuring, 387.703 s
 encoding, and 0.299 s publishing. This instrumentation still needs the full
 supported C2 gate.
+The separate opt-in [component seam diagnostic](C2_OPERATIONAL_PHASE_TIMING.md)
+passed its pinned network-none one-Clang developmental gate with 26 checks,
+25 progress markers, 21 ordered seam observations, byte-identical 16 MiB
+outputs, and 455,868 KiB joint peak RSS. Its six model encode calls occupied
+730.663 s of the same run's 747.021 s measure/encode parent intervals;
+checksum cost within that model seam is not separately measured. This is
+diagnostic evidence only; full supported C2 admission remains pending.
 
 ## Wave 3 — first complete language model
 
