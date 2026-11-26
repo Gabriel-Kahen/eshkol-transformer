@@ -16,6 +16,7 @@
          c1-checkpoint-codec-internal
          c1-checkpoint-encode-state-internal
          c1-checkpoint-encode-c2-owned-state-internal
+         c1-checkpoint-encode-c2-owned-state-with-sha-internal
          c1-checkpoint-decode-state-internal
          c1-checkpoint-save-state-internal!
          c1-checkpoint-load-state-internal
@@ -350,7 +351,15 @@
           (vector path kind shape dtype kind-code dtype-code elements
                   payload-offset (c1-copy-bytes payload) record-size))))))
 
-(define (c1-build-record descriptor)
+(define (c1-encode-digest sha bytes operation)
+  (let ((digest (sha bytes)))
+    (if (or (not (bytevector? digest))
+            (not (= (bytevector-length digest) c1-checksum-bytes)))
+        (c1-fail 'internal operation
+                 "checkpoint SHA callback returned a malformed digest"))
+    digest))
+
+(define (c1-build-record descriptor sha operation)
   (let* ((path (vector-ref descriptor 0))
          (shape (vector-ref descriptor 2))
          (path-value (c1-encode-path path))
@@ -376,7 +385,9 @@
             (c1-write-u64! record offset (car remaining))
             (dims (cdr remaining) (+ offset 8)))))
     (c1-copy-into! record (+ c1-record-prefix-bytes (* rank 8)) path-bytes)
-    (let ((digest (c1-sha256 (c1-concat (list c1-tensor-domain record payload)))))
+    (let ((digest (c1-encode-digest
+                   sha (c1-concat (list c1-tensor-domain record payload))
+                   operation)))
       (c1-copy-into! record 48 digest))
     record))
 
@@ -464,7 +475,7 @@
                                (if first-payload first-payload payload)))))))))))
 
 (define c1-checkpoint-encode-projection-internal
-  (lambda (projection policy codec tensor-encoder operation)
+  (lambda (projection policy codec tensor-encoder sha operation)
   (let* (;; Projection construction validates the bound provider, every entry,
          ;; storage disjointness, and the complete alias graph before a codec
          ;; callback can observe a tensor carrier.
@@ -514,7 +525,8 @@
             (let* ((records (let loop ((items ordered) (parts '()))
                               (if (null? items) (c1-reverse parts)
                                   (loop (cdr items)
-                                        (cons (c1-build-record (car items)) parts)))))
+                                        (cons (c1-build-record (car items) sha
+                                                               operation) parts)))))
                    (metadata (c1-concat
                               (cons provider-bytes
                                     (c1-list-append records (list alias-bytes)))))
@@ -546,8 +558,10 @@
               (c1-write-u16! header 96 2)
               (c1-write-u16! header 98 0)
               (let* ((unsigned (c1-concat (list header metadata payload)))
-                     (digest (c1-sha256 (c1-concat
-                                         (list c1-container-domain unsigned)))))
+                     (digest (c1-encode-digest
+                               sha (c1-concat
+                                     (list c1-container-domain unsigned))
+                               operation)))
                 (c1-concat (list unsigned digest)))))
           (let* ((descriptor (c1-entry-descriptor
                               (car remaining) tensor-encoder payload-offset
@@ -591,7 +605,7 @@
           (if (vector-ref outcome 0)
               (vector-ref outcome 1)
               (raise (vector-ref outcome 1)))))
-      operation)))
+      c1-sha256 operation)))
 
 (define (c1-checkpoint-encode-c2-owned-state-internal
           state owner-token policy codec operation)
@@ -599,6 +613,21 @@
       (c1-fail 'invalid-argument
                'c1-checkpoint-encode-c2-owned-state-internal
                "C2 model encode operation must be a symbol"))
+  (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+    state owner-token policy codec c1-sha256 operation))
+
+;;; The guarded C2 sibling may supply a private digest delegate. The callback
+;;; receives the complete domain-prefixed preimage and must return a fresh
+;;; bytevector of exactly 32 bytes.
+(define (c1-checkpoint-encode-c2-owned-state-with-sha-internal
+          state owner-token policy codec sha operation)
+  (if (not (symbol? operation))
+      (c1-fail 'invalid-argument
+               'c1-checkpoint-encode-c2-owned-state-with-sha-internal
+               "C2 model encode operation must be a symbol"))
+  (if (not (procedure? sha))
+      (c1-fail 'invalid-argument operation
+               "C2 model SHA callback must be a procedure"))
   (let ((projection
           (state-dict-c2-owned-projection-internal
             state owner-token operation)))
@@ -623,7 +652,7 @@
           (if (vector-ref outcome 0)
               (vector-ref outcome 1)
               (raise (vector-ref outcome 1)))))
-      operation)))
+      sha operation)))
 
 (define (c1-utf8-continuation? value)
   (and (>= value 128) (<= value 191)))
