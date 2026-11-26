@@ -117,6 +117,16 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   missing Linux `/proc` support and leaves default scheduling and compiler
   evidence unchanged. A short synthetic overlap test passes; a full P1 run,
   sustained hosted trace and matched serial comparison remain open.
+  A separate branch-only hosted diagnostic candidate pins the tested source to
+  `15f2522946b8ee13b9f166967a99f2665263d4d0`/tree
+  `672e9da3d40061278e94ca0aa1954e98936afa7e`, runs only the supported
+  parameter-state lane with the three opt-in P1 flags, and uploads a sealed
+  diagnostic receipt. It copies validated per-pair TSV/JSON and compiler timing
+  from the retained P1 directory; build scratch stays out of the artifact.
+  After review, a PR from a reviewed `codex/p1-pair-memory-trigger-*` branch
+  into `codex/p1-pair-memory-hosted-diagnostic-20261126` is the only trigger;
+  the checkout still pins the candidate source above. No hosted diagnostic has
+  been triggered and no acceptance claim follows.
 
 ## Parallel execution strategy
 

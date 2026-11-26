@@ -1,0 +1,235 @@
+name: P1 pair-memory diagnostic (non-admission)
+on:
+  pull_request:
+    branches: [codex/p1-pair-memory-hosted-diagnostic-20261126]
+permissions:
+  contents: read
+concurrency:
+  group: p1-pair-memory-diagnostic-${{ github.event.pull_request.base.sha }}
+  cancel-in-progress: false
+jobs:
+  parameter-state:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'codex/p1-pair-memory-trigger-') }}
+    name: Supported parameter-state only (non-admission)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      CC: clang-21
+      CXX: clang++-21
+      ESHKOL_CXX_COMPILER: clang++-21
+      LLVM_CONFIG_EXECUTABLE: llvm-config-21
+      ESHKOL_JOBS: '2'
+      A0_COMPILER_TIMEOUT_SECONDS: '60'
+      P1_COMPILER_TIMEOUT_SECONDS: '1200'
+      T1_COMPILER_TIMEOUT_SECONDS: '600'
+      T2_COMPILER_TIMEOUT_SECONDS: '600'
+      D2_COMPILER_TIMEOUT_SECONDS: '900'
+      K2_COMPILER_TIMEOUT_SECONDS: '900'
+      O2_COMPILER_TIMEOUT_SECONDS: '1200'
+      P1_LSAN: '1'
+      C1_LSAN: '1'
+      I2_ASAN_DETECT_LEAKS: '1'
+      K2_ASAN_DETECT_LEAKS: '1'
+      D2_ASAN_DETECT_LEAKS: '1'
+      N2_ASAN_DETECT_LEAKS: '1'
+      O2_ASAN_DETECT_LEAKS: '1'
+      N3K_ASAN_DETECT_LEAKS: '1'
+      L3S_ASAN_DETECT_LEAKS: '1'
+      G3S_ASAN_DETECT_LEAKS: '1'
+      M3T_ASAN_DETECT_LEAKS: '1'
+      M3_ASAN_DETECT_LEAKS: '1'
+      G3N_ASAN_DETECT_LEAKS: '1'
+      G3C4_ASAN_DETECT_LEAKS: '1'
+      P1_TWO_COMPILERS: '1'
+      P1_PAIR_MEMORY_TRACE: '1'
+      P1_KEEP_TMP: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 15f2522946b8ee13b9f166967a99f2665263d4d0
+          fetch-depth: 0
+      - name: Verify exact candidate source and record identity
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          root="$RUNNER_TEMP/p1-pair-memory-diagnostic"
+          test ! -e "$root" && test ! -L "$root"
+          mkdir -m 0700 "$root"
+          test "$GITHUB_BASE_REF" = codex/p1-pair-memory-hosted-diagnostic-20261126
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = 15f2522946b8ee13b9f166967a99f2665263d4d0
+          test "$(git rev-parse 'HEAD^{tree}')" = 672e9da3d40061278e94ca0aa1954e98936afa7e
+          test -z "$(git status --porcelain --untracked-files=all)"
+          printf 'mode\tP1_TWO_COMPILERS=1 P1_PAIR_MEMORY_TRACE=1 P1_KEEP_TMP=1\nstatus\tstarted\nworkflow_base\t%s\nsource_head\t%s\nsource_tree\t%s\ntrigger_head\t%s\nrun_id\t%s\nrun_attempt\t%s\n' \
+            "$BASE_SHA" "$(git rev-parse HEAD)" "$(git rev-parse 'HEAD^{tree}')" \
+            "$PR_HEAD_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$root/identity.tsv"
+          sha256sum toolchain/eshkol.lock scripts/bootstrap-eshkol.sh scripts/common.sh \
+            scripts/test-p1.sh scripts/p1-compile-pair.sh tests/p1/pair_memory_trace.py \
+            > "$root/source-inputs.sha256"
+          cat /etc/os-release > "$root/host-os.txt"
+          grep '^MemAvailable:' /proc/meminfo > "$root/initial-memory.txt"
+          echo 'P1 pair-memory diagnostic only; not full-suite or admission evidence.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install host dependencies
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          wget -qO "$RUNNER_TEMP/llvm-snapshot.gpg.key" https://apt.llvm.org/llvm-snapshot.gpg.key
+          gpg --show-keys --with-colons "$RUNNER_TEMP/llvm-snapshot.gpg.key" | grep -F 'fpr:::::::::6084F3CF814B57C1CF12EFD515CF4D18AF4F7421:'
+          sudo install -m 0644 "$RUNNER_TEMP/llvm-snapshot.gpg.key" /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo 'deb https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y \
+            build-essential clang-21 cmake git gnupg llvm-21 llvm-21-dev lld-21 make \
+            ninja-build pkg-config wget libjpeg-dev libncurses-dev libopenblas-dev \
+            libpcre2-dev libpng-dev libreadline-dev libsqlite3-dev libssl-dev libwebp-dev \
+            ripgrep time
+          test "$(llvm-config-21 --version)" = '21.1.8'
+          clang-21 --version | head -1 >> "$RUNNER_TEMP/p1-pair-memory-diagnostic/toolchain.txt"
+          llvm-config-21 --version >> "$RUNNER_TEMP/p1-pair-memory-diagnostic/toolchain.txt"
+      - name: Restore pinned Eshkol toolchain
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .deps
+          key: eshkol-v1-${{ runner.os }}-${{ runner.arch }}-llvm-21.1.8-${{ hashFiles('toolchain/eshkol.lock', 'scripts/bootstrap-eshkol.sh', 'scripts/common.sh') }}
+      - name: Verify pinned Eshkol toolchain
+        id: toolchain
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          make toolchain > "$RUNNER_TEMP/p1-pair-memory-diagnostic/toolchain.log" 2>&1
+          cp .deps/eshkol-build/eshkol-transformer-provenance.tsv \
+            "$RUNNER_TEMP/p1-pair-memory-diagnostic/toolchain-provenance.tsv"
+      - name: Build parameter-state prerequisites
+        id: prerequisites
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: /usr/bin/bash scripts/ci-build-prerequisites.sh parameter-state > "$RUNNER_TEMP/p1-pair-memory-diagnostic/prerequisites.log" 2>&1
+      - name: Run complete parameter-state suite
+        id: suite
+        shell: /usr/bin/bash -euo pipefail {0}
+        run: |
+          trap 'cp "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/p1-pair-memory-diagnostic/p1-step-summary.md" 2>/dev/null || true' EXIT
+          make test-ci-parameters-after-build > "$RUNNER_TEMP/p1-pair-memory-diagnostic/parameter-state.log" 2>&1
+      - name: Collect validated pair-memory evidence
+        id: collect
+        if: always()
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+        run: |
+          python3 - "$RUNNER_TEMP/p1-pair-memory-diagnostic" "$SUITE_OUTCOME" <<'PY'
+          import csv
+          import datetime
+          import json
+          from pathlib import Path
+          import re
+          import shutil
+          import sys
+
+          root, outcome = Path(sys.argv[1]), sys.argv[2]
+          log = root / "parameter-state.log"
+          if not log.is_file():
+              if outcome == "success":
+                  raise SystemExit("successful suite has no log")
+              raise SystemExit(0)
+          markers = re.findall(r"^P1 preserved temporary evidence: (.+)$",
+                               log.read_text(errors="replace"), re.MULTILINE)
+          if len(markers) != 1:
+              if outcome == "success":
+                  raise SystemExit("successful suite needs exactly one P1 evidence path")
+              raise SystemExit(0)
+          source = Path(markers[0])
+          if (not source.is_absolute() or not source.is_dir() or source.is_symlink()
+                  or source.parent.resolve() != (Path.cwd() / ".deps").resolve()
+                  or not re.fullmatch(r"eshkol-transformer-p1\.[A-Za-z0-9]+", source.name)):
+              raise SystemExit("invalid P1 evidence path")
+          traces = sorted(source.glob("pair-*-memory.tsv"))
+          if outcome == "success" and [p.name for p in traces] != [
+                  f"pair-{i}-memory.tsv" for i in range(1, 7)]:
+              raise SystemExit("successful suite needs exactly six ordered pair traces")
+          header = ["utc", "monotonic_ns", "pgid_first", "pgid_second",
+                    "rss_first_bytes", "rss_second_bytes", "rss_sum_bytes",
+                    "processes_first", "processes_second"]
+          files = []
+          for trace in traces:
+              summary = trace.with_suffix(".summary.json")
+              if (not trace.is_file() or trace.is_symlink()
+                      or not summary.is_file() or summary.is_symlink()):
+                  raise SystemExit("missing or linked pair trace/summary")
+              with trace.open(newline="") as stream:
+                  reader = csv.DictReader(stream, delimiter="\t")
+                  if reader.fieldnames != header:
+                      raise SystemExit("invalid pair trace header")
+                  rows = list(reader)
+              if not rows:
+                  raise SystemExit("empty pair trace")
+              prev = -1
+              groups = None
+              both = peak = 0
+              for row in rows:
+                  stamp = datetime.datetime.fromisoformat(row["utc"])
+                  values = [int(row[key]) for key in header[1:]]
+                  monotonic, first_group, second_group, first, second, total, count1, count2 = values
+                  if (stamp.utcoffset() != datetime.timedelta(0) or monotonic <= prev
+                          or first_group <= 0 or second_group <= 0
+                          or first_group == second_group or min(first, second, total, count1, count2) < 0
+                          or total != first + second):
+                      raise SystemExit("invalid pair trace row")
+                  if groups is None:
+                      groups = (first_group, second_group)
+                  elif groups != (first_group, second_group):
+                      raise SystemExit("pair process groups changed mid-trace")
+                  prev = monotonic
+                  both += int(count1 > 0 and count2 > 0)
+                  peak = max(peak, total)
+              receipt = json.loads(summary.read_text())
+              if (receipt.get("scope") != "sampled RSS of two P1 compiler process groups only"
+                      or receipt.get("samples") != len(rows)
+                      or receipt.get("both_active_samples") != both
+                      or receipt.get("max_sampled_pair_rss_bytes") != peak
+                      or receipt.get("interval_seconds") != 0.25):
+                  raise SystemExit("pair trace/summary mismatch")
+              files.extend((trace, summary))
+          timing = source / "compiler-timing.log"
+          if not timing.is_file() or timing.is_symlink():
+              raise SystemExit("missing or linked compiler timing log")
+          if outcome == "success":
+              lines = timing.read_text().splitlines()
+              pattern = r"elapsed_s=[0-9]+(?:\.[0-9]+)? max_rss_kib=[0-9]+ exit=0 command=.+"
+              if not lines or any(re.fullmatch(pattern, line) is None for line in lines):
+                  raise SystemExit("successful suite has invalid compiler timing log")
+          files.append(timing)
+          destination = root / "validated-p1"
+          destination.mkdir(mode=0o700)
+          for path in files:
+              shutil.copyfile(path, destination / path.name)
+          (root / "collection.tsv").write_text(
+              f"scope\tP1 compiler process groups only\n"
+              f"suite_outcome\t{outcome}\nvalidated_pairs\t{len(traces)}\n")
+          PY
+      - name: Seal diagnostic receipt
+        if: always()
+        shell: /usr/bin/bash -euo pipefail {0}
+        env:
+          JOB_STATUS: ${{ job.status }}
+          TOOLCHAIN_OUTCOME: ${{ steps.toolchain.outcome }}
+          PREREQUISITES_OUTCOME: ${{ steps.prerequisites.outcome }}
+          SUITE_OUTCOME: ${{ steps.suite.outcome }}
+          COLLECT_OUTCOME: ${{ steps.collect.outcome }}
+        run: |
+          root="$RUNNER_TEMP/p1-pair-memory-diagnostic"
+          test -d "$root" && test ! -L "$root"
+          printf 'toolchain_outcome\t%s\nprerequisites_outcome\t%s\nsuite_outcome\t%s\ncollect_outcome\t%s\nfinal_job_status\t%s\n' \
+            "$TOOLCHAIN_OUTCOME" "$PREREQUISITES_OUTCOME" "$SUITE_OUTCOME" "$COLLECT_OUTCOME" "$JOB_STATUS" \
+            >> "$root/identity.tsv"
+          (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | \
+            LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$root/SHA256SUMS"
+          (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
+      - name: Upload diagnostic-only receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: p1-pair-memory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/p1-pair-memory-diagnostic/
+          if-no-files-found: error
+          retention-days: 30
