@@ -121,7 +121,7 @@ grows linearly with depth. The plan and result report those bytes separately.
 
 ## Measured results
 
-The benchmark used Ubuntu 22.04.5 LTS and Clang 21.1.8 in
+The composed AC4/MOD5-B benchmark used Ubuntu 22.04.5 LTS and Clang 21.1.8 in
 `eshkol-r0-debug:20260928` on a single logical CPU of an AMD Ryzen 7 3700X.
 It timed complete forward/backward calls with dropout 0.2 and GQA
 `(N,T,Hq,Hkv,Dh) = (2,3,4,2,2)`. Each reported time is the median of seven
@@ -130,18 +130,18 @@ Times and ratios describe this run on small verified shapes.
 
 | Layers | Policy | Planned B | Peak B | Activation saved | Workspace B | Replays | µs/call | Time vs. NONE |
 |---:|---|---:|---:|---:|---:|---:|---:|---:|
-| 4 | NONE | 8,832 | 8,832 | 0.00% | 15,232 | 0 | 66.479 | 1.000× |
-| 4 | EVERY_LAYER | 3,648 | 3,648 | 58.70% | 10,048 | 4 | 94.694 | 1.424× |
-| 4 | SQRT_SEGMENTS | 3,456 | 3,456 | 60.87% | 9,856 | 6 | 106.509 | 1.602× |
-| 4 | EVERY_K, k=4 | 3,264 | 3,264 | 63.04% | 9,664 | 10 | 133.000 | 2.001× |
-| 8 | NONE | 16,512 | 16,512 | 0.00% | 29,312 | 0 | 132.061 | 1.000× |
-| 8 | EVERY_LAYER | 4,416 | 4,416 | 73.26% | 17,216 | 8 | 186.029 | 1.409× |
-| 8 | SQRT_SEGMENTS | 3,840 | 3,840 | 76.74% | 16,640 | 13 | 218.101 | 1.652× |
-| 8 | EVERY_K, k=8 | 3,264 | 3,264 | 80.23% | 16,064 | 36 | 367.026 | 2.779× |
-| 16 | NONE | 31,872 | 31,872 | 0.00% | 57,472 | 0 | 263.757 | 1.000× |
-| 16 | EVERY_LAYER | 5,952 | 5,952 | 81.33% | 31,552 | 16 | 374.150 | 1.419× |
-| 16 | SQRT_SEGMENTS | 4,224 | 4,224 | 86.75% | 29,824 | 28 | 448.460 | 1.700× |
-| 16 | EVERY_K, k=16 | 3,264 | 3,264 | 89.76% | 28,864 | 136 | 1,153.750 | 4.374× |
+| 4 | NONE | 8,832 | 8,832 | 0.00% | 15,232 | 0 | 67.923 | 1.000× |
+| 4 | EVERY_LAYER | 3,648 | 3,648 | 58.70% | 10,048 | 4 | 91.396 | 1.346× |
+| 4 | SQRT_SEGMENTS | 3,456 | 3,456 | 60.87% | 9,856 | 6 | 103.137 | 1.518× |
+| 4 | EVERY_K, k=4 | 3,264 | 3,264 | 63.04% | 9,664 | 10 | 127.038 | 1.870× |
+| 8 | NONE | 16,512 | 16,512 | 0.00% | 29,312 | 0 | 125.994 | 1.000× |
+| 8 | EVERY_LAYER | 4,416 | 4,416 | 73.26% | 17,216 | 8 | 177.876 | 1.412× |
+| 8 | SQRT_SEGMENTS | 3,840 | 3,840 | 76.74% | 16,640 | 13 | 208.153 | 1.652× |
+| 8 | EVERY_K, k=8 | 3,264 | 3,264 | 80.23% | 16,064 | 36 | 347.909 | 2.761× |
+| 16 | NONE | 31,872 | 31,872 | 0.00% | 57,472 | 0 | 252.628 | 1.000× |
+| 16 | EVERY_LAYER | 5,952 | 5,952 | 81.33% | 31,552 | 16 | 365.811 | 1.448× |
+| 16 | SQRT_SEGMENTS | 4,224 | 4,224 | 86.75% | 29,824 | 28 | 429.435 | 1.700× |
+| 16 | EVERY_K, k=16 | 3,264 | 3,264 | 89.76% | 28,864 | 136 | 1,091.355 | 4.320× |
 
 The optimized and ASan/UBSan/LSan runs each checked 5,440 central differences
 over every parameter and input element of multi-layer fixtures spanning all
@@ -149,7 +149,7 @@ four shape rows, with dropout disabled and enabled. Maximum absolute error
 was `8.10525438e-06` against the criterion
 `7e-6 + 0.003 × abs(analytic_gradient)`. Both runs also passed 136
 `EVERY_K` schedules, 16 square-root schedules, 64 forward-only cases,
-independent RNG mask goldens, causal and batch isolation checks, and 51
+independent RNG mask goldens, causal and batch isolation checks, and 53
 rejected runs plus four planner errors.
 
 At each of 4, 8, and 16 layers, all four policies had byte-identical

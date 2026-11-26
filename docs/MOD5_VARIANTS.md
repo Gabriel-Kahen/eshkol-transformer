@@ -264,8 +264,12 @@ tensor's one-based position in the parameter list.
 | MQA | 0.008395704115932417 | 0.004524844149234992 | 271.59334016169555 |
 | GQA | 0.008879557896747705 | 0.004289885267436509 | 272.5524322746628 |
 
-This reconciliation onto provider base `b49d177c` still requires the pinned
-Ubuntu 22.04/Clang 21.1.8 AOT rerun before integration.
+The exact reconciliation `e91014cd` onto provider base `b49d177c` passed the
+pinned Ubuntu 22.04/Clang 21.1.8 native and strict AOT rerun. The composed
+AC4/MOD5-B stack also passed those focused gates, including two fresh AOT
+compilations with byte-identical ELF and stdout. Use the opt-in
+`make test-mod5-aot` target for the strict AOT check. Hosted qualification and
+live C1/IO5 integration remain pending.
 
 Provider support is bounded to the listed serial CPU f32 rows and the reviewed
 x86-64 libm lane. The bridge has a fixed training shape, the compiled block
