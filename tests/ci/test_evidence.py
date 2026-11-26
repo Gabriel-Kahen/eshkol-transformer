@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import redirect_stdout
 import io
+from itertools import combinations
 import json
 from pathlib import Path
 import tempfile
@@ -22,6 +23,18 @@ BASE_TESTED_COMMIT = "1" * 40
 RUN_ID = 4815162342
 ATTEMPT = 3
 EVIDENCE_JOB_ID = 9001
+EXPECTED_OPTIONAL_INVENTORIES = (
+    frozenset(),
+    frozenset({
+        "A2 attention benchmark only (non-admission)",
+        "DATA4 installed command diagnostic (non-admission)",
+    }),
+    frozenset({
+        "A2 attention benchmark only (non-admission)",
+        "DATA4 installed command diagnostic (non-admission)",
+        "Wave 5 tooling diagnostic (non-admission)",
+    }),
+)
 
 
 class FakeApi:
@@ -131,14 +144,16 @@ def jobs() -> list[dict[str, object]]:
     return result
 
 
-def jobs_with_skipped_diagnostics() -> list[dict[str, object]]:
+def jobs_with_skipped_diagnostics(
+    inventory: frozenset[str] = evidence.OPTIONAL_DIAGNOSTIC_JOBS,
+) -> list[dict[str, object]]:
     result = jobs()
     result.extend(
         {
             **successful_job(9004 + index, name),
             "conclusion": "skipped",
         }
-        for index, name in enumerate(sorted(evidence.OPTIONAL_DIAGNOSTIC_JOBS))
+        for index, name in enumerate(sorted(inventory))
     )
     return result
 
@@ -229,7 +244,9 @@ def successful_docs_push_responses() -> dict[str, object]:
     }
 
 
-def skipped_docs_base_responses() -> dict[str, object]:
+def skipped_docs_base_responses(
+    inventory: frozenset[str] = evidence.OPTIONAL_DIAGNOSTIC_JOBS,
+) -> dict[str, object]:
     base_run_id = RUN_ID + 10
     base_attempt = 1
     base_jobs = [
@@ -247,7 +264,7 @@ def skipped_docs_base_responses() -> dict[str, object]:
             "run_attempt": base_attempt,
             "conclusion": "skipped",
         }
-        for index, name in enumerate(sorted(evidence.OPTIONAL_DIAGNOSTIC_JOBS))
+        for index, name in enumerate(sorted(inventory))
     )
     responses = successful_push_responses()
     responses.update({
@@ -408,14 +425,16 @@ class EvidenceTests(unittest.TestCase):
         )
 
     def test_push_reuses_full_run_with_skipped_optional_diagnostics(self) -> None:
-        responses = successful_push_responses()
-        all_jobs = jobs_with_skipped_diagnostics()
-        responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
-        result = evidence.select_push_reuse(
-            "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
-            FakeApi(responses),
-        )
-        self.assertTrue(result.reused)
+        for inventory in EXPECTED_OPTIONAL_INVENTORIES:
+            with self.subTest(inventory=inventory):
+                responses = successful_push_responses()
+                all_jobs = jobs_with_skipped_diagnostics(inventory)
+                responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
+                result = evidence.select_push_reuse(
+                    "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
+                    FakeApi(responses),
+                )
+                self.assertTrue(result.reused)
 
     def test_docs_push_verifies_exact_base_full_run_without_code_reuse(self) -> None:
         api = FakeApi(successful_docs_push_responses())
@@ -445,30 +464,71 @@ class EvidenceTests(unittest.TestCase):
         )
 
     def test_docs_push_verifies_full_base_with_skipped_optional_diagnostics(self) -> None:
-        responses = successful_docs_push_responses()
-        all_jobs = jobs_with_skipped_diagnostics()
-        responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
-        result = evidence.select_push_reuse(
-            "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
-            FakeApi(responses), prose_only="true", push_before=BASE_COMMIT,
-        )
-        self.assertFalse(result.reused)
-        self.assertTrue(result.docs_verified)
+        for inventory in EXPECTED_OPTIONAL_INVENTORIES:
+            with self.subTest(inventory=inventory):
+                responses = successful_docs_push_responses()
+                all_jobs = jobs_with_skipped_diagnostics(inventory)
+                responses[jobs_path()] = {"total_count": len(all_jobs), "jobs": all_jobs}
+                result = evidence.select_push_reuse(
+                    "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
+                    FakeApi(responses), prose_only="true", push_before=BASE_COMMIT,
+                )
+                self.assertFalse(result.reused)
+                self.assertTrue(result.docs_verified)
 
-    def test_optional_diagnostics_must_be_exactly_skipped_as_a_pair(self) -> None:
+    def test_optional_diagnostic_subsets_and_states_are_fail_closed(self) -> None:
         good = jobs_with_skipped_diagnostics()
+        diagnostics = sorted(EXPECTED_OPTIONAL_INVENTORIES[-1])
+        for count in range(len(diagnostics) + 1):
+            for subset in combinations(diagnostics, count):
+                inventory = frozenset(subset)
+                with self.subTest(inventory=inventory):
+                    altered = jobs_with_skipped_diagnostics(inventory)
+                    responses = successful_push_responses()
+                    responses[jobs_path()] = {
+                        "total_count": len(altered), "jobs": altered,
+                    }
+                    result = evidence.select_push_reuse(
+                        "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT,
+                        TREE, FakeApi(responses),
+                    )
+                    self.assertEqual(
+                        result.reused,
+                        inventory in EXPECTED_OPTIONAL_INVENTORIES,
+                    )
         cases = {
-            "one missing": good[:-1],
             "one succeeded": [{**good[0]}] + [
                 {**job, "conclusion": "success"} if job["id"] == 9004 else job
                 for job in good[1:]
+            ],
+            "one failed": [
+                {**job, "conclusion": "failure"} if job["id"] == 9004 else job
+                for job in good
             ],
             "one active": [
                 {**job, "status": "in_progress"} if job["id"] == 9004 else job
                 for job in good
             ],
             "unrelated skipped": good + [
-                {**successful_job(9006, "unexpected diagnostic"), "conclusion": "skipped"}
+                {**successful_job(9007, "unexpected diagnostic"), "conclusion": "skipped"}
+            ],
+            "unrelated successful": good + [successful_job(9007, "unexpected diagnostic")],
+            "supported skipped": [
+                {**job, "conclusion": "skipped"} if job["id"] == 1 else job
+                for job in good
+            ],
+            "missing topology": [job for job in good if job["name"] != "CI topology"],
+            "suite scope drift": [
+                {**job, "name": job["name"].replace("Full suites / ", "Foreign / ", 1)}
+                if job["id"] == 1 else job for job in good
+            ],
+            "evidence scope drift": [
+                {**job, "name": "Foreign / Suite evidence"}
+                if job["id"] == EVIDENCE_JOB_ID else job for job in good
+            ],
+            "aggregation scope drift": [
+                {**job, "name": "Foreign / " + evidence.FINAL_AGGREGATION}
+                if job["id"] == 9002 else job for job in good
             ],
         }
         for label, altered in cases.items():
@@ -707,29 +767,50 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue(result.docs_verified)
         self.assertEqual(result.run_id, RUN_ID)
 
-    def test_docs_five_job_wrapper_skip_verifies_original_pr(self) -> None:
-        api = FakeApi(skipped_docs_base_responses())
-        result = evidence.select_push_reuse(
-            "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
-            api, prose_only="true", push_before=BASE_COMMIT,
-        )
-        self.assertFalse(result.reused)
-        self.assertTrue(result.docs_verified)
-        self.assertEqual(result.run_id, RUN_ID)
-        self.assertEqual(api.calls, [
-            commit_path_for(BASE_COMMIT), runs_path_for(BASE_COMMIT),
-            jobs_path_for(RUN_ID + 10, 1), jobs_path_for(RUN_ID + 10, 1),
-            pulls_path_for(BASE_COMMIT), runs_path_for(PR_HEAD), jobs_path(),
-            logs_path(), commit_path_for(BASE_TESTED_COMMIT),
-        ])
+    def test_docs_wrapper_skip_verifies_original_pr_for_each_inventory(self) -> None:
+        for inventory in EXPECTED_OPTIONAL_INVENTORIES:
+            with self.subTest(inventory=inventory):
+                api = FakeApi(skipped_docs_base_responses(inventory))
+                result = evidence.select_push_reuse(
+                    "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT, TREE,
+                    api, prose_only="true", push_before=BASE_COMMIT,
+                )
+                self.assertFalse(result.reused)
+                self.assertTrue(result.docs_verified)
+                self.assertEqual(result.run_id, RUN_ID)
+                self.assertEqual(api.calls, [
+                    commit_path_for(BASE_COMMIT), runs_path_for(BASE_COMMIT),
+                    jobs_path_for(RUN_ID + 10, 1), jobs_path_for(RUN_ID + 10, 1),
+                    pulls_path_for(BASE_COMMIT), runs_path_for(PR_HEAD), jobs_path(),
+                    logs_path(), commit_path_for(BASE_TESTED_COMMIT),
+                ])
 
-    def test_docs_five_job_wrapper_skip_rejects_inexact_jobs(self) -> None:
+    def test_docs_wrapper_skip_rejects_inexact_jobs(self) -> None:
         path = jobs_path_for(RUN_ID + 10, 1)
         base_jobs = skipped_docs_base_responses()[path]["jobs"]
+        diagnostics = sorted(EXPECTED_OPTIONAL_INVENTORIES[-1])
+        for count in range(len(diagnostics) + 1):
+            for subset in combinations(diagnostics, count):
+                inventory = frozenset(subset)
+                with self.subTest(inventory=inventory):
+                    responses = skipped_docs_base_responses(inventory)
+                    result = evidence.select_push_reuse(
+                        "push", "refs/heads/main", REPOSITORY, COMMIT, COMMIT,
+                        TREE, FakeApi(responses), prose_only="true",
+                        push_before=BASE_COMMIT,
+                    )
+                    self.assertEqual(
+                        result.docs_verified,
+                        inventory in EXPECTED_OPTIONAL_INVENTORIES,
+                    )
         cases = {
-            "one optional missing": base_jobs[:-1],
+            "one optional only": base_jobs[:-2],
             "optional succeeded": [
                 {**job, "conclusion": "success"} if job["id"] == 9204 else job
+                for job in base_jobs
+            ],
+            "optional failed": [
+                {**job, "conclusion": "failure"} if job["id"] == 9204 else job
                 for job in base_jobs
             ],
             "optional active": [
@@ -739,6 +820,9 @@ class EvidenceTests(unittest.TestCase):
             "other skipped job": base_jobs + [
                 {**successful_job(9206, "other diagnostic"),
                  "run_attempt": 1, "conclusion": "skipped"}
+            ],
+            "other successful job": base_jobs + [
+                {**successful_job(9206, "other diagnostic"), "run_attempt": 1}
             ],
             "wrong attempt": [
                 {**base_jobs[0], "run_attempt": 2}, *base_jobs[1:]

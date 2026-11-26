@@ -627,6 +627,14 @@ exact-head run `44119689208` passed all required jobs; it merged as
 passed. Local CI tests (132), topology, and a live documentation-base selector
 check against `fd8329252` pass.
 
+The CI-E2 Wave 5 inventory follow-up accepts exactly the historical A2/DATA4
+skipped pair, the current A2/DATA4/Wave 5 skipped trio, or the earlier empty
+optional inventory in full and collapsed runs. Supported full-run job names and
+counts remain exact; active, successful, or failed diagnostics cannot supply
+evidence. The completed #246 PR run `45718653493` was verified read-only against
+merged main tree `8146d3d7f9931a41456228cd5dbf35a5e6f7dded`. The fix is a
+reviewed candidate for #248, pending integration and hosted CI.
+
 PR #235's exact-head full run `43989331852` failed in the unchanged D2
 shard-loader suite: the 8,192-batch large resource process crossed its
 300-second watchdog, while the prior merged-main run `43965845021` passed the
