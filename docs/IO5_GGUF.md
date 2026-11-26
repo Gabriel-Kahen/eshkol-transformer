@@ -24,6 +24,12 @@ python3 tools/io5/gguf_interop.py gguf-to-c1 external.gguf output.etcp \
 make test-io5-gguf
 ```
 
+The local command builds the IO5 quant codec and runs quantized discovery.
+The Q8 GGML decoder witness runs when both `IO5_GGUF_NATIVE_PREFIX` and
+`IO5_GGML_SOURCE_ARCHIVE` identify the pinned native build; the required CI
+job sets both and `IO5_GGUF_NATIVE_REQUIRED=1`. A half-configured local
+native witness fails with a missing-variable error.
+
 Default import requires the IO5 manifest. `--plain-provider` explicitly treats
 each complete external tensor name as **one** literal P1 path segment, every tensor
 as a parameter, and the state as having no aliases. Dots, slashes and Unicode are
