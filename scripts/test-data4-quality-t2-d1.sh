@@ -15,7 +15,7 @@ mkdir -p -- "${evidence}/build"
 evidence="$(realpath -- "${evidence}")"
 
 # The compiler and DATA4 archive can each use substantial memory.
-exec 9>/home/gabe/.cache/eshkol-transformer-orchestration-build.lock
+exec 9>/tmp/eshkol-transformer-heavy-build.lock
 flock -x 9
 
 runner="$(eshkol_build_dir)/eshkol-run"
@@ -61,6 +61,7 @@ timeout --foreground --kill-after=5s 300s "${runner}" \
   >"${evidence}/reject.stdout" 2>"${evidence}/reject.stderr"
 [[ ! -e "${evidence}/rejected-corpus" ]] || \
   die "rejected source IDs published a D1 corpus"
+mkdir -- "${evidence}/corpus"
 "${evidence}/build/witness" write "${evidence}/corpus" \
   >"${evidence}/write.stdout" 2>"${evidence}/write.stderr"
 [[ -s "${evidence}/corpus/manifest.etm" ]] || die "missing D1 manifest"

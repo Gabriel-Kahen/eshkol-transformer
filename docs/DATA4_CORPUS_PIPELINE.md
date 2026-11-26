@@ -109,6 +109,17 @@ change, not adversarial re-signing or a swap with another valid report.
 
 ## Measured Validation Results
 
+The development-only DATA4-Q -> T2/D1 witness passed in the pinned
+`eshkol-r0-debug:20260928` Ubuntu 22.04 / LLVM 21.1.8 environment with the
+`fe9dfd52` toolchain. The quality run kept `alpha`, `bravo`, `charlie` in
+ordinal order, rejected invalid UTF-8, low quality and an exact duplicate,
+and yielded the expected 20 T2 token IDs. D1 validated and T2 read back all
+20 IDs in order. A duplicate source ID failed before a D1 target appeared.
+The retained local receipt is
+`/home/gabe/.cache/eshkol-data4-q-t2-d1-witness-20261125-r5/SHA256SUMS`
+(8/8 hashes verified). Independent source-and-test delta review found no
+blocker. This is local integration evidence, not hosted acceptance.
+
 Historical `60093c6e` evidence was recorded offline in
 `eshkol-r0-debug:20260928` (`clang-21`, `clang++-21`, pinned Eshkol toolchain
 `/tc`). Current extracted-tree validation is tracked separately:
