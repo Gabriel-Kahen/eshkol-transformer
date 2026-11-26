@@ -5,6 +5,7 @@
 
 #include "eshkol_transformer/dist5_collectives_abi.h"
 
+#include <errno.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
@@ -122,18 +123,46 @@ static void rank_run(unsigned rank, int fd) {
 int main(void) {
   int fds[2];
   CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
-  pid_t child = fork();
-  CHECK(child >= 0);
-  if (child == 0) {
-    CHECK(close(fds[0]) == 0);
-    rank_run(1, fds[1]);
-    _exit(0);
+  pid_t children[WORLD] = {0};
+  for (unsigned rank = 0; rank < WORLD; ++rank) {
+    children[rank] = fork();
+    if (children[rank] < 0) {
+      for (unsigned previous = 0; previous < rank; ++previous) {
+        (void)kill(children[previous], SIGKILL);
+        (void)waitpid(children[previous], NULL, 0);
+      }
+      CHECK(children[rank] >= 0);
+    }
+    if (children[rank] != 0)
+      continue;
+    CHECK(close(fds[1u - rank]) == 0);
+    rank_run(rank, fds[rank]);
+    exit(EXIT_SUCCESS);
   }
+  CHECK(close(fds[0]) == 0);
   CHECK(close(fds[1]) == 0);
-  rank_run(0, fds[0]);
-  int status;
-  CHECK(waitpid(child, &status, 0) == child);
-  CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+  int passed = 1;
+  int active[WORLD] = {1, 1};
+  for (unsigned done = 0; done < WORLD; ++done) {
+    int status;
+    pid_t child;
+    do {
+      child = waitpid(-1, &status, 0);
+    } while (child < 0 && errno == EINTR);
+    CHECK(child > 0);
+    for (unsigned rank = 0; rank < WORLD; ++rank)
+      if (children[rank] == child)
+        active[rank] = 0;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+      fprintf(stderr, "rank process %ld failed (status %#x)\n", (long)child,
+              status);
+      passed = 0;
+      for (unsigned rank = 0; rank < WORLD; ++rank)
+        if (active[rank])
+          (void)kill(children[rank], SIGKILL);
+    }
+  }
+  CHECK(passed);
   puts("DIST5/MOD5 actual-gradient SGD parity: PASS (2 ranks, 3 updates, "
        "coordinated rejection and recovery)");
   return 0;
