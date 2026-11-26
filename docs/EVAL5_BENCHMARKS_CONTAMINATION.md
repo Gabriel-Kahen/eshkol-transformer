@@ -227,14 +227,10 @@ original documents on pinned, network-disabled Ubuntu 22.04.
 [Hosted executable provenance](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773952998)
 
 The opt-in MOD5 provider advertises the fixed block shapes used here and has
-no vocabulary dimension. The existing compiled MOD5-C and old EVAL5 AOT
-fixtures hardcode V=16 in their model rosters, so they have not executed this
-V=256 checkpoint. The next live gate must make a development-only V=256
-Eshkol runner load these exact C1/D1 resources, source the tokenizer
-fingerprint and vocabulary from validated T1 and D1 owners, bind the complete
-D1 manifest inventory hashes, compare its scored logits and metrics to the
-reference, and only then publish an EVAL5 manifest. The reference fixture
-itself publishes no benchmark manifest and provides no external-corpus claim.
+no vocabulary dimension. The existing MOD5-C and older EVAL5 AOT fixtures
+hardcode V=16; the test-only source specialization below executes V=256
+without changing them. The reference fixture itself publishes no benchmark
+manifest and provides no external-corpus claim.
 
 The read-only hosted CLI receipt at
 `/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-native-input-replay-20261126.w6iFhy`
@@ -263,16 +259,14 @@ passes under normal Clang 22 and ASan/UBSan/LSan; this is a bridge test, not a
 model execution. The comparator checks live metrics against the fixed Python
 reference with relative tolerance `5e-4` and absolute tolerance `5e-3`, and
 the eight f32 probes with relative tolerance `5e-4` and absolute tolerance
-`2e-3`; MC counts must match exactly. These are provisional numerical
-acceptance bounds for the first AOT witness, subject to the actual measured
-run. A mismatched or nonfinite value fails closed.
+`2e-3`; MC counts must match exactly. These numerical acceptance bounds were
+declared before the AOT run. A mismatched or nonfinite value fails closed.
 
 `scripts/test-eval5-v256-aot.sh` prepares one strict CPU-f32 AOT build using
 the same pinned MOD5-C native bridge, trusted C1/P1/I2 archives, and EVAL5
 scorer. It compares the live score and probes, then exercises a correctly
 checksummed C1 shape mutant and swapped D1 split identity. Its explicit
-`EVAL5_V256_AOT_SLOT=1` guard prevents an uncoordinated full AOT build. This
-gate has not run; a build slot and its exact compiler result are still needed.
+`EVAL5_V256_AOT_SLOT=1` guard prevents an uncoordinated full AOT build.
 Set `EVAL5_V256_EVIDENCE_DIR` to a fresh directory to retain its compiled
 source, compiler log, score line, fixture, and negative-path outputs.
 
@@ -282,3 +276,40 @@ and `cddddr`. The retained attempt directory is
 `/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-aot-a13051c5-20261126T190906Z`.
 The focused successor uses an FFI f64 readback helper and the already used
 `cdddr` list primitive; source and normal/sanitized C checks pass locally.
+
+### Measured V=256 compiled scoring witness
+
+The one-slot replay of commit `a0f2f967d9dccd434faa9058131b26b0e034fa70`
+(tree `05224e53cd1de987f17073290c4584439ee9dcfd`) passed on Ubuntu
+22.04.5, Clang/LLVM 21.1.8, Eshkol
+`fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`, and the pinned
+`eshkol-r0-debug:20260928` image. The AOT ELF SHA-256 is
+`82be011d931c5143b1963ead2ab0a105e8dba80200657a999fdd7b95ba0022ef`.
+The compiled Eshkol decoder loaded the exact C1 checkpoint, validated the
+T1 owner fingerprint and all three D1 shards in each split, matched the
+original byte documents and complete D1 inventory hashes, and passed live
+binary32 logits into the EVAL5 C LM/MC scorers. The score was total NLL
+`90.780767317731659`, mean NLL `5.6737979573582287`, perplexity
+`291.13816763515604`, bits per byte `8.1855601760866463`, and MC `2/4`.
+All eight f32 logit probes and the metrics passed the predeclared comparator;
+the largest metric absolute difference from the Python reference was
+`6.98173608e-09`. Fresh-process C1 reload passed; a correctly checksummed
+head shape mutant and swapped train/eval D1 split both failed before scoring.
+
+The retained evidence directory is
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-aot-a0f2f967-20261126T191053Z`;
+its `SHA256SUMS` digest is
+`748e7287fc8d97b3194812bb545423c450d152e6ac57094862106381a0b79181`.
+It includes the generated source, compile log, executable, fixture, live
+score, and negative outputs. A second fresh, network-disabled Ubuntu
+container replayed that sealed executable without rebuilding it; its score
+and both rejected-path outputs matched byte for byte, with both rejects
+returning status 2. The independent receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-independent-replay-20261126.7DQDU2`;
+its `SHA256SUMS` digest is
+`0ad31dc93046564ce63be086200dfe0d62bb470812fb5011709953a7eb9e2164`.
+This is one AOT build and one deterministic fixture, not a second-build
+reproducibility proof, training run, external corpus evaluation, live C
+contamination audit, or EVAL5 manifest publication.
+A full benchmark runner still needs a live contamination gate and admitted
+manifest publication over its scored data and owner-sourced identities.
