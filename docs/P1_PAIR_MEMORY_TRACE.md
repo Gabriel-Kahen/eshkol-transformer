@@ -30,3 +30,6 @@ serial per-command peak RSS, since those peaks occur at different times.
 Collect cgroup current/peak/swap separately on the same runner if a full
 container-memory comparison is required. No hosted or serial comparison is
 established by this source change.
+
+The hosted trigger requests the six-pair memory trace from the exact pinned
+P1 candidate using the reviewed branch-only diagnostic.
