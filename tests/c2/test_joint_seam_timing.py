@@ -20,6 +20,9 @@ class JointSeamTimingTest(unittest.TestCase):
             self.assertIn("(set! c2-save-o2-stage-internal", source)
             self.assertIn("c2-timed-save-native-measure", (generated.parent / "overlay/c2_checkpoint_save_extension.esk").read_text())
             self.assertIn("c2-timed-load-native-stage", (generated.parent / "overlay/c2_checkpoint_load_extension.esk").read_text())
+            c1 = (generated.parent / "overlay/transformer/checkpoint_internal.esk").read_text()
+            self.assertEqual(c1.count("(c2-timed-c1-hash-parts (list"), 2)
+            self.assertIn("(define c2-timing-c1-stats", c1)
 
             phases = [1, 2, *range(10, 17), *range(20, 27), *range(30, 37), 40, 41]
             stamps = {phase: (1000 if phase == 1 else 2000 if phase == 2 else
@@ -49,13 +52,31 @@ class JointSeamTimingTest(unittest.TestCase):
             def write():
                 stdout.write_text("C2 OPERATIONAL RUNTIME PASS: 26 checks mode=joint baseline-kib=1\n" + "".join(
                     f"C2 SEAM TIMING: name={name} index={index} start-ms={start} end-ms={end}\n"
-                    for (name, index), (start, end) in observations.items()))
+                    for (name, index), (start, end) in observations.items()) +
+                    "C2 C1 SHA TIMING: stage=tensor calls=372 bytes=100656114 assembly-ms=12 sha-ms=18\n"
+                    "C2 C1 SHA TIMING: stage=container calls=6 bytes=100646766 assembly-ms=6 sha-ms=6\n")
 
             write()
             with contextlib.redirect_stdout(io.StringIO()) as captured:
                 validate(stdout, progress)
             self.assertIn("observations=21 progress=25", captured.getvalue())
+            self.assertIn("assembly-ms=18 sha-ms=24", captured.getvalue())
             complete = stdout.read_text()
+            stdout.write_text(complete.replace("stage=container calls=6", "stage=container calls=5"))
+            with self.assertRaisesRegex(ValueError, "call counts"):
+                validate(stdout, progress)
+            stdout.write_text(complete.replace("stage=tensor calls=372", "stage=tensor calls=366"))
+            with self.assertRaisesRegex(ValueError, "call counts"):
+                validate(stdout, progress)
+            stdout.write_text(complete.replace("bytes=100646766", "bytes=100646765"))
+            with self.assertRaisesRegex(ValueError, "input bytes"):
+                validate(stdout, progress)
+            stdout.write_text(complete.replace("assembly-ms=12", "assembly-ms=120"))
+            with self.assertRaisesRegex(ValueError, "exceed measured model seam"):
+                validate(stdout, progress)
+            stdout.write_text(complete + "C2 C1 SHA TIMING: stage=container calls=6 bytes=100646766 assembly-ms=6 sha-ms=6\n")
+            with self.assertRaisesRegex(ValueError, "duplicate C1 SHA"):
+                validate(stdout, progress)
             stdout.write_text(complete.replace("26 checks", "25 checks"))
             with self.assertRaisesRegex(ValueError, "exact 26-check"):
                 validate(stdout, progress)

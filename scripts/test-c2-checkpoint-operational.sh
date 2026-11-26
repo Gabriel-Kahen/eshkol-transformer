@@ -341,20 +341,21 @@ write_development_manifest() {
     printf 'run-environment=ESHKOL_ARENA_POISON=1\n'
     printf 'native-cflags='; printf ' %q' "${runtime_cflags[@]}"; printf '\n'
     printf 'aot-flags=--strict-types --optimize 0 --no-stdlib'
+    if [[ "${seam_timing}" == 1 ]]; then
+      printf ' -I %q' "${tmp}/clang-a/overlay"
+    fi
     printf ' -I %q' "${PROJECT_ROOT}/internal/p1/lib" \
       "${PROJECT_ROOT}/internal/c1/lib" "${PROJECT_ROOT}/internal/t2/lib" \
       "${PROJECT_ROOT}/internal/t1/lib" "${PROJECT_ROOT}/internal/d2/lib" \
       "${PROJECT_ROOT}/src" "${PROJECT_ROOT}/lib"
-    if [[ "${seam_timing}" == 1 ]]; then
-      printf ' -I %q' "${tmp}/clang-a/overlay"
-    fi
     printf ' -I %q' "${PROJECT_ROOT}/native"
     printf ' -L %q --lib eshkol_transformer_c2_operational\n' "${runtime}"
     printf 'aot-source=%s\n' "${runtime_source}"
     if [[ "${seam_timing}" == 1 ]]; then
       printf 'diagnostic=c2-joint-seam-timing-v1\n'
       sha256sum "${PROJECT_ROOT}/tests/c2/c2_joint_seam_timing.py" \
-        "${runtime_source}" "${tmp}/clang-a/overlay/"*.esk
+        "${runtime_source}" "${tmp}/clang-a/overlay/"*.esk \
+        "${tmp}/clang-a/overlay/transformer/checkpoint_internal.esk"
     fi
     printf 'aot-depfile=%s\naot-output=%s\n' "${depfile}" \
       "${tmp}/clang-a/operational"
@@ -395,13 +396,14 @@ compile_runtime() {
       timeout --foreground --signal=TERM --kill-after=5s 900s "${runner}" \
         --strict-types --optimize 0 --no-stdlib \
         "${depfile_args[@]}" \
+        "${overlay_args[@]}" \
         -I "${PROJECT_ROOT}/internal/p1/lib" \
         -I "${PROJECT_ROOT}/internal/c1/lib" \
         -I "${PROJECT_ROOT}/internal/t2/lib" \
         -I "${PROJECT_ROOT}/internal/t1/lib" \
         -I "${PROJECT_ROOT}/internal/d2/lib" \
         -I "${PROJECT_ROOT}/src" -I "${PROJECT_ROOT}/lib" \
-        "${overlay_args[@]}" -I "${PROJECT_ROOT}/native" -L "${runtime}" \
+        -I "${PROJECT_ROOT}/native" -L "${runtime}" \
         --lib eshkol_transformer_c2_operational \
         "${runtime_source}" \
         -o "${tmp}/${label}/operational" \

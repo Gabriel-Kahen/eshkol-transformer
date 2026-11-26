@@ -19,6 +19,52 @@ SPECS = (
 NATIVE = {"load-native-measure", "load-native-stage", "save-native-measure", "save-native-encode"}
 RECORD = re.compile(r"^C2 SEAM TIMING: name=([a-z0-9-]+) index=([0-9]+) start-ms=([0-9]+) end-ms=([0-9]+)$")
 PROGRESS = re.compile(r"^C2 OPERATIONAL PROGRESS: phase=([0-9]+) monotonic-ms=([0-9]+)$")
+SHA_RECORD = re.compile(
+    r"^C2 C1 SHA TIMING: stage=(tensor|container) calls=([0-9]+) "
+    r"bytes=([0-9]+) assembly-ms=([0-9]+) sha-ms=([0-9]+)$")
+JOINT_MODEL_TENSORS = 62  # The fixed joint fixture uses 62 C1 records per model.
+# Six byte-identical model images: sum(domain + record + payload) and
+# six times (container domain + unsigned C1 image), from joint-exact.c2.
+JOINT_SHA_INPUT_BYTES = {"tensor": 100656114, "container": 100646766}
+
+
+def c1_overlay(overlay):
+    source = (ROOT / "internal/c1/lib/transformer/checkpoint_internal.esk").read_text()
+    tensor = "(c1-sha256 (c1-concat (list c1-tensor-domain record payload)))"
+    container = "(c1-sha256 (c1-concat\n                                         (list c1-container-domain unsigned)))"
+    if source.count(tensor) != 1 or source.count(container) != 1:
+        raise ValueError("C1 checksum call sites changed")
+    source = source.replace("(provide c1-persistence-policy-internal",
+                            "(provide c2-timing-c1-stats\n         c1-persistence-policy-internal", 1)
+    anchor = "(define (c1-build-record descriptor)"
+    if source.count(anchor) != 1:
+        raise ValueError("C1 record definition changed")
+    probe = """;;; Generated for the single-compiler C2 diagnostic; no C1 source is edited.
+(extern i64 c2-timing-c1-now :real et_c2_operational_monotonic_millis_v1)
+;;; Per stage: calls, input bytes, input assembly milliseconds, SHA milliseconds.
+(define c2-timing-c1-stats (vector (vector 0 0 0 0) (vector 0 0 0 0)))
+(define (c2-timed-c1-hash-parts parts stage)
+  (let* ((started (c2-timing-c1-now))
+         (input (c1-concat parts))
+         (assembled (c2-timing-c1-now))
+         (digest (c1-sha256 input))
+         (finished (c2-timing-c1-now))
+         (stats (vector-ref c2-timing-c1-stats stage)))
+    (vector-set! stats 0 (+ (vector-ref stats 0) 1))
+    (vector-set! stats 1 (+ (vector-ref stats 1) (bytevector-length input)))
+    (vector-set! stats 2 (+ (vector-ref stats 2) (- assembled started)))
+    (vector-set! stats 3 (+ (vector-ref stats 3) (- finished assembled)))
+    digest))
+
+"""
+    source = source.replace(anchor, probe + anchor)
+    source = source.replace(tensor,
+                            "(c2-timed-c1-hash-parts (list c1-tensor-domain record payload) 0)")
+    source = source.replace(container,
+                            "(c2-timed-c1-hash-parts (list c1-container-domain unsigned) 1)")
+    target = overlay / "transformer/checkpoint_internal.esk"
+    target.parent.mkdir()
+    target.write_text(source)
 
 
 def wrapper(name, target, arity, count, native=False):
@@ -69,12 +115,20 @@ def generate(path):
         (newline)
         (timing-output-{name} (+ index 1)))))
 """
+    for stage, index in (("tensor", 0), ("container", 1)):
+        records += f"""(let ((stats (vector-ref c2-timing-c1-stats {index})))
+  (display "C2 C1 SHA TIMING: stage={stage} calls=") (display (vector-ref stats 0))
+  (display " bytes=") (display (vector-ref stats 1))
+  (display " assembly-ms=") (display (vector-ref stats 2))
+  (display " sha-ms=") (display (vector-ref stats 3)) (newline))
+"""
     before, after = source.rsplit(footer, 1)
     source = before + records + "\n" + footer + after
     path.write_text(source)
 
     overlay = path.parent / "overlay"
     overlay.mkdir()
+    c1_overlay(overlay)
     original_root = (ROOT / "native/c2_wave2_root.esk").read_text()
     for kind in ("save", "load"):
         filename = f"c2_checkpoint_{kind}_extension.esk"
@@ -119,6 +173,25 @@ def validate(stdout, progress):
     expected = {(name, i) for name, _, _, count in SPECS for i in range(count)}
     if set(observations) != expected:
         raise ValueError(f"incomplete observations: missing={expected - set(observations)}, extra={set(observations) - expected}")
+    sha = {}
+    for line in stdout.read_text().splitlines():
+        if line.startswith("C2 C1 SHA TIMING:"):
+            match = SHA_RECORD.fullmatch(line)
+            if not match or match[1] in sha:
+                raise ValueError(f"malformed or duplicate C1 SHA record: {line}")
+            sha[match[1]] = tuple(map(int, match.groups()[1:]))
+    if set(sha) != {"tensor", "container"}:
+        raise ValueError("incomplete C1 SHA records")
+    if sha["container"][0] != 6 or sha["tensor"][0] != 6 * JOINT_MODEL_TENSORS:
+        raise ValueError("C1 SHA call counts differ from six model encodes")
+    if any(sha[stage][1] != expected for stage, expected in JOINT_SHA_INPUT_BYTES.items()):
+        raise ValueError("C1 SHA input bytes differ from the fixed joint fixture")
+    model_ms = sum(end - start for (name, _), (start, end) in observations.items()
+                   if name == "model")
+    assembly_ms = sum(stage[2] for stage in sha.values())
+    digest_ms = sum(stage[3] for stage in sha.values())
+    if assembly_ms + digest_ms > model_ms:
+        raise ValueError("C1 SHA stages exceed measured model seam")
     phases = {}
     for line in progress.read_text().splitlines():
         match = PROGRESS.fullmatch(line)
@@ -163,6 +236,10 @@ def validate(stdout, progress):
               f"model-encode-ms={observations['model', 2*save+1][1]-observations['model', 2*save+1][0]} "
               f"o2-encode-ms={observations['o2', 2*save+1][1]-observations['o2', 2*save+1][0]} "
               f"native-encode-ms={observations['save-native-encode', save][1]-observations['save-native-encode', save][0]}")
+    print(f"C2 C1 SHA ATTRIBUTION: model-ms={model_ms} assembly-ms={assembly_ms} "
+          f"sha-ms={digest_ms} other-model-ms={model_ms-assembly_ms-digest_ms} "
+          f"tensor-calls={sha['tensor'][0]} tensor-bytes={sha['tensor'][1]} "
+          f"container-calls={sha['container'][0]} container-bytes={sha['container'][1]}")
     print(f"C2 SEAM TIMING VALIDATED: observations={len(observations)} progress={len(phases)}")
 
 

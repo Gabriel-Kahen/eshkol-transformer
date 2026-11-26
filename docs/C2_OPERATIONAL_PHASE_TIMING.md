@@ -86,3 +86,48 @@ The run-time manifest has stale default AOT source/flag fields; the receipt's
 `SUPPLEMENTAL_PROVENANCE.txt` pins the actual generated source and overlay.
 This is developmental measurement, not full C2 qualification or production
 admission.
+
+## Development-only C1 checksum attribution
+
+The next diagnostic extends the same opt-in single-Clang overlay. A generated
+copy of `transformer.checkpoint_internal` times only the two existing C1 encode
+checksum sites: each tensor record and the C1 container. For each site it
+accumulates call count, input bytes, milliseconds spent assembling the SHA
+input with `c1-concat`, and milliseconds inside the unchanged `c1-sha256`.
+The validator compares those totals with the six measured model-encode calls
+from the same process and reports the remaining model time separately. It
+requires 372 tensor hashes and six container hashes with exact input totals
+of 100,656,114 and 100,646,766 bytes, respectively, derived from the fixed
+joint fixture and its byte-identical C2 outputs.
+
+Input-list construction, timing and counter bookkeeping, payload copying,
+and the rest of C1 encoding remain in the residual model interval. The clock
+has millisecond resolution. The SHA interval includes its normal padding and
+digest conversion. This is one instrumented diagnostic, not a speed
+comparison or a production checksum change. The pinned executable compiler
+does not emit an executable depfile; retained source and generated-overlay
+hashes supply the exact input provenance.
+
+The pinned Ubuntu 22.04, Clang 21.1.8, Eshkol `fe9dfd5241` network-none
+joint gate passed 26 assertions, all 25 progress markers and 21 prior seam
+observations, and exact fixture comparisons for both 16,777,216-byte C2
+outputs. Its six model calls took 729,862 ms within 746,166 ms of SAVE
+measure/encode parent intervals. The C1 split from that same process was:
+
+| Existing C1 stage | Calls | Input bytes | Assembly | `c1-sha256` |
+| --- | ---: | ---: | ---: | ---: |
+| Tensor record | 372 | 100,656,114 | 28 ms | 356,496 ms |
+| Container | 6 | 100,646,766 | 26 ms | 373,119 ms |
+| Total | 378 | 201,302,880 | 54 ms | 729,615 ms |
+
+The measured residual inside the six model calls is 193 ms. The SHA calls
+occupy 99.966% of those model intervals in this instrumented run, subject to
+the 1-ms clock resolution and probe overhead. The joint process took
+862,071 ms, with 406,424 KiB peak RSS below the unchanged 524,288 KiB cap;
+the AOT compile took 110 s. Both compiler and runtime stderr were empty.
+The outer command used 5,291,556 KiB peak RSS and zero swaps. These numbers
+locate the cost in the existing CPU SHA implementation; they do not measure
+any replacement, speedup, or full supported C2 qualification.
+
+The sealed receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/c2-c1-sha-attribution-20261125`.

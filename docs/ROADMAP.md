@@ -751,8 +751,17 @@ passed its pinned network-none one-Clang developmental gate with 26 checks,
 25 progress markers, 21 ordered seam observations, byte-identical 16 MiB
 outputs, and 455,868 KiB joint peak RSS. Its six model encode calls occupied
 730.663 s of the same run's 747.021 s measure/encode parent intervals;
-checksum cost within that model seam is not separately measured. This is
+checksum cost within that earlier model seam was not separately measured. This is
 diagnostic evidence only; full supported C2 admission remains pending.
+The subsequent [development-only C1 attribution](C2_OPERATIONAL_PHASE_TIMING.md)
+passed the same pinned network-none one-Clang joint gate with 26 checks,
+25 markers, 21 seam observations, and both byte-identical 16 MiB outputs.
+Across six model encodes, the unchanged `c1-sha256` took 729.615 s for
+378 tensor/container hashes over 201,302,880 input bytes; checksum-input
+assembly took 0.054 s and the remaining model interval was 0.193 s at
+millisecond resolution. This is a single instrumented diagnostic, not a
+measured replacement or production change. Full supported C2 admission and
+any optimization decision remain separate.
 
 ## Wave 3 — first complete language model
 
