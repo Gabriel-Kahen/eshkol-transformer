@@ -61,6 +61,7 @@ timeout --foreground --kill-after=5s 300s "${runner}" \
   >"${evidence}/reject.stdout" 2>"${evidence}/reject.stderr"
 [[ ! -e "${evidence}/rejected-corpus" ]] || \
   die "rejected source IDs published a D1 corpus"
+mkdir -- "${evidence}/corpus"
 "${evidence}/build/witness" write "${evidence}/corpus" \
   >"${evidence}/write.stdout" 2>"${evidence}/write.stderr"
 [[ -s "${evidence}/corpus/manifest.etm" ]] || die "missing D1 manifest"

@@ -64,7 +64,8 @@
         (loop (cdr rest) (cons (car (car rest)) ids)))))
 
 (define (witness-staging=? staging ids)
-  (and (= (bytevector-length staging) (* (length ids) 8))
+  (and (= (bytevector-length staging)
+          (* (data4-bounded-length ids 65537) 8))
        (let loop ((rest ids) (offset 0))
          (if (null? rest) #t
              (and (= (t1-core-read-u64-le staging offset) (car rest))
@@ -151,7 +152,7 @@
                                (witness-staging=? staging tokens)))
               (q-destroy (witness-pointer session))
               (display "quality-selected alpha bravo charlie; T2/D1 tokens=20 readback=20 PASS")
-              (newline)))))))
+              (newline))))))))
 
 (define witness-args (cdr (command-line)))
 (if (or (not (pair? witness-args))
