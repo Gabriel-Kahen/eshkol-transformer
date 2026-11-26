@@ -25,12 +25,27 @@ p1_timeout="${P1_COMPILER_TIMEOUT_SECONDS:-360}"
 p1_lsan="${P1_LSAN:-0}"
 [[ "${p1_lsan}" == 0 || "${p1_lsan}" == 1 ]] || \
   die "P1_LSAN must be 0 or 1"
+p1_two_compilers="${P1_TWO_COMPILERS:-0}"
+[[ "${p1_two_compilers}" == 0 || "${p1_two_compilers}" == 1 ]] || \
+  die "P1_TWO_COMPILERS must be 0 or 1"
+if [[ "${p1_two_compilers}" == 1 ]]; then
+  source "${PROJECT_ROOT}/scripts/p1-compile-pair.sh"
+fi
 
 mkdir -p "${PROJECT_ROOT}/.deps"
 p1_tmp="$(mktemp -d "${PROJECT_ROOT}/.deps/eshkol-transformer-p1.XXXXXX")"
 p1_timing="${p1_tmp}/compiler-timing.log"
+p1_phase_started=$SECONDS
+p1_phase() {
+  printf 'P1 suite phase=%s elapsed_s=%d\n' "$1" "$((SECONDS - p1_phase_started))"
+  p1_phase_started=$SECONDS
+}
 p1_cleanup() {
   local status=$?
+  if [[ "${p1_two_compilers}" == 1 ]]; then
+    p1_stop_pair
+    p1_flush_pair_timing
+  fi
   if [[ -s "${p1_timing}" ]]; then
     if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
       {
@@ -137,6 +152,7 @@ compile_trusted_aot() {
 }
 
 "${PROJECT_ROOT}/scripts/generate-p1-roots.sh" --check
+p1_phase identity-builds-start
 "${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
   "${p1_tmp}/identity-a" normal all
 "${PROJECT_ROOT}/scripts/build-p1-identity.sh" \
@@ -146,6 +162,7 @@ cmp "${p1_public_archive}" \
   "${p1_tmp}/identity-b/public/libeshkol_transformer_p1_identity.a"
 cmp "${p1_trusted_archive}" \
   "${p1_tmp}/identity-b/trusted/libeshkol_transformer_p1_identity.a"
+p1_phase identity-builds-complete
 
 mkdir -p "${p1_package_link}" "${p1_tmp}/package-b"
 cp "${p1_trusted_source}" "${p1_tmp}/copied-p1-root.esk"
@@ -206,6 +223,7 @@ ESHKOL_PATH="${p1_tmp}/shadow" ESHKOL_LIB_DIR="${p1_tmp}/shadow" \
   "${PROJECT_ROOT}/scripts/build-p1-package.sh" "${p1_package_object}"
 "${PROJECT_ROOT}/scripts/build-p1-package.sh" \
   "${p1_tmp}/package-b/eshkol_transformer_p1.o"
+p1_phase package-builds-complete
 cmp "${p1_package_object}" \
   "${p1_tmp}/package-b/eshkol_transformer_p1.o"
 for evidence in global-defined.txt undefined.txt expected-undefined.txt \
@@ -420,22 +438,51 @@ UBSAN_OPTIONS=halt_on_error=1 \
 ASAN_OPTIONS="detect_leaks=${p1_lsan}:halt_on_error=1" \
 UBSAN_OPTIONS=halt_on_error=1 \
   "${p1_tmp}/test-p1-failpoints-sanitized" >/dev/null
+p1_phase native-and-sanitizer-checks-complete
 
 for run in 1 2; do
-  compile_public_object "${p1_public_source}" "${p1_tmp}/module-${run}.o" \
-    "${p1_tmp}/module-${run}.d" "${p1_tmp}/module-${run}.log"
-  compile_public_object "${p1_example_source}" "${p1_tmp}/example-${run}.o" \
-    "${p1_tmp}/example-${run}.d" "${p1_tmp}/example-${run}.log"
-  compile_public_object "${p1_public_stub_source}" \
-    "${p1_tmp}/public-stubs-${run}.o" \
-    "${p1_tmp}/public-stubs-${run}.d" \
-    "${p1_tmp}/public-stubs-${run}.log"
-  compile_public_object "${p1_public_reverse_source}" \
-    "${p1_tmp}/public-reverse-${run}.o" \
-    "${p1_tmp}/public-reverse-${run}.d" \
-    "${p1_tmp}/public-reverse-${run}.log"
-  compile_trusted_object "${p1_test_source}" "${p1_tmp}/test-${run}.o" \
-    "${p1_tmp}/test-${run}.d" "${p1_tmp}/test-${run}.log"
+  if [[ "${p1_two_compilers}" == 1 ]]; then
+    p1_compile_pair \
+      compile_public_object "${p1_public_source}" "${p1_tmp}/module-${run}.o" \
+        "${p1_tmp}/module-${run}.d" "${p1_tmp}/module-${run}.log" -- \
+      compile_public_object "${p1_example_source}" "${p1_tmp}/example-${run}.o" \
+        "${p1_tmp}/example-${run}.d" "${p1_tmp}/example-${run}.log"
+    p1_compile_pair \
+      compile_public_object "${p1_public_stub_source}" \
+        "${p1_tmp}/public-stubs-${run}.o" \
+        "${p1_tmp}/public-stubs-${run}.d" \
+        "${p1_tmp}/public-stubs-${run}.log" -- \
+      compile_public_object "${p1_public_reverse_source}" \
+        "${p1_tmp}/public-reverse-${run}.o" \
+        "${p1_tmp}/public-reverse-${run}.d" \
+        "${p1_tmp}/public-reverse-${run}.log"
+  else
+    compile_public_object "${p1_public_source}" "${p1_tmp}/module-${run}.o" \
+      "${p1_tmp}/module-${run}.d" "${p1_tmp}/module-${run}.log"
+    compile_public_object "${p1_example_source}" "${p1_tmp}/example-${run}.o" \
+      "${p1_tmp}/example-${run}.d" "${p1_tmp}/example-${run}.log"
+    compile_public_object "${p1_public_stub_source}" \
+      "${p1_tmp}/public-stubs-${run}.o" \
+      "${p1_tmp}/public-stubs-${run}.d" \
+      "${p1_tmp}/public-stubs-${run}.log"
+    compile_public_object "${p1_public_reverse_source}" \
+      "${p1_tmp}/public-reverse-${run}.o" \
+      "${p1_tmp}/public-reverse-${run}.d" \
+      "${p1_tmp}/public-reverse-${run}.log"
+  fi
+  if [[ "${p1_two_compilers}" == 1 ]]; then
+    p1_require_pair_memory || \
+      die "P1 two-compiler heavy pair needs 8 GiB free memory headroom"
+    p1_compile_pair \
+      compile_trusted_object "${p1_test_source}" "${p1_tmp}/test-${run}.o" \
+        "${p1_tmp}/test-${run}.d" "${p1_tmp}/test-${run}.log" -- \
+      compile_trusted_aot "${p1_registry_test_source}" \
+        "${p1_tmp}/registry-${run}" "${p1_tmp}/registry-${run}.aot.log" \
+        "${p1_test_trusted_link}"
+  else
+    compile_trusted_object "${p1_test_source}" "${p1_tmp}/test-${run}.o" \
+      "${p1_tmp}/test-${run}.d" "${p1_tmp}/test-${run}.log"
+  fi
 
   compile_public_aot "${p1_example_source}" "${p1_tmp}/example-${run}" \
     "${p1_tmp}/example-${run}.aot.log"
@@ -465,13 +512,16 @@ for run in 1 2; do
     "${p1_tmp}/test-${run}" >"${p1_tmp}/test-${run}.stdout" \
     2>"${p1_tmp}/test-${run}.stderr"
 
-  compile_trusted_aot "${p1_registry_test_source}" \
-    "${p1_tmp}/registry-${run}" "${p1_tmp}/registry-${run}.aot.log" \
-    "${p1_test_trusted_link}"
+  if [[ "${p1_two_compilers}" == 0 ]]; then
+    compile_trusted_aot "${p1_registry_test_source}" \
+      "${p1_tmp}/registry-${run}" "${p1_tmp}/registry-${run}.aot.log" \
+      "${p1_test_trusted_link}"
+  fi
   timeout --foreground --signal=TERM --kill-after=2s 30s \
     "${p1_tmp}/registry-${run}" >"${p1_tmp}/registry-${run}.stdout" \
     2>"${p1_tmp}/registry-${run}.stderr"
 done
+p1_phase deterministic-compile-matrix-complete
 
 for run in 1 2; do
   for stem in module example public-stubs public-reverse; do
@@ -555,6 +605,7 @@ cmp "${PROJECT_ROOT}/tests/expected/p1-registry-atomicity.stdout" \
    ! -s "${p1_tmp}/registry-2.stderr" ]] || \
   die "P1 runtime gate wrote stderr"
 
+p1_phase runtime-and-determinism-checks-complete
 negative_sources=(
   negative_public_provider_internal
   negative_public_module_internal
@@ -711,6 +762,8 @@ if sed -n '/^(define (module-load-state-dict!/,/^(define (set-mode-recursive!/p'
   die "P1 strict load creates or binds a temporary expected state"
 fi
 
+p1_phase negative-diagnostics-complete
 /usr/bin/bash "${PROJECT_ROOT}/scripts/check-p1-registry-publication.sh"
+p1_phase registry-proof-complete
 
 printf 'P1 PASS: E1B-integrated packaging, structural/native/registry checks, root-publication IR and poison proof, sanitizers, negatives, atomicity, and determinism\n'
