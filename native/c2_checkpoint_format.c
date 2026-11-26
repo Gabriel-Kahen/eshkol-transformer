@@ -174,6 +174,61 @@ int64_t et_c2_private_model_sha256_v1(const void *input_bv,
   return 0;
 }
 
+#ifdef ET_C2_SHA_SPANS_EXPERIMENT
+/* Test-only C2-owned candidate. Never included in the ordinary format object. */
+int64_t et_c2_private_model_sha256_spans_experiment_v1(
+    const void *first, int64_t first_bytes, const void *second,
+    int64_t second_bytes, const void *third, int64_t third_bytes,
+    void *digest_bv) {
+  const void *inputs[3] = {first, second, third};
+  const int64_t lengths[3] = {first_bytes, second_bytes, third_bytes};
+  uintptr_t starts[3], output_start;
+  size_t spans[3], output_span;
+  int64_t observed, output_length;
+  uint64_t total = 0u;
+  sha256_state state;
+  uint8_t digest[32];
+  size_t i;
+  if (digest_bv == NULL) return 1;
+  output_start = (uintptr_t)digest_bv;
+  if (output_start > UINTPTR_MAX - sizeof(output_length)) return 1;
+  memcpy(&output_length, digest_bv, sizeof(output_length));
+  output_span = sizeof(output_length) + 32u;
+  if (output_length != 32 || output_span > UINTPTR_MAX - output_start)
+    return 1;
+  for (i = 0; i < 3u; ++i) {
+    if (lengths[i] < 0 || (inputs[i] == NULL && lengths[i] != 0)) return 1;
+    if (inputs[i] == NULL) {
+      starts[i] = 0u;
+      spans[i] = 0u;
+      continue;
+    }
+    starts[i] = (uintptr_t)inputs[i];
+    if (starts[i] > UINTPTR_MAX - sizeof(observed)) return 1;
+    memcpy(&observed, inputs[i], sizeof(observed));
+    if (observed != lengths[i] ||
+        (uint64_t)lengths[i] > SIZE_MAX - sizeof(observed) ||
+        (uint64_t)lengths[i] > UINT64_MAX / UINT64_C(8) ||
+        total > UINT64_MAX / UINT64_C(8) - (uint64_t)lengths[i])
+      return 1;
+    total += (uint64_t)lengths[i];
+    spans[i] = sizeof(observed) + (size_t)lengths[i];
+    if (spans[i] > UINTPTR_MAX - starts[i] ||
+        (starts[i] < output_start + output_span &&
+         output_start < starts[i] + spans[i]))
+      return 1;
+  }
+  sha256_init(&state);
+  for (i = 0; i < 3u; ++i)
+    if (inputs[i] != NULL && lengths[i] != 0)
+      sha256_update(&state, (const uint8_t *)(starts[i] + sizeof(observed)),
+                    (size_t)lengths[i]);
+  sha256_final(&state, digest);
+  memcpy((void *)(output_start + sizeof(output_length)), digest, sizeof(digest));
+  return 0;
+}
+#endif
+
 static uint16_t u16(const uint8_t *p) {
   return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8u));
 }
