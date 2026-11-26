@@ -2,7 +2,23 @@
 
 ## Current accepted scope
 
-The latest independently replayed artifact is `15079014750`
+The latest independently replayed artifact is `15083982610`
+(`cli3-fixed-binary-45745765085-1`, GitHub artifact digest
+`sha256:4aca539b9e6fdc7895702117fd0386a1dc3e319bcf669dd09c584cfabc113f7b`)
+from [PR #251 run 45745765085](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45745765085).
+The recorded build commit is `23b64a1effbf1111de53f5d0fa2b3d8dd8a98547`,
+the GitHub synthetic merge of PR head `3229f0dada021dbd858fd3a4b4a0ffff9bd4f8b7`.
+The exact tree `ab9a1e2f0c21890236392d27eff6e7b4697c13b1` passed all 26
+required jobs and became main at `d0b1adb228842ee2cd3c018f3374fedb8aa902bb`.
+[The main run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45754877329)
+reused that exact-tree evidence. The downloaded tarball SHA-256 is
+`d3c526196a9582ead33383043872f44ae5046ac059b1dad0cae32ebef0269873`.
+The [downloaded artifact runner](CLI3_DOWNLOADED_ARTIFACT_RUNNER.md) passed
+on the exact merged source tree in a network-disabled Ubuntu 22.04 container.
+It verified both archive seals and ran the DATA4 v2, checkpoint continuation,
+evaluation, and one-byte generation fixture without compiling.
+
+The preceding independently replayed artifact is `15079014750`
 (`cli3-fixed-binary-45735042703-1`, GitHub artifact digest
 `sha256:5328a303a0e7191416779dfcf76338b5f6d887e58d7f31f2bdc3a9b97b270fbf`)
 from [PR #248 run 45735042703](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45735042703).
