@@ -165,7 +165,7 @@ jobs:
                   raise SystemExit("empty pair trace")
               prev = -1
               groups = None
-              both = peak = 0
+              both = overlap_rss = peak = 0
               for row in rows:
                   stamp = datetime.datetime.fromisoformat(row["utc"])
                   values = [int(row[key]) for key in header[1:]]
@@ -181,6 +181,8 @@ jobs:
                       raise SystemExit("pair process groups changed mid-trace")
                   prev = monotonic
                   both += int(count1 > 0 and count2 > 0)
+                  overlap_rss += int(count1 > 0 and count2 > 0
+                                     and first > 0 and second > 0)
                   peak = max(peak, total)
               receipt = json.loads(summary.read_text())
               if (receipt.get("scope") != "sampled RSS of two P1 compiler process groups only"
@@ -189,6 +191,8 @@ jobs:
                       or receipt.get("max_sampled_pair_rss_bytes") != peak
                       or receipt.get("interval_seconds") != 0.25):
                   raise SystemExit("pair trace/summary mismatch")
+              if outcome == "success" and overlap_rss == 0:
+                  raise SystemExit("successful pair has no simultaneous positive RSS sample")
               files.extend((trace, summary))
           timing = source / "compiler-timing.log"
           if not timing.is_file() or timing.is_symlink():

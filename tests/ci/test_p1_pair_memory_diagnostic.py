@@ -82,6 +82,31 @@ class PairMemoryDiagnosticTests(unittest.TestCase):
                                     cwd=work, env={**env, "RUNNER_TEMP": str(work / "bad")},
                                     capture_output=True, text=True)
             self.assertNotEqual(failed.returncode, 0)
+            for name, count in (("no-processes", 0), ("zero-rss", 1),
+                                ("last-pair-zero", 1)):
+                with self.subTest(name=name):
+                    for index in range(1, 7):
+                        trace = source / f"pair-{index}-memory.tsv"
+                        positive = name == "last-pair-zero" and index < 6
+                        trace.write_text(header + (row if positive else
+                            f"2026-11-26T10:00:00.000+00:00\t1\t10\t11\t"
+                            f"0\t0\t0\t{count}\t{count}\n"))
+                        trace.with_suffix(".summary.json").write_text(json.dumps({
+                            "scope": "sampled RSS of two P1 compiler process groups only",
+                            "samples": 1, "both_active_samples": int(positive or count),
+                            "max_sampled_pair_rss_bytes": 300 if positive else 0,
+                            "interval_seconds": 0.25}))
+                    failure_root = work / name
+                    failure_receipt = failure_root / "p1-pair-memory-diagnostic"
+                    failure_receipt.mkdir(parents=True)
+                    (failure_receipt / "parameter-state.log").write_text(
+                        "P1 preserved temporary evidence: " + str(source) + "\n")
+                    rejected = subprocess.run(command, cwd=work,
+                                              env={**env, "RUNNER_TEMP": str(failure_root)},
+                                              capture_output=True, text=True)
+                    self.assertNotEqual(rejected.returncode, 0)
+                    self.assertIn("no simultaneous positive RSS sample", rejected.stderr)
+                    self.assertFalse((failure_receipt / "validated-p1").exists())
 
 
 if __name__ == "__main__":

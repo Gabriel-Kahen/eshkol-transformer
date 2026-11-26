@@ -125,8 +125,13 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   from the retained P1 directory; build scratch stays out of the artifact.
   After review, a PR from a reviewed `codex/p1-pair-memory-trigger-*` branch
   into `codex/p1-pair-memory-hosted-diagnostic-20261126` is the only trigger;
-  the checkout still pins the candidate source above. No hosted diagnostic has
-  been triggered and no acceptance claim follows.
+  the checkout still pins the candidate source above. Hosted run
+  `45883192669` began on the prior workflow commit `7114e474`; its result is
+  not assessed in this source branch and no acceptance claim follows.
+  A workflow-only successor additionally rejects a successful six-pair receipt
+  unless every pair has at least one sample where both compiler groups report
+  positive RSS. The already-launched diagnostic uses its prior workflow; its
+  receipt must be checked against this condition separately.
 
 ## Parallel execution strategy
 
