@@ -308,8 +308,8 @@ returning status 2. The independent receipt is
 `/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-independent-replay-20261126.7DQDU2`;
 its `SHA256SUMS` digest is
 `0ad31dc93046564ce63be086200dfe0d62bb470812fb5011709953a7eb9e2164`.
-This is one AOT build and one deterministic fixture, not a second-build
-reproducibility proof, training run, external corpus evaluation, live C
+That exact source has one AOT build and one deterministic fixture, not a
+second-build reproducibility proof, training run, external corpus evaluation, live C
 contamination audit, or EVAL5 manifest publication.
 A full benchmark runner still needs a live contamination gate and admitted
 manifest publication over its scored data and owner-sourced identities.
@@ -323,4 +323,22 @@ the separate `--check-c1` path still tests a validly checksummed wrong-shape
 checkpoint. The AOT script makes its staged fixture files read-only after
 source generation and requires separate C1 shape, C1 identity, and D1 split
 identity failures. Source and fixture negative tests cover the correction;
-the corrected source awaits a separately pinned AOT replay before integration.
+the corrected source passed a separately pinned AOT replay at commit
+`ab088449c159cabcf60fc6d1df30cc8722fe8046` (tree
+`9f2b763eb2c8985052db3271ed2e203d3a67b29b`) on the same pinned
+Ubuntu 22.04.5, Clang/LLVM 21.1.8, Eshkol commit, and image. Its AOT ELF
+SHA-256 is
+`ac18b4025652809c43f637198b40b36a8b3303cfaa3b3d665487525a45cf23ac`.
+The live score line, including eight f32 probes, was byte-identical to the
+earlier one, and the comparator again passed with maximum metric absolute
+difference `6.98173608e-09`. The well-formed wrong-shape C1 produced
+`unexpected MOD5 parameter metadata` in `--check-c1` mode; supplying that
+C1 to scoring produced `C1 checkpoint SHA-256 mismatch`. Swapping the D1
+splits produced `D1 manifest SHA-256 mismatch`. All three exited with status
+2 before any `SCORE` line. The fresh evidence directory is
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-aot-ab088449-20261126T192020Z.E7a9YZ`;
+its verified `SHA256SUMS` digest is
+`79d1560bf66580162819455dba100cd6664e1873d9252ae473e0c771c22cdf49`.
+This replay proves the corrected fixed development witness, not an independent
+second build of the same source, live C contamination audit, benchmark manifest,
+external evaluation, training, or production runtime behavior.
