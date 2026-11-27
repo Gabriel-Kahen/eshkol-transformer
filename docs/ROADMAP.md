@@ -3490,7 +3490,8 @@ publication, public G2 and continuation remain pending.
   The next Eshkol gate is the private reservation that binds the constructor's
   original carrier bundle at the sole output entry's first enrollment. The
   [reservation proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/6845bd0a81aad05f169b0c0e85fc8779b43c87a8)
-  awaits independent contract review. Same-call terminal publication,
+  defines that boundary. The private entry and its compiled proof remain
+  pending. Same-call terminal publication,
   detached Eshkol output, public G2, and CLI adoption follow separately.
 
 - **Private P2/G2 terminal pending-allocation precursor:** The
@@ -3534,8 +3535,11 @@ publication, public G2 and continuation remain pending.
   `/home/gabe/.codex/evidence/eshkol-transformer/g3c4-carrier-wave3-12598d3-20261125/SHA256SUMS-RUN`
   (`59496ab79d9a12ea718f83aef319f6da1d491e6da943008f90c6779d20651ba3`).
   The replay on main `443dad4b` uses the same PA4 transitive-header pin
-  and passes the two source mutation checkers and Q0 isolation. The Wave 3
-  compiled receipt applies to its own tree.
+  and passes Q0 isolation. Review found coordinated record/carrier substitution
+  and a forged completion tag in the pending probe. The replay binds the
+  exact record contents and roots at enrollment and checks completion through
+  the private root before unwinding. Both suites now verify and seal the full
+  input closure. The Wave 3 compiled receipt applies to its own tree.
 
 ## Wave 4 — practical pretraining and performance
 

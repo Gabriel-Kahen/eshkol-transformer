@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in ar cmp env git grep python3 sha256sum timeout; do
+for command in ar cmp env git grep python3 sha256sum timeout xargs; do
   require_command "$command"
 done
 cc= cxx=
@@ -14,12 +14,17 @@ evidence="${1:-$(project_build_dir)/g3c4-p2g2-terminal-pending-anchor-test}"
 extent_witness="${G3C4_TERMINAL_EXTENT_WITNESS:-0}"
 [[ "$extent_witness" == 0 || "$extent_witness" == 1 ]] || exit 2
 mkdir -p "$evidence"
+evidence="$(cd -- "$evidence" && pwd)"
 python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-pending-anchor.py" \
   >"$evidence/static.stdout"
-if [[ "$extent_witness" == 1 ]]; then
-  python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-carriers.py" \
-    >>"$evidence/static.stdout"
-fi
+# Both modes compile the same native inputs. Verify the shared transitive
+# closure even when only the pending and feature-off Eshkol fixtures run.
+python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-carriers.py" \
+  >>"$evidence/static.stdout"
+closure="$PROJECT_ROOT/native/g3c4_p2g2_terminal_carriers_source_closure.txt"
+sha256sum "$closure" >"$evidence/closure.sha256"
+(cd "$PROJECT_ROOT" && xargs -d '\n' sha256sum -- <"$closure") \
+  >"$evidence/source.sha256"
 
 tmp="$(mktemp -d "$evidence/build.XXXXXX")"
 trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
@@ -144,6 +149,21 @@ WRAPPER
     python3 "$PROJECT_ROOT/scripts/check-g3c4-terminal-carrier-failures.py" \
       "$directory/p2g2-extent" "$mode" "$evidence" \
       >"$evidence/$mode-allocation-classification.stdout"
+  else
+    local fault status log_prefix
+    for fault in return unwind inherited-abort; do
+      log_prefix="$evidence/$mode-failstop-$fault"
+      status=0
+      "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
+        timeout --foreground --signal=TERM --kill-after=5s 120s \
+        "$directory/p2g2-protected" "$fault" >"$log_prefix.stdout" \
+        2>"$log_prefix.stderr" || status=$?
+      printf '%s\n' "$status" >"$log_prefix.exit"
+      [[ "$status" == 134 ]]
+      grep -Fx "P2/G2 terminal cleanup fault injected: $fault" \
+        "$log_prefix.stdout" >/dev/null
+      test ! -s "$log_prefix.stderr"
+    done
   fi
 }
 
@@ -169,11 +189,7 @@ fi
 cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
 git -C "$PROJECT_ROOT" diff --check
-closure="$PROJECT_ROOT/native/g3c4_p2g2_terminal_pending_anchor_source_closure.txt"
-[[ "$extent_witness" == 1 ]] && \
-  closure="$PROJECT_ROOT/native/g3c4_p2g2_terminal_carriers_source_closure.txt"
-sha256sum "$closure" \
-  >"$evidence/closure.sha256"
+(cd "$PROJECT_ROOT" && sha256sum -c --quiet "$evidence/source.sha256")
 if [[ "$extent_witness" == 0 ]]; then
   cat "$evidence/static.stdout" "$evidence/normal-feature-off-run.stdout" \
       "$evidence/normal-run.stdout"

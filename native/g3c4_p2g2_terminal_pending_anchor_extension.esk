@@ -7,6 +7,7 @@
 (define g3c4-p2g2-terminal-pending-check #f)
 (define g3c4-p2g2-terminal-pending-prepare #f)
 (define g3c4-p2g2-terminal-pending-abort! #f)
+(define g3c4-p2g2-terminal-pending-live? #f)
 
 ;;; Slots: call, protected record/anchor, output/its shell/native, auxiliary,
 ;;; raw[2]/staging[16], first raw[1]/staging[8], second raw[1]/staging[8],
@@ -24,8 +25,12 @@
           (else (loop (cdr remaining))))))
 
 (let ((original-heads (vector '())))
-  ;; Only these three private operations close over the original allocation roots.
-  ;; The diagnostic probe receives no authority mutation operation.
+  ;; Only authenticated abort removes a prepared call's private original root.
+  (set! g3c4-p2g2-terminal-pending-live?
+    (lambda (call)
+      (let ((originals (vector-ref original-heads 0)))
+        (and (pair? originals) (eq? (car (car originals)) call)))))
+
   (set! g3c4-p2g2-terminal-pending-check
     (lambda (call operation)
   (let ((pending (g3c4-p2g2-terminal-pending-for call))
@@ -42,7 +47,7 @@
                               g3c4-p2g2-terminal-pending-anchors 0)) anchor)
                   (pair? originals)
                   (eq? (car (car originals)) call)
-                  ((cdr (car originals)) anchor)
+                  ((cdr (car originals)))
                   (let original ((i 0))
                     (if (= i 17) #t
                         (and (eq? (vector-ref pending i)
@@ -124,22 +129,23 @@
            (anchor-node
              (cons anchor (vector-ref g3c4-p2g2-terminal-pending-anchors 0)))
            (original-check
-             (let ((raw second-raw) (staging second-staging)
-                   (one text-one) (two text-two)
-                   (record-head record-node) (anchor-head anchor-node)
+             (let ((original (vector-copy anchor))
                    (record-next (cdr record-node))
                    (anchor-next (cdr anchor-node)))
-               (lambda (candidate)
+               (lambda ()
                  (and (eq? (vector-ref g3c4-p2g2-terminal-pending-records 0)
-                           record-head)
+                           record-node)
                       (eq? (vector-ref g3c4-p2g2-terminal-pending-anchors 0)
-                           anchor-head)
-                      (eq? (cdr record-head) record-next)
-                      (eq? (cdr anchor-head) anchor-next)
-                      (eq? (vector-ref candidate 11) raw)
-                      (eq? (vector-ref candidate 12) staging)
-                      (eq? (vector-ref candidate 13) one)
-                      (eq? (vector-ref candidate 14) two)))))
+                           anchor-node)
+                      (eq? (car record-node) pending)
+                      (eq? (car anchor-node) anchor)
+                      (eq? (cdr record-node) record-next)
+                      (eq? (cdr anchor-node) anchor-next)
+                      (let identity ((i 0))
+                        (or (= i 17)
+                            (and (eq? (vector-ref anchor i)
+                                      (vector-ref original i))
+                                 (identity (+ i 1)))))))))
            (original-node
              (cons (cons call original-check)
                    (vector-ref original-heads 0))))
@@ -190,14 +196,14 @@
   (syntax-rules ()
     ((_ operation generator (call anchor) body ...)
      (g3c4-with-p2g2-protected-call operation generator (call)
-       (let ((anchor (g3c4-p2g2-terminal-pending-prepare call)))
-         (guard (caught
-                  (#t
-                    (if (eq? (vector-ref anchor 16) 'pending)
-                        (guard (abort-failure (#t (exit 134)))
-                          (g3c4-p2g2-terminal-pending-abort! call)))
-                    (raise caught)))
+       (guard (caught
+                (#t
+                  (if (g3c4-p2g2-terminal-pending-live? call)
+                      (guard (abort-failure (#t (exit 134)))
+                        (g3c4-p2g2-terminal-pending-abort! call)))
+                  (raise caught)))
+         (let ((anchor (g3c4-p2g2-terminal-pending-prepare call)))
            body ...
-           (if (not (eq? (vector-ref anchor 16) 'dead))
+           (if (g3c4-p2g2-terminal-pending-live? call)
                (g3c4-fail 'invalid-state operation
                           "P2/G2 terminal pending probe must abort"))))))))

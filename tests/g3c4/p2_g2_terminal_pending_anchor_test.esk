@@ -97,6 +97,38 @@
                     (vector-set! pending i original)
                     (vector-set! anchor i original)
                     (paired (+ i 1)))))
+            (let* ((protected (vector-ref pending 1))
+                   (protected-anchor (vector-ref pending 2))
+                   (original (vector-ref pending 9))
+                   (replacement (make-bytevector 1 0)))
+              (vector-set! protected 11 replacement)
+              (vector-set! protected-anchor 11 replacement)
+              (vector-set! pending 9 replacement)
+              (vector-set! anchor 9 replacement)
+              (reject "coordinated inherited carrier replacement rejected"
+                (lambda () (g3c4-p2g2-terminal-pending-check call 'test)))
+              (vector-set! protected 11 original)
+              (vector-set! protected-anchor 11 original)
+              (vector-set! pending 9 original)
+              (vector-set! anchor 9 original))
+            (let* ((original (vector-ref pending 15))
+                   (replacement (vector-copy original)))
+              (vector-set! pending 15 replacement)
+              (vector-set! anchor 15 replacement)
+              (reject "paired extent identity replacement rejected"
+                (lambda () (g3c4-p2g2-terminal-pending-check call 'test)))
+              (vector-set! pending 15 original)
+              (vector-set! anchor 15 original))
+            (let ((record-node
+                    (vector-ref g3c4-p2g2-terminal-pending-records 0))
+                  (anchor-node
+                    (vector-ref g3c4-p2g2-terminal-pending-anchors 0)))
+              (set-car! record-node (vector-copy pending))
+              (set-car! anchor-node (vector-copy anchor))
+              (reject "paired record content copies rejected"
+                (lambda () (g3c4-p2g2-terminal-pending-check call 'test)))
+              (set-car! record-node pending)
+              (set-car! anchor-node anchor))
             (let ((record-head
                     (vector-ref g3c4-p2g2-terminal-pending-records 0)))
               (vector-set! g3c4-p2g2-terminal-pending-records 0
@@ -133,7 +165,7 @@
                  (= (bytevector-u8-ref second 0) 93)
                  (= (bytevector-u8-ref text-one 0) 94)
                  (= (bytevector-u8-ref text-two 0) 95)
-                 (eq? (g3c4-p2g2-terminal-pending-for call) pending)))
+                     (eq? (g3c4-p2g2-terminal-pending-for call) pending)))
           (check "release genuine pending I1 lease"
             (= (pending-ids-lease (vector-ref pending 5) 0) 0))
           (check "authenticated pending abort"
@@ -147,6 +179,24 @@
            (null? (vector-ref g3c4-p2g2-terminal-pending-anchors 0))))
     (check "generator reusable" (g3c4-generator-close-internal! generator))))
 
+(define (forged-cleanup mode)
+  (let ((generator
+          (g3c4-generator-create-internal model tokenizer (config 23))))
+    (g3c4-with-p2g2-terminal-pending-probe
+      'terminal-anchor-forged-cleanup generator (call pending)
+      (if (equal? mode "inherited-abort")
+          (g3c4-p2g2-protected-abort! call))
+      (vector-set! pending 16 'dead)
+      (display "P2/G2 terminal cleanup fault injected: ")
+      (display mode)
+      (newline)
+      (if (equal? mode "unwind")
+          (g3c4-fail 'invalid-state 'terminal-anchor-forged-cleanup
+                     "injected unwind after forged terminal state")))
+    (exit 91)))
+
+(define arguments (cdr (command-line)))
+(if (pair? arguments) (forged-cleanup (car arguments)))
 (one-case 7 #f)
 (one-case 11 #t)
 (display "G3-C4 P2/G2 terminal anchor PASS: checks=")
