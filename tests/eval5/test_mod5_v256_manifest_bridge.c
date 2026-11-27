@@ -24,6 +24,63 @@ static int digest(const char hex[65], uint8_t out[32]) {
   return 1;
 }
 
+static int32_t compare_runner(
+    const uint8_t fingerprints[288], const uint8_t digests[96],
+    const uint8_t documents[36], const uint32_t train_tokens[18],
+    const uint32_t eval_tokens[18], const float logits[4][8 * 256],
+    const char *expected, size_t size) {
+  return et_eval5_v256_compare_runner(
+      fingerprints, digests, documents, train_tokens, eval_tokens,
+      logits[0], logits[1], logits[2], logits[3], expected, size);
+}
+
+static int test_runner(et_eval5_v256_manifest_input input, uint8_t digests[96],
+                       const uint8_t train_bytes[18], const uint8_t eval_bytes[18],
+                       const uint32_t train_tokens[18], const uint32_t eval_tokens[18]) {
+  static const float logits[4][8 * 256] = {
+      {[200] = 0.125f}, {[15] = -0.25f}, {[8 * 256 - 1] = 0.5f}, {[0] = -1.0f},
+  };
+  float probes[8];
+  CHECK(et_eval5_v256_score(logits[0], logits[1], logits[2], logits[3], eval_tokens,
+                           input.metrics, input.mc_counts, probes) == ET_EVAL5_OK);
+  char expected[ET_EVAL5_MANIFEST_MAX_BYTES + 1u];
+  size_t size = 0;
+  CHECK(et_eval5_v256_manifest_roundtrip(&input, expected, sizeof(expected),
+                                         &size) == ET_EVAL5_OK);
+
+  uint8_t fingerprints[288], documents[36];
+  for (size_t i = 0; i < 3u; ++i)
+    memcpy(fingerprints + 96u * i, input.tokenizer_fingerprint, 96u);
+  memcpy(documents, train_bytes, 18u);
+  memcpy(documents + 18u, eval_bytes, 18u);
+  CHECK(compare_runner(fingerprints, digests, documents, train_tokens, eval_tokens,
+                       logits, expected, size) == ET_EVAL5_OK);
+
+  for (size_t i = 0; i < 3u; ++i) {
+    fingerprints[96u * i + 95u] = '5';
+    CHECK(compare_runner(fingerprints, digests, documents, train_tokens, eval_tokens,
+                         logits, expected, size) == ET_EVAL5_ERR_IDENTITY);
+    fingerprints[96u * i + 95u] = '4';
+    digests[32u * i] ^= 1u;
+    CHECK(compare_runner(fingerprints, digests, documents, train_tokens, eval_tokens,
+                         logits, expected, size) == ET_EVAL5_ERR_FORMAT);
+    digests[32u * i] ^= 1u;
+  }
+  CHECK(compare_runner(fingerprints, digests, documents, train_tokens, eval_tokens,
+                       logits, expected, size - 1u) == ET_EVAL5_ERR_FORMAT);
+  expected[size] = '!';
+  CHECK(compare_runner(fingerprints, digests, documents, train_tokens, eval_tokens,
+                       logits, expected, size) == ET_EVAL5_ERR_FORMAT);
+  expected[size] = '\0';
+  documents[18] ^= 1u;
+  CHECK(compare_runner(fingerprints, digests, documents, train_tokens, eval_tokens,
+                       logits, expected, size) == ET_EVAL5_ERR_IDENTITY);
+  memcpy(documents + 18u, train_bytes, 18u);
+  CHECK(compare_runner(fingerprints, digests, documents, train_tokens, train_tokens,
+                       logits, expected, size) == ET_EVAL5_ERR_CONTAMINATED);
+  return 0;
+}
+
 int main(int argc, char **argv) {
   static const char fingerprint[] =
       "sha256:eshkol-byte-tokenizer-v1:"
@@ -89,6 +146,8 @@ int main(int argc, char **argv) {
   memcpy(digests, input.train_manifest_sha256, 32u);
   memcpy(digests + 32u, input.eval_manifest_sha256, 32u);
   memcpy(digests + 64u, input.checkpoint_sha256, 32u);
+  CHECK(test_runner(input, digests, train_bytes, eval_bytes,
+                    train_tokens, eval_tokens) == 0);
   int64_t audit_record[9] = {0};
   for (size_t i = 0; i < 8u; ++i)
     audit_record[i + 1u] = (int64_t)input.audit_counts[i];
@@ -150,6 +209,6 @@ int main(int argc, char **argv) {
   CHECK(et_eval5_v256_manifest_roundtrip(&input, formatted, 1u,
                                           &size) == ET_EVAL5_ERR_BOUNDS);
   CHECK(memcmp(formatted, untouched, sizeof(formatted)) == 0 && size == 777u);
-  puts("EVAL5 V256 in-memory manifest round-trip: PASS");
+  puts("EVAL5 V256 in-memory manifest round-trip and one-shot parity: PASS");
   return 0;
 }
