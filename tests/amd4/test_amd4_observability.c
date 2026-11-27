@@ -1,5 +1,9 @@
 #include "eshkol_transformer/amd4_hip_abi.h"
 
+#ifdef AMD4_TEST_LOADER_FIXTURES
+#include "loader_fixture.h"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -815,7 +819,20 @@ static void test_live(void) {
   free(text);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+#ifdef AMD4_TEST_LOADER_FIXTURES
+  if (argc == 2) {
+    test_amd4_loader_fixture(argv[1]);
+    test_k1();
+    printf("AMD4 loader fixture %s passed with K1 fail-closed checks\n", argv[1]);
+    return EXIT_SUCCESS;
+  }
+#endif
+  if (argc != 1) {
+    return EXIT_FAILURE;
+  }
+  (void)argv;
+
   test_enumeration();
   test_hip_failures();
   test_library_failures();
