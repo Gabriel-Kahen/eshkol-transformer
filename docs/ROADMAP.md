@@ -3682,8 +3682,9 @@ publication, public G2 and continuation remain pending.
   is queued. The
   [native call-bound I1 prerequisite](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#native-call-bound-i1-prerequisite)
   retains the original pending output's actual typed borrow and releases it
-  while the same call is active. Its native gate exercises lease rejection
-  and abort retry. A2 release and Eshkol composition remain pending.
+  while the same call is active. Its native gate exercises lease rejection,
+  abort retry, and equal-I1 substitution at prefix and terminal publication.
+  A2 release and Eshkol composition remain pending.
   Same-call terminal publication, detached Eshkol output, public G2,
   and CLI adoption follow separately.
 

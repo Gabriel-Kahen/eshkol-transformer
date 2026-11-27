@@ -3221,6 +3221,24 @@ et_g3c4_p2g2_call_i1_lease_end(
     abort();
   return 0;
 }
+
+#ifdef ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE
+static int64_t et_g3c4_p2g2_i1_publication_preflight(
+    et_g3c4_context_internal *context, et_g3c4_output_internal *output) {
+  et_g3c4_output_internal *pending = NULL;
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending != output || context->p2g2_i1_lease.output != output ||
+      context->p2g2_i1_lease.ids != output->ids)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+  /* Use the existing no-mutation lease probe to preserve the I1 error. */
+  if (et_g3c4_output_discard_preflight(output) != 0)
+    return et_g3c4_error_state.category;
+  if (context->p2g2_i1_lease.borrow != NULL)
+    return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+  return 0;
+}
+#endif
 #endif
 
 int64_t et_g3c4_private_output_release_v1(void *candidate) {
@@ -7192,6 +7210,10 @@ static int et_g3c4_p2g2_second_output_clean(
       output->text_ready != 0u || output->length != 0 ||
       output->cache_length != 0)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  if (et_g3c4_p2g2_i1_publication_preflight(context, output) != 0)
+    return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_capture_i64(et_m3_private_i64_unborrowed_v1(
           output->ids, &error), &error) != 0 ||
       et_g3c4_capture_i64(et_i64_tensor_borrow_begin_v1(
@@ -7553,6 +7575,10 @@ int64_t et_g3c4_private_p2g2_prefix_commit_v1(
       !et_g3c4_prefill_binding_matches_pins(context))
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  if (et_g3c4_p2g2_i1_publication_preflight(context, output) != 0)
+    return et_g3c4_error_state.category;
+#endif
   selected = context->token_frame_candidate;
   /* First-token EOS needs the later terminal publication contract. */
   if (selected == context->generator_policy[5])
@@ -7628,6 +7654,10 @@ int64_t et_g3c4_private_p2g2_prefix_commit_v1(
   }
   if (et_a2_kv_cache_transaction_view_end_v1(
           &cache_view, &cache_error) != 0) abort();
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  if (et_g3c4_p2g2_i1_publication_preflight(context, output) != 0)
+    return et_g3c4_error_state.category;
+#endif
 
   /* All fallible work is above this point. The A2 commit must succeed on
    * the verified, view-free transaction or the process fails closed. */
@@ -8632,6 +8662,10 @@ int64_t et_g3c4_private_p2g2_terminal_commit_v1(
     return et_g3c4_fail(ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_ALIAS);
   if (et_g3c4_terminal_candidate_preflight(context, prior) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  if (et_g3c4_p2g2_i1_publication_preflight(context, output) != 0)
+    return et_g3c4_error_state.category;
+#endif
   /* The validated I1 copy and A2 commit are the no-failure terminal tail. */
   if (et_i64_tensor_copy_from_v1(output->ids, ids, 2u, &ids_error) != 0)
     abort();

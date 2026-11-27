@@ -114,6 +114,15 @@ I1 `[2]` bytes, foreign and equal owner controls, pre-begin allocation
 failure, repeated and stale operations, and unchanged cache, binding and RNG
 state on held-lease abort followed by release and retry.
 
+With both features enabled, prefix, second-frame and terminal preflight
+verify the retained pending owner and original IDs independently of the
+mutable pending slot. Prefix and terminal repeat the check after the final
+native view is closed. The native regression holds the original lease,
+substitutes a distinct zero-filled I1 `[2]`, and verifies that rejection
+preserves staged and committed cache data, RNG, output, and the active call
+before release and abort. It covers first-EOS and second-token terminal
+branches.
+
 `CC=clang bash tests/g3c4/test-p2-g2-call-i1-lease.sh EVIDENCE_DIRECTORY`
 runs the native gate with normal, repeat and ASan/UBSan/LSan modes and
 compares feature-on/off external symbols. This prerequisite covers native I1
