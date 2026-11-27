@@ -36,6 +36,8 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   dtype, and quantized paths remain open.
 - The [width-16 MOD5-C storage proof](MOD5_E2E_C1_IO5.md#width-16-c2-storage-prerequisite)
   exercises a private I2 1.2 descriptor for the four missing matrix shapes.
+  The ordinary I2 1.1 build retains its original direct storage-copy
+  dispatch. Capability-driven shape dispatch requires the private build flag.
   Default K2 rejects those requests and the candidate descriptor. The K2
   profile contract and supported C2 LOAD/SAVE qualification remain open.
 - [PR #251](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/251)
