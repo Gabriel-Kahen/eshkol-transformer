@@ -51,6 +51,9 @@ done
 "${cc}" "${native_cflags[@]}" -c tests/eval5/mod5_v256_score_bridge.c \
   -o "${scratch}/mod5_v256_score_bridge.o"
 objects+=("${scratch}/mod5_v256_score_bridge.o")
+"${cc}" "${native_cflags[@]}" -c tests/eval5/mod5_v256_manifest_bridge.c \
+  -o "${scratch}/mod5_v256_manifest_bridge.o"
+objects+=("${scratch}/mod5_v256_manifest_bridge.o")
 ar rcsD "${scratch}/libeval5_v256_native.a" "${objects[@]}"
 
 mkdir -p "${scratch}/cache"
@@ -78,6 +81,14 @@ fi
   "${fixture}/eval-clean" "${fixture}/model.etcp" > "${scratch}/score.out"
 python3 -m tests.eval5.check_mod5_v256_witness "${fixture}" "${scratch}/score.out"
 
+"${scratch}/witness" --audit-control "${fixture}/tokenizer.etok" \
+  "${fixture}/train" "${fixture}/eval-clean" > "${scratch}/audit-control.out"
+grep -Fxq 'AUDIT -7 2 2 2 2 14 14 0 1' "${scratch}/audit-control.out"
+! grep -q '^SCORE' "${scratch}/audit-control.out" ||
+  die "contaminated control reached scoring"
+! grep -q '^MANIFEST_BEGIN' "${scratch}/audit-control.out" ||
+  die "contaminated control reached manifest formatting"
+
 "${scratch}/witness" --check-c1 "${fixture}/model.etcp" > "${scratch}/c1-good.out"
 grep -Fxq C1_CHECKED "${scratch}/c1-good.out"
 python3 - "${fixture}/model.etcp" "${scratch}/wrong-shape.etcp" <<'PY'
@@ -90,7 +101,16 @@ tensors = list(state.tensors)
 tensors[9] = replace(tensors[9], shape=(128, 16), data=tensors[9].data[:128 * 16 * 4])
 Path(sys.argv[2]).write_bytes(encode_c1(replace(state, tensors=tuple(tensors))))
 PY
+python3 - "${scratch}/wrong-t1.etok" <<'PY'
+from pathlib import Path
+import sys
+from tests.t1.reference import Identity, encode_artifact
+Path(sys.argv[1]).write_bytes(encode_artifact(Identity(utf8_policy="strict")))
+PY
 set +e
+"${scratch}/witness" "${scratch}/wrong-t1.etok" "${fixture}/train" \
+  "${fixture}/eval-clean" "${fixture}/model.etcp" > "${scratch}/t1-identity-bad.out"
+tokenizer_identity_status=$?
 "${scratch}/witness" --check-c1 "${scratch}/wrong-shape.etcp" > "${scratch}/c1-bad.out"
 shape_status=$?
 "${scratch}/witness" "${fixture}/tokenizer.etok" "${fixture}/train" \
@@ -100,11 +120,15 @@ checkpoint_identity_status=$?
   "${fixture}/train" "${fixture}/model.etcp" > "${scratch}/split-bad.out"
 identity_status=$?
 set -e
-[[ "${shape_status}" -eq 2 && "${checkpoint_identity_status}" -eq 2 && "${identity_status}" -eq 2 ]] ||
-  die "negative C1 shape, C1 identity, or D1 split identity was accepted"
+[[ "${tokenizer_identity_status}" -eq 2 && "${shape_status}" -eq 2 && \
+   "${checkpoint_identity_status}" -eq 2 && "${identity_status}" -eq 2 ]] ||
+  die "negative T1 identity, C1 shape/identity, or D1 split identity was accepted"
+grep -Fq 'T1 tokenizer owner identity mismatch' "${scratch}/t1-identity-bad.out"
 grep -Fq 'unexpected MOD5 parameter metadata' "${scratch}/c1-bad.out"
 grep -Fq 'C1 checkpoint SHA-256 mismatch' "${scratch}/c1-identity-bad.out"
 grep -Fq 'D1 manifest SHA-256 mismatch' "${scratch}/split-bad.out"
-! grep -q '^SCORE' "${scratch}/c1-bad.out" "${scratch}/c1-identity-bad.out" "${scratch}/split-bad.out" ||
+! grep -q '^SCORE' "${scratch}/t1-identity-bad.out" "${scratch}/c1-bad.out" "${scratch}/c1-identity-bad.out" "${scratch}/split-bad.out" ||
   die "rejected input produced a SCORE line"
-printf 'EVAL5 V256 AOT live score, C1 shape/identity, and D1 identity: PASS\n'
+! grep -q '^MANIFEST_BEGIN' "${scratch}/t1-identity-bad.out" "${scratch}/c1-bad.out" "${scratch}/c1-identity-bad.out" "${scratch}/split-bad.out" ||
+  die "rejected input produced a manifest"
+printf 'EVAL5 V256 AOT live audit/control, score, manifest, and T1/D1/C1 negatives: PASS\n'
