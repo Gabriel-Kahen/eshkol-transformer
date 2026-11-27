@@ -1278,9 +1278,9 @@ condition. It pins canonical and emitted hashes, restores the exact old raw
 object before any model observer, and rechecks the full P1 projection before
 the ordinary unchanged-state and fresh-load retry. This is source-only P1
 projection evidence, not native M3 graph or rollback proof; bounded source
-review accepted it, while compiled witnesses remain pending. The exact sanitizer import
-manifests are still absent and its build fails closed. Pinned Q0 oracle
-generation, emitted package inventories, generated AOT postprepare review,
+review accepted it, while compiled witnesses remain pending. The initial
+source candidate lacked emitted sanitizer import manifests. Pinned Q0 oracle
+generation, generated AOT postprepare review,
 fresh normal/repeat/poisoned and sanitizer runtime gates remain pending. This candidate does not establish
 N3 or E3 §9 compiled acceptance. A dedicated, manually dispatched
 Ubuntu-22.04/LLVM-21 zero-only inventory-discovery harness is source-staged:
@@ -1295,8 +1295,8 @@ on `fa746a626` stopped at normal Eshkol AOT. Its manifest listed three hidden
 generated-source scratch copies that the uploader omitted. Their visible
 evidence copies verified. The workflow now moves private builder scratch
 outside the artifact root before sealing the visible evidence. Hosted
-receipt verification, exact sanitizer inventory review and pinning, the
-compiled zero-control gates, and E3 §9 qualification remain pending.
+receipt verification, the compiled zero-control runtime gates, and E3 §9
+qualification remain pending.
 PR #206's hosted CI run `38445613534`
 stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
 generator was missing from the exact development-script allowlist. The focused
@@ -1308,15 +1308,21 @@ Hosted zero-inventory discovery run `45948199739` reached normal AOT on
 The source repair moves the same live/dead module and handle count into the
 pinned zero-only P1 overlay. The negative driver still compares both counts
 before capture and after restoring and rechecking the projection. The overlay
-returns only the two counts. Emitted inventory review and compiled runtime
-qualification remain pending.
+returns only the two counts. Compiled runtime qualification remains pending.
 
 The isolated N3 zero-package linkage candidate enables the existing I2 test
 provider in the exact noninstalled zero bridge and requires the allocator
 failpoint, allocator reset and live-builder census as local definitions after
 the aggregate link. The focused bridge checks cover the zero and uniform
-tuples and verify that ordinary E3 builds omit those definitions. The full
-normal and sanitizer inventory discovery and runtime matrices remain pending.
+tuples and verify that ordinary E3 builds omit those definitions. The guarded
+f31/LLVM 21 [PR #280](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/280)
+discovery on `31ce137fa` and tree `9dcb7f7a5365` found one local definition of
+each I2 hook in both ELF objects. The exact emitted lists now pin 175 normal
+undefined symbols, 170 sanitizer noninstrumentation imports and 58 sanitizer
+instrumentation imports. The sealed discovery receipt SHA-256 is
+`46741a0cea7960df13369c4e35f543e1006a250a2d06e8384030bc5011a1f989`.
+Pinned Q0 generation and normal, repeat, poisoned and sanitizer runtime
+qualification remain pending.
 
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has

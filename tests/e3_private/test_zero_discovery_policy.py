@@ -103,32 +103,58 @@ class ZeroDiscoveryPolicyTest(unittest.TestCase):
     def test_missing_sanitizer_pins_are_discovery_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             runner_temp = Path(tmp)
+            checkout = runner_temp / "checkout"
+            for directory in ("scripts", "native", "internal", "src", "tests"):
+                shutil.copytree(ROOT / directory, checkout / directory)
+            # Let the wrapper check its pins, then stop the builder at toolchain
+            # verification so this test exercises the discovery route offline.
+            with (checkout / "scripts/common.sh").open("a") as common:
+                common.write(dedent('''
+                    verify_toolchain() {
+                      if [[ "${BASH_SOURCE[1]##*/}" == build-e1b-consumer.sh ]]; then
+                        die "fixture reached builder toolchain verification"
+                      fi
+                    }
+                '''))
             gate = runner_temp / "e3-n3-zero-discovery/sanitize"
             stage = gate / ".e3-zero-control.ABC123"
             (gate / "evidence").mkdir(parents=True)
             stage.mkdir()
-            prefix = ROOT / "tests/e3_private/zero_control_package"
-            args = [ROOT / "tests/e3_private/zero_control_driver_root.esk",
-                    ROOT / "tests/e3_private/zero_control_bridge.c",
+            prefix = checkout / "tests/e3_private/zero_control_package"
+            object_file = stage / "e3_zero_control_package.o"
+            args = [checkout / "tests/e3_private/zero_control_driver_root.esk",
+                    checkout / "tests/e3_private/zero_control_bridge.c",
                     Path(str(prefix) + "_private_renames.txt"),
                     Path(str(prefix) + "_public_exports.txt"),
-                    stage / "e3_zero_control_package.o",
-                    ROOT / "internal/p1/lib", ROOT / "internal/c1/lib",
-                    ROOT / "internal/t1/lib", ROOT / "src",
-                    ROOT / "internal/d2/lib", ROOT / "internal/e3/lib"]
+                    object_file,
+                    checkout / "internal/p1/lib", checkout / "internal/c1/lib",
+                    checkout / "internal/t1/lib", checkout / "src",
+                    checkout / "internal/d2/lib", checkout / "internal/e3/lib"]
             env = dict(os.environ, RUNNER_TEMP=str(runner_temp),
-                       E3_ZERO_CONTROL_SANITIZE="1",
-                       ESHKOL_SOURCE_DIR=str(runner_temp / "absent-source"),
-                       ESHKOL_BUILD_DIR=str(runner_temp / "absent-build"))
-            self.assertFalse(Path(str(prefix) +
-                                  "_sanitized_noninstrumentation_undefined_symbols.txt").exists())
-            env["E3_ZERO_CONTROL_DISCOVERY"] = "1"
-            discovery = subprocess.run(["bash", str(BUILDER), *map(str, args)],
-                                       cwd=ROOT, env=env, capture_output=True, text=True)
-            self.assertNotEqual(discovery.returncode, 0)
-            self.assertNotIn("sanitized_noninstrumentation_undefined_symbols", discovery.stderr)
-            self.assertNotIn("E3 zero discovery arguments differ", discovery.stderr)
-            self.assertFalse((stage / "e3_zero_control_package.o").exists())
+                       E3_ZERO_CONTROL_SANITIZE="1")
+            env.pop("E3_ZERO_CONTROL_DISCOVERY", None)
+            artifact = runner_temp / "artifact"
+            wrapper = checkout / "scripts/build-e3-zero-control-test.sh"
+            builder = checkout / BUILDER.relative_to(ROOT)
+            for kind in ("noninstrumentation", "instrumentation"):
+                with self.subTest(kind=kind):
+                    name = f"sanitized_{kind}_undefined_symbols"
+                    pin = Path(f"{prefix}_{name}.txt")
+                    pin.unlink()
+                    normal = subprocess.run(["bash", str(wrapper), str(artifact), "sanitize"],
+                                            cwd=checkout, env=env, capture_output=True, text=True)
+                    self.assertNotEqual(normal.returncode, 0)
+                    self.assertIn(f"sanitizer needs an emitted exact {name} manifest", normal.stderr)
+                    self.assertFalse(artifact.exists())
+                    discovery = subprocess.run(
+                        ["bash", str(builder), *map(str, args)], cwd=checkout,
+                        env=dict(env, E3_ZERO_CONTROL_DISCOVERY="1"),
+                        capture_output=True, text=True,
+                    )
+                    self.assertNotEqual(discovery.returncode, 0)
+                    self.assertIn("fixture reached builder toolchain verification", discovery.stderr)
+                    self.assertFalse(object_file.exists())
+                    shutil.copyfile(ROOT / pin.relative_to(checkout), pin)
 
     def test_capture_copies_partial_files_and_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
