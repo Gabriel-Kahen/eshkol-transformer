@@ -68,4 +68,4 @@ printf 'MOD5 E2E two fresh AOT builds with byte-identical ELF: PASS\n'
 MOD5_E2E_AOT="${scratch}/a/mod5-e2e" \
   ESHKOL_IO5_QUANT_LIB="${PROJECT_ROOT}/build/io5_quant/libeshkol_transformer_io5_quant.so" \
   python3 tests/mod5/test_mod5_e2e_io5.py -v
-printf 'MOD5 E2E training, C1, five lossless and two narrow IO5 routes per variant and fresh model reload: PASS\n'
+printf 'MOD5 E2E training, C1, lossless, narrow safetensors and mixed Q8_0 routes with fresh model scoring: PASS\n'

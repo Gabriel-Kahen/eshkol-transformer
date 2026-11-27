@@ -1,4 +1,4 @@
-"""Drive D1, live AOT training, C1, and lossless and narrow IO5 CLI routes."""
+"""Drive D1, live AOT training, C1, and IO5 restores."""
 
 from dataclasses import replace
 import hashlib
@@ -16,10 +16,11 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools/io5"
-sys.path[:0] = [str(TOOLS), str(ROOT / "tests/c1")]
+sys.path[:0] = [str(TOOLS), str(ROOT / "tests/c1"), str(ROOT / "tests/io5")]
 import gguf_interop as gg
 import quantized_interchange as quant
 import safetensors_interop as safe
+from gguf_wire_fixture import unpack_quant_gguf
 from test_checkpoint_format import build_container
 
 PROFILE = "eshkol-mod5-v1"
@@ -42,6 +43,14 @@ ROSTER = {
     "norm_final.weight": (16,),
     "token_embedding.weight": (16, 16),
 }
+GGUF_NAMES = (
+    "blk.0.attn_k.weight", "blk.0.attn_output.weight", "blk.0.attn_q.weight",
+    "blk.0.attn_v.weight", "blk.0.ffn_down.weight", "blk.0.ffn_gate.weight",
+    "blk.0.ffn_up.weight", "blk.0.attn_norm.weight", "blk.0.ffn_norm.weight",
+    "output.weight", "output_norm.weight", "token_embd.weight",
+)
+Q8_NAME = "blk.0.ffn_down.weight"
+Q8_PATH = ("blocks", "0", "ffn", "down", "weight")
 EVAL = re.compile(
     r"EVAL loss=(\S+) loss_f64=(0x[0-9a-f]+(?:\.[0-9a-f]+)?p[+-]\d+) "
     r"logits_f32_sha256=([0-9a-f]{64})"
@@ -105,6 +114,9 @@ class Mod5EndToEndTests(unittest.TestCase):
 
     def cli(self, *args, status=0):
         return self.run_command(sys.executable, TOOLS / "model_mapping.py", *args, status=status)
+
+    def quant_cli(self, *args, status=0):
+        return self.run_command(sys.executable, TOOLS / "quantized_interchange.py", *args, status=status)
 
     def train_eval(self, variant):
         path, stdout = self.originals[variant]
@@ -255,6 +267,117 @@ class Mod5EndToEndTests(unittest.TestCase):
                     self.assert_live_eval(restored, result.stdout)
                     print(f"MOD5 {prefix} weight_max_abs={weight_delta:.9g} loss_abs={loss_delta:.9g} "
                           f"logits_f32_sha256={restored_eval[3]}", flush=True)
+
+    def inspect_q8_wire(self, raw, state):
+        metadata, rows, prefix_end, data_start = unpack_quant_gguf(raw)
+        self.assertEqual(tuple(row[0] for row in rows), GGUF_NAMES)
+        self.assertEqual(metadata["general.file_type"], (gg.UINT32, 7))
+        self.assertEqual(metadata["general.quantization_version"], (gg.UINT32, 2))
+        self.assertEqual(metadata["eshkol.io5.profile"], (gg.STRING, "eshkol-decoder-v1"))
+        self.assertEqual(metadata["eshkol.io5.scheme"], (gg.STRING, "gguf"))
+        self.assertEqual(metadata["eshkol.io5.q8_fallback_dtype"], (gg.STRING, "F32"))
+        self.assertEqual(json.loads(metadata["eshkol.io5.tensor_dtypes"][1]), {
+            name: "Q8_0" if name == Q8_NAME else "F32" for name in GGUF_NAMES
+        })
+        self.assertEqual(json.loads(metadata["eshkol.io5.manifest"][1]), {
+            "provider": state.provider,
+            "entries": [
+                {"name": name, "path": list(tensor.path), "kind": tensor.kind}
+                for name, tensor in zip(GGUF_NAMES, state.tensors, strict=True)
+            ],
+            "aliases": [list(group) for group in state.aliases],
+        })
+        self.assertEqual(data_start % 32, 0)
+        self.assertEqual(raw[prefix_end:data_start], bytes(data_start - prefix_end))
+        cursor = 0
+        restored = []
+        q8_byte = None
+        weight_delta = 0.0
+        for tensor, (name, dims, kind, offset, data) in zip(state.tensors, rows, strict=True):
+            self.assertEqual(dims, tensor.shape[::-1])
+            self.assertEqual(offset, cursor)
+            padding = (-len(data)) % 32
+            cursor += len(data) + padding
+            self.assertEqual(raw[data_start + cursor - padding:data_start + cursor], bytes(padding))
+            if name == Q8_NAME:
+                self.assertEqual((tensor.path, dims, kind, len(data)), (Q8_PATH, (32, 16), 8, 544))
+                q8_byte = data_start + offset + 2
+                blocks = []
+                for (scale, *quants), weights in zip(
+                    struct.iter_unpack("<e32b", data), struct.iter_unpack("<32f", tensor.data), strict=True,
+                ):
+                    amax = max(map(abs, weights))
+                    self.assertEqual(struct.pack("<e", scale), struct.pack("<e", amax / 127))
+                    self.assertTrue(all(-127 <= quant <= 127 for quant in quants))
+                    values = tuple(scale * quant for quant in quants)
+                    error = max(abs(a - b) for a, b in zip(weights, values, strict=True))
+                    self.assertLessEqual(error, max(scale / 2, amax - 127 * scale))
+                    weight_delta = max(weight_delta, error)
+                    blocks.append(struct.pack("<32f", *values))
+                data = b"".join(blocks)
+            else:
+                self.assertEqual(kind, 0)
+                self.assertEqual(data, tensor.data)
+            restored.append(replace(tensor, data=data))
+        self.assertEqual(cursor, 9952)
+        self.assertEqual(len(raw), data_start + cursor)
+        self.assertIsNotNone(q8_byte)
+        return replace(state, tensors=tuple(restored)), q8_byte, weight_delta
+
+    def test_trained_q8_gguf_fresh_scoring(self):
+        for variant in self.originals:
+            with self.subTest(variant=variant):
+                original, baseline = self.train_eval(variant)
+                self.assert_live_eval(original, baseline)
+                original_bytes = original.read_bytes()
+                state = safe.decode_c1(original_bytes)
+                self.assertEqual(state.provider, PROVIDER)
+                self.assertEqual({".".join(t.path): t.shape for t in state.tensors}, ROSTER)
+                self.assertEqual(state.aliases, ((9, 11),) if variant == "tied" else ())
+                directory = self.directory / f"{variant}-q8"
+                directory.mkdir()
+                wire = directory / "trained.gguf"
+                self.quant_cli(
+                    "c1-to-gguf", original, wire, "--profile", "eshkol-decoder-v1",
+                    "--scheme", "gguf", "--dtype", "Q8_0", "--q8-fallback", "F32",
+                )
+                raw = wire.read_bytes()
+                expected, q8_byte, weight_delta = self.inspect_q8_wire(raw, state)
+                restored = directory / "restored.etcp"
+                self.quant_cli("gguf-to-c1", wire, restored)
+                self.assertEqual(safe.decode_c1(restored.read_bytes()), expected)
+                self.assertGreater(weight_delta, 0)
+
+                score = self.run_command(self.binary, "--mode", "load-eval", restored).stdout
+                self.assert_live_eval(restored, score)
+                result = EVAL.fullmatch(score.rstrip("\n"))
+                self.assertIsNotNone(result)
+                loss, bits, logits = result.groups()
+                self.assertTrue(math.isfinite(float(loss)) and float(loss) >= 0)
+                self.assertEqual(float.fromhex(bits), float(loss))
+                _, baseline_bits, baseline_logits = EVAL.fullmatch(baseline.rstrip("\n")).groups()
+                loss_delta = abs(float.fromhex(bits) - float.fromhex(baseline_bits))
+                self.assertGreater(loss_delta, 0)
+                self.assertLessEqual(loss_delta, 0.01)
+                self.assertNotEqual(logits, baseline_logits)
+
+                corrupt = directory / "corrupt.gguf"
+                corrupt.write_bytes(flip(raw, q8_byte))
+                rejected = directory / "rejected.etcp"
+                diagnostic = "IO5 quantized GGUF payload SHA-256 mismatch"
+                result = self.quant_cli("gguf-to-c1", corrupt, rejected, status=2)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertFalse(rejected.exists())
+                existing = directory / "existing.etcp"
+                existing.write_bytes(original_bytes)
+                result = self.quant_cli("gguf-to-c1", corrupt, existing, "--overwrite", status=2)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertEqual(existing.read_bytes(), original_bytes)
+                print(
+                    f"MOD5 {variant} mixed Q8_0 fresh evaluation: {score.strip()} "
+                    f"max_weight_delta={weight_delta:.9g} mean_loss_delta={loss_delta:.9g}",
+                    flush=True,
+                )
 
     def test_external_roster_and_live_c1_tamper(self):
         original, evaluation = self.train_eval("untied")
