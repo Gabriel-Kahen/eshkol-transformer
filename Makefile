@@ -34,6 +34,7 @@ SHELL := /usr/bin/bash
 	test-paged-kv-model-attention \
 	test-beam-cd-composition test-beam-cd-live-cpu test-spec-paged-witness test-spec-live-model \
 	test-data4-quality-t2-d1 \
+	build-spec-paged-round test-spec-paged-round \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
@@ -439,6 +440,12 @@ test-spec-paged-witness:
 	/usr/bin/bash scripts/test-spec-paged-witness.sh
 test-spec-live-model:
 	/usr/bin/bash scripts/test-spec-live-model.sh
+
+build-spec-paged-round:
+	/usr/bin/bash scripts/build-spec-paged-round.sh
+
+test-spec-paged-round:
+	/usr/bin/bash scripts/test-spec-paged-round.sh
 
 test-data4-quality-t2-d1:
 	/usr/bin/bash scripts/test-data4-quality-t2-d1.sh
