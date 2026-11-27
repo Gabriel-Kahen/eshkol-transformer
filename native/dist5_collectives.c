@@ -26,7 +26,10 @@ enum kind {
   ALLREDUCE,
   ALLGATHER,
   REDUCE_SCATTER,
-  SYNC
+  SYNC,
+  WEIGHTED_COUNTS,
+  WEIGHTED_SUM,
+  WEIGHTED_VOTE
 };
 enum phase { GRANT = 1, RESULT, COMMIT, ABORT };
 enum { REQUEST_WORDS = 11, REPLY_WORDS = 3 };
@@ -256,14 +259,18 @@ static et_dist5_status_t receive_reply(struct exchange *x, enum phase phase) {
   return (et_dist5_status_t)words[2];
 }
 
-static int valid_local_status(uint64_t status) {
+static int valid_local_status(enum kind kind, uint64_t status) {
   return status == ET_DIST5_OK || status == ET_DIST5_ERR_INVALID_ARG ||
-         status == ET_DIST5_ERR_NONFINITE || status == ET_DIST5_ERR_ALLOC;
+         status == ET_DIST5_ERR_NONFINITE || status == ET_DIST5_ERR_ALLOC ||
+         ((kind == WEIGHTED_SUM || kind == WEIGHTED_VOTE) &&
+          status == ET_DIST5_ERR_IO);
 }
 
 /* Consistent priority even when more than one rank rejects its operand. */
 static et_dist5_status_t merge_status(et_dist5_status_t a,
                                       et_dist5_status_t b) {
+  if (a == ET_DIST5_ERR_IO || b == ET_DIST5_ERR_IO)
+    return ET_DIST5_ERR_IO;
   if (a == ET_DIST5_ERR_INVALID_ARG || b == ET_DIST5_ERR_INVALID_ARG)
     return ET_DIST5_ERR_INVALID_ARG;
   if (a == ET_DIST5_ERR_NONFINITE || b == ET_DIST5_ERR_NONFINITE)
@@ -282,7 +289,7 @@ static et_dist5_status_t check_requests(struct exchange *x) {
       return status;
     request(x, r, expected);
     if (memcmp(incoming, expected, 4 * sizeof(uint64_t)) != 0 ||
-        !valid_local_status(incoming[REQUEST_WORDS - 1])) {
+        !valid_local_status(x->call->kind, incoming[REQUEST_WORDS - 1])) {
       mismatch = 1;
       continue;
     }
@@ -524,12 +531,32 @@ static int overlaps(const void *send, size_t input, const void *recv,
   return a < b + output && b < a + input;
 }
 
+static et_dist5_status_t allocate_exchange(struct exchange *x) {
+  const struct call *c = x->call;
+  const int coordinator = x->comm->rank == 0;
+  const int needs_scratch = coordinator && x->comm->world > 1 &&
+                            (c->kind != BROADCAST || c->root != 0);
+  x->stage = malloc(coordinator ? x->total : x->output);
+  if (needs_scratch)
+    x->scratch = malloc(x->input);
+  if (x->stage == NULL || (needs_scratch && x->scratch == NULL))
+    return ET_DIST5_ERR_ALLOC;
+  return ET_DIST5_OK;
+}
+
 static et_dist5_status_t prepare(struct exchange *x) {
   const struct call *c = x->call;
-  if (c->kind == BARRIER)
+  if (c->kind == BARRIER || c->kind == WEIGHTED_VOTE)
     return ET_DIST5_OK;
+  if (c->kind == WEIGHTED_COUNTS) {
+    /* The request carries the parameter count and rate bits for agreement.
+     * The only payload here is the local effective count. */
+    x->total = x->input = x->output = sizeof(int64_t);
+    return allocate_exchange(x);
+  }
   const int reduce =
-      c->kind == ALLREDUCE || c->kind == REDUCE_SCATTER || c->kind == SYNC;
+      c->kind == ALLREDUCE || c->kind == REDUCE_SCATTER || c->kind == SYNC ||
+      c->kind == WEIGHTED_SUM;
   const size_t element =
       c->dtype == ET_DIST5_F32 ? sizeof(float) : sizeof(int64_t);
   const size_t factor =
@@ -550,35 +577,26 @@ static et_dist5_status_t prepare(struct exchange *x) {
     return ET_DIST5_ERR_INVALID_ARG;
   const int in_place =
       c->kind == BROADCAST ||
-      ((c->kind == ALLREDUCE || c->kind == SYNC) && c->send == c->recv);
+      ((c->kind == ALLREDUCE || c->kind == SYNC || c->kind == WEIGHTED_SUM) &&
+       c->send == c->recv);
   if (!in_place && overlaps(c->send, x->input, c->recv, x->output))
     return ET_DIST5_ERR_INVALID_ARG;
   if (c->kind == SYNC && !finite_f32(c->send, c->count))
     return ET_DIST5_ERR_NONFINITE;
 
-  const int coordinator = x->comm->rank == 0;
-  const int needs_scratch = coordinator && x->comm->world > 1 &&
-                            (c->kind != BROADCAST || c->root != 0);
-  x->stage = malloc(coordinator ? x->total : x->output);
-  if (needs_scratch)
-    x->scratch = malloc(x->input);
-  if (x->stage == NULL || (needs_scratch && x->scratch == NULL))
-    return ET_DIST5_ERR_ALLOC;
-  return ET_DIST5_OK;
+  return allocate_exchange(x);
 }
 
-static et_dist5_status_t execute(et_dist5_comm_t *comm, const struct call *call,
-                                 int timeout_ms) {
-  if (comm == NULL || timeout_ms <= 0)
-    return ET_DIST5_ERR_INVALID_ARG;
+static et_dist5_status_t execute_before(et_dist5_comm_t *comm,
+                                        const struct call *call,
+                                        int64_t deadline,
+                                        et_dist5_status_t local) {
   if (comm->fatal != ET_DIST5_OK)
     return comm->fatal;
-  const int64_t now = now_ms();
-  if (now < 0 || comm->sequence == UINT64_MAX)
+  if (comm->sequence == UINT64_MAX)
     return ET_DIST5_ERR_IO;
-  struct exchange x = {
-      .comm = comm, .call = call, .deadline = now + timeout_ms};
-  x.local = prepare(&x);
+  struct exchange x = {.comm = comm, .call = call, .deadline = deadline};
+  x.local = local == ET_DIST5_OK ? prepare(&x) : local;
   et_dist5_status_t status = comm->rank == 0 ? coordinate(&x) : participate(&x);
   if (status == ET_DIST5_OK && comm->world == 1) {
     const int64_t end = now_ms();
@@ -595,6 +613,18 @@ static et_dist5_status_t execute(et_dist5_comm_t *comm, const struct call *call,
   free(x.scratch);
   free(x.stage);
   return status;
+}
+
+static et_dist5_status_t execute(et_dist5_comm_t *comm, const struct call *call,
+                                 int timeout_ms) {
+  if (comm == NULL || timeout_ms <= 0)
+    return ET_DIST5_ERR_INVALID_ARG;
+  if (comm->fatal != ET_DIST5_OK)
+    return comm->fatal;
+  const int64_t now = now_ms();
+  if (now < 0)
+    return ET_DIST5_ERR_IO;
+  return execute_before(comm, call, now + timeout_ms, ET_DIST5_OK);
 }
 
 et_dist5_status_t et_dist5_barrier(et_dist5_comm_t *comm, uint64_t tag,
@@ -648,4 +678,122 @@ et_dist5_status_t et_dist5_sync_gradients_f32(et_dist5_comm_t *comm,
   const struct call call = {SYNC,          tag, count, ET_DIST5_F32,
                             ET_DIST5_MEAN, 0,   local, mean};
   return execute(comm, &call, timeout_ms);
+}
+
+static int invalid_aligned_span(const void *buffer, size_t bytes,
+                                size_t alignment) {
+  return invalid_span(buffer, bytes) || (uintptr_t)buffer % alignment != 0;
+}
+
+static et_dist5_status_t validate_weighted_step(
+    int64_t local_count, const float *local_mean, size_t count,
+    uint32_t rate_bits, const float *parameters, const float *mean,
+    const int64_t *global_count) {
+  if (count == 0 || count >= ET_DIST5_MAX_BUFFER_BYTES / sizeof(float) ||
+      local_count < 0 || rate_bits == 0 || rate_bits >= UINT32_C(0x7f800000))
+    return ET_DIST5_ERR_INVALID_ARG;
+  const size_t parameter_bytes = count * sizeof(float);
+  const size_t mean_bytes = parameter_bytes + sizeof(float);
+  const size_t count_bytes = sizeof(*global_count);
+  if (invalid_aligned_span(parameters, parameter_bytes, _Alignof(float)) ||
+      invalid_aligned_span(mean, mean_bytes, _Alignof(float)) ||
+      invalid_aligned_span(global_count, count_bytes, _Alignof(int64_t)) ||
+      overlaps(parameters, parameter_bytes, mean, mean_bytes) ||
+      overlaps(parameters, parameter_bytes, global_count, count_bytes) ||
+      overlaps(mean, mean_bytes, global_count, count_bytes))
+    return ET_DIST5_ERR_INVALID_ARG;
+  if (local_count > 0 && local_mean != mean &&
+      (invalid_aligned_span(local_mean, mean_bytes, _Alignof(float)) ||
+       overlaps(local_mean, mean_bytes, mean, mean_bytes) ||
+       overlaps(local_mean, mean_bytes, parameters, parameter_bytes) ||
+       overlaps(local_mean, mean_bytes, global_count, count_bytes)))
+    return ET_DIST5_ERR_INVALID_ARG;
+  if (!finite_f32(parameters, count) ||
+      (local_count > 0 && !finite_f32(local_mean, count + 1)))
+    return ET_DIST5_ERR_NONFINITE;
+  return ET_DIST5_OK;
+}
+
+static et_dist5_status_t scale_weighted_mean(float *stage, size_t count,
+                                             const float *mean,
+                                             int64_t local, int64_t total) {
+  if (local == 0) {
+    memset(stage, 0, count * sizeof(float));
+    return ET_DIST5_OK;
+  }
+  fenv_t saved;
+  if (fegetenv(&saved) != 0 || fesetenv(FE_DFL_ENV) != 0)
+    return ET_DIST5_ERR_IO;
+  const double fraction = (double)local / (double)total;
+  for (size_t i = 0; i < count; ++i)
+    stage[i] = (float)((double)mean[i] * fraction);
+  return fesetenv(&saved) == 0 ? ET_DIST5_OK : ET_DIST5_ERR_IO;
+}
+
+static et_dist5_status_t stage_sgd(float *stage, size_t count,
+                                   const float *parameters,
+                                   const float *gradient, float rate) {
+  fenv_t saved;
+  if (fegetenv(&saved) != 0 || fesetenv(FE_DFL_ENV) != 0)
+    return ET_DIST5_ERR_IO;
+  for (size_t i = 0; i < count; ++i)
+    stage[i] = parameters[i] - rate * gradient[i];
+  const int finite = finite_f32(stage, count);
+  if (fesetenv(&saved) != 0)
+    return ET_DIST5_ERR_IO;
+  return finite ? ET_DIST5_OK : ET_DIST5_ERR_NONFINITE;
+}
+
+et_dist5_status_t et_dist5_weighted_sgd_f32(
+    et_dist5_comm_t *comm, int64_t local_count, const float *local_mean,
+    size_t parameter_count, float learning_rate, float *parameters,
+    float *global_mean, int64_t *global_count, uint64_t tag, int timeout_ms) {
+  if (comm == NULL || timeout_ms <= 0)
+    return ET_DIST5_ERR_INVALID_ARG;
+  if (comm->fatal != ET_DIST5_OK)
+    return comm->fatal;
+  const int64_t now = now_ms();
+  if (now < 0)
+    return ET_DIST5_ERR_IO;
+  const int64_t deadline = now + timeout_ms;
+  uint32_t rate_bits;
+  memcpy(&rate_bits, &learning_rate, sizeof(rate_bits));
+  et_dist5_status_t status = validate_weighted_step(
+      local_count, local_mean, parameter_count, rate_bits, parameters,
+      global_mean, global_count);
+  float *stage = NULL;
+  if (status == ET_DIST5_OK) {
+    stage = malloc((2 * parameter_count + 1) * sizeof(float));
+    if (stage == NULL)
+      status = ET_DIST5_ERR_ALLOC;
+  }
+
+  int64_t total;
+  const struct call counts = {WEIGHTED_COUNTS, tag, parameter_count, ET_DIST5_I64,
+                              ET_DIST5_SUM, rate_bits, &local_count, &total};
+  status = execute_before(comm, &counts, deadline, status);
+  if (status != ET_DIST5_OK || total == 0) {
+    free(stage);
+    return status == ET_DIST5_OK ? ET_DIST5_ERR_INVALID_ARG : status;
+  }
+
+  const size_t mean_count = parameter_count + 1;
+  status = scale_weighted_mean(stage, mean_count, local_mean, local_count, total);
+  const struct call sum = {WEIGHTED_SUM, tag, mean_count, ET_DIST5_F32,
+                           ET_DIST5_SUM, 0, stage, stage};
+  status = execute_before(comm, &sum, deadline, status);
+  if (status == ET_DIST5_OK) {
+    float *updated = stage + mean_count;
+    status = stage_sgd(updated, parameter_count, parameters, stage + 1,
+                       learning_rate);
+    const struct call vote = {.kind = WEIGHTED_VOTE, .tag = tag};
+    status = execute_before(comm, &vote, deadline, status);
+    if (status == ET_DIST5_OK) {
+      memcpy(parameters, updated, parameter_count * sizeof(float));
+      memcpy(global_mean, stage, mean_count * sizeof(float));
+      *global_count = total;
+    }
+  }
+  free(stage);
+  return status;
 }
