@@ -39,7 +39,9 @@ runs the existing cross-command gate and installed DATA4 command tests, then
 executes the integrated recipe below. A source-only check is available as
 `make test-doc5-source`. If you already have the sealed CI binary artifact,
 follow the [downloaded artifact guide](CLI3_DOWNLOADED_ARTIFACT_RUNNER.md) to run
-`make test-cli3-downloaded-artifact` on the same Ubuntu lane without rebuilding. The literal recipe and 18 installed D1/DATA4 tests passed in pinned Ubuntu using the verified [PR #259 CLI3 artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45883398570).
+`make test-cli3-downloaded-artifact` on the same Ubuntu lane without rebuilding.
+The literal recipe and 18 installed D1/DATA4 tests passed in pinned Ubuntu
+using the verified [PR #259 CLI3 artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45883398570).
 
 ## Prepare, train, evaluate, and generate
 
