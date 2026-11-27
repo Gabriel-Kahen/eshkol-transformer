@@ -123,10 +123,12 @@ for compiler in clang gcc; do
       "${tmp}/${compiler}-ordinary.defined" >/dev/null; then
     die "ordinary ${compiler} O2 object exposed a restore symbol"
   fi
-  test ! -s <(comm -23 "${tmp}/${compiler}-ordinary.defined" \
-                       "${tmp}/${compiler}-feature.defined")
-  test ! -s <(comm -23 "${tmp}/${compiler}-step.defined" \
-                       "${tmp}/${compiler}-combined.defined")
+  comm -23 "${tmp}/${compiler}-ordinary.defined" \
+    "${tmp}/${compiler}-feature.defined" | cmp -s - /dev/null ||
+    die "${compiler} restore gate removed an ordinary O2 definition"
+  comm -23 "${tmp}/${compiler}-step.defined" \
+    "${tmp}/${compiler}-combined.defined" | cmp -s - /dev/null ||
+    die "${compiler} restore gate removed an O2 update/clear definition"
   comm -13 "${tmp}/${compiler}-ordinary.defined" \
     "${tmp}/${compiler}-feature.defined" \
     >"${tmp}/${compiler}-feature-defined-delta"
@@ -178,9 +180,9 @@ for compiler in clang gcc; do
     et_i2_private_g3c4_construction_parameter_preflight_v1 | \
     LC_ALL=C sort | \
     cmp - "${tmp}/${compiler}-joint-g3-defined-delta"
-  test ! -s <(comm -23 \
-    "${tmp}/${compiler}-i2_restore_bridge.defined" \
-    "${tmp}/${compiler}-joint_bridge.defined")
+  comm -23 "${tmp}/${compiler}-i2_restore_bridge.defined" \
+    "${tmp}/${compiler}-joint_bridge.defined" | cmp -s - /dev/null ||
+    die "${compiler} G3 coexistence removed an I2 restore definition"
   comm -13 "${tmp}/${compiler}-i2_restore_bridge.undefined" \
     "${tmp}/${compiler}-joint_bridge.undefined" \
     >"${tmp}/${compiler}-joint-g3-undefined-delta"
@@ -191,12 +193,12 @@ for compiler in clang gcc; do
     "${tmp}/${compiler}-joint-g3-undefined-delta"
   printf '%s\n' et_g3c4_construction_parameter_preflight_internal | \
     cmp - "${tmp}/${compiler}-joint-g3-undefined-delta"
-  test ! -s <(comm -23 \
-    "${tmp}/${compiler}-i2_restore_bridge.undefined" \
-    "${tmp}/${compiler}-joint_bridge.undefined")
-  test ! -s <(comm -23 \
-    "${tmp}/${compiler}-i2_ordinary_bridge.undefined" \
-    "${tmp}/${compiler}-g3_owner_bridge.undefined")
+  comm -23 "${tmp}/${compiler}-i2_restore_bridge.undefined" \
+    "${tmp}/${compiler}-joint_bridge.undefined" | cmp -s - /dev/null ||
+    die "${compiler} G3 coexistence removed an I2 restore dependency"
+  comm -23 "${tmp}/${compiler}-i2_ordinary_bridge.undefined" \
+    "${tmp}/${compiler}-g3_owner_bridge.undefined" | cmp -s - /dev/null ||
+    die "${compiler} G3 owner gate removed an ordinary I2 dependency"
   for symbol in et_i2_private_g3c4_construction_available_v1 \
     et_i2_private_g3c4_construction_parameter_preflight_v1; do
     check_hidden "${joint_bridge}" "${symbol}"

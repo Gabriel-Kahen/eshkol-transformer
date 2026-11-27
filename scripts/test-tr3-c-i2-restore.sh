@@ -209,10 +209,12 @@ for compiler in clang gcc; do
                     "${tmp}/${compiler}-feature_f32.defined")" == \
       et_i2_private_owned_clone_match_v1 ]] ||
     die "${compiler} matcher gate changed an unexpected defined symbol"
-  test ! -s <(comm -23 "${tmp}/${compiler}-ordinary_f32.defined" \
-                       "${tmp}/${compiler}-feature_f32.defined")
-  test ! -s <(comm -3 "${tmp}/${compiler}-ordinary_f32.undefined" \
-                      "${tmp}/${compiler}-feature_f32.undefined")
+  comm -23 "${tmp}/${compiler}-ordinary_f32.defined" \
+    "${tmp}/${compiler}-feature_f32.defined" | cmp -s - /dev/null ||
+    die "${compiler} matcher gate removed an ordinary F32 definition"
+  comm -3 "${tmp}/${compiler}-ordinary_f32.undefined" \
+    "${tmp}/${compiler}-feature_f32.undefined" | cmp -s - /dev/null ||
+    die "${compiler} matcher gate changed the F32 undefined-symbol set"
   grep -Fx et_i2_private_owned_clone_match_v1 \
     "${tmp}/${compiler}-feature_bridge.undefined" >/dev/null
 
