@@ -81,6 +81,10 @@ geometry-to-roster comparison belongs in the explicit profile gate because
 X1 1.0 lacks FFN and tie fields and generic C2 does not enforce a model-specific
 roster.
 
+The [continuation input fixture](#v256-c2-continuation-input-fixture) supplies
+the tokenizer, training corpus, X1 input, and independent cursor expectations.
+It follows the width-four witness's two-update prefix and four-update suffix.
+
 Both variants have 12 logical C1 entries. The untied variant has 12 unique
 parameters and 24 O2 moments, for 36 staged descriptors. The tied variant has
 equal-bit payloads at both paths and one logical `head.weight` /
@@ -94,6 +98,23 @@ O2 reconstruction builder take bounded ranks and extents. This source supports
 reusing the detached owner path with the new shapes. Exact width-16 owner
 transfer, moment bytes, group options, schedule and release still need runtime
 evidence.
+
+The focused `scripts/test-mod5-v256-c2-inputs.sh` gate resolves X1 through the
+compiled Eshkol resolver and loads the serialized T1 identity through the
+trusted tokenizer loader. It checks all six native D2 input, target and mask
+views, compares the seven real cursor snapshots against the independent D2
+oracle, and seeks a separately opened reader to the two-update split for
+four byte-exact cursor and row replays. Compiled input verification, training
+and C2 owner restoration remain pending.
+
+The private MOD5 V256 transfer bridge uses the same C1 path order to move
+exact binary32 parameter bits and prepare one normalized I2 gradient plan.
+The tied layout sends eleven distinct destinations and routes the decoder's
+already summed gradient to canonical `head.weight`. The transfer gate
+checks all 10,544 untied and 6,448 tied words, rejects mismatched shapes,
+duplicate destinations, nonfinite gradients and stale contribution ordinals,
+and checks that rejected batches preserve all gradient state. The live
+Eshkol decoder and AdamW composition remains pending.
 
 ### Order of admission and evidence
 
@@ -152,6 +173,51 @@ evidence.
    K2/C2 package gates alongside the opt-in closure. Seal the supported receipt
    against the exact source and artifact. A subsequent continuation gate can
    qualify a restored live receiver and a matched training suffix.
+
+### V256 C2 continuation input fixture
+
+Run `python3 -m tests.mod5.mod5_v256_c2_fixture build DIR` with a fresh
+directory and use `verify DIR` to verify it. The fixture contains the
+canonical raw T1 tokenizer, six original nine-byte training documents,
+and one checksummed D1 shard per document. Unpacked D2 at batch size one
+and context eight produces six independent rows. All eight next-token
+targets contribute to the loss in every row. The fixture uses no data shuffle.
+
+The live witness should resolve `config.json` with X1 and compare the
+canonical result to `expected-x1.json`. Its fixed `run.seed` is 1729,
+the Philox key. Open the live D2 reader with the settings in
+`fixture.json`, then capture its epoch-start cursor at ordinal 0 and
+its current cursor after two updates. The record gives independent cursor
+hashes through ordinal 6 for comparison with that reader. The fixture
+tests exercise the data formats, row boundaries, masks and oracle seek.
+Live X1 and D2 integration, tied and untied C2 LOAD/SAVE, and the training
+suffix remain runtime gates.
+
+### V256 cross-entropy gradient witness
+
+The bounded [gradient test](../tests/mod5/test-mod5-v256-gradient.sh) uses
+the accepted MOD5-C decoder and the EVAL5 V256 tokenizer, D1 split and C1
+roster. It reads the first validated held-out document as eight next-token
+rows with full loss weight. The untied image has separate `[256,16]` head
+and embedding tensors. The tied image uses the same roster, equal payloads
+and the canonical head/embedding alias group.
+
+The gradient test runs the real decoder backward on both models. It
+compares the separate head and embedding contributions on the shared
+weights with the decoder's tied result across all 4,096 elements. The
+combined gradient is placed at `head.weight` and the alias slot is cleared.
+Central differences perturb the untied head or embedding alone and both
+uses of the shared tensor together. A binary64 oracle built on the
+independent EVAL5 forward reference checks both losses and seven
+preselected nonzero coordinates, including source and target IDs above
+127. Each tied coordinate has nonzero contributions from both paths.
+
+On the pinned Ubuntu 22.04 and LLVM 21 toolchain, run the test with
+`MOD5_V256_GRADIENT_AOT_SLOT=1 bash tests/mod5/test-mod5-v256-gradient.sh FRESH_EVIDENCE_DIR`
+in an assigned build slot. The gate runs the compiled witness twice and
+compares its transcripts. The compiler-free fixture and oracle checks are
+complete. The supported AOT result and independent review remain open,
+along with K2 profile admission and C2/optimizer continuation.
 
 ## IO5 gate
 
