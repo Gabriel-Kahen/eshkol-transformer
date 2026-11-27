@@ -3284,8 +3284,9 @@ D2 closure incompatibility. Public next-step metrics and effective-rate
 observations remain pending.
 The [TR3-C standalone restore provenance audit](TR3_I2_RESTORE_INTEGRATION.md#current-main-standalone-provenance)
 confirms that main `443dad4b` matches the accepted Wave 3 F32 objects in all
-four pinned comparisons. The frozen I2 comparison and private matcher manifest
-block standalone acceptance pending review of a current-main successor.
+four pinned comparisons. The [opt-in current-main I2/O2 targets](TR3_I2_RESTORE_INTEGRATION.md#current-main-opt-in-gate)
+passed the pinned native gates with the Wave 3 baseline and separate matcher
+manifest. The candidate awaits independent review.
 The bounded [private TR3-C retention diagnosis](TR3_C_RETENTION_CYCLE_DIAGNOSIS.md)
 passes pinned f31/LLVM21 ASan/UBSan/LSan tests at 32 and 128 genuine
 snapshot→C2 SAVE/LOAD→joint restore cycles after one P1/C2 identity prewarm,

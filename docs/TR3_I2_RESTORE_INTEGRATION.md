@@ -73,8 +73,30 @@ The 122-file local audit seal is
 `eshkol-tr3c-feature-off-443dad4b.0ElUoa/evidence/SHA256SUMS`
 (`330fd077d6a585a7c26d8dee83fcc4dd9457635fe0b19e4c17cafcab72e7ca7c`).
 
-A current-main successor needs independent review of an explicit immutable
-F32 baseline and its source and header inputs, plus the matcher manifest
-delta. It must replay the exact Clang/GCC O0 and O2 comparisons and the native
-restore runtime and coexistence assertions. The historical test recipe and
-its accepted input continue to identify the original proof.
+## Current-main opt-in gate
+
+Run `make test-tr3-c-i2-restore-current-main` for I2 or
+`make test-tr3-c-o2-restore-current-main` for O2 with its nested I2 gate. The
+explicit profile compares all four feature-off F32 objects against
+`5d2df96ecdc5f4d7ccb8cbc560dfd322c3e2813d`, using its archived F32 source and
+three repository headers. Its separate matcher undefined-symbol manifest
+includes `abort`. Both targets keep the existing native runtime, sanitizer,
+and coexistence assertions.
+
+The current profile authenticates E3 frame blob
+`8e3753fe01931975200e776bed18f5d089b52baf` for the six matcher calls under
+`ET_E3_ZERO_CONTROL_TESTING`. The source scan rejects any other location,
+and ordinary Clang and GCC preprocessing must omit all private I2 restore
+references from that translation unit. Changes to that source blob require
+review before the current profile can pass.
+
+The two opt-in Make targets passed locally in the pinned image on the source
+identified above. Modified arguments, ordinary object bytes, matcher manifest,
+E3 source, and an extra public header reference each failed their respective
+checks. The unchanged default profile also passed the full historical O2 and
+nested I2 gate when the updated runners were mounted into accepted source
+`2aeefad2`, which carries the same F32 source and headers as `b3e84641`.
+The 60-file local qualification seal is
+`eshkol-tr3c-feature-off-443dad4b.0ElUoa/successor-qualification/SHA256SUMS`
+(`9d94cb59fcb1d2ddcdc63918dec2dad135aeeadbe001c61eda90e0a332df01a6`).
+The opt-in candidate awaits independent review.

@@ -2,6 +2,9 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+[[ $# == 0 || ( $# == 1 && "${1-}" == --current-main ) ]] ||
+  die "usage: ${0##*/} [--current-main]"
+
 for command in awk clang cmp comm gcc git grep nm readelf tar timeout; do
   require_command "${command}"
 done
@@ -290,5 +293,5 @@ if grep -Ein 'python|pytorch|torch' \
   die "TR3-C O2 native path contains a forbidden Python/PyTorch reference"
 fi
 
-/usr/bin/bash "${PROJECT_ROOT}/scripts/test-tr3-c-i2-restore.sh" >/dev/null
+/usr/bin/bash "${PROJECT_ROOT}/scripts/test-tr3-c-i2-restore.sh" "$@" >/dev/null
 printf 'TR3-C O2 RESTORE PASS: GCC/Clang, exact manifests, I2/#119 coexistence, failure atomicity, terminals, sanitizers\n'
