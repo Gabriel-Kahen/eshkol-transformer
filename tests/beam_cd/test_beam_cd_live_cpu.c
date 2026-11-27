@@ -1,10 +1,10 @@
 #include "eshkol_transformer/ac4_checkpointing_abi.h"
-#include "eshkol_transformer/beam_search_abi.h"
-#include "eshkol_transformer/constrained_decode_abi.h"
+#include "eshkol_transformer/constrained_beam_abi.h"
 #include "eshkol_transformer/t2_bpe_trainer_abi.h"
 
 #include <assert.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -66,7 +66,7 @@ static void initialize_model(cpu_model *model, uint32_t eos) {
 /* Embed [rows, prefix], run the admitted CPU causal block on [2,3,4], and
  * project each final prefix position through the fixture's affine head. */
 static void model_logits(const cpu_model *model, const prefix rows[ROWS],
-                         size_t count, float logits[ROWS][VOCAB]) {
+                         size_t count, float *logits) {
   assert(count > 0 && count <= ROWS);
   float input[STREAM] = {0};
   const float target[STREAM] = {0};
@@ -97,7 +97,7 @@ static void model_logits(const cpu_model *model, const prefix rows[ROWS],
       for (size_t h = 0; h < HIDDEN; ++h)
         logit += last[h] * model->head[token][h];
       assert(isfinite(logit));
-      logits[row][token] = logit;
+      logits[row * VOCAB + token] = logit;
     }
   }
 }
@@ -125,52 +125,73 @@ typedef struct {
   et_beam_hypothesis_v1 hypotheses[ROWS];
 } generation;
 
+static et_beam_status manual_step(et_beam_state_v1 *beam,
+                                  const et_cd_vocab_index *index,
+                                  uint16_t start_state, const prefix rows[ROWS],
+                                  const float *logits, size_t count) {
+  double masked[ROWS * VOCAB];
+  for (size_t row = 0; row < count; ++row) {
+    uint16_t state = start_state;
+    /* Replay only generated IDs. The prompt conditions the model. */
+    for (size_t t = 1; t < rows[row].length; ++t) {
+      uint16_t next;
+      uint32_t finished;
+      assert(et_cd_advance_token_v1(index, state, rows[row].tokens[t],
+                                    &next, &finished) == ET_CD_OK);
+      assert(!finished);
+      state = next;
+    }
+    const size_t offset = row * VOCAB;
+    float constrained[VOCAB];
+    const et_cd_status mask_status =
+        et_cd_apply_logit_mask_v1(index, state, logits + offset, constrained);
+    if (mask_status == ET_CD_ERR_NONFINITE)
+      return ET_BEAM_ERR_NONFINITE;
+    assert(mask_status == ET_CD_OK);
+    for (size_t token = 0; token < VOCAB; ++token)
+      masked[offset + token] = (double)constrained[token];
+  }
+  return et_beam_step_v1(beam, masked, count);
+}
+
 /* The fixture requires at least one EOS-completed hypothesis. All search state
  * is local, and a failed step or exhausted incomplete search publishes nothing. */
 static et_beam_status generate(const cpu_model *model,
                               const et_cd_vocab_index *index,
                               const et_beam_config_v1 *config, uint32_t prompt,
-                              generation *out) {
+                              bool inject_second_row_nan, generation *out) {
   et_cd_vocab_index_info info;
   assert(et_cd_vocab_index_info_get(index, &info) == ET_CD_OK);
   assert(info.vocab_size == config->vocab_size && config->vocab_size == VOCAB);
   assert(info.eos_token_id == config->eos_token_id);
   assert(config->num_beams <= ROWS && config->max_new_tokens <= CONTEXT);
-  et_beam_state_v1 beam;
+  et_beam_state_v1 beam, manual;
   assert(et_beam_init_v1(&beam, config, &prompt, 1) == ET_BEAM_OK);
+  memcpy(&manual, &beam, sizeof(manual));
   while (!et_beam_is_done_v1(&beam)) {
     const size_t count = et_beam_active_count_v1(&beam);
     prefix rows[ROWS];
-    uint16_t states[ROWS];
     for (size_t row = 0; row < count; ++row) {
       double score;
       assert(et_beam_get_active_beam_v1(&beam, row, rows[row].tokens, CONTEXT,
                                         &rows[row].length, &score) == ET_BEAM_OK);
-      states[row] = info.start_state;
-      /* Replay only generated IDs. The prompt conditions the model. */
-      for (size_t t = 1; t < rows[row].length; ++t) {
-        uint16_t next;
-        uint32_t finished;
-        assert(et_cd_advance_token_v1(index, states[row], rows[row].tokens[t],
-                                      &next, &finished) == ET_CD_OK);
-        assert(!finished);
-        states[row] = next;
-      }
     }
 
-    float logits[ROWS][VOCAB];
-    double masked[ROWS * VOCAB];
+    float logits[ROWS * VOCAB];
     model_logits(model, rows, count, logits);
-    for (size_t row = 0; row < count; ++row) {
-      float constrained[VOCAB];
-      assert(et_cd_apply_logit_mask_v1(index, states[row], logits[row],
-                                       constrained) == ET_CD_OK);
-      for (size_t token = 0; token < VOCAB; ++token)
-        masked[row * VOCAB + token] = (double)constrained[token];
-    }
-    const et_beam_status status = et_beam_step_v1(&beam, masked, count);
+    /* The prompt's byte 'x' is forbidden in either continuation row. */
+    if (inject_second_row_nan && count == ROWS)
+      logits[VOCAB + prompt] = NAN;
+    const et_beam_status status =
+        et_constrained_beam_step_v1(&beam, index, logits, count, VOCAB);
+    /* Before advancing the control, it is a byte snapshot of the prior step. */
+    if (status != ET_BEAM_OK)
+      assert(memcmp(&beam, &manual, sizeof(beam)) == 0);
+    assert(manual_step(&manual, index, info.start_state, rows, logits, count) ==
+           status);
     if (status != ET_BEAM_OK)
       return status;
+    assert(memcmp(&beam, &manual, sizeof(beam)) == 0);
   }
 
   et_beam_hypothesis_v1 ranked[ROWS];
@@ -229,12 +250,12 @@ int main(void) {
   cpu_model model;
   initialize_model(&model, info.eos_id);
   const prefix start[ROWS] = {{{prompt}, 1}};
-  float first[ROWS][VOCAB];
+  float first[VOCAB];
   model_logits(&model, start, 1, first);
   for (uint32_t token = 0; token < VOCAB; ++token) {
-    assert(token == prompt || first[0][prompt] > first[0][token]);
+    assert(token == prompt || first[prompt] > first[token]);
     assert(token == prompt || token == info.eos_id ||
-           first[0][info.eos_id] > first[0][token]);
+           first[info.eos_id] > first[token]);
     const uint32_t expected = token == 'a' || token == merged;
     assert(et_cd_vocab_index_is_token_allowed(index, index_info.start_state,
                                                token) == expected);
@@ -243,12 +264,13 @@ int main(void) {
   /* Changing the batch order preserves both live prefix rows. */
   const prefix next[ROWS] = {{{prompt, 'a'}, 2}, {{prompt, merged}, 2}};
   const prefix swapped[ROWS] = {next[1], next[0]};
-  float second[ROWS][VOCAB], permuted[ROWS][VOCAB];
+  float second[ROWS * VOCAB], permuted[ROWS * VOCAB];
   model_logits(&model, next, ROWS, second);
   model_logits(&model, swapped, ROWS, permuted);
-  assert(memcmp(second[0], second[1], sizeof(second[0])) != 0);
-  assert(memcmp(second[0], permuted[1], sizeof(second[0])) == 0);
-  assert(memcmp(second[1], permuted[0], sizeof(second[1])) == 0);
+  const size_t row_bytes = VOCAB * sizeof(float);
+  assert(memcmp(second, second + VOCAB, row_bytes) != 0);
+  assert(memcmp(second, permuted + VOCAB, row_bytes) == 0);
+  assert(memcmp(second + VOCAB, permuted, row_bytes) == 0);
 
   const et_beam_config_v1 config = {.struct_size = sizeof(config),
                                    .num_beams = ROWS,
@@ -257,15 +279,15 @@ int main(void) {
                                    .max_new_tokens = CONTEXT,
                                    .repetition_penalty = 1.0};
   generation result;
-  assert(generate(&model, index, &config, prompt, &result) == ET_BEAM_OK);
+  assert(generate(&model, index, &config, prompt, false, &result) == ET_BEAM_OK);
   assert(result.count == ROWS);
 
   /* Enumerate the three completions. The split row chooses b or c from its
    * second forward, and each accepting row has exactly one allowed ID, EOS. */
-  const double a = (double)first[0]['a'];
-  const double ab = (double)first[0][merged];
-  const double b = (double)second[0]['b'];
-  const double c = (double)second[0]['c'];
+  const double a = (double)first['a'];
+  const double ab = (double)first[merged];
+  const double b = (double)second['b'];
+  const double c = (double)second['c'];
   assert(b != c);
   const double first_normalizer = fmax(a, ab) + log1p(exp(-fabs(a - ab)));
   const double split_normalizer = fmax(b, c) + log1p(exp(-fabs(b - c)));
@@ -289,24 +311,30 @@ int main(void) {
   et_beam_config_v1 short_budget = config;
   short_budget.max_new_tokens = 2;
   generation partial;
-  assert(generate(&model, index, &short_budget, prompt, &partial) == ET_BEAM_OK);
+  assert(generate(&model, index, &short_budget, prompt, false, &partial) ==
+         ET_BEAM_OK);
   assert(partial.count == 1 && partial.hypotheses[0].tokens[1] == merged);
   assert(partial.hypotheses[0].score == joined->score);
   check_decoded(tokenizer, &partial.hypotheses[0], prompt, info.eos_id,
                 literal, sizeof(literal));
 
-  /* Even with a viable split branch, min-length suppression empties the
-   * EOS-only merged row. Prior successful output survives the whole call. */
+  /* Prior successful output survives each failed generation. */
   generation saved;
   memcpy(&saved, &result, sizeof(saved));
+  assert(generate(&model, index, &config, prompt, true, &result) ==
+         ET_BEAM_ERR_NONFINITE);
+  assert(memcmp(&saved, &result, sizeof(result)) == 0);
+
+  /* Even with a viable split branch, min-length suppression empties the
+   * EOS-only merged row. */
   et_beam_config_v1 reject = config;
   reject.min_new_tokens = 2;
-  assert(generate(&model, index, &reject, prompt, &result) ==
+  assert(generate(&model, index, &reject, prompt, false, &result) ==
          ET_BEAM_ERR_NO_VALID_TOKENS);
   assert(memcmp(&saved, &result, sizeof(result)) == 0);
   reject = config;
   reject.max_new_tokens = 1;
-  assert(generate(&model, index, &reject, prompt, &result) ==
+  assert(generate(&model, index, &reject, prompt, false, &result) ==
          ET_BEAM_ERR_NO_VALID_TOKENS);
   assert(memcmp(&saved, &result, sizeof(result)) == 0);
 
@@ -314,7 +342,8 @@ int main(void) {
   et_cd_dfa_destroy(dfa);
   et_t2_bpe_destroy(tokenizer);
   printf("BEAM/CD live CPU: PASS (T2 vocabulary %u, causal [2,3,4], "
-         "split a%c %a, merged ab %a, atomic empty and budget rejection)\n",
+         "split a%c %a, merged ab %a, coordinated/manual byte parity, "
+         "nonfinite, empty and budget rejection)\n",
          info.vocab_size, (int)split->tokens[2], split->score, joined->score);
   return 0;
 }

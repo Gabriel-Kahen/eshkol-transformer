@@ -9,7 +9,7 @@ cc="${CC:-clang}"
 common=(-std=c11 -Wall -Wextra -Werror -Wpedantic -ffp-contract=off
         -fexcess-precision=standard -fno-fast-math -I include)
 src=(tests/beam_cd/test_beam_cd_live_cpu.c native/beam_search.c
-     native/constrained_decode.c native/t2_bpe_trainer.c
+     native/constrained_beam.c native/constrained_decode.c native/t2_bpe_trainer.c
      native/ac4_checkpointing.c native/mod5_primitives_provider.c
      native/kernel_abi.c)
 
