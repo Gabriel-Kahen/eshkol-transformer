@@ -11,6 +11,7 @@ resolve_provenance_compilers cc cxx \
   "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
 runner="$(eshkol_build_dir)/eshkol-run"
 out="${1:-$(project_build_dir)/k2-mod5-v256}"
+[[ ! -e "$out" && ! -L "$out" ]] || die "K2 V256 evidence directory must be fresh"
 mkdir -p "$out"
 out="$(realpath "$out")"
 cd "$PROJECT_ROOT"
@@ -68,9 +69,9 @@ env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR -u ESHKOL_AOT_MODULE_CACHE_DIR \
   ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
   timeout --foreground --signal=TERM --kill-after=5s 600s \
   "$runner" --strict-types --optimize 0 --no-stdlib \
-  -I "$PROJECT_ROOT/native" -I "$PROJECT_ROOT/src" -I "$PROJECT_ROOT/lib" \
-  -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
-  -I "$PROJECT_ROOT/internal/t1/lib" -L "$out" --lib eshkol_k2_mod5_v256_witness \
+  -I "$PROJECT_ROOT/native" -I "$PROJECT_ROOT/internal/p1/lib" \
+  -I "$PROJECT_ROOT/internal/c1/lib" -I "$PROJECT_ROOT/internal/t1/lib" \
+  -I "$PROJECT_ROOT/src" -L "$out" --lib eshkol_k2_mod5_v256_witness \
   "$PROJECT_ROOT/tests/k2/mod5_v256_runtime.esk" -o "$out/witness" \
   >"$out/compile.stdout" 2>"$out/compile.stderr"
 test ! -s "$out/compile.stderr"
