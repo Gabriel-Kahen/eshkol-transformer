@@ -1,0 +1,121 @@
+(load "k2_wave2_root.esk")
+(load "k2_mod5_v256_extension.esk")
+
+(extern i64 baseline-matches :real et_k2_test_require_count_v1)
+(extern i64 v256-matches :real et_k2_test_mod5_v256_match_count_v1)
+(extern void drop-v256 :real et_k2_test_mod5_v256_drop_v1)
+(extern i64 test-fork :real et_k2_test_fork_v1)
+(extern i64 test-wait i64 :real et_k2_test_wait_child_v1)
+(extern void test-exit i64 :real et_k2_test_exit_child_v1)
+
+(define checks 0)
+(define foreign-called? #f)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "K2 V256 FAIL ") (display label) (newline) (exit 1))))
+(define (rejects? thunk category)
+  (guard (caught (#t (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught) category))))
+    (thunk) #f))
+(define (check-rejection-before-match label thunk category)
+  (let ((ordinary-count (baseline-matches)) (v256-count (v256-matches)))
+    (check label (and (rejects? thunk category)
+                      (= ordinary-count (baseline-matches))
+                      (= v256-count (v256-matches))))))
+(define (default-request shape)
+  (k2-public-capability-request 'storage.copy 'f32 'cpu shape #t))
+(define (v256-request shape)
+  (k2-mod5-v256-request 'storage.copy 'f32 'cpu shape #t))
+(define (v256-verified report request)
+  (let* ((entry (k2-mod5-v256-require report 'tensor.f32 request))
+         (description (k2-mod5-v256-entry-description entry)))
+    (and (eq? (vector-ref description 0) 'tensor.f32)
+         (eq? (vector-ref description 1) 'verified)
+         (string=? (vector-ref description 3) "1.3"))))
+
+(define ordinary (k2-public-capability-discover))
+(define v256 (k2-mod5-v256-discover))
+(define width-default (default-request '(16)))
+(define width-v256 (v256-request '(16)))
+(define head-v256 (v256-request '(256 16)))
+(define transposed-v256 (v256-request '(16 256)))
+
+(check 'default-report-rejected-before-match
+       (and (rejects? (lambda () (v256-verified ordinary width-v256)) 'unsupported)
+            (= (baseline-matches) 0) (= (v256-matches) 0)))
+(check 'default-request-rejected-before-match
+       (and (rejects? (lambda () (v256-verified v256 width-default)) 'invalid-argument)
+            (= (baseline-matches) 0) (= (v256-matches) 0)))
+(check-rejection-before-match 'v256-report-rejected-by-default
+  (lambda () (k2-public-capability-verified? v256 'tensor.f32 width-default))
+  'invalid-argument)
+(check-rejection-before-match 'v256-request-rejected-by-default
+  (lambda () (k2-public-capability-verified? ordinary 'tensor.f32 width-v256))
+  'invalid-argument)
+(check 'own-profile-ordinary
+       (and (k2-public-capability-verified? ordinary 'tensor.f32 width-default)
+            (= (baseline-matches) 1) (= (v256-matches) 0)))
+(check 'own-profile-v256
+       (and (v256-verified v256 width-v256)
+            (= (baseline-matches) 1) (= (v256-matches) 1)))
+(check 'ordinary-rejects-head
+       (not (k2-public-capability-verified? ordinary 'tensor.f32
+                                            (default-request '(256 16)))))
+(check 'v256-matches-head (v256-verified v256 head-v256))
+(check 'v256-rejects-transpose
+       (rejects? (lambda () (v256-verified v256 transposed-v256)) 'unsupported))
+(check 'foreign-never-invoked
+       (and (rejects? (lambda ()
+                       (v256-verified (lambda (query) (set! foreign-called? #t))
+                                      head-v256))
+                     'invalid-argument)
+            (not foreign-called?) (= (v256-matches) 3)))
+(let* ((report (k2-mod5-v256-discover))
+       (state (report k2-v256-query)))
+  (vector-set! state 6 (vector 'mod5-width16-v256))
+  (check-rejection-before-match 'wrong-profile-before-match
+    (lambda () (v256-verified report head-v256)) 'unsupported)
+  (vector-set! state 6 k2-v256-profile)
+  (vector-set! state 5 'dead)
+  (check 'invalidated-before-match
+         (and (rejects? (lambda () (v256-verified report head-v256)) 'invalid-state)
+              (= (v256-matches) 3))))
+
+(drop-v256)
+(check 'stale-before-match
+       (and (rejects? (lambda () (v256-verified v256 width-v256)) 'invalid-state)
+            (= (v256-matches) 3)
+            (k2-public-capability-verified? ordinary 'tensor.f32 width-default)))
+(define new-v256 (k2-mod5-v256-discover))
+(check 'new-report-rejects-stale-request
+       (rejects? (lambda () (v256-verified new-v256 width-v256)) 'invalid-state))
+(check 'new-generation-matches (v256-verified new-v256 (v256-request '(256 16))))
+
+(let* ((current-request (v256-request '(16)))
+       (ordinary-entry (k2-public-capability-require ordinary 'tensor.f32 width-default))
+       (v256-entry (k2-mod5-v256-require new-v256 'tensor.f32 current-request)))
+  (check-rejection-before-match 'v256-entry-rejected-by-default
+    (lambda () (k2-public-capability-entry-version v256-entry)) 'invalid-argument)
+  (check-rejection-before-match 'default-entry-rejected-by-v256
+    (lambda () (k2-mod5-v256-entry-description ordinary-entry)) 'invalid-argument)
+  (check-rejection-before-match 'default-request-rejected-as-entry
+    (lambda () (k2-public-capability-entry-version width-default)) 'invalid-argument)
+  (check-rejection-before-match 'v256-request-rejected-as-entry
+    (lambda () (k2-mod5-v256-entry-description current-request)) 'invalid-argument)
+  (check-rejection-before-match 'default-entry-rejected-as-request
+    (lambda () (k2-public-capability-verified? ordinary 'tensor.f32 ordinary-entry))
+    'invalid-argument)
+  (check-rejection-before-match 'v256-entry-rejected-as-request
+    (lambda () (v256-verified new-v256 v256-entry)) 'invalid-argument))
+
+(let ((child (test-fork)))
+  (if (= child 0)
+      (test-exit
+        (if (and (rejects? (lambda () (v256-verified new-v256 head-v256)) 'invalid-state)
+                 (v256-verified (k2-mod5-v256-discover) (v256-request '(256 16))))
+            0 1))
+      (check 'serialized-child-rediscovery (and (> child 0) (= (test-wait child) 1)))))
+
+(display "K2 MOD5 V256 PASS ")
+(display checks)
+(newline)
