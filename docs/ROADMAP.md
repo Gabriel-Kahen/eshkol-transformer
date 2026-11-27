@@ -3504,9 +3504,63 @@ publication, public G2 and continuation remain pending.
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
-  after native commit. Native terminal integration and logical I1 clone code
-  are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  after native commit. The native commit and snapshot merged through
+  [PR #184](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/184), and
+  the native logical I1 clone through
+  [PR #189](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/189).
+  The next Eshkol gate is the private reservation that binds the constructor's
+  original carrier bundle at the sole output entry's first enrollment. The
+  [reservation proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/6845bd0a81aad05f169b0c0e85fc8779b43c87a8)
+  defines that boundary. The private entry and its compiled proof remain
+  pending. Same-call terminal publication,
+  detached Eshkol output, public G2, and CLI adoption follow separately.
+
+- **Private P2/G2 terminal pending-allocation precursor:** The
+  [abort-only anchor candidate](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
+  reserves the original output and second/text carriers before sampling. An
+  independent lexical root detects paired carrier replacement and changed
+  list nodes/successors before abort. On the `c71d39a984` worktree candidate,
+  the pinned `fe9dfd5` Ubuntu 22.04/Clang 21 normal, repeat and sanitizer
+  fixtures pass 23 private and four feature-off checks with identical stdout
+  and empty stderr; seven static mutations pass. The runner's final Git check
+  failed because the container lacked the external worktree Git directory;
+  host postflight passed. Evidence is sealed under
+  `build/g3c4-p2g2-terminal-pending-anchor-20261114/SHA256SUMS` pending
+  independent result review and integration. Actual bytevector backing
+  extent, allocation failure cuts, same-call EOS/second-token publication,
+  detached clones, public G2 and save/reload remain open.
+
+- **Standalone P2/G2 constructor-owned carrier prerequisite:** The
+  [private carrier bundle candidate](g3/G3_C4_P2_G2_TERMINAL_CARRIERS_LEAF.md)
+  captures all eight literal constructor returns in an inaccessible lexical
+  root, authenticates original bundle/carrier identities and fixed extents,
+  and provides authenticated scrub/unlink retirement. Pinned normal, repeat
+  and sanitizer runs pass 530 identical checks each, including eight guarded
+  allocation cuts with earlier-bundle preservation and retry; sixteen
+  unguarded cuts match the exact pinned emergency exit 1 diagnostic.
+  Unchanged pending/feature-off predecessors pass 23/4 per mode; 22+7 static
+  mutations and Q0's four tests pass. Evidence is under
+  `build/g3c4-p2g2-terminal-carriers-20261115-attempt3/`; integration remains
+  pending. Its development allocator
+  witness is evidence only; the production helper never converts carriers
+  to native pointers. Existing protected/prefix wrappers and native ABI
+  remain unchanged. Composition into the sole native pending output and
+  actual terminal close, public G2, trained-G2 sanitizer acceptance and
+  save/reload remain open.
+
+  The standalone pending anchor and carrier bundle also passed their original
+  pinned Ubuntu 22.04/Clang 21.1.8 gates on the Wave 3 reconciliation
+  `12598d3bc01c155eab0eeb89b26c11304ee3fcbd` (tree `d6338d1b`), with
+  23 pending, four feature-off, and 530 carrier checks per mode. The
+  83-file seal is
+  `/home/gabe/.codex/evidence/eshkol-transformer/g3c4-carrier-wave3-12598d3-20261125/SHA256SUMS-RUN`
+  (`59496ab79d9a12ea718f83aef319f6da1d491e6da943008f90c6779d20651ba3`).
+  The replay on main `443dad4b` uses the same PA4 transitive-header pin
+  and passes Q0 isolation. Review found coordinated record/carrier substitution
+  and a forged completion tag in the pending probe. The replay binds the
+  exact record contents and roots at enrollment and checks completion through
+  the private root before unwinding. Both suites now verify and seal the full
+  input closure. The Wave 3 compiled receipt applies to its own tree.
 
 ## Wave 4 — practical pretraining and performance
 

@@ -1,0 +1,103 @@
+;;; Standalone constructor-owned carrier provenance, not call/output authority.
+;;; Load after g3c4_model_extension.esk. No ptr conversion occurs here.
+(define g3c4-p2g2-terminal-carriers-create #f)
+(define g3c4-p2g2-terminal-carriers-check #f)
+(define g3c4-p2g2-terminal-carriers-retire! #f)
+
+(let ((roots (vector '())))
+  (define (root-for bundle operation)
+    (let find ((remaining (vector-ref roots 0)))
+      (cond ((null? remaining)
+             (g3c4-fail 'invalid-state operation
+                        "P2/G2 carriers have no original constructor root"))
+            ((eq? bundle (car (car remaining))) (cdr (car remaining)))
+            (else (find (cdr remaining))))))
+  (set! g3c4-p2g2-terminal-carriers-create
+    (lambda ()
+      (let* ((first-raw (make-bytevector 1 0))
+             (first-staging (make-bytevector 8 0))
+             (pending-raw (make-bytevector 2 0))
+             (pending-staging (make-bytevector 16 0))
+             (second-raw (make-bytevector 1 0))
+             (second-staging (make-bytevector 8 0))
+             (text-one (make-bytevector 1 0))
+             (text-two (make-bytevector 2 0))
+             (extents (vector 9 16 10 24 9 16 9 10))
+             (bundle (vector first-raw first-staging pending-raw
+                             pending-staging second-raw second-staging
+                             text-one text-two extents 'live))
+             (live (vector #t))
+             (proof
+               (lambda (retire operation)
+                 ;; Originals are independent lexical bindings, never derived
+                 ;; from a mutable bundle slot or its expected-size vector.
+                 (if (not (and (vector? bundle) (= (vector-length bundle) 10)
+                               (eq? (vector-ref bundle 0) first-raw)
+                               (eq? (vector-ref bundle 1) first-staging)
+                               (eq? (vector-ref bundle 2) pending-raw)
+                               (eq? (vector-ref bundle 3) pending-staging)
+                               (eq? (vector-ref bundle 4) second-raw)
+                               (eq? (vector-ref bundle 5) second-staging)
+                               (eq? (vector-ref bundle 6) text-one)
+                               (eq? (vector-ref bundle 7) text-two)
+                               (eq? (vector-ref bundle 8) extents)
+                               (let lengths ((i 0))
+                                 (if (= i 8) #t
+                                     (and (bytevector? (vector-ref bundle i))
+                                          (= (bytevector-length
+                                               (vector-ref bundle i))
+                                             (case i
+                                               ((0 4 6) 1)
+                                               ((1 5) 8)
+                                               ((2 7) 2)
+                                               (else 16)))
+                                          (m3t-exact-i64? (vector-ref extents i))
+                                          (= (vector-ref extents i)
+                                             (case i
+                                               ((0 4 6) 9)
+                                               ((1 5) 16)
+                                               ((2 7) 10)
+                                               (else 24)))
+                                          (lengths (+ i 1)))))
+                               (eq? (vector-ref bundle 9)
+                                    (if (vector-ref live 0) 'live 'dead))))
+                     (g3c4-fail 'invalid-state operation
+                                "P2/G2 original carrier allocation changed"))
+                 (if retire
+                     (begin
+                       (if (vector-ref live 0)
+                           (begin
+                             (let scrub ((i 0))
+                               (if (< i 8)
+                                   (begin
+                                     (let bytes ((j 0))
+                                       (if (< j (- (vector-ref extents i) 8))
+                                           (begin
+                                             (bytevector-u8-set!
+                                               (vector-ref bundle i) j 0)
+                                             (bytes (+ j 1)))))
+                                     (scrub (+ i 1)))))
+                             (vector-set! live 0 #f)
+                             (vector-set! bundle 9 'dead)))
+                       #t)
+                     (if (vector-ref live 0) #t
+                         (g3c4-fail 'invalid-state operation
+                                    "P2/G2 original carriers are retired"))))))
+        ;; Construct the root before publishing the bundle. No enrollment API
+        ;; accepts external bytevectors.
+        (vector-set! roots 0 (cons (cons bundle proof) (vector-ref roots 0)))
+        bundle)))
+  (set! g3c4-p2g2-terminal-carriers-check
+    (lambda (bundle operation) ((root-for bundle operation) #f operation)))
+  (set! g3c4-p2g2-terminal-carriers-retire!
+    (lambda (bundle)
+      (let* ((operation 'g3c4-p2g2-terminal-carriers-retire!)
+             (proof (root-for bundle operation))
+             ;; Rebuild before scrubbing: no allocation follows revocation.
+             (remaining
+               (let remove ((entries (vector-ref roots 0)))
+                 (if (eq? bundle (car (car entries))) (cdr entries)
+                     (cons (car entries) (remove (cdr entries)))))))
+        (proof #t operation)
+        (vector-set! roots 0 remaining)
+        #t))))
