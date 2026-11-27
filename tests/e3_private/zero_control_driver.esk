@@ -206,8 +206,20 @@
                                  (word (+ offset 1)))))))
                (row (+ index 1)))))))
 
+(define (e3-zero-capture-modules model)
+  (let ((supplied (vector-ref (m3t-entry model 'model 'e3-zero-control #t) 8))
+        (modules (make-vector 17 #f))
+        (handles (make-vector 14 #f))
+        (carriers (make-vector 14 #f)))
+    ;; P1 authenticates the fixed tree and returns its existing module shells.
+    (e3-zero-invariant
+      (= ((vector-ref p1-trusted-surface 69)
+           model supplied modules handles carriers) 0))
+    (e3-zero-invariant (eq? (vector-ref modules 0) model))
+    modules))
+
 (define (e3-zero-modes model)
-  (let ((modules (vector-ref (m3t-entry model 'model 'e3-zero-control #t) 4))
+  (let ((modules (e3-zero-capture-modules model))
         (modes (make-vector 17 #f)))
     (let fill ((index 0))
       (if (= index 17) modes

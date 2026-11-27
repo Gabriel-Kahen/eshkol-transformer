@@ -235,8 +235,7 @@
                (pair (+ index 1)))))))
 
 (define (e3-zero-negative-topology-shells? model modules)
-  (let ((registered
-          (vector-ref (m3t-entry model 'model 'e3-zero-negative #t) 4)))
+  (let ((registered (e3-zero-capture-modules model)))
     (let shell ((index 0))
       (if (= index 17) #t
           (and (eq? (vector-ref modules index)
