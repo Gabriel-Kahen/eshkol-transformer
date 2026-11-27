@@ -1,24 +1,57 @@
 # DATA4 Corpus Quality-Filtering, Deduplication, and Provenance Pipeline
 
-Status: standalone implementation candidate extracted onto current main from
-`60093c6e`. It has no dependency on that commit's unrelated historical parent.
-The native library and Eshkol AOT bridge are opt-in build artifacts; they are not
-part of the installed CLI3 command, accepted DATA4-A report, D1 writer, or T2
-staging path. No compatibility between this report and the installed DATA4-A
-version-1 report is claimed. Integration requires an explicit contract for how
-quality-filtered documents enter the accepted T2/D1 aggregate.
+The native library, Eshkol AOT bridge, and same-aggregate T2/D1 adapter
+are opt-in build artifacts. The installed CLI3 corpus commands use the
+separate [DATA4-A/C report](DATA4_INSTALLED_REPORT.md).
 
-The development-only `scripts/test-data4-quality-t2-d1.sh` witness consumes
-the AOT bridge's actual per-ordinal DATA4-Q dispositions, preserves the
-corresponding original source IDs and bytes in order, verifies the independent
-quality report, and stages only kept bytes through the accepted T2 encoder and
-D1 writer. It checks the exact selected IDs and token IDs before publication,
-then validates D1 and compares the complete T2 readback. A duplicate source ID
-must fail the quality run before any D1 target is created. This is a test-only
-composition: no installed command, public ABI, DATA4-A report conversion, or
-general-purpose ownership transfer is added. D1 stores flat token IDs; document
-IDs and boundaries are established before publication and cannot be recovered
-from the D1 readback alone.
+## Same-aggregate T2/D1 publication
+
+Load `t2_wave2_root.esk`, `data4_corpus.esk`, and
+`data4_quality_corpus.esk` in that order in a trusted Eshkol aggregate
+linked to the DATA4-Q archive and the existing T2/D1 dependencies:
+
+```scheme
+(data4-quality-corpus-write! tokenizer directory shard-token-limit documents config)
+```
+
+Supply a registered tokenizer from the same aggregate, an existing D1
+output directory, and an integer shard limit from 1 to 65,536. The input is a
+proper list of 0 to 128 documents of the form `(source-id bytevector)`
+totaling at most 65,536 raw bytes. D1 remains the owner of target exclusion
+and manifest publication. Staging allows up to 65,536 token IDs, including
+any tokenizer-added special tokens.
+
+Pass `#f` for the native configuration defaults or supply
+`#(min-bytes max-bytes min-codepoints max-codepoints min-printable-ratio
+min-alnum-ratio max-dup-line-ratio max-repeated-ngram-ratio rep-ngram-size near)`.
+Explicit byte and codepoint bounds are exact integers from 0 to 65,536, and
+the four ratios use the native binary64 constraints documented below. Set
+`near` to `#t` to keep native near-dedup defaults, `#f` to disable near
+deduplication, or `#(ngram-size permutations bands seed jaccard-threshold)`
+to configure it. The bridge takes a signed i64 seed carrying the seed's
+64-bit pattern. Construct a custom configuration with `vector` so exact
+integers retain their types in the nested vector on the pinned compiler.
+
+The adapter snapshots input IDs and bytevectors, submits them in ordinal
+order, and stages exactly the original bytes of each document whose
+bridge disposition is `kept`. It verifies the copied quality report and
+checks its checksum against the same session's digest. Native session and
+buffer ownership ends before token encoding. T2 staging and D1's token
+validation complete before D1 publishes any shard or manifest.
+
+Success returns `#(d1-summary quality-report-bytes kept-source-ids)`. Empty
+and all-rejected batches produce a manifest with zero shards and preserve their
+distinct report rows. D1 stores one flat token stream. The in-memory quality
+report and ID list carry source provenance, and the quality report checksum
+covers that report alone. The caller owns any optional persistence of this
+receipt. The adapter has no installed command or public ABI.
+
+Use `make test-data4-quality-t2-d1` to exercise the adapter in a genuine
+same-aggregate AOT executable. The gate verifies first-seen selection and
+near/exact duplicate provenance across reordered batches, raw multibyte and
+line-ending preservation through T2/D1, empty and all-filtered inputs,
+preexisting-target preservation, and release of the native session when
+invalid inputs or injected report faults fail before publication.
 
 ## Public C11/C++17 ABI and Eshkol AOT Bridge
 
