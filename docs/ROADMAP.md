@@ -34,6 +34,11 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   A source-private C2 candidate shares the guarded load path and validates
   the exact model, optimizer and X1 roster before reconstruction. Its
   private-profile binding and live load and continuation gates remain open.
+  The [live V256 decoder and AdamW witness](MOD5_E2E_C1_IO5.md#live-v256-decoder-and-adamw-witness)
+  stages six exact T1/D1/D2 rows through the pinned backward pass, canonical
+  I2 transfers, native O2 updates and decoder weight refresh. Focused source,
+  native adapter and independent evidence-verifier checks passed. The
+  supported AOT run remains pending.
 
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,

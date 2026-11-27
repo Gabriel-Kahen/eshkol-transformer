@@ -386,3 +386,39 @@ ASan/UBSan/LSan V=256 K1 reports are 3,225 bytes with SHA-256
 `50e09d8e0bf757492e1a0c10aacaf58ba124d18f6e48b65cf3f21f41dd288ab6`.
 The combined build also checks the original I2 1.1 and I2 1.2 report hashes.
 Explicit K2 profile admission and tied/untied C2 LOAD/SAVE remain separate gates.
+
+
+## Live V256 decoder and AdamW witness
+
+The opt-in witness reuses the pinned V256 decoder, C1 initial weights, and
+tied-gradient check from the EVAL5 and gradient generators. Its dataset
+comes from the existing V256 T1/D1/D2 fixture. Each profile opens a fresh D2
+reader and consumes six full eight-token batches. The live borrowed input
+and target views supply the decoder tensors. The runtime checks each full
+mask and records the D2 cursor and token bytes for independent verification.
+
+The untied profile enrolls 12 P1 destinations. The tied profile enrolls
+11 distinct destinations and gives the embedding path the canonical
+`head.weight` handle. It checks both backward contributions before sending
+their sum to that head. The test uses the existing atomic I2 gradient
+transfer with one already-normalized contribution per destination and
+checks the stored payload and metadata. It uses the accepted dense CPU-f32
+O2 AdamW step, clears gradients, and rebuilds every decoder tensor from
+native parameter bits before measuring post-update loss.
+
+The guarded runner retains the transcript and the complete native
+parameter, gradient, first-moment and second-moment words per update.
+Its independent verifier checks both losses for every row against the
+MOD5 forward oracle and checks each output word against the fixed binary32
+AdamW recurrence. Two fresh processes per profile must produce identical
+transcripts and bit traces. This gate covers live training and a C1 initial
+model. It precedes the K2 profile binding, C2 continuation, and release
+qualification.
+
+```bash
+python3 -B -m unittest tests.mod5.test_mod5_v256_decoder_adamw
+MOD5_V256_DECODER_ADAMW_SLOT=1 bash tests/mod5/test-mod5-v256-decoder-adamw.sh /absolute/fresh-evidence
+```
+
+The source, native adapters and evidence verifier have local checks. The
+supported AOT gate needs an assigned build slot.
