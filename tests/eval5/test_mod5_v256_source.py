@@ -59,11 +59,23 @@ class Mod5V256SourceTests(unittest.TestCase):
             self.assertIn("et_eval5_v256_manifest_roundtrip_live", source)
             self.assertLess(source.index("(score-v256 (ffi-pointer"),
                             source.rindex("(emit-manifest tokenizer-fingerprint train evaluation model-sha"))
+            self.assertIn("et_eval5_v256_compare_runner", source)
+            emit = source.split("(define (emit-manifest", 1)[1].split(
+                "(define (release-score-buffers", 1)[0]
+            self.assertIn("(train-fingerprint (string->utf8 (vector-ref train 3)))", emit)
+            self.assertIn("(eval-fingerprint (string->utf8 (vector-ref evaluation 3)))", emit)
+            self.assertIn("(copy-digest (vector-ref train 2) digests 0)", emit)
+            self.assertIn("(copy-digest (vector-ref evaluation 2) digests 32)", emit)
+            self.assertIn("(copy-digest model-sha digests 64)", emit)
+            self.assertLess(emit.index("(compare-runner-v256"), emit.index("(emit-score"))
+            self.assertLess(emit.index("(if (and valid-manifest (= runner-status 0))"),
+                            emit.index('(display "MANIFEST_BEGIN")'))
             self.assertIn("(vector all original manifest-sha (vector-ref metadata 4))", source)
             self.assertIn("(audit-splits train train -7)", source)
             control = source.split("(define (audit-control", 1)[1].split("(define (witness-main", 1)[0]
             self.assertNotIn("emit-manifest", control)
             self.assertNotIn("score-v256", control)
+            self.assertNotIn("compare-runner-v256", control)
             self.assertNotIn("et_eval5_manifest_", source)
             self.assertNotIn("(check-file-sha model-path", source)
             self.assertIn("(load-weights (caddr args))", source)

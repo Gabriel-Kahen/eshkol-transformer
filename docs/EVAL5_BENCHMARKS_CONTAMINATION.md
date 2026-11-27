@@ -443,3 +443,21 @@ is retained in the local evidence stream.
 
 The sealed receipt is
 `/home/gabe/.codex/evidence/eshkol-eval5-live-manifest-20261127.LMcYvd/live.SHA256SUMS`.
+
+### V=256 one-shot runner parity
+
+The opt-in V256 witness prepares one set of live MOD5 logits after the
+standalone clean audit. It passes those logits, the authenticated document
+spans, all three owner fingerprints, and the two D1 and checked C1 digests
+to `et_eval5_run_benchmark`. The legacy scorer and manifest round-trip
+still produce the reference record in the same invocation. The witness
+requires exact equality of the canonical length and bytes including the
+trailing NUL before writing the score and manifest to its evidence stream.
+The independent Python comparator then checks field order, digest bindings,
+metric bits, and checksum. The contaminated control still stops before C1
+loading and inference.
+
+The focused C driver exercises the comparison with fixed logits and rejects
+individual fingerprint and digest mutations, a mismatched byte span, a
+changed extent or terminator, and contamination. The live comparison is
+gated by `EVAL5_V256_AOT_SLOT=1 bash scripts/test-eval5-v256-aot.sh`.
