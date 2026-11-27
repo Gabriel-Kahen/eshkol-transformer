@@ -1,0 +1,185 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_call_entry_extension.esk")
+(load "g3c4_t1_output_decode_extension.esk")
+(load "g3c4_output_envelope_extension.esk")
+(load "g3c4_p2g2_ownership_extension.esk")
+(load "g3c4_p2g2_protected_scope_extension.esk")
+(load "g3c4_p2g2_t1_prefix_coordinator_extension.esk")
+(load "g3c4_p2g2_terminal_idle_input_extension.esk")
+
+;;; Reuse the prefix gate's read-only native state checks at cache length 0.
+(extern i64 idle-witness-mark ptr i64 i64
+        :real et_g3c4_p2g2_coordinator_test_mark_v1)
+(extern i64 idle-witness-entry-state ptr i64
+        :real et_g3c4_p2g2_coordinator_test_after_abort_v1)
+
+(define checks 0)
+(define operation 'terminal-idle-input-witness)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P2/G2 terminal idle input FAIL ") (display label)
+             (newline) (exit 1))))
+(define (reject label category thunk)
+  (check label
+    (guard (caught (#t (and (transformer-error? caught)
+                            (eq? (transformer-error-category caught) category))))
+      (thunk) #f)))
+(define (config budget)
+  (list ':profile 'diagnostic-c4 ':sampling 'greedy
+        ':temperature-bits 1065353216 ':top-k 256 ':top-p-bits 1065353216
+        ':max-new-tokens budget ':eos #f ':seed 7))
+(define (raw-tokenizer)
+  (t1-private-register-core (t1-tokenizer-core-create 'raw '() '() '())))
+(define (capture generator input)
+  (g3c4-p2g2-terminal-idle-input-preflight generator input operation))
+
+(define tokenizer (raw-tokenizer))
+(define foreign-tokenizer (raw-tokenizer))
+(define tokenizer-entry (t1-private-entry tokenizer))
+(define core (car (cdr tokenizer-entry)))
+(define model (g3c4-model-create-seeded-internal 1729))
+(define equal-model (g3c4-model-create-seeded-internal 1729))
+(define encoded (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255)))
+(define input (g3c4-p2g2-owned-input-create encoded))
+(define equal-input (g3c4-p2g2-owned-input-create
+                     (t1-wave1-tokenizer-encode tokenizer (bytevector 0 255))))
+(define released-input (g3c4-p2g2-owned-input-create encoded))
+(define short-input (generation-input-create-internal
+                     (t1-wave1-tokenizer-encode tokenizer (bytevector 0))))
+(define generator (g3c4-generator-create-internal model tokenizer (config 2)))
+(define equal-generator (g3c4-generator-create-internal model tokenizer (config 2)))
+(define short-generator (g3c4-generator-create-internal model tokenizer (config 1)))
+
+(define generator-entry (g3c4-generator-entry-call-ready generator operation))
+(define native (vector-ref generator-entry 3))
+(define model-entry (vector-ref generator-entry 5))
+(define model-native (vector-ref model-entry 3))
+(define foreign-model-entry (g3c4-model-entry-live equal-model operation #f))
+(define foreign-generator-entry
+  (g3c4-generator-entry-call-ready equal-generator operation))
+(define policy (vector-ref generator-entry 7))
+(define input-entry (g3c4-input-entry-live input operation))
+(define input-native (vector-ref input-entry 3))
+(define foreign-native (vector-ref (g3c4-input-entry-live equal-input operation) 3))
+(define before (vector-ref g3c4-registry 0))
+(define model-root (vector-ref g3c4-model-registry 0))
+(define protected-root (vector-ref g3c4-p2g2-protected-records 0))
+(define protected-anchor-root (vector-ref g3c4-p2g2-protected-anchors 0))
+
+(check "mark native idle state before admission" (= (idle-witness-mark native 0 255) 0))
+(define bound (capture generator input))
+(define (same-admission anchor)
+  (and (eq? (vector-ref anchor 0) generator)
+       (eq? (vector-ref anchor 1) generator-entry)
+       (eq? (vector-ref anchor 2) native)
+       (eq? (vector-ref anchor 3) model)
+       (eq? (vector-ref anchor 4) model-entry)
+       (eq? (vector-ref anchor 5) model-native)
+       (eq? (vector-ref anchor 6) tokenizer)
+       (eq? (vector-ref anchor 7) tokenizer-entry)
+       (eq? (vector-ref anchor 8) core)
+       (eq? (vector-ref anchor 9) policy)
+       (eq? (vector-ref anchor 10) input)
+       (eq? (vector-ref anchor 11) input-entry)
+       (eq? (vector-ref anchor 12) input-native)))
+(check "real idle preflight retains original model, raw T1 and owned input"
+  (same-admission (bound generator input)))
+(check "another genuine same-content pair can establish its own admission"
+  (and (not (eq? input-native foreign-native))
+       (procedure? (capture equal-generator equal-input))))
+
+(reject "same-content input shell copy has no registry identity" 'invalid-argument
+  (lambda () (capture generator (vector-copy input))))
+(reject "same-content generator shell copy has no registry identity" 'invalid-argument
+  (lambda () (capture (vector-copy generator) input)))
+(reject "encoded T1 shell is not the owned prompt" 'invalid-argument
+  (lambda () (capture generator encoded)))
+(reject "P1 owned input fails native P2 admission" 'shape-mismatch
+  (lambda () (capture generator short-input)))
+(reject "budget-one generator is ineligible" 'invalid-argument
+  (lambda () (capture short-generator input)))
+(reject "foreign equal-content P2 input cannot reuse the bound admission" 'invalid-state
+  (lambda () (bound generator equal-input)))
+(reject "foreign equal-policy generator cannot reuse the bound admission" 'invalid-state
+  (lambda () (bound equal-generator input)))
+
+(vector-set! g3c4-registry 0 (cons (vector-copy input-entry) before))
+(reject "shadow entry with the same shell and handle changes identity" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! g3c4-registry 0 before)
+(vector-set! input-entry 3 foreign-native)
+(reject "genuine foreign native input fails exact handle recheck" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! input-entry 3 input-native)
+(vector-set! generator-entry 3 (vector-ref foreign-generator-entry 3))
+(reject "foreign native generator behind the original shell is stale" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! generator-entry 3 native)
+(vector-set! generator-entry 5 foreign-model-entry)
+(reject "a genuine same-seed model entry is foreign" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! generator-entry 5 model-entry)
+(vector-set! model-entry 3 (vector-ref foreign-model-entry 3))
+(reject "foreign native model behind the original entry is stale" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! model-entry 3 model-native)
+
+(vector-set! generator-entry 7 (vector-copy policy))
+(reject "equal policy vector replacement fails exact handle recheck" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! generator-entry 7 policy)
+(vector-set! policy 6 0)
+(reject "valid in-place EOS policy change is stale" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! policy 6 #f)
+(vector-set! generator-entry 6 foreign-tokenizer)
+(reject "another genuine baseline raw tokenizer is foreign" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! generator-entry 6 tokenizer)
+(let ((foreign-core (car (cdr (t1-private-entry foreign-tokenizer)))))
+  (set-car! (cdr tokenizer-entry) foreign-core)
+  (reject "equal raw core substitution behind original shell is stale" 'invalid-state
+    (lambda () (bound generator input)))
+  (set-car! (cdr tokenizer-entry) core))
+
+(vector-set! g3c4-p2g2-ownership-gate 0 #f)
+(reject "feature-off rejects before reservation" 'invalid-argument
+  (lambda () (capture generator input)))
+(reject "previous admission cannot bypass feature-off" 'invalid-state
+  (lambda () (bound generator input)))
+(vector-set! g3c4-p2g2-ownership-gate 0 #t)
+
+(let ((released (capture generator released-input)))
+  (check "genuine secondary owned input is released"
+    (generation-tensor-release-internal! released-input))
+  (reject "new preflight rejects released input" 'invalid-state
+    (lambda () (capture generator released-input)))
+  (reject "existing admission rejects released input" 'invalid-state
+    (lambda () (released generator released-input))))
+
+(let ((projection (bound generator input)))
+  (vector-set! projection 12 foreign-native)
+  (check "mutating returned projection cannot replace retained authority"
+    (same-admission (bound generator input))))
+(check "preflight does not enroll, acquire or reserve"
+  (and (eq? (vector-ref g3c4-registry 0) before)
+       (eq? (vector-ref g3c4-model-registry 0) model-root)
+       (eq? (vector-ref g3c4-p2g2-protected-records 0) protected-root)
+       (eq? (vector-ref g3c4-p2g2-protected-anchors 0) protected-anchor-root)
+       (eq? (vector-ref generator-entry 4) #f)
+       (eq? (vector-ref model-entry 10) #f)
+       (= (idle-witness-entry-state native 0) 0)))
+
+(check "genuine generators close"
+  (and (g3c4-generator-close-internal! equal-generator)
+       (g3c4-generator-close-internal! short-generator)
+       (g3c4-generator-close-internal! generator)))
+(reject "existing admission rejects closed generator" 'invalid-state
+  (lambda () (bound generator input)))
+(check "genuine inputs release"
+  (and (generation-tensor-release-internal! input)
+       (generation-tensor-release-internal! equal-input)
+       (generation-tensor-release-internal! short-input)))
+(display "P2/G2 terminal idle input PASS checks=") (display checks) (newline)
