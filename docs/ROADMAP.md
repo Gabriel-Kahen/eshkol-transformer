@@ -3308,6 +3308,10 @@ at 5,922,716 KiB with zero swaps. Evidence verifies under
 historical 81298 gate still fails before the first update with the documented
 D2 closure incompatibility. Public next-step metrics and effective-rate
 observations remain pending.
+The [TR3-C standalone restore provenance audit](TR3_I2_RESTORE_INTEGRATION.md#current-main-standalone-provenance)
+confirms that main `443dad4b` matches the accepted Wave 3 F32 objects in all
+four pinned comparisons. The frozen I2 comparison and private matcher manifest
+block standalone acceptance pending review of a current-main successor.
 The bounded [private TR3-C retention diagnosis](TR3_C_RETENTION_CYCLE_DIAGNOSIS.md)
 passes pinned f31/LLVM21 ASan/UBSan/LSan tests at 32 and 128 genuine
 snapshot→C2 SAVE/LOAD→joint restore cycles after one P1/C2 identity prewarm,
