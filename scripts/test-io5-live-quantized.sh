@@ -70,6 +70,7 @@ if ! (
   die "IO5 live quantized M3 AOT compilation failed"
 fi
 (cd "${scratch}" && sha256sum io5-quantized-m3 libio5_quantized_m3_native.a)
-ESHKOL_IO5_QUANT_LIB="${PROJECT_ROOT}/build/io5_quant/libeshkol_transformer_io5_quant.so" \
-  ESHKOL_ARENA_POISON=1 IO5_LIVE_QUANTIZED_BRIDGE="${binary}" \
-  python3 tests/io5/test_live_quantized_m3.py -v
+export ESHKOL_IO5_QUANT_LIB="${PROJECT_ROOT}/build/io5_quant/libeshkol_transformer_io5_quant.so"
+export ESHKOL_ARENA_POISON=1 IO5_LIVE_QUANTIZED_BRIDGE="${binary}"
+python3 tests/io5/test_live_quantized_m3.py -v
+python3 tests/io5/live_external_quantized_m3.py -v
