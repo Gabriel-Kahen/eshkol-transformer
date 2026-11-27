@@ -35,30 +35,53 @@ static owner *make_owner(initializer *s) {
  OK(et_m3t_private_owner_save_roster_v1(o,parameters,identities));
  return o;
 }
-static void forward(workspace *w) {
+static void forward_before_attention(workspace *w) {
  OK(et_m3t_private_embedding_v1(w,0,0));OK(et_m3t_private_embedding_v1(w,1,0));
  OK(et_m3t_private_residual_v1(w,0,0));OK(et_m3t_private_layer_norm_v1(w,0,0));
  OK(et_m3t_private_linear_v1(w,0,0));OK(et_m3t_private_linear_v1(w,1,0));OK(et_m3t_private_linear_v1(w,2,0));
  OK(et_m3t_private_heads_split_v1(w,0,0));OK(et_m3t_private_heads_split_v1(w,1,0));OK(et_m3t_private_heads_split_v1(w,2,0));
- OK(et_m3t_private_attention_v1(w,0));OK(et_m3t_private_heads_merge_v1(w,0));
+}
+static void forward_after_attention(workspace *w) {
+ OK(et_m3t_private_heads_merge_v1(w,0));
  OK(et_m3t_private_linear_v1(w,3,0));OK(et_m3t_private_residual_v1(w,1,0));
  OK(et_m3t_private_layer_norm_v1(w,1,0));OK(et_m3t_private_linear_v1(w,4,0));
  OK(et_m3t_private_gelu_v1(w,0));OK(et_m3t_private_linear_v1(w,5,0));OK(et_m3t_private_residual_v1(w,2,0));
  OK(et_m3t_private_layer_norm_v1(w,2,0));OK(et_m3t_private_linear_v1(w,6,0));
 }
-static void reverse(workspace *w) {
+static void forward(workspace *w) {
+ forward_before_attention(w);
+ OK(et_m3t_private_attention_v1(w,0));
+ forward_after_attention(w);
+}
+static void reverse_before_attention(workspace *w) {
  OK(et_m3t_private_linear_v1(w,6,1));OK(et_m3t_private_layer_norm_v1(w,2,1));OK(et_m3t_private_residual_v1(w,2,1));
  OK(et_m3t_private_linear_v1(w,5,1));OK(et_m3t_private_gelu_v1(w,1));OK(et_m3t_private_linear_v1(w,4,1));
  OK(et_m3t_private_layer_norm_v1(w,1,1));OK(et_m3t_private_sum_v1(w,2));OK(et_m3t_private_residual_v1(w,1,1));
- OK(et_m3t_private_linear_v1(w,3,1));OK(et_m3t_private_heads_merge_v1(w,1));OK(et_m3t_private_attention_v1(w,1));
+ OK(et_m3t_private_linear_v1(w,3,1));OK(et_m3t_private_heads_merge_v1(w,1));
+}
+static void reverse_after_attention(workspace *w) {
  OK(et_m3t_private_heads_split_v1(w,0,1));OK(et_m3t_private_heads_split_v1(w,1,1));OK(et_m3t_private_heads_split_v1(w,2,1));
  OK(et_m3t_private_linear_v1(w,0,1));OK(et_m3t_private_linear_v1(w,1,1));OK(et_m3t_private_linear_v1(w,2,1));
  OK(et_m3t_private_sum_v1(w,0));OK(et_m3t_private_layer_norm_v1(w,0,1));OK(et_m3t_private_sum_v1(w,1));
  OK(et_m3t_private_residual_v1(w,0,1));OK(et_m3t_private_embedding_v1(w,0,1));OK(et_m3t_private_embedding_v1(w,1,1));OK(et_m3t_private_sum_v1(w,3));
 }
+static void reverse(workspace *w) {
+ reverse_before_attention(w);
+ OK(et_m3t_private_attention_v1(w,1));
+ reverse_after_attention(w);
+}
 #include "role_oracle.h"
 #include "failure_cases.h"
-int main(void) {
+#ifdef ET_PA4_WIDER_M3T_DIAGNOSTIC
+#include "../pa4_wider/m3t_dispatch.h"
+#endif
+int main(int argc, char **argv) {
+#ifdef ET_PA4_WIDER_M3T_DIAGNOSTIC
+ if (argc > 1) return pa4_m3t_diagnostic(argc, argv);
+#else
+ (void)argc;
+ (void)argv;
+#endif
  initializer *s=et_m3t_private_initializer_create_v1(1729);CHECK(s);OK(et_m3t_private_initializer_seal_v1(s));
  discovery_failures(s);
  owner *o=make_owner(s);CHECK(o->successor->words[2]==290);CHECK(s->words[2]==0);
