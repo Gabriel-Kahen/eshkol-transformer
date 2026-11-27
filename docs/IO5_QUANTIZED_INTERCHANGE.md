@@ -203,11 +203,13 @@ the F16 type, reversed dimension order, 32-byte alignment and padding, and
 all 4,416 tensor payload bytes against the original F32 state rounded to F16.
 An independent F16 widening step checks the full restored C1 bytes before
 the C1 loader evaluates all 512 CPU F32 logits and saves the same tied state.
-The test requires maximum weight and logit deltas of at most `8.0e-6` and
-`5.0e-5`. Invalid tensor padding and a corrupted checksummed payload are
-rejected before creating or replacing the C1 destination. The fixed M3
-roster has no innermost dimension divisible by 32, so these results cover
-the F16 route. Live Q8_0 evaluation requires a compatible model profile.
+On pinned Ubuntu 22.04 the 8,000-byte GGUF file reproduced the safetensors
+F16 route's restored C1 bytes. Maximum weight and logit deltas were
+`7.626e-6` and `2.932e-5`, within the test limits of `8.0e-6` and `5.0e-5`.
+Invalid tensor padding and a corrupted checksummed payload are rejected
+before creating or replacing the C1 destination. The fixed M3 roster has
+no innermost dimension divisible by 32. Live Q8_0 evaluation requires a
+compatible model profile.
 
 ## Limitations and scope
 
