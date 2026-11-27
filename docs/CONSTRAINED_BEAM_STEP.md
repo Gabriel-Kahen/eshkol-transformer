@@ -51,3 +51,19 @@ Ubuntu 22.04 / Clang 21.1.8 image
 The gate checks the C++ header and native object symbols, then runs optimized
 and sanitizer tests for cross-row branching, normalized scores, processor
 ordering, completion, failure atomicity, and the maximum supported geometry.
+
+## Live CPU witness
+
+On the same image, run `CC=clang-21 CXX=clang++-21 make test-beam-cd-live-cpu`.
+This development fixture sends dense F32 logits from a one-block AC4/MOD5
+causal forward with shape `[2,3,4]` to the native step. The CD5 index uses all
+260 token spellings and the EOS ID from a native T2 tokenizer. On each
+successful step, the witness compares the entire beam object byte for byte
+against a separate beam advanced by manual CD5 replay, masking, and BEAM5.
+An independent score calculation and T2 decoding check the ranked split and
+merged token paths to EOS.
+
+A NaN in a forbidden column of the second live row and minimum-length
+suppression on the EOS-only row leave the full beam and prior generation output
+untouched. An exhausted budget with no EOS completion also leaves prior output
+untouched. The gate compares optimized, repeat, and ASan/UBSan/LSan output.
