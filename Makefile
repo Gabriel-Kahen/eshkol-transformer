@@ -26,11 +26,14 @@ SHELL := /usr/bin/bash
 	test-e3-native-parity test-e3-private-package test-e3-private-runtime \
 	test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics \
-	test-mod5 test-mod5-aot test-mp4 test-mp4-mod5 test-ac4 test-pa4-wider test-n2 test-n3k \
+	test-mod5 test-mod5-aot test-mod5-o2-continuation test-mp4 test-mp4-mod5 \
+	test-ac4 test-pa4-wider test-n2 test-n3k \
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
-	test-reference-formats test-t1 test-t2 test-t2-trainer test-data4-pipeline \
+	test-reference-formats test-t1 test-t2 test-t2-trainer test-t2-native-corpus test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
-	test-beam-cd-composition test-spec-paged-witness test-data4-quality-t2-d1 \
+	test-paged-kv-model-attention \
+	test-beam-cd-composition test-beam-cd-live-cpu test-spec-paged-witness \
+	test-data4-quality-t2-d1 \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
@@ -300,6 +303,9 @@ test-mod5:
 test-mod5-aot:
 	/usr/bin/bash scripts/test-mod5-aot.sh
 
+test-mod5-o2-continuation:
+	/usr/bin/bash scripts/test-mod5-o2-continuation.sh
+
 test-mp4-mod5:
 	/usr/bin/bash scripts/test-mp4-mod5.sh
 
@@ -396,9 +402,12 @@ test-dist5-mod5:
 test-eval5:
 	/usr/bin/bash scripts/test-eval5.sh
 
-.PHONY: test-io5-gguf
+.PHONY: test-io5-gguf test-io5-live-quantized
 test-io5-gguf:
 	/usr/bin/bash scripts/test-io5-gguf.sh
+
+test-io5-live-quantized:
+	/usr/bin/bash scripts/test-io5-live-quantized.sh
 
 # Optional Wave 5 leaf gates; no default build or CI suite consumes them.
 test-beam-search:
@@ -410,11 +419,17 @@ test-constrained-decode:
 test-paged-kv:
 	/usr/bin/bash scripts/test-paged-kv.sh
 
+test-paged-kv-model-attention:
+	/usr/bin/bash scripts/test-paged-kv-model-attention.sh
+
 test-spec-decode:
 	/usr/bin/bash scripts/test-spec-decode.sh
 
 test-beam-cd-composition:
 	/usr/bin/bash scripts/test-beam-cd-composition.sh
+
+test-beam-cd-live-cpu:
+	/usr/bin/bash scripts/test-beam-cd-live-cpu.sh
 
 test-spec-paged-witness:
 	/usr/bin/bash scripts/test-spec-paged-witness.sh
@@ -480,6 +495,9 @@ test-t2: build
 
 test-t2-trainer:
 	/usr/bin/bash scripts/test-t2-trainer.sh
+
+test-t2-native-corpus:
+	/usr/bin/bash scripts/test-t2-native-corpus.sh
 
 test-data4-pipeline:
 	/usr/bin/bash scripts/test-data4-pipeline.sh

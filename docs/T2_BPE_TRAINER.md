@@ -13,8 +13,8 @@ oracle test compares them directly against `tests/t2/reference.py`.
 `ETBPE100` is a binary format; the
 accepted `eshkol-bpe-tokenizer` v1.0 artifact is canonical ASCII TSV. Neither
 loader accepts the other's artifact, and the two SHA-256 identities have
-different domains. There is no conversion, public tokenizer registration, D1
-composition, or streaming bridge. Native BOS/EOS/PAD/UNK are fixed optional
+different domains. The opt-in raw import below creates a distinct accepted T2
+tokenizer for use by trusted corpus callers. Native BOS/EOS/PAD/UNK are fixed optional
 omitted specials; accepted T2 uses named specials with `omit` or `error` decode
 policy and optional prefix/suffix lists. The native path has no strict UTF-8
 mode and allows up to 3,840 merges, beyond the accepted T2 ceiling.
@@ -29,6 +29,37 @@ Delivered files:
   - `tests/t2_trainer/test_t2_trainer_oracle.py`
   - `tests/t2_trainer/test_t2_trainer_aot.esk`
 - Build and validation scripts: `scripts/build-t2-trainer.sh`, `scripts/test-t2-trainer.sh`
+
+## Opt-in raw import into the accepted corpus path
+
+`(t2-native-bpe-import path)` is a build-only procedure for trusted callers in
+the Wave-2 aggregate. Load `native/t2_native_bpe_import.esk` after
+`native/t2_wave2_root.esk` and link `native/t2_native_bpe_import.c` with the
+native trainer archive. The bridge uses the hardened `ETBPE100` loader,
+accepts 0–256 merges with no native specials, and copies the validated merge
+operands and result IDs in rank order. The accepted T2 constructor checks the
+merge table, creates the canonical raw TSV artifact and T2 fingerprint, and
+registers the tokenizer only after construction succeeds. Callers use that
+fingerprint for D1 manifest and shard identity.
+
+An invalid path argument is `invalid-argument`, malformed bytes are
+`corrupt-data`, an unknown wire version is `version-mismatch`, and an
+unreadable, missing, or symlink file is `io`. A valid native model with
+specials or more than 256 merges is `unsupported`. Import reads one bounded
+artifact and creates only an in-process tokenizer. The caller may use the
+accepted T2 save/load path to persist canonical TSV separately, and the
+existing DATA4 prepare/write path to publish a bounded D1 corpus. The DATA4
+path retains its 128-document, 65,536-input-byte, and 65,536-token limits and
+D1's manifest-last publication contract.
+
+`make test-t2-native-corpus` trains ETBPE100 fixtures with the native trainer,
+compares the imported canonical T2 bytes with an independently trained T2
+core, checks accepted T2 streaming across a split merge, and compares every
+D1 token ID with the native encoder's output. Two fresh processes produce
+byte-identical tokenizer, manifest, and shard files. The gate also checks
+zero and 256 merges, one-over and special-bearing models, corrupt and
+unreadable files, wrong T2 identity at equal vocabulary, a preexisting D1
+target, and D1 shard corruption. The import has no installed entry point.
 
 ## Vocabulary & Deterministic Training Algorithm
 
@@ -117,6 +148,8 @@ change the tested native or AOT inputs.
 
 - CPU-only implementation (no GPU execution claimed).
 - Vocabulary ceiling is `4096` tokens (`256` base bytes plus at most `3840` combined merges and special tokens); individual merged token spellings are capped at `256` bytes. The extended ceiling above the accepted T2 256-merge limit has not been independently measured by the cross-T2 oracle cases.
-- Encoding operates on whole byte buffers in memory (streaming incremental BPE transducers remain in the existing Wave-2 T2 Eshkol contract documented in `docs/BPE_TOKENIZER_FORMAT.md`).
+- The native encoder operates on whole byte buffers in memory. An imported
+  model can use the accepted Wave-2 T2 streaming encoder documented in
+  `docs/BPE_TOKENIZER_FORMAT.md`.
 - Decode rejects overlapping token-ID input and byte output; output-count storage must be separate from both buffers.
 - Atomic rename durability assumes POSIX same-directory rename semantics without concurrent hostile directory replacement.
