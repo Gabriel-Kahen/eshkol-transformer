@@ -13,6 +13,9 @@
     ((_ operation generator (observed-call observed-bundle observed-entry
                             authenticate abort!) body ...)
      (m3-call operation
+       (if (not (vector-ref g3c4-p2g2-ownership-gate 0))
+           (g3c4-fail 'invalid-argument operation
+                      "P2/G2 first enrollment is disabled"))
        (let* ((generator-entry
                 (g3c4-generator-entry-call-ready generator operation))
               (model (vector-ref generator-entry 5))

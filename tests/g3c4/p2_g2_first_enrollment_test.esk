@@ -240,8 +240,9 @@
   (vector-set! g3c4-p2g2-ownership-gate 0 #f)
   (check "off rejects before any enrollment"
     (rejects? (lambda () (probe 'dry)) 'invalid-argument))
-  (check-idle)
+  ;; The ordinary live lookup also requires the opt-in to validate budget two.
   (vector-set! g3c4-p2g2-ownership-gate 0 #t)
+  (check-idle)
   (check "generator reusable" (probe 'dry))
   (check-idle)
   (g3c4-p2g2-terminal-carriers-retire! earlier-bundle)
