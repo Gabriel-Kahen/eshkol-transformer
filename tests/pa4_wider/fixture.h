@@ -54,15 +54,20 @@ static inline const et_kernel_provider_v1 *provider(int variant) {
                         : et_pa4_wider_online_provider_v1();
 }
 
-static inline et_kernel_runtime *discover(int variant) {
+static inline et_kernel_runtime *
+discover_provider(const et_kernel_provider_v1 *descriptor) {
   et_kernel_runtime *runtime = NULL;
   et_kernel_error error;
   const int32_t status = et_kernel_runtime_discover(
-      resolve, (void *)provider(variant), &runtime, &error);
+      resolve, (void *)descriptor, &runtime, &error);
   if (status != 0)
     fprintf(stderr, "%s: %s\n", error.operation, error.message);
   require(status == 0 && runtime != NULL, "explicit K1 provider discovery");
   return runtime;
+}
+
+static inline et_kernel_runtime *discover(int variant) {
+  return discover_provider(provider(variant));
 }
 
 static et_kernel_tensor_view_v1 view(void *data, size_t bytes,
