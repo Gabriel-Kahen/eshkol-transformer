@@ -143,15 +143,23 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   The suite ran in 64m17s, including a 49m08s compile matrix. Both scheduled
   heavy pairs passed their 8 GiB pre-launch check. That run measured
   single-compiler peak RSS and initial host headroom.
-- The [paired memory diagnostic](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829)
-  passed the complete parameter-state suite on exact source `15f25229` and
-  tree `672e9da3`. The supported suite step took 4,091 seconds. Independent
-  receipt verification matched all six 250 ms process-group traces and
-  67 compiler invocations, including 43 expected failures. The maximum
-  sampled sum across the two paired compiler process groups was
-  7,487,873,024 bytes. The [serial control](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/270)
-  is queued through the branch-only workflow. Default compile scheduling
-  remains serial.
+- The hosted paired and serial diagnostics passed the complete parameter-state
+  suite on source `15f2522946b8ee13b9f166967a99f2665263d4d0` and tree
+  `672e9da3d40061278e94ca0aa1954e98936afa7e`. The sealed comparison matched
+  OS, Ubuntu 22.04 runner image `20261116.365.1`, toolchain and source-input
+  identities, toolchain cache key and restore outcome, and all 67 compiler
+  commands and exit statuses, including 43 expected failures. The suite step
+  took 4,091 seconds paired and 5,166 seconds serial, an observed difference
+  of 1,075 seconds (20.8% lower for the paired run). The runs used separate
+  hosted machines.
+  All six 250 ms paired traces observed overlap. The highest sampled sum
+  across both compiler process groups was 7,487,873,024 bytes. The highest
+  GNU time peak RSS for a single command was 4,248,352 KiB paired and
+  4,271,924 KiB serial. Serial job-wide memory was unmeasured. Compiler
+  pairing is opt-in.
+  [Paired run 45934920829, attempt 1, job 140295806350](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829/job/140295806350)
+  [Serial run 45941958637, attempt 1, job 140318040542](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941958637/job/140318040542)
+  [Trace and comparison contract](https://github.com/Gabriel-Kahen/eshkol-transformer/blob/a2634ddfb33e82d9e3fe0dc169a999cb45294627/docs/P1_PAIR_MEMORY_TRACE.md)
 
 ## Parallel execution strategy
 
