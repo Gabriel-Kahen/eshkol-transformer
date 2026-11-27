@@ -37,20 +37,28 @@ The runner checks every API row, tutorial repository path, and referenced Make
 target. It copies tracked sources into a disposable directory, builds CLI3,
 runs the existing cross-command gate and installed DATA4 command tests, then
 executes the integrated recipe below. A source-only check is available as
-`make test-doc5-source`; it does not establish
-the executable walkthrough.
+`make test-doc5-source`. If you already have the sealed CI binary artifact,
+follow the [downloaded artifact guide](CLI3_DOWNLOADED_ARTIFACT_RUNNER.md) to run
+`make test-cli3-downloaded-artifact` on the same Ubuntu lane without rebuilding.
 
 ## Prepare, train, evaluate, and generate
 
-In a disposable checkout with the same pinned toolchain, build the CLI3
-executable. The [cross-command gate](../scripts/test-cli3-cross-command-chain.sh)
+To build the CLI3 executable, use a disposable checkout with the same pinned
+toolchain. The [cross-command gate](../scripts/test-cli3-cross-command-chain.sh)
 uses the same config and bytes, and checks the output and rejection contracts.
 
 ```bash
+cli_build=$(mktemp -d)
+TMPDIR="$cli_build" CLI3_COMPILER_TIMEOUT_SECONDS=1200 \
+  bash scripts/build-cli3.sh "$cli_build/cli3"
+cli="$cli_build/cli3/eshkol-transformer"
+```
+
+With `cli` set to the absolute path of the built or verified installed
+executable, run the recipe:
+
+```bash
 scratch=$(mktemp -d)
-TMPDIR="$scratch" CLI3_COMPILER_TIMEOUT_SECONDS=1200 \
-  bash scripts/build-cli3.sh "$scratch/cli3"
-cli="$scratch/cli3/eshkol-transformer"
 cat >"$scratch/config.json" <<'JSON'
 {"config-schema-major":1,"config-schema-minor":0,"model.context-length":2,"model.hidden-size":4,"model.layer-count":1,"model.query-head-count":2,"model.vocabulary-size":256,"run.seed":1729,"training.accumulation-steps":2}
 JSON
@@ -62,6 +70,7 @@ mkdir "$scratch/train" "$scratch/heldout"
   --source "train=$scratch/train.txt" --minimum-bytes 6 --maximum-bytes 6 \
   --output-directory "$scratch/train" --shard-token-limit 4
 "$cli" corpus report-validate --input-directory "$scratch/train"
+"$cli" corpus validate "$scratch/train" --max-total-tokens 6
 "$cli" corpus build --tokenizer "$scratch/byte.t1" \
   --document "$scratch/heldout.txt" --output-directory "$scratch/heldout" \
   --shard-token-limit 4
@@ -86,9 +95,15 @@ corpus and report as separate units, so an interrupted publication can leave
 a corpus without its sidecar. Preserve the original inputs and options to
 regenerate a v2.0 report in a fresh directory if needed.
 
+`corpus validate` checks the D1 manifest and shards with an explicit token
+limit. Its plain-text summary begins `shards=2 tokens=6 vocab=256 limit=4`.
+The `limit` field is the stored shard token limit, and `--max-total-tokens 6`
+bounds the total tokens accepted by the command.
+
 The C2 checkpoint holds fixed-profile CPU-f32 training state; it is distinct
 from the C1 logical-parameter format used by IO5. This run establishes one
 update, evaluation and one-byte generation for the context-two byte-tokenizer
 profile. It does not establish a general model trainer, longer generation,
 GPU execution, or CPU-v1 release admission. See the [roadmap](ROADMAP.md) for
-their separate gates. Remove the scratch directory when finished.
+their separate gates. Remove the scratch directory and any temporary build
+directory when finished.
