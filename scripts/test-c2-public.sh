@@ -306,6 +306,7 @@ done
 
 private_bindings=(
   c2-public-checkpoint-load
+  c2-checkpoint-load-with-admission-internal
   c2-public-capability-admit-one
   c2-public-capability-admit-all
   c2-checkpoint-load-stage-internal

@@ -89,8 +89,9 @@ required = [
     "(vector-set! roots 0 remaining)",
 ]
 def contract(candidate):
+    before_check, _, _ = candidate.partition("(set! g3c4-p2g2-terminal-carriers-check")
     return (all(item in candidate for item in required)
-            and candidate.count("(make-bytevector ") == 8
+            and before_check.count("(make-bytevector ") == 8
             and "(extern " not in candidate
             and "native-terminal" not in candidate)
 assert contract(source)

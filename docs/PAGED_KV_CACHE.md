@@ -162,6 +162,38 @@ using single-pass online softmax in IEEE-754 binary64 accumulators (`running_max
 and **zero heap allocations**. Output is staged in a bounded stack buffer and
 committed to `out` only after all heads and finite checks pass.
 
+## Live MOD5 grouped-query attention witness
+
+The opt-in native witness uses the admitted MOD5 CPU F32 model fixture with
+two batches, three tokens, width eight, four query heads, and two KV heads
+of width two. The shared block produces Q, K and V from the same weights and
+normalization. The dense route uses MOD5's grouped-query provider with
+contiguous positions, a full causal mask, zero ALiBi, and a window covering
+all three tokens. The paged route interleaves token appends for the two
+sequences, decodes each current prefix through PKV5, and returns attention
+to the same output projection, residual and feed-forward path.
+
+The witness checks every live cached K/V word against the corresponding
+projection, sequence lengths and block tables across the page boundary,
+and the mapping of each pair of query heads to its KV head. A
+multi-token row distinguishes the queries within each group. A change
+to the last input of the first batch changes that row's attention and
+block output while preserving the earlier rows and the other batch bit
+for bit. A nondivisible query-head count leaves the caller's output and
+all cache state unchanged. Sequence release restores all blocks.
+
+```bash
+bash scripts/test-paged-kv-mod5-gqa.sh
+```
+
+On the host Clang 22.1.8 native check, normal, repeat, and ASan/UBSan/LSan
+runs matched the complete projection and paged output traces. The 96
+attention and 96 block comparisons had maximum absolute errors of
+`1.49011612e-08` and `2.98023224e-08`, against bounds of `1e-6` and `2e-6`.
+The witness is scoped to CPU F32 causal inference with this fixture.
+Arbitrary masks, ALiBi, bounded-window decode, context-bound prefix sharing,
+and public runtime routing remain outside this gate.
+
 ## Historical experiment evidence
 
 The original `cd714a38b` experiment was verified inside the pinned Ubuntu 22.04 container (`eshkol-r0-debug:20260928`,
