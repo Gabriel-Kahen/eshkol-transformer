@@ -258,9 +258,11 @@ quants, then checks the decoded weights, repeatable scores, changed logits
 digests and mean-loss drift. A corrupt quant byte must fail import before
 creating a C1 file or replacing an existing one.
 
-Ubuntu 22.04 with Clang/LLVM 21.1.8 passed all five tests and produced two
-byte-identical AOT executables. The gate requires nonzero absolute mean-loss drift
-of at most 0.01 for both variants.
+Ubuntu 22.04 with Clang/LLVM 21.1.8 produced byte-identical AOT executables
+from two fresh builds of source tree `02964ade`. All six MOD5 end-to-end
+tests passed, including the F16 and BF16 safetensors routes and both Q8_0
+scoring cases. The Q8_0 gate requires nonzero absolute mean-loss drift of
+at most 0.01 for both variants.
 
 | Variant | Imported mean loss | Absolute mean-loss drift | Maximum absolute weight delta |
 |---|---:|---:|---:|
