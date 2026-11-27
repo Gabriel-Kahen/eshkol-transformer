@@ -1,0 +1,47 @@
+;;; Opt-in trusted source, loaded after t2_wave2_root.esk in the same aggregate.
+
+(extern i64 t2-native-bpe-read-merges ptr ptr
+        :real et_t2_private_import_native_bpe_v1)
+
+(define (t2-native-bpe-import-category status)
+  (cond ((or (= status -2) (= status -5) (= status -7)
+             (= status -8) (= status -9)) 'corrupt-data)
+        ((= status -6) 'version-mismatch)
+        ((= status -11) 'io)
+        ((= status -13) 'unsupported)
+        (else 'internal)))
+
+(define (t2-native-bpe-import path)
+  (let ((operation 't2-native-bpe-import))
+    (if (not (t2-wave2-valid-file-path? path))
+        (t2-private-raise 'invalid-argument operation "invalid native BPE path"))
+    (let* ((bytes (make-bytevector (* t2-core-max-merges 12) 0))
+           (count (t2-native-bpe-read-merges path bytes)))
+      (if (< count 0)
+          (let ((message (if (= count -13)
+                             "native BPE import requires at most 256 merges and no specials"
+                             "native BPE artifact load failed")))
+            (et-e1b-private-raise
+             (t2-native-bpe-import-category count) operation message
+             (list (list 'source-domain 't2-native-bpe)
+                   (list 'source-code count)
+                   (list 'source-message message))
+             #f)))
+      (if (> count t2-core-max-merges)
+          (t2-private-raise 'internal operation "invalid native BPE merge count"))
+      (let ((merges
+             (let loop ((remaining count) (out '()))
+               (if (= remaining 0) out
+                   (let* ((rank (- remaining 1))
+                          (offset (* rank 12)))
+                     (loop rank
+                           (cons (list rank
+                                       (t2-d1-u32-le bytes offset)
+                                       (t2-d1-u32-le bytes (+ offset 4))
+                                       (t2-d1-u32-le bytes (+ offset 8)))
+                                 out)))))))
+        (t2-private-map-core-error
+         operation
+         (lambda ()
+           (t2-private-register-core
+            (t2-tokenizer-core-create 'raw merges '() '() '()))))))))
