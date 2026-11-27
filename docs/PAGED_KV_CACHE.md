@@ -144,6 +144,12 @@ token chain. The manager compares the supplied fingerprints and relies on
 the caller for fingerprint provenance and the association between the key
 and the stored KV.
 
+On integrated tree `a4b99069` at `60dba470`, the pinned Ubuntu/Clang 21
+gate passed 320 exact SHA-256 cases, allocation cuts, CoW and truncate
+controls, and ASan/UBSan/LSan. The legacy ABI AOT caller produced
+byte-identical ELF and stdout across two fresh builds. The same gate
+passed the fixed-model attention and speculative round regressions.
+
 ## Exact Paged GQA Causal Decode Attention (`et_paged_kv_decode_attention_v1`)
 
 For each query head `qh` in `[0, num_q_heads)` mapped to KV head
