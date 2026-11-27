@@ -3483,9 +3483,15 @@ publication, public G2 and continuation remain pending.
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
-  after native commit. Native terminal integration and logical I1 clone code
-  are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  after native commit. The native commit and snapshot merged through
+  [PR #184](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/184), and
+  the native logical I1 clone through
+  [PR #189](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/189).
+  The next Eshkol gate is the private reservation that binds the constructor's
+  original carrier bundle at the sole output entry's first enrollment. The
+  [reservation proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/6845bd0a81aad05f169b0c0e85fc8779b43c87a8)
+  awaits independent contract review. Same-call terminal publication,
+  detached Eshkol output, public G2, and CLI adoption follow separately.
 
 - **Private P2/G2 terminal pending-allocation precursor:** The
   [abort-only anchor candidate](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
@@ -3519,6 +3525,17 @@ publication, public G2 and continuation remain pending.
   remain unchanged. Composition into the sole native pending output and
   actual terminal close, public G2, trained-G2 sanitizer acceptance and
   save/reload remain open.
+
+  The standalone pending anchor and carrier bundle also passed their original
+  pinned Ubuntu 22.04/Clang 21.1.8 gates on the Wave 3 reconciliation
+  `12598d3bc01c155eab0eeb89b26c11304ee3fcbd` (tree `d6338d1b`), with
+  23 pending, four feature-off, and 530 carrier checks per mode. The
+  83-file seal is
+  `/home/gabe/.codex/evidence/eshkol-transformer/g3c4-carrier-wave3-12598d3-20261125/SHA256SUMS-RUN`
+  (`59496ab79d9a12ea718f83aef319f6da1d491e6da943008f90c6779d20651ba3`).
+  The replay on main `443dad4b` uses the same PA4 transitive-header pin
+  and passes the two source mutation checkers and Q0 isolation. The Wave 3
+  compiled receipt applies to its own tree.
 
 ## Wave 4 — practical pretraining and performance
 
