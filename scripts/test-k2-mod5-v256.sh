@@ -64,15 +64,18 @@ awk '$5 == "GLOBAL" && $6 == "HIDDEN" &&
   "$out/k2-v256-symbols.txt"
 ar rcsD "$out/libeshkol_k2_mod5_v256_witness.a" "$out"/objects/*.o
 
-env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR -u ESHKOL_AOT_MODULE_CACHE_DIR \
-  ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="$out/cache" ESHKOL_CXX_COMPILER="$cxx" \
-  ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
-  timeout --foreground --signal=TERM --kill-after=5s 600s \
-  "$runner" --strict-types --optimize 0 --no-stdlib \
-  -I "$PROJECT_ROOT/native" -I "$PROJECT_ROOT/internal/p1/lib" \
-  -I "$PROJECT_ROOT/internal/c1/lib" -I "$PROJECT_ROOT/internal/t1/lib" \
-  -I "$PROJECT_ROOT/src" -L "$out" --lib eshkol_k2_mod5_v256_witness \
-  "$PROJECT_ROOT/tests/k2/mod5_v256_runtime.esk" -o "$out/witness" \
+compile_witness() {
+  env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR -u ESHKOL_AOT_MODULE_CACHE_DIR \
+    ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="$out/cache" ESHKOL_CXX_COMPILER="$cxx" \
+    ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
+    timeout --foreground --signal=TERM --kill-after=5s 600s \
+    "$runner" --strict-types --optimize 0 --no-stdlib \
+    -I "$PROJECT_ROOT/native" -I "$PROJECT_ROOT/internal/p1/lib" \
+    -I "$PROJECT_ROOT/internal/c1/lib" -I "$PROJECT_ROOT/internal/t1/lib" \
+    -I "$PROJECT_ROOT/src" -L "$out" --lib eshkol_k2_mod5_v256_witness \
+    "$PROJECT_ROOT/tests/k2/mod5_v256_runtime.esk" "$@"
+}
+compile_witness -o "$out/witness" \
   >"$out/compile.stdout" 2>"$out/compile.stderr"
 test ! -s "$out/compile.stderr"
 for repeat in a b; do
@@ -82,3 +85,10 @@ for repeat in a b; do
 done
 cmp "$out/witness-a.stdout" "$out/witness-b.stdout"
 grep -Fx 'K2 MOD5 V256 PASS 22' "$out/witness-a.stdout"
+if [[ "${K2_V256_SCHEME_DISCOVERY:-0}" == 1 ]]; then
+  # The pinned driver only emits depfiles in object or shared-library mode.
+  compile_witness --emit-object --emit-depfile "$out/witness.d" \
+    -o "$out/witness-dependencies.o" \
+    >"$out/dependencies-compile.stdout" 2>"$out/dependencies-compile.stderr"
+  [[ -s "$out/witness.d" && ! -s "$out/dependencies-compile.stderr" ]]
+fi
