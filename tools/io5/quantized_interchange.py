@@ -51,6 +51,7 @@ SAFETENSORS_STORAGE_DTYPES = ("F16", "BF16")
 GGUF_STORAGE_DTYPES = ("F16", "Q8_0")
 Q8_FALLBACK_DTYPES = ("F32", "F16")
 QUANTIZED_PROFILES = (mapping.M3, mapping.DECODER)
+SAFETENSORS_QUANTIZED_PROFILES = (*QUANTIZED_PROFILES, mapping.MOD5)
 
 QUANT_VERSION_KEY = "eshkol.io5.quant_version"
 STORAGE_DTYPE_KEY = "eshkol.io5.storage_dtype"
@@ -213,17 +214,22 @@ def select_gguf_tensor_dtype(shape: tuple[int, ...], storage_dtype: str, q8_fall
     return "Q8_0" if (len(shape) >= 2 and shape[-1] > 0 and shape[-1] % QK8_0 == 0) else q8_fallback
 
 
-def _resolve_names(state: State, profile: str | None, scheme: str | None, default_scheme: str) -> tuple[tuple[str, ...], str | None]:
+def _resolve_names(
+    state: State, profile: str | None, scheme: str | None, default_scheme: str,
+    profiles: tuple[str, ...] = QUANTIZED_PROFILES,
+) -> tuple[tuple[str, ...], str | None]:
     if profile is None:
         require(scheme is None, "--scheme requires --profile")
         return mapping.synthetic_names(state), None
-    _require_quantized_profile(profile)
+    _require_quantized_profile(profile, profiles)
     chosen_scheme = default_scheme if scheme is None else scheme
     return mapping.mapped_names(state, profile, chosen_scheme), chosen_scheme
 
 
-def _require_quantized_profile(profile: str | None) -> None:
-    require(profile in QUANTIZED_PROFILES, "unsupported quantized profile")
+def _require_quantized_profile(
+    profile: str | None, profiles: tuple[str, ...] = QUANTIZED_PROFILES,
+) -> None:
+    require(profile in profiles, "unsupported quantized profile")
 
 
 def _payload_digest(
@@ -249,6 +255,20 @@ def _payload_digest(
     return h.hexdigest()
 
 
+def _safetensors_payload_digest(
+    metadata: dict[str, str], entries: list[tuple[str, str, tuple[int, ...], bytes]],
+) -> str:
+    digest = _payload_digest(metadata[safe.MANIFEST_KEY], entries)
+    if metadata.get(mapping.PROFILE) != mapping.MOD5:
+        return digest
+    # The decoder profile can map the same roster. Bind MOD5's profile,
+    # naming scheme and source provenance into its checksum.
+    identity = safe.json_bytes((
+        metadata[mapping.PROFILE], metadata[mapping.SCHEME], metadata[SOURCE_DIGEST_KEY],
+    ))
+    return hashlib.sha256(b"eshkol.io5.quant.safetensors.mod5.v1\0" + identity + bytes.fromhex(digest)).hexdigest()
+
+
 def encode_quantized_safetensors(
     raw_c1: bytes,
     storage_dtype: str,
@@ -261,7 +281,9 @@ def encode_quantized_safetensors(
     require(storage_dtype in SAFETENSORS_STORAGE_DTYPES, "unsupported safetensors quantized dtype: require F16 or BF16")
     state = safe.decode_c1(raw_c1, limits)
     load_native_codec(lib_path)
-    names, chosen_scheme = _resolve_names(state, profile, scheme, "huggingface")
+    names, chosen_scheme = _resolve_names(
+        state, profile, scheme, "huggingface", SAFETENSORS_QUANTIZED_PROFILES,
+    )
     encoder = native_encode_f16 if storage_dtype == "F16" else native_encode_bf16
 
     header: dict[str, object] = {}
@@ -287,12 +309,12 @@ def encode_quantized_safetensors(
         STORAGE_DTYPE_KEY: storage_dtype,
         LOSSY_KEY: "true",
         SOURCE_DIGEST_KEY: hashlib.sha256(raw_c1).hexdigest(),
-        PAYLOAD_DIGEST_KEY: _payload_digest(manifest, digest_entries),
         safe.MANIFEST_KEY: manifest,
     }
     if profile is not None:
         assert chosen_scheme is not None
         metadata.update(mapping.mapping_fields(profile, chosen_scheme))
+    metadata[PAYLOAD_DIGEST_KEY] = _safetensors_payload_digest(metadata, digest_entries)
     header["__metadata__"] = metadata
 
     encoded_header = safe.json_bytes(header)
@@ -381,7 +403,7 @@ def decode_quantized_safetensors(
         selected_scheme: str | None = None
         if mapping.MAPPING_VERSION in metadata:
             selected_profile, selected_scheme = mapping.selection_from_metadata(metadata, profile, scheme)
-            _require_quantized_profile(selected_profile)
+            _require_quantized_profile(selected_profile, SAFETENSORS_QUANTIZED_PROFILES)
         else:
             require(profile is None and scheme is None, "unmapped quantized safetensors has no profile/scheme")
 
@@ -407,7 +429,7 @@ def decode_quantized_safetensors(
             seen_names.add(name)
             dtype_w, shape_w, payload_w = wire_tensors[name]
             ordered_digest_entries.append((name, dtype_w, shape_w, payload_w))
-        require(_payload_digest(metadata[safe.MANIFEST_KEY], ordered_digest_entries) == metadata[PAYLOAD_DIGEST_KEY],
+        require(_safetensors_payload_digest(metadata, ordered_digest_entries) == metadata[PAYLOAD_DIGEST_KEY],
                 "IO5 quantized safetensors payload SHA-256 mismatch")
 
         decoder = native_decode_f16 if storage_dtype == "F16" else native_decode_bf16
@@ -853,7 +875,7 @@ def main() -> int:
     p_st_exp.add_argument("source", type=Path)
     p_st_exp.add_argument("destination", type=Path)
     p_st_exp.add_argument("--dtype", choices=SAFETENSORS_STORAGE_DTYPES, required=True)
-    p_st_exp.add_argument("--profile", choices=QUANTIZED_PROFILES)
+    p_st_exp.add_argument("--profile", choices=SAFETENSORS_QUANTIZED_PROFILES)
     p_st_exp.add_argument("--scheme", choices=mapping.SCHEMES)
     p_st_exp.add_argument("--overwrite", action="store_true")
     _add_limits(p_st_exp)
@@ -861,7 +883,7 @@ def main() -> int:
     p_st_imp = sub.add_parser("safetensors-to-c1")
     p_st_imp.add_argument("source", type=Path)
     p_st_imp.add_argument("destination", type=Path)
-    p_st_imp.add_argument("--profile", choices=QUANTIZED_PROFILES)
+    p_st_imp.add_argument("--profile", choices=SAFETENSORS_QUANTIZED_PROFILES)
     p_st_imp.add_argument("--scheme", choices=mapping.SCHEMES)
     p_st_imp.add_argument("--external", action="store_true")
     p_st_imp.add_argument("--provider")

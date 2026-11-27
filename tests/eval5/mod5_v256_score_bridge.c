@@ -6,6 +6,44 @@
 
 enum { TOKENS = 8, VOCAB = 256, DOC_IDS = 18, CONTEXT_FLOATS = TOKENS * VOCAB };
 
+int32_t et_eval5_v256_audit(const uint8_t train_bytes[18],
+                            const uint32_t train_tokens[18],
+                            const uint8_t eval_bytes[18],
+                            const uint32_t eval_tokens[18],
+                            uint64_t summary_out[8]) {
+  if (train_bytes == NULL || train_tokens == NULL || eval_bytes == NULL ||
+      eval_tokens == NULL || summary_out == NULL)
+    return ET_EVAL5_ERR_ARGUMENT;
+  for (size_t i = 0; i < DOC_IDS; ++i)
+    if (train_tokens[i] != train_bytes[i] || eval_tokens[i] != eval_bytes[i])
+      return ET_EVAL5_ERR_IDENTITY;
+  const et_eval5_document train[2] = {
+      {train_bytes, 9u, train_tokens, 9u},
+      {train_bytes + 9u, 9u, train_tokens + 9u, 9u},
+  };
+  const et_eval5_document eval[2] = {
+      {eval_bytes, 9u, eval_tokens, 9u},
+      {eval_bytes + 9u, 9u, eval_tokens + 9u, 9u},
+  };
+  const et_eval5_contamination_config policy = {
+      ET_EVAL5_NGRAM_TOKENS, 3u, 1u, 0.25, 0.0,
+  };
+  uint64_t indices[2] = {0, 0};
+  et_eval5_contamination_summary summary;
+  et_eval5_status status = et_eval5_audit_contamination(
+      train, 2u, eval, 2u, &policy, indices, 2u, &summary);
+  if (status != ET_EVAL5_OK && status != ET_EVAL5_ERR_CONTAMINATED)
+    return status;
+  const uint64_t result[8] = {
+      summary.eval_documents, summary.contaminated_documents,
+      summary.exact_doc_matches, summary.ngram_contaminated_docs,
+      summary.total_eval_ngrams, summary.matched_eval_ngrams,
+      indices[0], indices[1],
+  };
+  memcpy(summary_out, result, sizeof(result));
+  return status;
+}
+
 static et_eval5_sequence sequence(const float *logits,
                                   const uint32_t *targets, size_t count) {
   return (et_eval5_sequence){logits, targets, count, VOCAB, count * VOCAB};

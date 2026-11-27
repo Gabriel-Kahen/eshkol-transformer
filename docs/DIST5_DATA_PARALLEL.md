@@ -1,9 +1,17 @@
 # DIST5 data-parallel collectives
 
-DIST5 ABI 1.0 is a synchronous C11 collective library. Build it with
+DIST5 ABI 1.1 is a synchronous C11 collective library. Build it with
 `bash scripts/build-dist5.sh` and link `build/dist5/libeshkol_dist5.a` with
 `-lm`. The public header is `include/eshkol_transformer/dist5_collectives_abi.h`
 and supports C++17 linkage.
+
+The original ABI 1.0 declarations, symbols, constructor request, and
+collective frames are supported by the ABI 1.1 library. The constructor
+checks the requested version against its local library. It does not
+negotiate a version with peers. Every participant in a weighted call needs
+the 1.1 entry point. If a participant instead issues a 1.0 collective at
+that sequence, both sides get a fatal kind mismatch. If a participant fails
+to enter the exchange, the participating ranks can time out.
 
 ## Communicator and collectives
 
@@ -28,7 +36,8 @@ The operation tables below use `W` for the world size and `r` for the local rank
 | `et_dist5_allreduce` | Each rank supplies `count` elements and receives the same reduced `count` elements. Exact in-place input and output are supported. |
 | `et_dist5_allgather` | Each rank supplies `send_count` elements and receives `W * send_count` elements concatenated in ascending rank order. Input and output must be disjoint. |
 | `et_dist5_reduce_scatter` | Each rank supplies `W * recv_count` elements. After reduction, rank `r` receives slice `[r * recv_count, (r + 1) * recv_count)`. Input and output must be disjoint. |
-| `et_dist5_sync_gradients_f32` | Each rank supplies `count` gradients and receives the equal-rank mean. Exact in-place input and output are supported. Apply optimizer updates only after success. With uneven local batch sizes, weight contributions explicitly before synchronizing. |
+| `et_dist5_sync_gradients_f32` | Each rank supplies `count` gradients and receives the equal-rank mean. Exact in-place input and output are supported. Apply optimizer updates only after success. |
+| `et_dist5_weighted_sgd_f32` | Each rank supplies its effective count and packed objective and gradient means. The call stages the count-weighted global objective, gradient, and plain SGD update. |
 
 Reductions seed the accumulator with rank 0's operand, then combine ranks
 `1..W-1` in order, regardless of arrival time. Binary32 SUM and MEAN round
@@ -43,6 +52,44 @@ Bitwise reproducibility applies to identical rank operands in the validated
 floating-point environment. Different microbatch partitions can change f32
 parenthesization.
 
+## Count-weighted SGD
+
+The opt-in `et_dist5_weighted_sgd_f32` entry point takes contiguous native
+binary32 buffers. For `P` parameters, each packed mean has shape `[P + 1]`
+with the scalar objective first and mean gradients in the same order as the
+`[P]` parameter buffer. Local means use the same denominator as the local
+effective count. For example, with token masks, divide the local objective
+and gradient sum by the number of contributing tokens. Sample weights can be
+represented in common integer units. A zero-count rank contributes zeros and
+can omit its local mean. It still participates and applies the common update.
+
+The participants agree on the parameter count and bit pattern of the
+positive finite learning rate, and must start with identical layouts and
+parameter values. Parameters, the packed output, and the I64 count output
+occupy distinct spans. Exact in-place local and global means are supported.
+Every active input value is checked for finiteness before reduction.
+
+For nonnegative local counts `n_r`, the first exchange computes
+`N = sum(n_r)` with checked I64 arithmetic. Zero total or overflow rejects
+the step. The second exchange sums binary64 numerators
+`double(n_r) * double(local_mean_r)` in ascending rank order. Each rank
+divides that sum once by `double(N)` and rounds the result to binary32 before
+SGD. Binary64 accommodates the full finite binary32 input range multiplied
+by positive I64 counts. Count reporting remains exact. Integer-to-double
+conversion above 53 bits and binary64 products and sums can round. With
+opposing signs, cancellation can lose small contributions. The caller's
+floating-point environment is restored.
+
+Each rank then stages the plain SGD update `p_i - learning_rate * g_i`
+with separate binary32 multiply and subtract. The third exchange coordinates
+update finiteness. The call publishes the new parameters, packed global mean,
+and exact count after this exchange succeeds. A recoverable validation or
+numeric error in any phase leaves those three destinations unchanged and
+keeps the communicator reusable. All three phases share one deadline. This
+step supports plain SGD with CPU binary32 arrays. Optimizer state,
+checkpointing, canonical TR3 dispatch, and device buffers are outside its
+contract.
+
 ## Wire format and failures
 
 Frame words are consecutive host-order `uint64_t` values with no struct padding.
@@ -52,10 +99,16 @@ each call that enters the protocol.
 
 1. Workers send an 11-word request containing magic `0x4554444953540501`,
    sequence, sender rank, world size, kind, tag, count, dtype, op, broadcast
-   root, and local status. Kind values 1 through 6 denote barrier, broadcast,
-   allreduce, allgather, reduce-scatter, and gradient sync. The unused fields
-   are zero. Gradient sync checks local finiteness and includes the verdict in
-   this request, before any rank sends gradient payloads.
+   root, and local status. ABI 1.0 kind values 1 through 6 denote barrier,
+   broadcast, allreduce, allgather, reduce-scatter, and gradient sync. ABI 1.1
+   adds count, weighted-sum, and update-vote phases as kinds 7 through 9.
+   The count phase uses the count and root fields for parameter size and
+   learning-rate bits, and sends one I64 effective count per rank. The
+   weighted-sum phase carries `P + 1` packed little-endian binary64
+   numerators and returns their binary64 sums. Its dtype word is 3, a
+   private wire value. The vote has no payload. The unused fields are zero.
+   Gradient sync and the weighted step report local finiteness before
+   sending their operands.
 2. After matching requests, rank 0 sends each contributing worker a GRANT.
    That worker sends the exact number of bytes agreed in preflight. Rank 0
    consumes inputs in ascending rank order and stages the result.
@@ -97,10 +150,15 @@ a control frame there.
 
 The transport is single-host Unix socket IPC using Linux socket flags. It
 uses neither filesystem socket paths nor shared memory. The coordinator is a
-serial bottleneck. The ABI caps the world at 64 ranks and each full operand or
-result at 64 MiB, including expanded gather or scatter spans. Rank 0 may stage
-up to two such buffers. Remote hosts, heterogeneous peers, concurrent
-collectives on one communicator, RDMA, NCCL/RCCL, and GPU buffers are outside
+serial bottleneck. The ABI caps the world at 64 ranks and each public
+operand or result at 64 MiB, including expanded gather or scatter spans.
+Rank 0 may stage up to two such buffers for the generic collectives.
+Weighted SGD's private numerator array occupies up to 128 MiB. During
+that exchange rank 0 can allocate two additional double-sized buffers
+and each worker one, for up to 384 MiB on rank 0 and 256 MiB per worker.
+Afterward each rank stages up to 128 MiB for the binary32 mean and SGD
+update while it holds the numerator array. Remote hosts, heterogeneous
+peers, concurrent collectives on one communicator, RDMA, NCCL/RCCL, and GPU buffers are outside
 this implementation. Throughput and scale beyond the smoke workloads have
 not been measured.
 
@@ -133,7 +191,17 @@ ASan/UBSan/LSan (`detect_leaks=1`). Both builds passed the focused local gate.
 No runtime ABI was added. Rank processes exit normally so leak reports affect
 their status; the parent reaps them and fails the gate on a child error.
 
-The composition witness does not implement a general trainer, unequal-batch
-weighting, AOT path, persistent optimizer state, or recovery across process
-death. It was not added to the standalone `test-dist5.sh` gate. TR3 integration,
-throughput, and hosted CI validation for this composition remain pending.
+`make test-dist5-weighted-sgd` builds ABI 1.1 and runs the MOD5 GQA composition
+in optimized C11 and ASan/UBSan/LSan builds. Two ranks compare four updates
+with a serial masked-token objective, checking global counts, objective,
+every active gradient and parameter, and byte-identical rank replicas.
+It checks nine central differences, switches which rank has no effective
+tokens, and checks floating-point environment restoration across ranks.
+The gate also covers recoverable malformed counts, buffers and numeric
+inputs, one-rank overflow in the staged update, an exact `INT64_MAX` count,
+and fatal collective-kind and learning-rate disagreements. Three-rank
+range regressions preserve `FLT_MAX` under unequal counts and
+`FLT_TRUE_MIN` with two active ranks and one empty rank. Generic
+allreduce rejects the private dtype. The standalone
+collective and equal-rank MOD5 gates remain available. Hosted validation and
+TR3 integration for the ABI 1.1 step are pending.

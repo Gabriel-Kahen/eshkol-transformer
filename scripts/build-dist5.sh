@@ -19,7 +19,7 @@ ar rcsD "${archive}" "${scratch}/dist5_collectives.o"
 expected=(
   et_dist5_allgather et_dist5_allreduce et_dist5_barrier et_dist5_broadcast
   et_dist5_comm_create et_dist5_comm_destroy et_dist5_reduce_scatter
-  et_dist5_sync_gradients_f32
+  et_dist5_sync_gradients_f32 et_dist5_weighted_sgd_f32
 )
 exports="$(nm -g --defined-only "${archive}" | awk 'NF == 3 {print $2, $3}' | LC_ALL=C sort)"
 if [[ "${exports}" != "$(printf 'T %s\n' "${expected[@]}")" ]]; then
@@ -50,9 +50,13 @@ int main() {
                                          0, 1, nullptr, 0, &comm);
   if (init != ET_DIST5_OK)
     return 1;
-  const auto status = et_dist5_barrier(comm, 0, 1000);
+  float parameter = 0.0f;
+  float mean[] = {0.5f, 1.0f};
+  int64_t total = -1;
+  const auto status = et_dist5_weighted_sgd_f32(comm, 1, mean, 1, 0.5f,
+                                               &parameter, mean, &total, 0, 1000);
   et_dist5_comm_destroy(comm);
-  return status != ET_DIST5_OK;
+  return status != ET_DIST5_OK || total != 1 || parameter != -0.5f;
 }
 CPP
 "${cxx}" -std=c++17 "${warnings[@]}" "${scratch}/header.cpp" "${archive}" \

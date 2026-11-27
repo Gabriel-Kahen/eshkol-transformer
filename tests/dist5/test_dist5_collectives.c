@@ -283,7 +283,8 @@ static void malformed_bootstrap(void) {
   INVALID_BOOTSTRAP(make_comm(0, 2, pair, 0, &comm));
   INVALID_BOOTSTRAP(make_comm(0, 1, NULL, 0, NULL));
   INVALID_BOOTSTRAP(et_dist5_comm_create(2, 0, 0, 1, NULL, 0, &comm));
-  INVALID_BOOTSTRAP(et_dist5_comm_create(1, 1, 0, 1, NULL, 0, &comm));
+  INVALID_BOOTSTRAP(
+      et_dist5_comm_create(1, ET_DIST5_ABI_MINOR + 1, 0, 1, NULL, 0, &comm));
   INVALID_BOOTSTRAP(make_comm(0, 2, dgram, 1, &comm));
   INVALID_BOOTSTRAP(make_comm(0, 2, other, 1, &comm));
   const int dup_fd = dup(pair[0]);
@@ -295,6 +296,9 @@ static void malformed_bootstrap(void) {
   const int bad_fds[] = {pair[0], -1};
   INVALID_BOOTSTRAP(make_comm(0, 3, bad_fds, 2, &comm));
   CHECK(comm == NULL);
+  STATUS(et_dist5_comm_create(1, 0, 0, 1, NULL, 0, &comm), ET_DIST5_OK);
+  STATUS(et_dist5_barrier(comm, 0, TIMEOUT), ET_DIST5_OK);
+  et_dist5_comm_destroy(comm);
   STATUS(et_dist5_barrier(NULL, 0, TIMEOUT), ET_DIST5_ERR_INVALID_ARG);
   et_dist5_comm_destroy(NULL);
   for (unsigned i = 0; i < 2; ++i) {

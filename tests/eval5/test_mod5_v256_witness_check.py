@@ -18,18 +18,28 @@ class Mod5V256WitnessCheckTests(unittest.TestCase):
                        ("total_nll", "mean_nll", "perplexity", "bits_per_byte")]
             metrics.append(score["mc"]["accuracy"])
             values = metrics + [2, 4] + checker.expected_probes(root)
-            line = "SCORE " + " ".join(map(str, values)) + "\n"
+            audit = "AUDIT 0 2 0 0 0 14 0 0 0\n"
+            manifest = ("MANIFEST_BEGIN\n" + checker.expected_manifest(
+                record, metrics, [2, 4], [0, 2, 0, 0, 0, 14, 0, 0, 0]) +
+                "MANIFEST_END\n")
+            line = audit + "SCORE " + " ".join(map(str, values)) + "\n" + manifest
             self.assertEqual(checker.check(root, line), 0.0)
             bad = values.copy()
             bad[0] += 1.0
             with self.assertRaises(ValueError):
-                checker.check(root, "SCORE " + " ".join(map(str, bad)) + "\n")
+                checker.check(root, audit + "SCORE " + " ".join(map(str, bad)) + "\n" + manifest)
             bad = values.copy()
             bad[7] += 0.1
             with self.assertRaises(ValueError):
-                checker.check(root, "SCORE " + " ".join(map(str, bad)) + "\n")
+                checker.check(root, audit + "SCORE " + " ".join(map(str, bad)) + "\n" + manifest)
             with self.assertRaises(ValueError):
-                checker.check(root, "SCORE bad\n")
+                checker.check(root, audit + "SCORE bad\n" + manifest)
+            with self.assertRaises(ValueError):
+                checker.check(root, audit.replace(" 14 0 ", " 14 1 ") + line[len(audit):])
+            with self.assertRaises(ValueError):
+                checker.check(root, line.splitlines()[1] + "\n")
+            with self.assertRaises(ValueError):
+                checker.check(root, line.replace("train_dataset_sha256=71e4", "train_dataset_sha256=72e4"))
 
 
 if __name__ == "__main__":

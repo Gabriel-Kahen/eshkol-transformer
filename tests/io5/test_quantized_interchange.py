@@ -20,7 +20,7 @@ import model_mapping as mapping  # noqa: E402
 import quantized_interchange as qi  # noqa: E402
 import safetensors_interop as safe  # noqa: E402
 from test_checkpoint_format import build_container, parse_golden  # noqa: E402
-from test_model_mapping import M3_ROWS, PROVIDER  # noqa: E402
+from test_model_mapping import M3_ROWS, PROVIDER, mod5_fixture  # noqa: E402
 from test_safetensors_interop import safe as safetensors_wire, unpack as unpack_safetensors  # noqa: E402
 
 TOOL = ROOT / "tools/io5/quantized_interchange.py"
@@ -119,6 +119,27 @@ def to_c1(state: safe.State) -> bytes:
     )
     parse_golden(raw, expected_provider=state.provider.encode("utf-8"))
     return raw
+
+
+def mod5_finite_state(kv_width: int, *, tied: bool, equal_head: bool = False):
+    model, rows = mod5_fixture(kv_width, tied=tied)
+    tensors = [finite_tensor(path, shape, index) for index, (path, _, _, shape) in enumerate(rows)]
+    if tied or equal_head:
+        tensors[-1] = replace(tensors[-1], data=tensors[-3].data)
+    return replace(model, tensors=tuple(tensors)), rows
+
+
+def resign_safetensors(header, payload):
+    metadata = header["__metadata__"]
+    manifest = json.loads(metadata[safe.MANIFEST_KEY])
+    entries = []
+    for entry in manifest["entries"]:
+        name = entry["name"]
+        descriptor = header[name]
+        begin, end = descriptor["data_offsets"]
+        entries.append((name, descriptor["dtype"], tuple(descriptor["shape"]), payload[begin:end]))
+    metadata[qi.PAYLOAD_DIGEST_KEY] = qi._safetensors_payload_digest(metadata, entries)
+    return safetensors_wire(header, payload)
 
 
 def unpack_quant_gguf(raw: bytes):
@@ -271,6 +292,162 @@ class QuantizedInterchangeTests(unittest.TestCase):
                     )
                     re_restored = qi.decode_quantized_safetensors(re_encoded, profile=profile, scheme=scheme)
                     self.assertEqual(re_restored, restored)
+
+    def test_mod5_safetensors_exact_narrow_wire_and_restored_state(self) -> None:
+        for kv_width, tied, equal_head in ((2, True, True), (4, False, False), (8, False, True)):
+            state, rows = mod5_finite_state(kv_width, tied=tied, equal_head=equal_head)
+            source = to_c1(state)
+            for scheme, name_column in (("huggingface", 1), ("gguf", 2)):
+                for dtype in ("F16", "BF16"):
+                    with self.subTest(kv_width=kv_width, tied=tied, scheme=scheme, dtype=dtype):
+                        raw = qi.encode_quantized_safetensors(source, dtype, profile=mapping.MOD5, scheme=scheme)
+                        header, payload = unpack_safetensors(raw)
+                        metadata = header.pop("__metadata__")
+                        manifest = json.loads(metadata[safe.MANIFEST_KEY])
+                        self.assertEqual(metadata[mapping.PROFILE], mapping.MOD5)
+                        self.assertEqual(metadata[mapping.SCHEME], scheme)
+                        self.assertEqual(metadata[qi.SOURCE_DIGEST_KEY], hashlib.sha256(source).hexdigest())
+                        self.assertEqual(manifest["aliases"], [list(group) for group in state.aliases])
+                        self.assertEqual(set(header), {row[name_column] for row in rows})
+                        expected = []
+                        for row, tensor, entry in zip(rows, state.tensors, manifest["entries"], strict=True):
+                            name = row[name_column]
+                            self.assertEqual(entry, {"name": name, "path": list(tensor.path), "kind": "parameter"})
+                            desc = header[name]
+                            self.assertEqual(desc["shape"], list(tensor.shape))
+                            self.assertEqual(desc["dtype"], dtype)
+                            start, end = desc["data_offsets"]
+                            values = struct.iter_unpack("<f", tensor.data)
+                            if dtype == "F16":
+                                wire = b"".join(struct.pack("<e", value) for (value,) in values)
+                                f32 = b"".join(struct.pack("<f", value) for (value,) in struct.iter_unpack("<e", wire))
+                            else:
+                                bits = struct.iter_unpack("<I", tensor.data)
+                                narrow = [(bit + 0x7FFF + ((bit >> 16) & 1)) >> 16 for (bit,) in bits]
+                                wire = b"".join(struct.pack("<H", bit) for bit in narrow)
+                                f32 = b"".join(struct.pack("<I", bit << 16) for bit in narrow)
+                            self.assertEqual(payload[start:end], wire)
+                            expected.append(replace(tensor, data=f32))
+                        restored = qi.decode_quantized_safetensors(raw)
+                        self.assertEqual(restored, to_c1(replace(state, tensors=tuple(expected))))
+                        self.assertNotEqual(restored, source)
+
+    def test_mod5_safetensors_rejects_resigned_invalid_rosters(self) -> None:
+        state, rows = mod5_finite_state(4, tied=False)
+        names = {tuple(row[0].split(".")): row[1] for row in rows}
+        key = state.tensors[0]
+        bad_rosters = (
+            (state.tensors[1:], (), "missing MOD5 block tensor"),
+            (state.tensors[:-1], (), "missing MOD5 root tensor"),
+            (state.tensors[-3:], (), "requires at least one layer"),
+            (state.tensors + (finite_tensor("position_embedding.weight", (17, 8), 77),), (),
+             "unknown canonical path"),
+            (state.tensors + (finite_tensor("blocks.0.norm1.bias", (8,), 78),), (), "unknown canonical block path"),
+            ((replace(key, shape=(32,)),) + state.tensors[1:], (), "rank/extent mismatch"),
+            ((replace(key, shape=(0, 8), data=b""),) + state.tensors[1:], (), "rank/extent mismatch"),
+            ((replace(key, kind="buffer"),) + state.tensors[1:], (), "must be a parameter"),
+            (tuple(replace(t, path=("blocks", "2", *t.path[2:])) if t.path[:2] == ("blocks", "1") else t
+                   for t in state.tensors), (), "non-contiguous layer indices"),
+            ((key, replace(state.tensors[1], shape=key.shape, data=key.data), *state.tensors[2:]),
+             ((0, 1),), "only the head/embedding tie"),
+        )
+        for tensors, aliases, diagnostic in bad_rosters:
+            with self.subTest(rejection=diagnostic):
+                invalid = to_c1(replace(state, tensors=tuple(sorted(tensors, key=lambda t: t.path)), aliases=aliases))
+                with self.assertRaisesRegex(safe.InteropError, diagnostic):
+                    qi.encode_quantized_safetensors(invalid, "BF16", profile=mapping.MOD5)
+
+                # Assign mapped metadata and sign the malformed roster independently
+                # of the MOD5 exporter so decode has to reach the structural check.
+                header, payload = unpack_safetensors(qi.encode_quantized_safetensors(invalid, "BF16"))
+                metadata = header["__metadata__"]
+                metadata.update(mapping.mapping_fields(mapping.MOD5, "huggingface"))
+                manifest = json.loads(metadata[safe.MANIFEST_KEY])
+                for entry in manifest["entries"]:
+                    old_name = entry["name"]
+                    name = names.get(tuple(entry["path"]), old_name)
+                    entry["name"] = name
+                    header[name] = header.pop(old_name)
+                metadata[safe.MANIFEST_KEY] = safe.json_bytes(manifest).decode("ascii")
+                with self.assertRaisesRegex(safe.InteropError, diagnostic):
+                    qi.decode_quantized_safetensors(resign_safetensors(header, payload))
+
+        header, payload = unpack_safetensors(
+            qi.encode_quantized_safetensors(to_c1(state), "BF16", profile=mapping.MOD5)
+        )
+        metadata = header["__metadata__"]
+        manifest = json.loads(metadata[safe.MANIFEST_KEY])
+        left, right = manifest["entries"][0], manifest["entries"][3]
+        left["name"], right["name"] = right["name"], left["name"]
+        metadata[safe.MANIFEST_KEY] = safe.json_bytes(manifest).decode("ascii")
+        with self.assertRaisesRegex(safe.InteropError, "names do not match selected mapping"):
+            qi.decode_quantized_safetensors(resign_safetensors(header, payload))
+
+    def test_mod5_safetensors_cli_rejects_before_publication(self) -> None:
+        state, _ = mod5_finite_state(4, tied=True)
+        source = self.root / "model.c1"
+        wire = self.root / "model.safetensors"
+        destination = self.root / "restored.c1"
+        source.write_bytes(to_c1(state))
+
+        def cli(*args, expected_status=0):
+            result = subprocess.run([sys.executable, str(TOOL), *map(str, args)],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, expected_status, result.stderr)
+            return result.stderr
+
+        def assert_rejected(raw, diagnostic, *options):
+            wire.write_bytes(raw)
+            stderr = cli("safetensors-to-c1", wire, destination, *options, expected_status=2)
+            self.assertIn(diagnostic, stderr)
+
+        for dtype, infinity in (("F16", 0x7C00), ("BF16", 0x7F80)):
+            with self.subTest(dtype=dtype):
+                cli("c1-to-safetensors", source, wire, "--dtype", dtype, "--profile", mapping.MOD5, "--overwrite")
+                good = wire.read_bytes()
+                cli("safetensors-to-c1", wire, destination, "--profile", mapping.MOD5, "--scheme", "huggingface")
+                restored = destination.read_bytes()
+                destination.unlink()
+                assert_rejected(good, "IO5 profile mismatch", "--profile", mapping.DECODER)
+                assert_rejected(good, "IO5 scheme mismatch", "--scheme", "gguf")
+                assert_rejected(good, "external/plain import cannot override", "--plain-provider", PROVIDER)
+                self.assertFalse(destination.exists())
+
+                destination.write_bytes(restored)
+                assert_rejected(good[:-1] + bytes([good[-1] ^ 1]), "payload SHA-256 mismatch", "--overwrite")
+                for field, changed in ((mapping.PROFILE, mapping.DECODER), (mapping.SCHEME, "gguf"),
+                                       (qi.SOURCE_DIGEST_KEY, "0" * 64)):
+                    header, payload = unpack_safetensors(good)
+                    header["__metadata__"][field] = changed
+                    assert_rejected(safetensors_wire(header, payload), "payload SHA-256 mismatch", "--overwrite")
+
+                header, payload = unpack_safetensors(good)
+                header["model.embed_tokens.weight"]["dtype"] = "BF16" if dtype == "F16" else "F16"
+                assert_rejected(safetensors_wire(header, payload), "disagrees with", "--overwrite")
+                header, payload = unpack_safetensors(good)
+                start, _ = header["model.embed_tokens.weight"]["data_offsets"]
+                bad_tie = payload[:start] + bytes([payload[start] ^ 1]) + payload[start + 1:]
+                assert_rejected(resign_safetensors(header, bad_tie), "alias shape/value conflict", "--overwrite")
+                nonfinite = payload[:start] + struct.pack("<H", infinity) + payload[start + 2:]
+                assert_rejected(resign_safetensors(header, nonfinite), "non-finite", "--overwrite")
+                self.assertEqual(destination.read_bytes(), restored)
+                destination.unlink()
+
+                tensor = state.tensors[0]
+                invalid = replace(tensor, data=struct.pack("<f", math.inf) + tensor.data[4:])
+                source.write_bytes(to_c1(replace(state, tensors=(invalid,) + state.tensors[1:])))
+                self.assertIn("non-finite", cli("c1-to-safetensors", source, wire, "--dtype", dtype,
+                                               "--profile", mapping.MOD5, "--overwrite", expected_status=2))
+                self.assertEqual(wire.read_bytes(), resign_safetensors(header, nonfinite))
+                source.write_bytes(to_c1(state))
+
+        raw = source.read_bytes()
+        source.write_bytes(raw[:-1] + bytes([raw[-1] ^ 1]))
+        wire.unlink()
+        self.assertIn("checksum", cli("c1-to-safetensors", source, wire, "--dtype", "F16",
+                                      "--profile", mapping.MOD5, expected_status=2))
+        self.assertFalse(wire.exists())
+        self.assertEqual(list(self.root.glob(".io5-*")), [])
 
     def test_gguf_f16_and_q8_0_roundtrips_and_exact_block_layout(self) -> None:
         # 1. GGUF F16 on M3 and large decoder.
@@ -760,20 +937,15 @@ class QuantizedInterchangeTests(unittest.TestCase):
         with self.assertRaisesRegex(safe.InteropError, "profile mismatch"):
             qi.decode_quantized_gguf(gg_good, profile=mapping.M3)
 
-        # 4. Lossless MOD5 mapping must not authorize quantized MOD5.
-        self.assertIn(mapping.MOD5, mapping.PROFILES)
-        self.assertNotIn(mapping.MOD5, qi.QUANTIZED_PROFILES)
-        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
-            qi.encode_quantized_safetensors(
-                self.large_decoder_c1, "F16", profile=mapping.MOD5, scheme="huggingface"
-            )
-        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
-            qi.encode_quantized_gguf(
-                self.large_decoder_c1, "Q8_0", profile=mapping.MOD5, scheme="gguf"
-            )
+        # 4. MOD5 is admitted only for tagged safetensors, with its own checksum domain.
+        for dtype in ("F16", "Q8_0"):
+            with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
+                qi.encode_quantized_gguf(
+                    self.large_decoder_c1, dtype, profile=mapping.MOD5, scheme="gguf"
+                )
         unknown_profile_header, unknown_profile_data = unpack_safetensors(st_good)
         unknown_profile_header["__metadata__"][mapping.PROFILE] = mapping.MOD5
-        with self.assertRaisesRegex(safe.InteropError, "unsupported quantized profile"):
+        with self.assertRaisesRegex(safe.InteropError, "payload SHA-256 mismatch"):
             qi.decode_quantized_safetensors(
                 safetensors_wire(unknown_profile_header, unknown_profile_data)
             )
