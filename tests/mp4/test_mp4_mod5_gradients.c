@@ -2,7 +2,7 @@
 #include "../mod5/test_mod5_training_smoke.c"
 #undef main
 
-#include "eshkol_transformer/mp4_mixed_precision_abi.h"
+#include "eshkol_transformer/mp4_loss_scaler_record.h"
 
 #pragma STDC FP_CONTRACT OFF
 
@@ -14,12 +14,14 @@ enum {
   GRAD_UNSCALE_OVERFLOW = 2,
   GRAD_F32_SCALE_OVERFLOW = 3
 };
+_Static_assert((WIDTH * WIDTH) % TILE == 0,
+               "parameter rows must fit MP4 tiles");
 static const uint64_t tile_shape[] = {TILE};
 static const float learning_rate = 0.25f;
 
 typedef struct format {
   const char *dtype, *cast, *unscale;
-  float scale, desired_raw_fault, finite_narrow_limit, atol, rtol;
+  float max_scale, desired_raw_fault, finite_narrow_limit, atol, rtol;
 } format;
 
 static const format formats[] = {
@@ -90,12 +92,23 @@ static uint8_t unscale_tile(const et_kernel_runtime *runtime, const format *fmt,
   return overflow;
 }
 
+typedef struct trajectory {
+  weights master;
+  et_mp4_loss_scaler_v1 scaler;
+} trajectory;
+
+typedef struct step_result {
+  weights scaled, unscaled;
+  uint16_t narrow[PARAMETERS][WIDTH * WIDTH];
+  double loss;
+  float fault_peak_scaled;
+  uint8_t gradient_status;
+  et_mp4_loss_scaler_status scaler_status;
+} step_result;
+
 static uint8_t store_and_unscale(const et_kernel_runtime *runtime,
-                                 const format *fmt,
-                                 const et_mp4_loss_scaler_v1 *scaler,
-                                 const weights *raw, weights *unscaled) {
-  const float *source = &raw->data[0][0];
-  float *destination = &unscaled->data[0][0];
+                                 const format *fmt, float scale,
+                                 const weights *raw, step_result *result) {
   double activity = 0.0;
   for (size_t p = 0; p < PARAMETERS; ++p)
     for (size_t i = 0; i < param_size(p, 2u); ++i) {
@@ -103,20 +116,23 @@ static uint8_t store_and_unscale(const et_kernel_runtime *runtime,
       activity += fabs(raw->data[p][i]);
     }
   CHECK(activity > 0.001);
-  for (size_t offset = 0; offset < sizeof(*raw) / sizeof(float); offset += TILE) {
-    float scaled[TILE];
-    uint16_t narrow[TILE];
-    for (size_t i = 0; i < TILE; ++i) {
-      CHECK(isfinite(source[offset + i]));
-      scaled[i] = source[offset + i] * scaler->scale;
-      if (!isfinite(scaled[i]))
-        return GRAD_F32_SCALE_OVERFLOW;
+  for (size_t p = 0; p < PARAMETERS; ++p) {
+    for (size_t offset = 0; offset < WIDTH * WIDTH; offset += TILE) {
+      float *scaled = &result->scaled.data[p][offset];
+      uint16_t *narrow = &result->narrow[p][offset];
+      for (size_t i = 0; i < TILE; ++i) {
+        const float source = raw->data[p][offset + i];
+        CHECK(isfinite(source));
+        scaled[i] = source * scale;
+        if (!isfinite(scaled[i]))
+          return GRAD_F32_SCALE_OVERFLOW;
+      }
+      if (cast_tile(runtime, fmt, scaled, narrow) != 0)
+        return GRAD_NARROW_REJECT;
+      if (unscale_tile(runtime, fmt, narrow, 1.0f / scale,
+                       &result->unscaled.data[p][offset]) != 0)
+        return GRAD_UNSCALE_OVERFLOW;
     }
-    if (cast_tile(runtime, fmt, scaled, narrow) != 0)
-      return GRAD_NARROW_REJECT;
-    if (unscale_tile(runtime, fmt, narrow, 1.0f / scaler->scale,
-                     destination + offset) != 0)
-      return GRAD_UNSCALE_OVERFLOW;
   }
   return GRAD_CLEAN;
 }
@@ -192,68 +208,145 @@ static void make_fault_target(const et_kernel_runtime *mod5,
     fault[i] = normal[i] + high;
 }
 
+static et_mp4_loss_scaler_v1 new_scaler(const format *fmt) {
+  et_mp4_loss_scaler_v1 scaler;
+  CHECK(et_mp4_loss_scaler_init(&scaler, fmt->max_scale * 0.5f, 2.0f, 0.5f, 2u,
+                                1.0f, fmt->max_scale) ==
+        ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
+  return scaler;
+}
+
+static void run_step(const et_kernel_runtime *mod5,
+                     const et_kernel_runtime *mp4, const format *fmt,
+                     trajectory *state, float *x, const float *target,
+                     uint8_t fault, step_result *result) {
+  const weights before = state->master;
+  weights raw;
+  float dx[ELEMENTS];
+  result->loss = block_loss(mod5, 2u, &state->master, x, target, &raw, dx);
+  CHECK(isfinite(result->loss));
+  if (fault) {
+    for (size_t p = 0; p < PARAMETERS; ++p)
+      for (size_t i = 0; i < param_size(p, 2u); ++i) {
+        const float scaled = raw.data[p][i] * state->scaler.scale;
+        CHECK(isfinite(raw.data[p][i]) && isfinite(scaled));
+        result->fault_peak_scaled =
+            fmaxf(result->fault_peak_scaled, fabsf(scaled));
+      }
+    CHECK(result->fault_peak_scaled > fmt->finite_narrow_limit);
+  }
+  result->gradient_status =
+      store_and_unscale(mp4, fmt, state->scaler.scale, &raw, result);
+  result->scaler_status = et_mp4_loss_scaler_update(
+      &state->scaler, result->gradient_status != GRAD_CLEAN);
+  if (result->scaler_status == ET_MP4_LOSS_SCALER_STEP_ACCEPTED) {
+    CHECK(result->gradient_status == GRAD_CLEAN);
+    apply_sgd(&state->master, &result->unscaled);
+    CHECK(memcmp(&state->master, &before, sizeof(before)) != 0);
+  } else {
+    CHECK(memcmp(&state->master, &before, sizeof(before)) == 0);
+  }
+}
+
+static void check_record_parity(const et_mp4_loss_scaler_v1 *control,
+                                const et_mp4_loss_scaler_v1 *replay) {
+  uint8_t control_record[ET_MP4_LOSS_SCALER_RECORD_V1_BYTES];
+  uint8_t replay_record[ET_MP4_LOSS_SCALER_RECORD_V1_BYTES];
+  CHECK(et_mp4_loss_scaler_encode_v1(control, control_record,
+                                     sizeof(control_record)) ==
+        ET_MP4_LOSS_SCALER_RECORD_OK);
+  CHECK(et_mp4_loss_scaler_encode_v1(replay, replay_record,
+                                     sizeof(replay_record)) ==
+        ET_MP4_LOSS_SCALER_RECORD_OK);
+  CHECK(memcmp(control_record, replay_record, sizeof(control_record)) == 0);
+}
+
 static void run_format(const et_kernel_runtime *mod5,
                        const et_kernel_runtime *mp4, const format *fmt) {
-  weights baseline, master;
+  static const struct {
+    uint8_t fault, at_max_scale;
+    uint32_t clean_steps;
+  } steps[] = {
+      {0u, 0u, 1u}, {0u, 1u, 0u}, {1u, 0u, 0u}, {0u, 0u, 1u}, {0u, 1u, 0u}};
+  weights baseline;
   float x[ELEMENTS], target[ELEMENTS], fault_target[ELEMENTS], dx[ELEMENTS];
   initialize(&baseline, x, target);
-  master = baseline;
-  et_mp4_loss_scaler_v1 scaler;
-  CHECK(et_mp4_loss_scaler_init(&scaler, fmt->scale, 2.0f, 0.5f, 100u, 1.0f,
-                                fmt->scale) == ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
+  trajectory control = {baseline, new_scaler(fmt)};
+  trajectory prefix = {baseline, new_scaler(fmt)};
+  trajectory resumed = {0};
+  trajectory *replay = &prefix;
+  const float half_scale = fmt->max_scale * 0.5f;
 
   unsigned accepted = 0;
   float fault_peak_scaled = 0.0f;
-  for (unsigned attempt = 0; attempt < ACCEPTED_STEPS + 1u; ++attempt) {
-    const int fault = attempt == 2u;
-    if (fault)
-      make_fault_target(mod5, &master, x, target, fault_target, fmt);
-    weights raw, unscaled;
-    const weights before = master;
-    const double loss = block_loss(mod5, 2u, &master, x,
-                                   fault ? fault_target : target, &raw, dx);
-    CHECK(isfinite(loss));
-    if (fault) {
-      float largest_scaled = 0.0f;
-      for (size_t p = 0; p < PARAMETERS; ++p)
-        for (size_t i = 0; i < param_size(p, 2u); ++i) {
-          const float scaled = raw.data[p][i] * scaler.scale;
-          CHECK(isfinite(raw.data[p][i]) && isfinite(scaled));
-          largest_scaled = fmaxf(largest_scaled, fabsf(scaled));
-        }
-      CHECK(largest_scaled > fmt->finite_narrow_limit);
-      fault_peak_scaled = largest_scaled;
+  for (size_t attempt = 0; attempt < ARRAY_COUNT(steps); ++attempt) {
+    if (attempt == 1u) {
+      /* Growth is due on the next accepted update. */
+      uint8_t record[ET_MP4_LOSS_SCALER_RECORD_V1_BYTES];
+      CHECK(prefix.scaler.scale == half_scale &&
+            prefix.scaler.clean_steps == 1u);
+      CHECK(et_mp4_loss_scaler_encode_v1(&prefix.scaler, record,
+                                         sizeof(record)) ==
+            ET_MP4_LOSS_SCALER_RECORD_OK);
+      memcpy(&resumed.master, &prefix.master, sizeof(resumed.master));
+      CHECK(et_mp4_loss_scaler_decode_v1(record, sizeof(record),
+                                         &resumed.scaler) ==
+            ET_MP4_LOSS_SCALER_RECORD_OK);
+      check_record_parity(&control.scaler, &resumed.scaler);
+      replay = &resumed;
     }
-    const uint8_t overflow = store_and_unscale(mp4, fmt, &scaler, &raw,
-                                                &unscaled);
-    const float prior_scale = scaler.scale;
-    const et_mp4_loss_scaler_status outcome =
-        et_mp4_loss_scaler_update(&scaler, overflow != 0u);
+
+    const uint8_t fault = steps[attempt].fault;
+    if (fault)
+      make_fault_target(mod5, &control.master, x, target, fault_target, fmt);
+    const float *step_target = fault ? fault_target : target;
+    step_result expected = {0}, actual = {0};
+    run_step(mod5, mp4, fmt, &control, x, step_target, fault, &expected);
+    run_step(mod5, mp4, fmt, replay, x, step_target, fault, &actual);
+    CHECK(actual.gradient_status == expected.gradient_status);
+    CHECK(actual.scaler_status == expected.scaler_status);
+    CHECK(memcmp(&actual.loss, &expected.loss, sizeof(actual.loss)) == 0);
+    CHECK(memcmp(&actual.scaled, &expected.scaled, sizeof(actual.scaled)) == 0);
+    CHECK(memcmp(actual.narrow, expected.narrow, sizeof(actual.narrow)) == 0);
+    CHECK(memcmp(&actual.unscaled, &expected.unscaled,
+                 sizeof(actual.unscaled)) == 0);
+    CHECK(memcmp(&replay->master, &control.master, sizeof(control.master)) ==
+          0);
+    CHECK(control.scaler.scale ==
+          (steps[attempt].at_max_scale ? fmt->max_scale : half_scale));
+    CHECK(control.scaler.clean_steps == steps[attempt].clean_steps);
+    check_record_parity(&control.scaler, &replay->scaler);
     if (fault) {
-      CHECK(overflow == GRAD_NARROW_REJECT &&
-            outcome == ET_MP4_LOSS_SCALER_OVERFLOW_BACKOFF);
-      CHECK(memcmp(&master, &before, sizeof(master)) == 0);
-      CHECK(scaler.scale == prior_scale * 0.5f && scaler.clean_steps == 0u);
+      CHECK(expected.gradient_status == GRAD_NARROW_REJECT &&
+            expected.scaler_status == ET_MP4_LOSS_SCALER_OVERFLOW_BACKOFF);
+      CHECK(actual.fault_peak_scaled == expected.fault_peak_scaled);
+      fault_peak_scaled = expected.fault_peak_scaled;
       continue;
     }
-    CHECK(overflow == GRAD_CLEAN &&
-          outcome == ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
+    CHECK(expected.gradient_status == GRAD_CLEAN &&
+          expected.scaler_status == ET_MP4_LOSS_SCALER_STEP_ACCEPTED);
     weights reference_gradient;
     CHECK(isfinite(block_loss(mod5, 2u, &baseline, x, target,
                               &reference_gradient, dx)));
     for (size_t p = 0; p < PARAMETERS; ++p)
       for (size_t i = 0; i < param_size(p, 2u); ++i)
-        check_close(unscaled.data[p][i], reference_gradient.data[p][i],
+        check_close(expected.unscaled.data[p][i], reference_gradient.data[p][i],
                     fmt->atol, fmt->rtol);
     apply_sgd(&baseline, &reference_gradient);
-    apply_sgd(&master, &unscaled);
-    check_parity(&master, &baseline, fmt);
+    check_parity(&control.master, &baseline, fmt);
     ++accepted;
   }
-  CHECK(accepted == ACCEPTED_STEPS);
-  printf("MP4/MOD5 %s real-gradient storage: PASS (%u updates, finite "
-         "scaled cast rejection at %.9g, backoff, recovery)\n",
-         fmt->dtype, accepted, fault_peak_scaled);
+  CHECK(accepted == ACCEPTED_STEPS && replay == &resumed);
+  const double control_loss =
+      block_loss(mod5, 2u, &control.master, x, target, NULL, NULL);
+  const double resumed_loss =
+      block_loss(mod5, 2u, &resumed.master, x, target, NULL, NULL);
+  CHECK(isfinite(control_loss) &&
+        memcmp(&control_loss, &resumed_loss, sizeof(control_loss)) == 0);
+  printf("MP4/MOD5 %s real-gradient storage and scaler record replay: PASS "
+         "(%u updates, finite scaled cast rejection at %.9g, growth, backoff, "
+         "recovery, final loss %.9g)\n",
+         fmt->dtype, accepted, fault_peak_scaled, control_loss);
 }
 
 int main(void) {
