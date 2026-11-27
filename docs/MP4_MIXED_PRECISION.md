@@ -4,7 +4,8 @@ MP4 1.0 exposes `et_mp4_kernel_provider_v1()` for explicit K1 1.0 resolver
 registration and two standalone loss-scaler functions in
 `eshkol_transformer/mp4_mixed_precision_abi.h`. Link
 `build/mp4/libeshkol_transformer_mp4.a` and K1 with the platform math library.
-The MP4 archive exports these three functions and has no allocator imports.
+The archive also exports two buffer record functions through
+`eshkol_transformer/mp4_loss_scaler_record.h`. It has no allocator imports.
 
 ## K1 requests and tensor schemas
 
@@ -80,11 +81,9 @@ unscaled gradient and sets the byte to `0`.
 `0 < min_scale <= scale <= max_scale`, `growth_factor > 1`,
 `0 < backoff_factor < 1`, and `growth_interval > 0`. It initializes
 `clean_steps` to zero. The state contains five binary32 fields and two
-`uint32_t` counters in a 28-byte, pointer-free x86-64 layout. For persistence,
-encode the seven named fields in header order as little-endian 32-bit words
-in the caller's versioned, checksummed state format. Persist `clean_steps`
-with the scale and policy. A restored state must satisfy the init invariants
-and `clean_steps < growth_interval`, which update validates before use.
+`uint32_t` counters in a 28-byte, pointer-free x86-64 layout. A restored state
+must satisfy the init invariants and `clean_steps < growth_interval`, which
+update validates before use.
 
 | Update outcome | State transition | Caller action |
 | --- | --- | --- |
@@ -104,6 +103,46 @@ even if the unclamped value exceeds finite binary32. An overflow flag outside
 `0` and `1` is invalid.
 The caller is responsible for keeping its inverse scale representable and
 for treating an upstream gradient-production error as a skipped step.
+
+## Loss-scaler record v1
+
+`et_mp4_loss_scaler_encode_v1` and `et_mp4_loss_scaler_decode_v1` take an
+exactly 44-byte caller-owned buffer disjoint from the scaler. The record may
+be unaligned. Callers synchronize access to both spans. Fields occupy
+consecutive bytes and all multibyte fields are little-endian.
+
+| Byte offset | Size | Field |
+| --- | --- | --- |
+| 0 | 8 | Magic `45 54 4d 50 34 4c 53 00` (`ETMP4LS` plus NUL) |
+| 8 | 4 | Record version, unsigned value 1 |
+| 12 | 4 | `scale` binary32 bits |
+| 16 | 4 | `growth_factor` binary32 bits |
+| 20 | 4 | `backoff_factor` binary32 bits |
+| 24 | 4 | `growth_interval` uint32 |
+| 28 | 4 | `clean_steps` uint32 |
+| 32 | 4 | `min_scale` binary32 bits |
+| 36 | 4 | `max_scale` binary32 bits |
+| 40 | 4 | CRC-32/ISO-HDLC over bytes 0 through 39 |
+
+The CRC uses the reflected polynomial `0xedb88320`, initial value
+`0xffffffff`, and final XOR `0xffffffff`. It detects corruption. An intact
+v1 record remains reusable at any age. The caller controls which snapshot to
+restore and how it is stored.
+
+Both functions return `ET_MP4_LOSS_SCALER_RECORD_OK` on success. Invalid spans
+or an invalid source scaler return `INVALID_ARGUMENT`. Decode returns
+`INVALID_RECORD` for bad magic, a checksum mismatch, or an invalid decoded
+scaler, and `UNSUPPORTED_VERSION` for another version with valid magic and
+checksum. Each failure leaves the destination bytes intact. Decode replaces
+all seven fields on success. The codec uses integer operations and preserves
+the caller's floating-point environment and `errno`.
+
+The focused MP4 gate verifies the wire bytes against an independent fixture,
+rejects all 352 single-bit mutations and checksummed malformed records, and
+compares the full scaler state and outcome at every step across a save and
+restore with a pending growth step, subsequent growth and clamping, overflow
+backoff, and an underflow fault. This record covers standalone scaler state.
+TR3/O2 trainer checkpoint integration remains open.
 
 ## Validation and scope
 
@@ -143,7 +182,7 @@ for binary16 and 0.0000161482 for bfloat16.
 
 This foundation covers bounded serial CPU storage conversions, f32 master
 gradients, and loss-scaling state. GPU tensor cores, other devices and shapes,
-TR3 trainer wiring, and checkpoint integration are outside this ABI.
+and TR3 trainer wiring remain future work.
 
 ## MOD5 actual-gradient composition witness
 

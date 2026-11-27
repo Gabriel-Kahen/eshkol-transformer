@@ -19,12 +19,15 @@ cflags=(-std=c11 "${common[@]}" -fexcess-precision=standard)
 cppflags=(-std=c++17 "${common[@]}")
 sanitizers=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
 test_source=tests/mp4/test_mp4_provider.c
+record_test=tests/mp4/test_mp4_scaler_record.c
 header_test=tests/mp4/test_mp4_header_cpp.cpp
 
 "${cc}" "${cflags[@]}" -O2 -c native/kernel_abi.c -o "${scratch}/kernel.o"
 objects=(build/mp4/libeshkol_transformer_mp4.a "${scratch}/kernel.o")
 "${cc}" "${cflags[@]}" -O2 "${test_source}" "${objects[@]}" -lm -o "${scratch}/provider"
 "${scratch}/provider"
+"${cc}" "${cflags[@]}" -O2 "${record_test}" "${objects[@]}" -lm -o "${scratch}/record"
+"${scratch}/record"
 "${cxx}" "${cppflags[@]}" "${header_test}" "${objects[@]}" -lm -o "${scratch}/header"
 "${scratch}/header"
 printf 'MP4 C++17 header and linkage: PASS\n'
@@ -35,6 +38,9 @@ export UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1"
 "${cc}" "${cflags[@]}" "${sanitizers[@]}" "${test_source}" \
   native/mp4_mixed_precision_provider.c native/kernel_abi.c -lm -o "${scratch}/provider.san"
 "${scratch}/provider.san"
+"${cc}" "${cflags[@]}" "${sanitizers[@]}" "${record_test}" \
+  native/mp4_mixed_precision_provider.c native/kernel_abi.c -lm -o "${scratch}/record.san"
+"${scratch}/record.san"
 printf 'MP4 ASan/UBSan: PASS (LSan detect_leaks=%s)\n' "${MP4_ASAN_DETECT_LEAKS:-0}"
 
 python3 -m unittest -v tests.q0.test_python_isolation
