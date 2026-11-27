@@ -1220,12 +1220,15 @@ it retains the ordinary package authority checks, emits actual compiler
 closure and normal/sanitized import inventories into checksummed evidence, and
 never publishes an admitted object. Focused offline policy tests pass, and
 independent source/tests review accepted the exact `c4978ee` candidate. This
-current-main source merge includes the reviewed E3 PR #205 roadmap update; it
-does not add emitted inventories or change the zero model/driver sources. No
-hosted discovery has run. The workflow is absent from default-branch main, so
-manual dispatch remains HOLD until the reviewed workflow lands there. Exact
-sanitizer manifests, immutable root evidence release, manifest review/pinning,
-and all compiled gates remain pending. PR #206's hosted run `38445613534`
+source merge includes the reviewed E3 PR #205 roadmap update. Hosted discovery
+run `45948199739` at `fa746a626` stopped at normal Eshkol AOT. The outer
+manifest for artifact `15175608725` listed three hidden generated-source
+scratch copies that the uploader omitted. Their visible evidence copies
+verified. The workflow now moves the private builder staging directories
+outside the artifact root before sealing, keeping visible evidence available
+on success and failure. Hosted receipt verification, exact sanitizer
+manifests, immutable root evidence release, manifest review/pinning, and all
+compiled gates remain pending. PR #206's hosted run `38445613534`
 stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
 generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
