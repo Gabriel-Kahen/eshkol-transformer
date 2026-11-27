@@ -127,10 +127,17 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   passed the complete parameter-state suite with the pinned Ubuntu 22.04 and
   Clang/LLVM 21.1.8 toolchain. It checked out `261b8196`/tree `5be22737`.
   The suite ran in 64m17s, including a 49m08s compile matrix. Both scheduled
-  heavy pairs passed their 8 GiB pre-launch check. The receipt measures
-  single-compiler peak RSS and initial host headroom. A sustained hosted
-  memory trace and a matched serial comparison remain open. Default compile
-  scheduling stays serial.
+  heavy pairs passed their 8 GiB pre-launch check. That run measured
+  single-compiler peak RSS and initial host headroom.
+- The [paired memory diagnostic](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829)
+  passed the complete parameter-state suite on exact source `15f25229` and
+  tree `672e9da3`. The supported suite step took 4,091 seconds. Independent
+  receipt verification matched all six 250 ms process-group traces and
+  67 compiler invocations, including 43 expected failures. The maximum
+  sampled sum across the two paired compiler process groups was
+  7,487,873,024 bytes. The [serial control](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/270)
+  is queued through the branch-only workflow. Default compile scheduling
+  remains serial.
 
 ## Parallel execution strategy
 
