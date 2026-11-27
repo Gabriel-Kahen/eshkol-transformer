@@ -129,10 +129,17 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   passed the complete parameter-state suite with the pinned Ubuntu 22.04 and
   Clang/LLVM 21.1.8 toolchain. It checked out `261b8196`/tree `5be22737`.
   The suite ran in 64m17s, including a 49m08s compile matrix. Both scheduled
-  heavy pairs passed their 8 GiB pre-launch check. The receipt measures
-  single-compiler peak RSS and initial host headroom. A sustained hosted
-  memory trace and a matched serial comparison remain open. Default compile
-  scheduling stays serial.
+  heavy pairs passed their 8 GiB pre-launch check. That run measured
+  single-compiler peak RSS and initial host headroom.
+- The [paired memory diagnostic](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829)
+  passed the complete parameter-state suite on exact source `15f25229` and
+  tree `672e9da3`. The supported suite step took 4,091 seconds. Independent
+  receipt verification matched all six 250 ms process-group traces and
+  67 compiler invocations, including 43 expected failures. The maximum
+  sampled sum across the two paired compiler process groups was
+  7,487,873,024 bytes. The [serial control](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/270)
+  is queued through the branch-only workflow. Default compile scheduling
+  remains serial.
 
 ## Parallel execution strategy
 
@@ -2993,7 +3000,11 @@ tree with 49 sources, 30 native objects and 48 exports. The combined current
 installed facet also passed with 49 sources, 30 native objects, 104 exports
 and 175 undefined symbols; its 103-artifact seal is under
 `tr3-public-installed-fe9-combined-5fc65a0-20260928/SHA256SUMS`.
-Public trainer step and metrics API remain separate gates.
+The installed linked runner now reads each native symbol difference. Both
+replacement-object sets passed the pinned comparison, and localizing one
+required symbol was rejected. The complete linked gate still needs a fresh
+run with this assertion. Public trainer step and metrics API remain separate
+gates.
 The source-private TR3 step metrics authority now stages a ten-slot record
 alongside the lease root and fail-stops on postcommit authority divergence.
 On the exact fe9/LLVM21 pin, `scripts/test-tr3-private-metrics.sh` passes 30
@@ -3310,6 +3321,11 @@ at 5,922,716 KiB with zero swaps. Evidence verifies under
 historical 81298 gate still fails before the first update with the documented
 D2 closure incompatibility. Public next-step metrics and effective-rate
 observations remain pending.
+The [TR3-C standalone restore provenance audit](TR3_I2_RESTORE_INTEGRATION.md#current-main-standalone-provenance)
+confirms that main `443dad4b` matches the accepted Wave 3 F32 objects in all
+four pinned comparisons. The [opt-in current-main I2/O2 targets](TR3_I2_RESTORE_INTEGRATION.md#current-main-opt-in-gate)
+passed the pinned native gates with the Wave 3 baseline and separate matcher
+manifest. The candidate awaits independent review.
 The bounded [private TR3-C retention diagnosis](TR3_C_RETENTION_CYCLE_DIAGNOSIS.md)
 passes pinned f31/LLVM21 ASan/UBSan/LSan tests at 32 and 128 genuine
 snapshot→C2 SAVE/LOAD→joint restore cycles after one P1/C2 identity prewarm,
