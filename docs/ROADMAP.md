@@ -3000,7 +3000,11 @@ tree with 49 sources, 30 native objects and 48 exports. The combined current
 installed facet also passed with 49 sources, 30 native objects, 104 exports
 and 175 undefined symbols; its 103-artifact seal is under
 `tr3-public-installed-fe9-combined-5fc65a0-20260928/SHA256SUMS`.
-Public trainer step and metrics API remain separate gates.
+The installed linked runner now reads each native symbol difference. Both
+replacement-object sets passed the pinned comparison, and localizing one
+required symbol was rejected. The complete linked gate still needs a fresh
+run with this assertion. Public trainer step and metrics API remain separate
+gates.
 The source-private TR3 step metrics authority now stages a ten-slot record
 alongside the lease root and fail-stops on postcommit authority divergence.
 On the exact fe9/LLVM21 pin, `scripts/test-tr3-private-metrics.sh` passes 30
