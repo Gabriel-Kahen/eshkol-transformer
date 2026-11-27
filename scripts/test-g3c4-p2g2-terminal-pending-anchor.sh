@@ -41,18 +41,17 @@ trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
 
 compile_mode() {
   local mode=$1 directory="$tmp/$1" source
-  local -a optimization=(-O2) runtime=(env) witness_defines=()
-  local witness_link=
+  local -a optimization=(-O2) runtime=(env) witness_defines=() witness_link=()
   if [[ "$extent_witness" == 1 ]]; then
     witness_defines=(-DET_G3C4_TERMINAL_EXTENT_TESTING)
-    witness_link=-Wl,--wrap=arena_allocate_aligned
+    witness_link=(-Wl,--wrap=arena_allocate_aligned)
   fi
   local -a emission=()
   if [[ "$retirement_witness" == 1 ]]; then
     witness_defines=(-DET_G3C4_TERMINAL_RETIREMENT_TESTING)
-    witness_link='-Wl,--wrap=arena_allocate_aligned -Wl,--wrap=arena_allocate
+    witness_link=(-Wl,--wrap=arena_allocate_aligned -Wl,--wrap=arena_allocate
       -Wl,--wrap=arena_allocate_tensor_with_header
-      -Wl,--wrap=eshkol_region_write_barrier_checked_v1'
+      -Wl,--wrap=eshkol_region_write_barrier_checked_v1)
     emission=(--dump-ir)
   fi
   if [[ "$mode" == sanitize ]]; then
@@ -108,19 +107,26 @@ compile_mode() {
     -c "$PROJECT_ROOT/src/eshkol_transformer/m3_model.c" \
     -o "$directory/objects/m3_model.o"
   ar rcsD "$directory/libg3c4_p2g2_ownership.a" "$directory"/objects/*.o
-  local sanitizer_link=
+  local -a sanitizer_link=()
   [[ "$mode" == sanitize ]] && \
-    sanitizer_link='-fsanitize=address,undefined -fno-omit-frame-pointer'
-  cat >"$directory/cxx-wrap" <<WRAPPER
-#!/usr/bin/env bash
-exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
-  -Wl,--wrap=arena_allocate_vector_with_header \\
-  -Wl,--wrap=arena_allocate_with_header \\
-  -Wl,--wrap=arena_allocate_cons_with_header \\
-  $witness_link \\
-  -Wl,--wrap=malloc -Wl,--wrap=eshkol_push_exception_handler \\
-  -Wl,--wrap=et_kernel_runtime_dispatch
-WRAPPER
+    sanitizer_link=(-fsanitize=address,undefined -fno-omit-frame-pointer)
+  local -a wrap_flags=(
+    -Wl,--wrap=arena_allocate_vector_with_header
+    -Wl,--wrap=arena_allocate_with_header
+    -Wl,--wrap=arena_allocate_cons_with_header
+    "${witness_link[@]}"
+    -Wl,--wrap=malloc
+    -Wl,--wrap=eshkol_push_exception_handler
+    -Wl,--wrap=et_kernel_runtime_dispatch
+  )
+  {
+    printf '%s\n' '#!/usr/bin/env bash'
+    printf 'exec %q' "$cxx"
+    for flag in "${sanitizer_link[@]}"; do printf ' %q' "$flag"; done
+    printf ' "$@"'
+    printf ' %q' "${wrap_flags[@]}"
+    printf '\n'
+  } >"$directory/cxx-wrap"
   chmod 0500 "$directory/cxx-wrap"
   local fixture prefix source expected log
   local -a fixtures=(feature-off protected)
