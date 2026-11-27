@@ -296,6 +296,20 @@ class ZeroControlContract(unittest.TestCase):
         self.assertIn(b"(lambda (model modules handles carriers selector)",
                       module.INSERTION)
         self.assertNotIn(b"(module-parameters", module.INSERTION)
+        census = form(module.INSERTION.decode(), "(lambda ()")
+        trusted = "(define p1-trusted-surface"
+        self.assertIn(census, form(emitted.decode(), trusted))
+        self.assertNotIn(census, form(source.decode(), trusted))
+        for predicate in ("(shell-registry-current)", "(vector live dead)",
+                          "(vector? entry)", "(= (vector-length entry) 4)",
+                          "(eq? (vector-ref entry 1) 'module)",
+                          "(eq? (vector-ref entry 1) 'handle)",
+                          "(eq? (vector-ref entry 2) dead-construction-raw)",
+                          "(count (cdr remaining) live (+ dead 1))",
+                          "(count (cdr remaining) (+ live 1) dead)",
+                          "(count (cdr remaining) live dead)"):
+            self.assertIn(predicate, census)
+        self.assertNotIn("set!", census)
         for phrase in (b"'path-10", b"'shape-10", b"'tie-10",
                        b"'throw-path-10", b"(vector-set! target field original)",
                        b"(tr3-fixed-recheck!"):
@@ -423,6 +437,14 @@ class ZeroControlContract(unittest.TestCase):
                                       forged_include=True).returncode, 0)
             authentic = Path(temporary) / "authentic-module.esk"
             authentic.write_bytes(overlay.read_bytes())
+            source = authentic.read_bytes()
+            start = source.index(b"  ;; Zero-control-only P1 shell census")
+            end = source.index(b"  )))\n\n(define (module-parameters module)", start)
+            overlay.write_bytes(source[:start] + source[end:])
+            self.assertNotEqual(check("zero", overlay).returncode, 0)
+            for kind in ("retention", "retention-first-eval-mutant",
+                         "retention-overflow", "mode-graph"):
+                self.assertNotEqual(check(kind, overlay).returncode, 0, kind)
             overlay.unlink()
             overlay.symlink_to(authentic)
             self.assertNotEqual(check("zero", overlay).returncode, 0)
@@ -433,7 +455,18 @@ class ZeroControlContract(unittest.TestCase):
         build = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
         probe = negative.split('(define (e3-zero-negative-topology! model handles name)', 1)[1].split(
             '(define (e3-zero-negative-fire', 1)[0]
-        self.assertIn('(e3-zero-negative-p1-shell-census)', negative)
+        census = '(e3-zero-negative-p1-shell-census)'
+        self.assertIn('((vector-ref p1-trusted-surface 74))',
+                      form(negative, '(define ' + census))
+        self.assertNotIn('shell-registry-current', negative)
+        self.assertNotIn('dead-construction-raw', negative)
+        self.assertLess(probe.index(f'(p1-before {census})'),
+                        probe.index('(vector-ref p1-trusted-surface 69)'))
+        self.assertLess(probe.rindex('(vector-ref p1-trusted-surface 70)'),
+                        probe.index(f'(p1-after {census})'))
+        for index in (0, 1):
+            self.assertIn(f'(= (vector-ref p1-before {index}) '
+                          f'(vector-ref p1-after {index}))', probe)
         self.assertIn('(e3-zero-negative-topology-shells? model modules)', probe)
         self.assertIn('(e3-zero-negative-topology-pairs? model retained carriers)', probe)
         self.assertLess(probe.index('(vector-ref p1-trusted-surface 69)'),

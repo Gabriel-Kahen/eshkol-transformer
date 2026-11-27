@@ -246,16 +246,7 @@
 (define (e3-zero-negative-p1-shell-census)
   ;; Count rooted P1 module/handle shells and construction tombstones. This
   ;; read-only projection census does not claim native P1 record-hook coverage.
-  (let count ((remaining (shell-registry-current)) (live 0) (dead 0))
-    (if (null? remaining) (vector live dead)
-        (let ((entry (car remaining)))
-          (if (and (vector? entry) (= (vector-length entry) 4)
-                   (or (eq? (vector-ref entry 1) 'module)
-                       (eq? (vector-ref entry 1) 'handle)))
-              (if (eq? (vector-ref entry 2) dead-construction-raw)
-                  (count (cdr remaining) live (+ dead 1))
-                  (count (cdr remaining) (+ live 1) dead))
-              (count (cdr remaining) live dead))))))
+  ((vector-ref p1-trusted-surface 74)))
 
 (define (e3-zero-negative-topology-idle? model)
   (let ((census (e3-zero-negative-census model)))

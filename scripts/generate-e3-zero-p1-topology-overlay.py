@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate only the pinned, noninstalled E3 zero P1 projection probe."""
+"""Generate the pinned, noninstalled E3 zero P1 probe and shell census."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "internal/p1/lib/transformer/module.esk"
 SOURCE_SHA256 = "8629d7ee347fb81d0a24cbb5d296828208af9bf75965244d70f7a05ecb132e40"
-EMITTED_SHA256 = "06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8"
+EMITTED_SHA256 = "ef3acf621165f07fe5208d878fc8b041d38a3b8eb3e1298e14d99bb2ccf14f48"
 MANIFEST = ROOT / "tests/e3_private/zero_control_p1_overlay_manifest.json"
 ANCHOR = b'''  (lambda (identity)
     (construction-seal-prepared! identity))
@@ -74,6 +74,19 @@ INSERTION = b'''  ;; Zero-control-only P1 projection rejection, private slot 73.
                                         model modules handles carriers) 0))
                               (raise 'e3-zero-topology-fatal))
                           mismatch)))))))))
+  ;; Zero-control-only P1 shell census, private slot 74. Keep registry records
+  ;; and the tombstone identity inside P1's lexical scope.
+  (lambda ()
+    (let count ((remaining (shell-registry-current)) (live 0) (dead 0))
+      (if (null? remaining) (vector live dead)
+          (let ((entry (car remaining)))
+            (if (and (vector? entry) (= (vector-length entry) 4)
+                     (or (eq? (vector-ref entry 1) 'module)
+                         (eq? (vector-ref entry 1) 'handle)))
+                (if (eq? (vector-ref entry 2) dead-construction-raw)
+                    (count (cdr remaining) live (+ dead 1))
+                    (count (cdr remaining) (+ live 1) dead))
+                (count (cdr remaining) live dead))))))
 '''
 
 
