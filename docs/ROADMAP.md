@@ -133,7 +133,12 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   traces for that check.
   After review, a PR from a `codex/p1-pair-memory-trigger-*` branch into
   `codex/p1-pair-memory-timing-receipt-20261126` is the only trigger. The fresh
-  diagnostic and matched serial comparison remain pending.
+  diagnostic and matched serial comparison remain pending. A separate local
+  serial-control branch prepares an exact-source parameter-state receipt with
+  trace and pairing disabled. Its offline comparison requires the verified
+  paired receipt and matching hosted runner and toolchain evidence. The
+  serial trigger remains held pending paired receipt verification and run
+  coordination. See [P1 pair-memory evidence](P1_PAIR_MEMORY_TRACE.md).
 
 ## Parallel execution strategy
 
