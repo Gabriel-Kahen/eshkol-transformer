@@ -194,6 +194,32 @@ class ZeroControlContract(unittest.TestCase):
         self.assertEqual(result.returncode, 41)
         self.assertIn("mixed", result.stderr)
 
+    def test_i2_testing_define_is_scoped_to_the_package_bridge(self) -> None:
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        start = builder.index("\npackage_bridge_flags=()\n")
+        end = builder.index('\n"${e1b_clean_toolchain_env[@]}"', start)
+        script = '''set -euo pipefail
+          PROJECT_ROOT=$1
+          package_policy=$2
+          e3_tuple_kind=$3
+          e3_public_tuple=$4
+          g3g_package_policy=0
+        ''' + builder[start:end] + '\nprintf "%s\\n" "${package_bridge_flags[@]}"'
+        e3_kinds = ("zero", "uniform", "base", "diagnostic", "public", "retention",
+                    "retention-first-eval-mutant", "retention-overflow", "mode-graph",
+                    "numerical")
+        cases = [("e3-private-aggregate", kind) for kind in e3_kinds]
+        cases.extend((("m3-model-aggregate", ""), ("cli3-tr3-aggregate", "")))
+        for policy, kind in cases:
+            with self.subTest(policy=policy, kind=kind):
+                run = subprocess.run(
+                    ["bash", "-c", script, "bridge-flags", str(ROOT), policy, kind,
+                     "1" if kind == "public" else "0"],
+                    text=True, capture_output=True, check=True,
+                )
+                self.assertEqual("-DET_F32_TENSOR_TESTING" in run.stdout.splitlines(),
+                                 kind in ("zero", "uniform"))
+
     def test_14_unique_model_paths_and_postload_encoder(self) -> None:
         driver = (ROOT / "tests/e3_private/zero_control_driver.esk").read_text()
         self.assertEqual(driver.count('("blocks" "0" "attention"'), 8)
