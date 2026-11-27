@@ -88,6 +88,36 @@ class E3AsanIRBoundaryTests(unittest.TestCase):
                 self.assertEqual((result.returncode, result.stdout, result.stderr),
                                  (77, b"", b""))
 
+    def test_zero_sanitizer_requires_its_exact_private_tuple(self) -> None:
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        marker = 'if [[ "${E3_ZERO_CONTROL_SANITIZE:-0}" != 0 ]]; then\n'
+        selector, _ = builder.split(marker, 1)[1].split('\nfi\n', 1)
+        shell = ('set -euo pipefail\n'
+                 'E3_ZERO_CONTROL_SANITIZE=$1\n'
+                 'package_policy=$2\n'
+                 'e3_tuple_kind=$3\n'
+                 'e3_private_test_sanitize=$4\n'
+                 'die() { exit 77; }\n' + marker + selector + '\nfi\n'
+                 'printf "%s\\n" "${e3_private_test_sanitize}"\n')
+        private = "e3-private-aggregate"
+        for flag, policy, tuple_name, previous, expected in (
+            ("1", private, "zero", "0", (0, b"1\n")),
+            ("0", private, "zero", "0", (0, b"0\n")),
+            ("2", private, "zero", "0", (77, b"")),
+            ("1", private, "public", "0", (77, b"")),
+            ("1", private, "uniform", "0", (77, b"")),
+            ("1", private, "zero-extra", "0", (77, b"")),
+            ("1", "generic", "zero", "0", (77, b"")),
+            ("1", private, "zero", "1", (77, b"")),
+        ):
+            with self.subTest(flag=flag, policy=policy, tuple_name=tuple_name, previous=previous):
+                result = subprocess.run(
+                    ["bash", "-c", shell, "bash", flag, policy, tuple_name, previous],
+                    capture_output=True, check=False,
+                )
+                self.assertEqual((result.returncode, result.stdout), expected)
+                self.assertEqual(result.stderr, b"")
+
     @unittest.skipUnless(all(shutil.which(name) for name in ("clang", "nm")),
                          "Clang and nm are required for native IR controls")
     def test_real_generated_address_checks_and_tamper_rejection(self) -> None:

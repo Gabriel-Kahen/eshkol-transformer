@@ -17,12 +17,15 @@ tested build. The [downloaded artifact runner](docs/CLI3_DOWNLOADED_ARTIFACT_RUN
 verifies and exercises that binary without rebuilding it. The
 [roadmap](docs/ROADMAP.md) tracks broader model, evaluation, and resume support.
 
-The [corpus-to-model tutorial](docs/DOC5_CORPUS_TO_MODEL_TUTORIAL.md) walks
-through DATA4 preparation, one training update, evaluation, and one-byte
-generation. The [API reference](docs/DOC5_API_REFERENCE.md) lists the bounded
-public and source-only entry points. On the pinned toolchain, run
-`make test-doc5-source` to check documentation paths and symbols, or
-`make test-doc5` for the executable walkthrough in a disposable checkout.
+The [BPE corpus tutorial](docs/DOC5_BPE_CORPUS_TUTORIAL.md) trains a deterministic
+byte BPE tokenizer and validates its D1 corpus. The
+[corpus-to-model tutorial](docs/DOC5_CORPUS_TO_MODEL_TUTORIAL.md) walks through
+DATA4 preparation, one training update, evaluation, and one-byte generation.
+The [API reference](docs/DOC5_API_REFERENCE.md) lists the bounded public and
+source-only entry points. For the fixed-profile walkthrough and API reference,
+run `make test-doc5-source` to check paths and symbols, or
+`make test-doc5` on the pinned toolchain for an executable walkthrough in a
+disposable checkout.
 
 ## Build and test
 

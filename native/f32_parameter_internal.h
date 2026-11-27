@@ -23,6 +23,12 @@ typedef struct et_f32_gradient_reset_plan et_f32_gradient_reset_plan;
 const et_kernel_provider_v1 *et_i2_private_mod5_width16_storage_provider_v1(void);
 #endif
 
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+/* Separate development descriptor for the MOD5-C width-16 V=256 geometry. */
+__attribute__((visibility("hidden"))) const et_kernel_provider_v1 *
+et_i2_private_mod5_width16_v256_storage_provider_v1(void);
+#endif
+
 #ifdef ET_I2_PRIVATE_OWNED_CLONE_MATCH
 enum {
   ET_I2_PRIVATE_OWNED_RESULT_OK = 0,

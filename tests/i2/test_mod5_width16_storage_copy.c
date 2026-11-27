@@ -12,15 +12,29 @@
     }                                                                          \
   } while (0)
 
-enum { LEGACY_MATRIX_COUNT = 5, MATRIX_COUNT = 9, BUFFER_WORDS = 1026 };
-static const uint64_t matrices[MATRIX_COUNT][2] = {
+enum { LEGACY_MATRIX_COUNT = 5, WIDTH16_MATRIX_COUNT = 9 };
+static const uint64_t matrices[][2] = {
     {2u, 4u},  {4u, 4u},   {4u, 8u},   {8u, 4u},   {256u, 4u},
     {8u, 16u}, {16u, 16u}, {16u, 32u}, {32u, 16u},
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+    {256u, 16u},
+#endif
 };
-static const size_t sorted_matrices[MATRIX_COUNT] = {0u, 1u, 2u, 3u, 5u,
-                                                     6u, 7u, 8u, 4u};
+static const size_t sorted_matrices[] = {
+    0u, 1u, 2u, 3u, 5u, 6u, 7u, 8u, 4u,
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+    9u,
+#endif
+};
 static const char legacy_context;
 static const char width16_context;
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+enum { V256_MATRIX_COUNT = sizeof(matrices) / sizeof(matrices[0]),
+       BUFFER_WORDS = 257u * 16u + 2u };
+static const char v256_context;
+#else
+enum { BUFFER_WORDS = 1026 };
+#endif
 
 static const et_kernel_provider_v1 *resolve(void *context, const char *symbol) {
   if (symbol == NULL || strcmp(symbol, ET_KERNEL_PROVIDER_SYMBOL_V1) != 0) {
@@ -32,6 +46,11 @@ static const et_kernel_provider_v1 *resolve(void *context, const char *symbol) {
   if (context == &width16_context) {
     return et_i2_private_mod5_width16_storage_provider_v1();
   }
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+  if (context == &v256_context) {
+    return et_i2_private_mod5_width16_v256_storage_provider_v1();
+  }
+#endif
   return NULL;
 }
 
@@ -96,7 +115,7 @@ static et_kernel_runtime *discover(const char *context, const char *version,
   CHECK(et_kernel_runtime_capability_count(runtime) == 11u);
   expect_row(et_kernel_runtime_capability_find(runtime, "tensor.f32"), version,
              evidence, matrix_count,
-             matrix_count == MATRIX_COUNT ? sorted_matrices : NULL);
+             matrix_count > LEGACY_MATRIX_COUNT ? sorted_matrices : NULL);
   return runtime;
 }
 
@@ -186,7 +205,13 @@ static void write_report(const et_kernel_runtime *runtime) {
   free(report);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+  CHECK(argc == 1 || (argc == 2 && strcmp(argv[1], "--report-v16") == 0));
+#else
+  CHECK(argc == 1);
+  (void)argv;
+#endif
   static const uint64_t legacy_vectors[] = {0u, 16u};
   static const uint64_t rejected[][2] = {
       {0u, 16u},  {1u, 16u},  {8u, 15u},  {8u, 32u},  {16u, 8u},
@@ -206,7 +231,7 @@ int main(void) {
                LEGACY_MATRIX_COUNT);
   et_kernel_runtime *width16_runtime =
       discover(&width16_context, "1.2", "I2:bounded-exact-f32-storage.copy-v3",
-               MATRIX_COUNT);
+               WIDTH16_MATRIX_COUNT);
   copy_case(legacy_runtime, legacy, 0u, NULL, NULL, 0);
   copy_case(width16_runtime, width16, 0u, NULL, NULL, 0);
   for (size_t i = 0u; i < 2u; i++) {
@@ -215,7 +240,7 @@ int main(void) {
     copy_case(width16_runtime, width16, 1u, &legacy_vectors[i],
               &legacy_vectors[i], 0);
   }
-  for (size_t i = 0u; i < MATRIX_COUNT; i++) {
+  for (size_t i = 0u; i < WIDTH16_MATRIX_COUNT; i++) {
     copy_case(legacy_runtime, legacy, 2u, matrices[i], matrices[i],
               i < LEGACY_MATRIX_COUNT ? 0 : ET_KERNEL_ERROR_UNSUPPORTED);
     copy_case(width16_runtime, width16, 2u, matrices[i], matrices[i], 0);
@@ -230,7 +255,49 @@ int main(void) {
    */
   copy_case(width16_runtime, width16, 2u, matrices[7], matrices[8],
             ET_KERNEL_ERROR_SHAPE_MISMATCH);
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+  const et_kernel_provider_v1 *v256 =
+      et_i2_private_mod5_width16_v256_storage_provider_v1();
+  et_kernel_runtime *v256_runtime = discover(
+      &v256_context, "1.3", "I2:mod5-v256-exact-f32-storage.copy-v1",
+      V256_MATRIX_COUNT);
+  CHECK(v256 != legacy && v256 != width16);
+  CHECK(v256->validate_call != legacy->validate_call &&
+        v256->validate_call != width16->validate_call);
+  CHECK(v256->invoke_call == legacy->invoke_call);
+  const uint64_t *v256_matrix = matrices[WIDTH16_MATRIX_COUNT];
+  copy_case(legacy_runtime, legacy, 2u, v256_matrix, v256_matrix,
+            ET_KERNEL_ERROR_UNSUPPORTED);
+  copy_case(width16_runtime, width16, 2u, v256_matrix, v256_matrix,
+            ET_KERNEL_ERROR_UNSUPPORTED);
+  copy_case(v256_runtime, v256, 0u, NULL, NULL, 0);
+  for (size_t i = 0u; i < sizeof(legacy_vectors) / sizeof(legacy_vectors[0]); i++) {
+    copy_case(v256_runtime, v256, 1u, &legacy_vectors[i], &legacy_vectors[i], 0);
+  }
+  for (size_t i = 0u; i < V256_MATRIX_COUNT; i++) {
+    copy_case(v256_runtime, v256, 2u, matrices[i], matrices[i], 0);
+  }
+  for (size_t i = 0u; i < sizeof(rejected) / sizeof(rejected[0]); i++) {
+    copy_case(v256_runtime, v256, 2u, rejected[i], rejected[i],
+              ET_KERNEL_ERROR_UNSUPPORTED);
+  }
+  static const uint64_t v256_rejected[][2] = {
+      {16u, 256u}, {255u, 16u}, {256u, 15u}, {257u, 16u},
+  };
+  for (size_t i = 0u; i < sizeof(v256_rejected) / sizeof(v256_rejected[0]); i++) {
+    copy_case(v256_runtime, v256, 2u, v256_rejected[i], v256_rejected[i],
+              ET_KERNEL_ERROR_UNSUPPORTED);
+  }
+  copy_case(v256_runtime, v256, 3u, rank3, rank3, ET_KERNEL_ERROR_UNSUPPORTED);
+  copy_case(v256_runtime, v256, 2u, v256_matrix, v256_rejected[0],
+            ET_KERNEL_ERROR_SHAPE_MISMATCH);
+  copy_case(v256_runtime, v256, 2u, matrices[7], matrices[8],
+            ET_KERNEL_ERROR_SHAPE_MISMATCH);
+  write_report(argc == 1 ? v256_runtime : width16_runtime);
+  et_kernel_runtime_destroy(v256_runtime);
+#else
   write_report(width16_runtime);
+#endif
   et_kernel_runtime_destroy(width16_runtime);
   et_kernel_runtime_destroy(legacy_runtime);
   return 0;

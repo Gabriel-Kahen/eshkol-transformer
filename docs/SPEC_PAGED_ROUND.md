@@ -48,6 +48,7 @@ parent table and K/V contents, both model-specific result caches, and cleanup.
 The native gate links the separate archives in C11 and C++17 and runs the full
 fixture under ASan, UBSan, and leak detection.
 
-The API consumes caller-supplied CPU binary32 logits and K/V. Live target and
-draft forward adapters, sampling, GPU support, and public generation dispatch
-remain outside this leaf.
+The API consumes caller-supplied CPU binary32 logits and K/V. The
+[live G3-C4 witness](SPEC_LIVE_MODEL_WITNESS.md) supplies private draft and
+target producers and a recompute callback within its bounded CPU-f32 fixture.
+Sampling, GPU support, and public generation dispatch remain outside this leaf.

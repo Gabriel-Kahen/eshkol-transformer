@@ -4,6 +4,24 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 
 ## Current integration
 
+- PR #265's installed CLI3 artifact `15173825352` from run `45941244549`,
+  attempt 1, passed offline Ubuntu 22.04 x86-64 replay on exact accepted tree
+  `e0dae2e168700c2416a8f7f32efd5f6801f9fe0c`. The executable SHA-256 is
+  `cd1360b45ff7919eecba2e83b96167768d4cdd42fef115967f8865f0c2429611`.
+  The uninterrupted, 1+3, and chained one-update paths produced the same
+  four-update C2 checkpoint, SHA-256
+  `67ee14d747dfbaafeba1218eb03522b839c3d3339cd07290dc54eeefe12846ab`.
+  Five installed D1 and ten installed DATA4 tests passed. The independent
+  replay omitted three DATA4 fault-injection cases and covers the fixed
+  CPU-f32, context-two, byte-tokenizer profile with one-byte generation.
+  [Hosted CLI3 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941244549/job/140315873781)
+  [Artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941244549/artifacts/15173825352)
+  [Replay record](CLI3_FIXED_BINARY_ARTIFACT.md#current-accepted-scope)
+
+- The [proposed V=256 MOD5 C2 gate](MOD5_E2E_C1_IO5.md#proposed-width-16-c2-gate)
+  depends on exact native storage and K2 admission for `[256,16]` and a
+  tied and untied C2 witness with matching T1, D2 and X1 identities.
+
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,
   and V256 EVAL5 input-binding and live-scoring witness at `443dad4b` on
@@ -40,6 +58,10 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   dispatch. Capability-driven shape dispatch requires the private build flag.
   Default K2 rejects those requests and the candidate descriptor. The K2
   profile contract and supported C2 LOAD/SAVE qualification remain open.
+- The [width-16 V=256 storage-copy candidate](MOD5_E2E_C1_IO5.md#v256-storage-copy-candidate)
+  adds the exact `[256,16]` head and embedding row through a separate hidden
+  I2 1.3 descriptor. The pinned native replay covers the synthetic bit-copy
+  contract and exact reports. K2 profile admission remains open.
 - [PR #251](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/251)
   merged the lossless MOD5 model mapping and live C1 interchange witness,
   the downloaded CLI3 artifact runner, and #249's three development witnesses
@@ -74,7 +96,12 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   admitted lossless mapped/sharded IO5; [PR #247](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/247)
   admitted bounded F16/BF16 safetensors and F16/Q8_0 GGUF interchange. The
   required IO5 job passed 42 cases and the pinned GGML Q8_0 decoder witness
-  at 192 exact F32 bits. Live model/state ingress remains open.
+  at 192 exact F32 bits. The opt-in `make test-io5-live-quantized` candidate
+  adds independent external GGUF F16 and safetensors BF16 fixtures for the
+  fixed CPU F32 M3 bridge admitted in PR #262. The gate checks the explicit
+  IO5 import flags, exact tied C1 readback and drift across all 512 logits,
+  and rejects missing mapping arguments and unequal tie values before
+  publication. The external gate is limited to `eshkol-m3-v1`.
 - The [tagged MOD5 safetensors candidate](IO5_QUANTIZED_INTERCHANGE.md#tagged-mod5-safetensors)
   adds F16 and BF16 IO5 interchange with explicit MOD5 identity, canonical
   rosters and logical ties. Its live MOD5-C gate evaluates restored F32 C1
@@ -83,6 +110,9 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 - CI topology unit discovery now runs O2's existing exact public facade and
   header-tree pin before the expensive suites. The O2 package command retains
   the same test and expected digest.
+- CI topology unit discovery checks all seven predecessor source manifests
+  enforced by the required `native-numerics`, `g3n-forward`, `g3s-sampling`,
+  and `model-composition` suites. Stale pins fail before suite builds start.
 - Full CPU-v1 admission depends on trained save/reload and continuation,
   public terminal generation, and supported E3 numerical and resource
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
@@ -117,6 +147,13 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   requires independent closure, recipe and seal review, followed by fresh
   lock-time resource checks on a qualifying host. Public terminal generation,
   trained continuation, and the full E3 §9 matrix remain open.
+- The Wave 3 source candidate also reconciles admitted main `f953a5b24`
+  through PR #285. It combines the Wave 3 fault and retention checks with
+  the admitted E3 zero-control builder, inventory and fixture changes.
+  The shared builder hash reflects this reviewed source union. The
+  existing prepared SAVE package remains bound to its recorded tree.
+  Release qualification still requires the trained SAVE and continuation
+  gates, public terminal generation, and the full E3 §9 matrix.
 - On accepted `8d185344`, [hosted run 45646675969](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45646675969)
   passed `parameter-state`: 100m16s in the suite, after 2m10s of pinned
   toolchain verification. Its log has a 90m52s gap after the sanitized identity
@@ -156,15 +193,23 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   The suite ran in 64m17s, including a 49m08s compile matrix. Both scheduled
   heavy pairs passed their 8 GiB pre-launch check. That run measured
   single-compiler peak RSS and initial host headroom.
-- The [paired memory diagnostic](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829)
-  passed the complete parameter-state suite on exact source `15f25229` and
-  tree `672e9da3`. The supported suite step took 4,091 seconds. Independent
-  receipt verification matched all six 250 ms process-group traces and
-  67 compiler invocations, including 43 expected failures. The maximum
-  sampled sum across the two paired compiler process groups was
-  7,487,873,024 bytes. The [serial control](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/270)
-  is queued through the branch-only workflow. Default compile scheduling
-  remains serial.
+- The hosted paired and serial diagnostics passed the complete parameter-state
+  suite on source `15f2522946b8ee13b9f166967a99f2665263d4d0` and tree
+  `672e9da3d40061278e94ca0aa1954e98936afa7e`. The sealed comparison matched
+  OS, Ubuntu 22.04 runner image `20261116.365.1`, toolchain and source-input
+  identities, toolchain cache key and restore outcome, and all 67 compiler
+  commands and exit statuses, including 43 expected failures. The suite step
+  took 4,091 seconds paired and 5,166 seconds serial, an observed difference
+  of 1,075 seconds (20.8% lower for the paired run). The runs used separate
+  hosted machines.
+  All six 250 ms paired traces observed overlap. The highest sampled sum
+  across both compiler process groups was 7,487,873,024 bytes. The highest
+  GNU time peak RSS for a single command was 4,248,352 KiB paired and
+  4,271,924 KiB serial. Serial job-wide memory was unmeasured. Compiler
+  pairing is opt-in.
+  [Paired run 45934920829, attempt 1, job 140295806350](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829/job/140295806350)
+  [Serial run 45941958637, attempt 1, job 140318040542](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941958637/job/140318040542)
+  [Trace and comparison contract](https://github.com/Gabriel-Kahen/eshkol-transformer/blob/a2634ddfb33e82d9e3fe0dc169a999cb45294627/docs/P1_PAIR_MEMORY_TRACE.md)
 
 ## Parallel execution strategy
 
@@ -726,12 +771,23 @@ the header and rebuilt six edges in 31.34 seconds. A fresh changed-input replay
 using final source commit `0d8bd51a` rebuilt the same six edges in 32.17 seconds
 and passed the unchanged provenance gate; its checked receipt is
 `/home/gabe/.codex/evidence/eshkol-f0-integration-preflight-20261125/SHA256SUMS`.
+The [matched warm replay](../toolchain/README.md#local-f0-warm-replay) ran
+`8d185344` and `0d8bd51a` from fresh copies of the same seed at the
+same paths in one supported image. CMake generated identical final header
+bytes in both runs. Only the fixed bootstrap restored the original mtime
+before Ninja. The predecessor ran six build commands in 35.89 seconds
+total. The fix ran zero in 0.71 seconds total. Both passed provenance
+verification. The receipt is
+`/home/gabe/.codex/evidence/eshkol-f0-matched-warm-replay-20261127/SHA256SUMS`.
 The CI cache key hashes both changed bootstrap scripts, so the first candidate
 job without an exact matching cache builds cold; later jobs can restore a cache
 once a successful job saves it. Concurrent jobs may also miss before that save.
 The pinned Eshkol source and workflow predecessor pins match current main.
-These local results do not explain the hosted 154-target cache-hit rebuild or
-establish hosted wall-time savings.
+[Hosted F0 evidence](CI_EFFICIENCY.md#hosted-toolchain-cache) records an exact-key
+restore and zero Ninja build commands in all 44 cache-backed jobs across PRs #259
+and #262, including 27 jobs on the historical rebuild's runner image. The cause
+of that rebuild remains unknown, and attributable hosted wall-time savings remain
+unmeasured.
 
 The B0 supported attention report-v2 extension and explicit manual CI mode passed
 independent source/test/report review. Exact-head supported diagnostic run
@@ -1306,26 +1362,69 @@ condition. It pins canonical and emitted hashes, restores the exact old raw
 object before any model observer, and rechecks the full P1 projection before
 the ordinary unchanged-state and fresh-load retry. This is source-only P1
 projection evidence, not native M3 graph or rollback proof; bounded source
-review accepted it, while compiled witnesses remain pending. The exact sanitizer import
-manifests are still absent and its build fails closed. Pinned Q0 oracle
-generation, emitted package inventories, generated AOT postprepare review,
+review accepted it, while compiled witnesses remain pending. The initial
+source candidate lacked emitted sanitizer import manifests. Pinned Q0 oracle
+generation, generated AOT postprepare review,
 fresh normal/repeat/poisoned and sanitizer runtime gates remain pending. This candidate does not establish
 N3 or E3 §9 compiled acceptance. A dedicated, manually dispatched
 Ubuntu-22.04/LLVM-21 zero-only inventory-discovery harness is source-staged:
 it retains the ordinary package authority checks, emits actual compiler
 closure and normal/sanitized import inventories into checksummed evidence, and
 never publishes an admitted object. Focused offline policy tests pass, and
-independent source/tests review accepted the exact `c4978ee` candidate. This
-current-main source merge includes the reviewed E3 PR #205 roadmap update; it
-does not add emitted inventories or change the zero model/driver sources. No
-hosted discovery has run. The workflow is absent from default-branch main, so
-manual dispatch remains HOLD until the reviewed workflow lands there. Exact
-sanitizer manifests, immutable root evidence release, manifest review/pinning,
-and all compiled gates remain pending. PR #206's hosted run `38445613534`
+independent source and test review accepted the exact `c4978ee` candidate.
+[PR #206](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/206)
+merged the manually dispatched workflow into `main`. The first hosted
+[discovery run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45948199739)
+on `fa746a626` stopped at normal Eshkol AOT. Its manifest listed three hidden
+generated-source scratch copies that the uploader omitted. Their visible
+evidence copies verified. The workflow now moves private builder scratch
+outside the artifact root before sealing the visible evidence. The repaired
+[hosted run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45953148614)
+completed normal and sanitizer discovery on `686296ef`. Its
+[artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45953148614/artifacts/15178933242)
+matched the hosted ZIP hash and all 139 sealed files. The later linked
+`31ce137fa` inventory removed exactly the three I2 test imports in both
+modes. The sanitizer instrumentation list matches exactly. The compiled
+zero-control runtime gates and E3 §9 qualification remain pending.
+PR #206's hosted CI run `38445613534`
 stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
 generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
 were added; a fresh exact-head hosted run remains pending.
+
+Hosted zero-inventory discovery run `45948199739` reached normal AOT on
+`fa746a626` and stopped on two P1 registry names outside their lexical scope.
+The source repair moves the same live/dead module and handle count into the
+pinned zero-only P1 overlay. The negative driver still compares both counts
+before capture and after restoring and rechecking the projection. The overlay
+returns only the two counts. Compiled runtime qualification remains pending.
+
+The isolated N3 zero-package linkage candidate enables the existing I2 test
+provider in the exact noninstalled zero bridge and requires the allocator
+failpoint, allocator reset and live-builder census as local definitions after
+the aggregate link. The focused bridge checks cover the zero and uniform
+tuples and verify that ordinary E3 builds omit those definitions. The guarded
+f31/LLVM 21 [PR #280](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/280)
+discovery on `31ce137fa` and tree `9dcb7f7a5365` found one local definition of
+each I2 hook in both ELF objects. The exact emitted lists now pin 175 normal
+undefined symbols, 170 sanitizer noninstrumentation imports and 58 sanitizer
+instrumentation imports. The sealed discovery receipt SHA-256 is
+`46741a0cea7960df13369c4e35f543e1006a250a2d06e8384030bc5011a1f989`.
+The supported `b1d2bf62` gate reached pinned Q0 and stopped at the first
+oracle generation because the accuracy check used the final corpus name for
+every case. The oracle now checks each corpus against its own controlled
+targets. Two pinned Python 3.14.6 and PyTorch 2.13.0+cpu generations produced
+byte-identical validated bundles and preserved the original D1 corpus files.
+The all-correct, all-wrong and mixed f32 accuracy words are `3f800000`,
+`00000000` and `3f19999a`, respectively, with D2 masks `11`, `11`, `10` in each
+case. The supported `ecbe60182` gate passed oracle replay, canonical and
+zero-package checks, and normal and sanitizer binary repeat comparisons. Its
+first runtime case stopped at the mode snapshot. A diagnostic on the same
+compiled sanitizer ELF located the null read at a fixture lookup of an unused
+M3 transport field. The zero-only mode snapshot and topology shell comparison
+now obtain all 17 existing module shells from the authenticated P1 fixed-set
+capture. Focused source and pinned oracle checks pass. The repaired full
+runtime matrix remains pending.
 
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
@@ -1394,6 +1493,11 @@ imports and tuple near misses remain rejected. This source correction has no
 compiled acceptance yet. The upstream typed
 foreign-pointer prerequisite remains unresolved; no generated-ASan,
 ordinary-object-parity or E3 §9 acceptance is claimed for this union.
+
+The offline retention policy replays check that publication copies both
+verified sanitizer inventories byte for byte and that the ordinary exact
+undefined-symbol allowlist check precedes E3 private-authority validation
+under the zero-discovery guard. Compiled retention acceptance remains pending.
 
 The frozen five-case gate at `2b74b534` built its package variants but
 stopped at the first runtime compile on an extra closing parenthesis in the
@@ -1571,6 +1675,10 @@ existing first-evaluation tuple. Independent source/tests review accepted this
 exact union. The pinned PyTorch-dependent reference test, supported
 compiled/sanitizer gates, and §9 matrix remain open; this source union does not
 establish E3 admission.
+The first-evaluation source test pins the current canonical `e3_frame.c` at
+SHA-256 `0e3e18952f11d736fd46d9c914a30310d9f9d54aa7e4be53c468c64829fc79ae`.
+Both retention tuples leave the guarded zero-model (PR #206), sum-order
+(PR #207), and padded-position (PR #211) additions disabled.
 The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
 records a bounded guest-relative cause for a transient unsafe-output scan;
 its successor now uses no-follow descriptor traversal, postscan identity
@@ -3922,11 +4030,11 @@ publication, public G2 and continuation remain pending.
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| MP4 | [Bounded CPU mixed-precision foundation](MP4_MIXED_PRECISION.md) | TR3, K1 | The independently reviewed opt-in K1 provider and loss scaler passed an isolated-worktree Ubuntu 22.04/Clang 21 `make test-mp4` rerun on exact source `4ad7dbbc`: 65,536 patterns per format, 55,690 oracle casts, 2:1 payload size, a skipped overflow with successful replay, C++17 linkage, ASan/UBSan/LSan, Q0 and CI topology. The [sealed result](MP4_MIXED_PRECISION.md#validation-and-scope) covers the standalone numerical/storage foundation. PR #244 merged this opt-in foundation as `b49d177c`/tree `834349d2` after [six-gate diagnostic 45718653515](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45718653515) and [26-job required CI 45718653477](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45718653477) passed. A separate development-only `make test-mp4-mod5` gate now checks real MOD5 GQA gradients stored and unscaled through f16/bf16 MP4 against f32 SGD, with finite scaled f32 narrow-format rejection distinct from f32 scaling overflow, scaler backoff, skipped master update, recovery, and local optimized/sanitized passes. A standalone [MP4 scaler record](MP4_MIXED_PRECISION.md#loss-scaler-record-v1) adds fixed-size checksummed buffer persistence and verifies bit-exact scaler continuation through growth and backoff. TR3/O2 mixed-precision trainer wiring, trainer checkpoint integration, and performance qualification remain open. | active |
+| MP4 | [Bounded CPU mixed-precision foundation](MP4_MIXED_PRECISION.md) | TR3, K1 | The independently reviewed opt-in K1 provider and loss scaler passed an isolated-worktree Ubuntu 22.04/Clang 21 `make test-mp4` rerun on exact source `4ad7dbbc`: 65,536 patterns per format, 55,690 oracle casts, 2:1 payload size, a skipped overflow with successful replay, C++17 linkage, ASan/UBSan/LSan, Q0 and CI topology. The [sealed result](MP4_MIXED_PRECISION.md#validation-and-scope) covers the standalone numerical/storage foundation. PR #244 merged this opt-in foundation as `b49d177c`/tree `834349d2` after [six-gate diagnostic 45718653515](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45718653515) and [26-job required CI 45718653477](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45718653477) passed. A separate development-only `make test-mp4-mod5` gate now checks real MOD5 GQA gradients stored and unscaled through f16/bf16 MP4 against f32 SGD, with finite scaled f32 narrow-format rejection distinct from f32 scaling overflow, scaler backoff, skipped master update, recovery, and local optimized/sanitized passes. A standalone [MP4 scaler record](MP4_MIXED_PRECISION.md#loss-scaler-record-v1) adds fixed-size checksummed buffer persistence and verifies bit-exact scaler continuation through growth and backoff. The [live MOD5 replay gate](MP4_MIXED_PRECISION.md#mod5-actual-gradient-composition-witness) matches uninterrupted f16 and bf16 gradient processing and SGD after decoding the scaler record with a pending growth step and copying the in-memory master weights. TR3/O2 mixed-precision trainer wiring, trainer checkpoint integration, and performance qualification remain open. | active |
 | AC4 | [Standalone activation checkpointing candidate](AC4_CHECKPOINTING.md) | TR3, MOD5 | The main-based six-file CPU binary32 source is available through opt-in `make test-ac4`; it adds no default trainer or runtime path. The reviewed source and tests cover 1–16 layers, four fixed MQA/GQA/MHA shape rows, 5,440 central differences, failure cases and eight-step byte-identical updates across policies. At 16 layers on the measured GQA row, EVERY_K at k=16 reduced AC4 activation-arena peak from 31,872 to 3,264 bytes (89.76%) and total AC4 workspace from 57,472 to 28,864 bytes (49.78%), with 136 replay forwards and 4.320× call time on the composed AC4/MOD5-B gate. Workspace still grows linearly with depth because the failure-atomic parameter-gradient buffer remains staged. PR #248 admitted the opt-in gate after exact-tree required CI. The independently reviewed opt-in ABI 1.1 gradient replay candidate reuses the 3,264-byte activation arena and stages one layer of gradients. It reduced total workspace from 28,864 to 4,864 bytes with 272 replay forwards, up from 136. The pinned native gate passed 5,440 central differences, late backward rollback, and eight byte-identical SGD updates across all five policies. Hosted admission, TR3 integration, broader shapes, GPU, and mixed precision remain pending. | active |
 | AMD4 | [AMD HIP/rocBLAS device observability](AMD4_HIP_OBSERVABILITY.md) and backend | K1, TR3, B0 | Standalone opt-in host probe and unavailable K1 GEMM/attention capabilities are included in `codex/eval5-dist5-amd4-standalone-20261125`. The sealed Linux x86-64 / Clang 22.1.8 no-HIP receipt observed accessible KFD with unavailable HIP and rocBLAS libraries; normal and sanitizer gates passed with zero device rows and fail-closed K1 dispatch. The consolidated Clang 21.1.8 container gate passed with KFD absent and no HIP/rocBLAS libraries. PR #244 admitted the unavailable-device observability gate through the six-gate hosted diagnostic and required CI. The opt-in loader fixtures exercise the production dynamic loader, LP64 HIP R0600 properties, handle lifecycle, restore precedence and fail-closed K1 dispatch. The five scenarios passed pinned Clang 21 and host Clang 22, including ASan/UBSan/LSan. Hardware HIP/rocBLAS discovery, direct AMD execution, parity, benchmarks and backend integration remain open. | active |
 | PA4 | [Bounded CPU-f32 forward attention candidate](PA4_ATTENTION.md) and [PA4-Wider opt-in candidate](PA4_WIDER_ATTENTION.md) | A2, B0 | The separately linked PA4 candidate preserves exact forward and backward output bits on all ten admitted shapes. The [paired native comparison](ATTENTION_COMPARISON_RESULTS.md) on clean `d1c5e4d7` measured 9.675% lower total forward K1 dispatch time and 50.004% lower prevalidated invocation time for that fixed shape mix. Four forward dispatch ratio ranges cross parity, backward invocation was 3.179% slower, and process RSS ranges overlapped. Joint forward/backward and training throughput remain unmeasured. [PR #224](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/224) combines the opt-in candidate, [comparison format](ATTENTION_COMPARISON.md), tests, and measured results. The opt-in comparator merged through [PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240) with exact hosted CI. The separately linked PA4-Wider candidate adds CPU-f32 forward/backward providers and a scaling benchmark. Its focused main-based branch passed independent source/test review, Clang 21.1.8 regular and ASan/UBSan/LSan conformance (36,016 paired comparisons and 1,404 central differences in each build), archive/symbol and C++17 ABI checks, and malformed-prefix/borrowed-buffer regressions. The standalone candidate was not benchmarked under the occupied shared measurement lock; the documented timings predate its final validation change. The combined provider branch ran the scripted benchmark under the shared build lock without a default performance-admission claim. PR #244 merged the separately linked PA4-Wider provider as `b49d177c`/tree `834349d2` after the six-gate diagnostic and 26-job required suite passed. The opt-in [paired A2 joint execution](PA4_WIDER_ATTENTION.md#paired-a2-joint-execution) derives dO from each provider's actual output and verifies the full forward/backward chain on all ten common shapes. The pinned native run measured total-time ratios of 0.352313 for Wider reference and 0.294181 for Wider online against A2 on that mix. Both Wider paths took longer on the smallest shape. The independently reviewed [native M3T dispatch diagnostic](PA4_WIDER_ATTENTION.md#native-m3t-dispatch-diagnostic) checks A2 and PA4-Wider reference selection with 3,456 exact values over two initialized forward/reverse fixtures. It verifies malformed-mask rejection and retry at each attention call boundary. Wider trainer integration and default PA4 admission remain open. | active |
-| DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | [DATA4-A bounded corpus selection](DATA4_CORPUS_SLICE.md) is a build-only candidate: raw length filtering, first-occurrence exact deduplication, per-document provenance/SHA-256, and a deterministic checksummed in-memory report composed with T2 staging and D1 publication. The clean one-command native gate passed from `6b885150` with two-run artifact parity, T2/D1 readback, preexisting-target rejection, and D1 corruption detection. The dedicated required `data4-corpus` CI suite runs the source gate before the native gate; topology, full/acceptance inventories, and exact-evidence requirements include both commands. Exact PR #220 head `562cb353` passed hosted full run `43743963935` including `data4-corpus`. The [DATA4-B installed report slice](DATA4_INSTALLED_REPORT.md) adds opt-in `corpus prepare`/`report-validate` commands and C1 no-replace sidecar publication; independent source/workflow review accepted; exact `2e656717` supported diagnostic run `43935284566` passed 32 source checks, the CLI3 package/manifest gate and 9/9 installed commands, with both evidence seals verified. The transient binary was hashed but not uploaded. Ordinary full CI run `43941165585` failed M3's unchanged predecessor-builder source pin after the installed CLI3 command suite passed; the successor-only builder split restored the M3 predecessor pin and was integrated through PR #233. Exact-head run `43952346894` and merged-main run `43965845021` passed the required model-composition, DATA4 corpus and CLI3 command gates, accepting the bounded installed report slice. DATA4-C was validated locally before admission and binds v2 report bytes to the complete D1 manifest SHA-256. Its current-main installed gate at `3d0c4e31`/tree `ed76cd95` passed 42 source checks, exact package manifests and 13 installed command tests, including same-summary report swaps, malformed digest fields, legacy v1 rejection and post-commit manifest-read failure; the retained receipt verifies. The earlier native two-run parity/readback/corruption gate passed on identical DATA4-C source and tests. Independent source-and-test review found no blocker. PR #245 merged DATA4-C v2 as `5744dc44`/tree `76e6128d` after [26-job hosted CI 45718652932](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45718652932) passed; [merged-main run 45729653136](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45729653136) reused exact-tree evidence. Independent downloaded-binary validation passed manifest-byte binding and same-summary report-swap rejection. Legacy v1 reports require regeneration; the full DATA4 pipeline remains open. | active |
+| DATA4 | Filtering, deduplication, provenance and dataset reports | D1, T2 | [DATA4-A bounded corpus selection](DATA4_CORPUS_SLICE.md) is a build-only candidate: raw length filtering, first-occurrence exact deduplication, per-document provenance/SHA-256, and a deterministic checksummed in-memory report composed with T2 staging and D1 publication. The clean one-command native gate passed from `6b885150` with two-run artifact parity, T2/D1 readback, preexisting-target rejection, and D1 corruption detection. The dedicated required `data4-corpus` CI suite runs the source gate before the native gate; topology, full/acceptance inventories, and exact-evidence requirements include both commands. Exact PR #220 head `562cb353` passed hosted full run `43743963935` including `data4-corpus`. The [DATA4-B installed report slice](DATA4_INSTALLED_REPORT.md) adds opt-in `corpus prepare`/`report-validate` commands and C1 no-replace sidecar publication; independent source/workflow review accepted; exact `2e656717` supported diagnostic run `43935284566` passed 32 source checks, the CLI3 package/manifest gate and 9/9 installed commands, with both evidence seals verified. The transient binary was hashed but not uploaded. Ordinary full CI run `43941165585` failed M3's unchanged predecessor-builder source pin after the installed CLI3 command suite passed; the successor-only builder split restored the M3 predecessor pin and was integrated through PR #233. Exact-head run `43952346894` and merged-main run `43965845021` passed the required model-composition, DATA4 corpus and CLI3 command gates, accepting the bounded installed report slice. DATA4-C was validated locally before admission and binds v2 report bytes to the complete D1 manifest SHA-256. Its current-main installed gate at `3d0c4e31`/tree `ed76cd95` passed 42 source checks, exact package manifests and 13 installed command tests, including same-summary report swaps, malformed digest fields, legacy v1 rejection and post-commit manifest-read failure; the retained receipt verifies. The earlier native two-run parity/readback/corruption gate passed on identical DATA4-C source and tests. Independent source-and-test review found no blocker. PR #245 merged DATA4-C v2 as `5744dc44`/tree `76e6128d` after [26-job hosted CI 45718652932](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45718652932) passed; [merged-main run 45729653136](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45729653136) reused exact-tree evidence. Independent downloaded-binary validation passed manifest-byte binding and same-summary report-swap rejection. Legacy v1 reports require regeneration; the full DATA4 pipeline remains open. The installed BPE regression trains two canonical raw T2 tokenizers with vocabulary 257 and distinct fingerprints using CLI3. The [PR #262 binary](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934721553) produced three tokens per corpus from the same selected documents, validated both reports, and rejected a report swap and independently rejected a stale manifest digest or tokenizer fingerprint in a rechecksummed report. | active |
 
 ## Wave 5 — ecosystem expansion
 
@@ -3942,24 +4050,34 @@ and [26-job required CI 45718653493](https://github.com/Gabriel-Kahen/eshkol-tra
 passed. The installed CLI and default training/generation paths retain their
 contracts; live runtime composition remains open.
 
+The opt-in [trained Q8_0 fixture](MOD5_E2E_C1_IO5.md#trained-q8_0-gguf-scoring)
+exercises mixed GGUF on the fixed MOD5-C decoder. It uses the IO5 decoder
+mapping, explicit F32 fallback, and fresh CPU F32 scoring after C1 import.
+
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| IO5 | [Safetensors](IO5_SAFETENSORS.md) and [GGUF](IO5_GGUF.md) safe interchange | C1, M3 | Bounded data-only C1 1.0 CPU-f32 safetensors predecessor merged through PR #217. Reviewed GGUF v3 LE/F32/rank1–4 slice preserves semantic metadata/checksum and adds explicit plain import, checked offsets/alignment/padding and corruption negatives. [PR #222](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/222) requires the native reader/writer witness built from a SHA-256-pinned GGML source archive. The [supported IO5 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814/job/132956162216) passed all 22 IO5 tests with the native witness. That run fell short of aggregate acceptance at the separate D2 resource watchdog. Current-main reconciliation preserves the 22 compiled suites and adds IO5 to the required evidence inventory. The bounded converter and mandatory native gate merged through [PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240) after all 26 required jobs passed. The [mapped and sharded candidate](IO5_MODEL_MAPPING.md) passed 34 local IO5 tests and five isolation checks with the pinned Python references and native GGML witness on Ubuntu 22.04 and Clang 21. The successor pins the required IO5 CI discovery chain and mapping-suite inventory in topology mutation checks; the 34 IO5 and five isolation checks also pass locally with the pinned references and reused native witness under Clang 22. PR #243 merged the exact lossless mapped/sharded IO5 contract on main `417918d0`. The admitted bounded quantized IO5 slice carries F16/BF16 safetensors and F16/Q8_0 GGUF for bare C1 and the merged M3/decoder mappings, with framed payload checksums, fail-closed unmerged MOD5 requests, native C11 numeric/sanitizer tests, and a source-pinned independent GGML Q8_0 decoder witness. The premerge stacked integration passed 42 pinned-reference IO5 discovery tests (including eight quantized groups), five Python-isolation checks, 18 topology/O2/Q0 checks, Clang 21 C11/C++17 native and sanitizer checks, and the SHA-256-pinned GGML witness at 192 exact F32 bits. Independent source-and-test review approved the amended candidate. PR #247 merged it as `c96697ef`/tree `cd85d8f2` after [26-job hosted CI 45723832757](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45723832757) passed; the required IO5 job ran 42 cases and the pinned GGML decoder witness at 192 exact F32 bits. The focused [live C1 and lossless MOD5 mapping](IO5_LIVE_C1_INTEROP.md) gate passed two byte-identical native AOT builds, five round-trip routes, and corruption rejection on pinned Ubuntu. The quantized routes remain limited to M3 and decoder profiles. The opt-in [live M3 quantized gate](IO5_QUANTIZED_INTERCHANGE.md#opt-in-m3-model-evaluation) loads mapped F16/BF16 safetensors through the IO5-to-C1 path, checks mapped wire bytes and restored F32 weights against an independent reference, measures F32 weight and logit deltas, and rejects corrupted wire, invalid C1 checksums, a missing tie and a wrong tensor shape before publication. A separately reviewed MOD5-C candidate now passes a local live training and lossless IO5 round-trip gate on the accepted main contracts; admission remains pending. | active |
+| IO5 | [Safetensors](IO5_SAFETENSORS.md) and [GGUF](IO5_GGUF.md) safe interchange | C1, M3 | Bounded data-only C1 1.0 CPU-f32 safetensors predecessor merged through PR #217. Reviewed GGUF v3 LE/F32/rank1–4 slice preserves semantic metadata/checksum and adds explicit plain import, checked offsets/alignment/padding and corruption negatives. [PR #222](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/222) requires the native reader/writer witness built from a SHA-256-pinned GGML source archive. The [supported IO5 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814/job/132956162216) passed all 22 IO5 tests with the native witness. That run fell short of aggregate acceptance at the separate D2 resource watchdog. Current-main reconciliation preserves the 22 compiled suites and adds IO5 to the required evidence inventory. The bounded converter and mandatory native gate merged through [PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240) after all 26 required jobs passed. The [mapped and sharded candidate](IO5_MODEL_MAPPING.md) passed 34 local IO5 tests and five isolation checks with the pinned Python references and native GGML witness on Ubuntu 22.04 and Clang 21. The successor pins the required IO5 CI discovery chain and mapping-suite inventory in topology mutation checks; the 34 IO5 and five isolation checks also pass locally with the pinned references and reused native witness under Clang 22. PR #243 merged the exact lossless mapped/sharded IO5 contract on main `417918d0`. The admitted bounded quantized IO5 slice carries F16/BF16 safetensors and F16/Q8_0 GGUF for bare C1 and the merged M3/decoder mappings, with framed payload checksums, fail-closed unmerged MOD5 requests, native C11 numeric/sanitizer tests, and a source-pinned independent GGML Q8_0 decoder witness. The premerge stacked integration passed 42 pinned-reference IO5 discovery tests (including eight quantized groups), five Python-isolation checks, 18 topology/O2/Q0 checks, Clang 21 C11/C++17 native and sanitizer checks, and the SHA-256-pinned GGML witness at 192 exact F32 bits. Independent source-and-test review approved the amended candidate. PR #247 merged it as `c96697ef`/tree `cd85d8f2` after [26-job hosted CI 45723832757](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45723832757) passed; the required IO5 job ran 42 cases and the pinned GGML decoder witness at 192 exact F32 bits. The focused [live C1 and lossless MOD5 mapping](IO5_LIVE_C1_INTEROP.md) gate passed two byte-identical native AOT builds, five round-trip routes, and corruption rejection on pinned Ubuntu. Tagged quantized GGUF is limited to M3 and decoder profiles. The opt-in [live M3 quantized gate](IO5_QUANTIZED_INTERCHANGE.md#opt-in-m3-model-evaluation) loads mapped F16/BF16 safetensors through the IO5-to-C1 path, checks mapped wire bytes and restored F32 weights against an independent reference, measures F32 weight and logit deltas, and rejects corrupted wire, invalid C1 checksums, a missing tie and a wrong tensor shape before publication. A separately reviewed MOD5-C candidate now passes a local live training and lossless IO5 round-trip gate on the accepted main contracts; admission remains pending. | active |
 | T2-N | [Opt-in native BPE trainer and AOT bridge](T2_BPE_TRAINER.md) | T2, D1 | The exact six-gate hosted diagnostic and 26 required jobs passed for PR #246. A follow-up private import candidate admits raw, special-free `ETBPE100` models with up to 256 merges into the accepted same-aggregate T2 constructor and bounded DATA4/D1 path. The focused `make test-t2-native-corpus` gate passed with pinned Eshkol and Clang 21, checking canonical T2 bytes, partitioned T2 encode, exact native token IDs, deterministic D1 files and failed publication. Integration remains open. | active |
 | DATA4-Q | [Native quality and near-duplicate filtering](DATA4_CORPUS_PIPELINE.md) | DATA4 | Reviewed leaf adds strict UTF-8, quality/repetition filters and optional MinHash/LSH with exact Jaccard confirmation. A pinned local development-only witness passes actual kept ordinals and original bytes through accepted T2 staging and D1 publication, checks selected IDs and exact 20-token readback, and confirms duplicate source IDs publish no corpus; its eight receipt hashes verify and independent delta review found no blocker. The quality report remains distinct from installed DATA4; PR #251 admitted the bounded development witness. The opt-in same-aggregate adapter is a candidate for a maintained path using bounded one-shot staging, an in-memory quality receipt and the existing D1 writer. Its pinned AOT gate and independent executable replay passed reordered selection, raw byte preservation, empty and all-rejected corpora, and no publication on invalid or tampered staging. | active |
 | BEAM5 | [Standalone deterministic beam search](BEAM_SEARCH_DECODING.md) | A0 | Reviewed mock-logit CPU binary64 leaf is included unchanged; PR #246 admitted the standalone gate; live model/tokenizer dispatch remains open. | active |
 | CD5 | [Bounded constrained decoding](CONSTRAINED_DECODING_FSA.md) | T2/G3 contracts for dispatch | Reviewed byte DFA, token-mask and flat JSON schema leaf is included unchanged; PR #246 admitted the standalone gate; live dispatch remains open. | active |
-| BCD5 | Development-only beam + DFA composition witnesses | BEAM5, CD5 | PR #251 admitted `scripts/test-beam-cd-composition.sh`, which checks supplied logits, accepting-only EOS, nonfinite rejection and an empty vocabulary path. The opt-in `make test-beam-cd-live-cpu` candidate composes finite binary32 logits from a one-block AC4/MOD5 CPU model with the raw spellings and EOS of a 260-ID native T2 tokenizer. The `[2,3,4]` causal forward covers two active prefixes, a forbidden raw argmax, multi-byte and split token paths, an independent score oracle, and atomic rejection after EOS suppression or an incomplete budget. Public model/tokenizer dispatch remains open. | complete |
-| BCD5 native step | [Opt-in native constrained beam step](CONSTRAINED_BEAM_STEP.md) | BEAM5, CD5 | Advances a caller-owned beam with dense live CPU F32 candidate rows, replays generated histories through CD5, and uses the existing BEAM5 scoring and lifecycle. The pinned `make test-constrained-beam` gate covers optimized and sanitized native execution. Live model/tokenizer dispatch remains open. | active |
-| PKV5 | [Paged KV cache](PAGED_KV_CACHE.md) | A2 | PR #246 admitted the standalone ownership, copy-on-write, and AOT gate. The opt-in context-bound native candidate binds prefix keys to caller-supplied model, tokenizer, and KV configuration fingerprints in a single-producer pool. The opt-in [fixed CPU model witness](PAGED_KV_CACHE.md#fixed-model-attention-witness) passed 2,048 logit comparisons against dense replay. Persistent generation cache ownership remains open. | active |
-| SPEC5 | [Lossless speculative decoding](SPECULATIVE_DECODING.md) | Generation contracts | Reviewed standalone RNG/output-span leaf is included unchanged; PR #246 admitted the standalone gate; target/draft integration remains open. | active |
+| BCD5 | Development-only beam + DFA composition witnesses | BEAM5, CD5 | PR #251 admitted `scripts/test-beam-cd-composition.sh`, which checks supplied logits, accepting-only EOS, nonfinite rejection and an empty vocabulary path. The opt-in [live CPU witness](CONSTRAINED_BEAM_STEP.md#live-cpu-witness) feeds `[2,3,4]` AC4/MOD5 forwards and a native 260-ID T2 vocabulary into the coordinator. It checks byte parity with manual composition after each step, an independent score oracle, split and multi-byte paths to EOS, and atomic rejection for a nonfinite row or EOS suppression. Incomplete budget exhaustion publishes no generation. Public model/tokenizer dispatch remains open. | complete |
+| BCD5 native step | [Opt-in native constrained beam step](CONSTRAINED_BEAM_STEP.md) | BEAM5, CD5 | PR #265 admitted the native leaf. It advances a caller-owned beam with dense CPU F32 candidate rows, replays generated histories through CD5, and uses the existing BEAM5 scoring and lifecycle. The pinned `make test-constrained-beam` gate covers optimized and sanitized native execution. Public model/tokenizer dispatch remains open. | active |
+| PKV5 | [Paged KV cache](PAGED_KV_CACHE.md) | A2 | PR #246 admitted the standalone ownership, copy-on-write, and AOT gate. The opt-in context-bound native candidate binds prefix keys to caller-supplied model, tokenizer, and KV configuration fingerprints in a single-producer pool. The opt-in [fixed CPU model witness](PAGED_KV_CACHE.md#fixed-model-attention-witness) passed 2,048 logit comparisons against dense replay. The [live context-bound prefix reuse candidate](PAGED_KV_CACHE.md#live-context-bound-prefix-reuse) checks one physical prefix hit with zero copies, exact fresh paged parity, dense bounds, six context rejections, and full cleanup on the pinned native gate. Independent review and admission are pending. Persistent generation cache ownership remains open. | active |
+| SPEC5 | [Lossless speculative decoding](SPECULATIVE_DECODING.md) | Generation contracts | Reviewed standalone RNG/output-span leaf is included unchanged; PR #246 admitted the standalone gate. The bounded private witness exercises live target/draft forwards. Public generation remains open. | active |
 | SPEC5/PKV5 witness | [Development-only verifier/paged-cache composition](SPEC_PAGED_COMPOSITION_WITNESS.md) | SPEC5, PKV5 | Mock logits and K/V drive accepted and rejected greedy/seeded suffixes through actual paged truncate, correction/bonus append, uninterrupted-control parity and physical refcount accounting. The optional pinned Ubuntu 22.04/Clang 21 `make test-spec-paged-witness` gate passed optimized and ASan/UBSan/LSan cases; independent source/test review found no blocker. PR #251 admitted the bounded development witness. Live model forward and public generation remain open. | complete |
-| SPEC5 live model witness | [Greedy private G3-C4 model and paged KV composition](SPEC_LIVE_MODEL_WITNESS.md) | SPEC5, PKV5, G3-C4 token forward | Opt-in `make test-spec-live-model` checks live draft proposals, target verification rows, actual K/V rollback, and correction/bonus and continuation parity against uninterrupted A2 forwards. All three cases passed optimized C11 and ASan/UBSan/LSan on pinned Ubuntu 22.04 and Clang 21.1.8. Review and admission are pending. Public generation and direct paged attention remain open. | active |
-| SPEC5/PKV5 round | [Opt-in greedy round API](SPEC_PAGED_ROUND.md) | SPEC5, PKV5 | Separate native candidate stages draft and target K/V, truncates both children after verification, and publishes both child IDs after any correction or bonus K/V succeeds. The optional `make test-spec-paged-round` gate covers acceptance, rejection, EOS, failure rollback and retry. Live model adapters and public generation remain open. | active |
-| MOD5 | [Bounded CPU-f32 native variant provider](MOD5_VARIANTS.md): RMSNorm, SwiGLU, GQA/MQA, ALiBi and sliding-window attention | M3, K1 | Separately linked K1 candidate replayed on main `8d185344`; explicit resolver keeps model selection opt-in and M3's fixed profile unchanged. `make test-mod5`, `make test-mp4`, and `make test-pa4-wider` plus the exact-PR-head, Ubuntu 22.04/Clang 21.1.8 six-slice diagnostic workflow provide opt-in repo gates outside required full CI. The workflow also runs `make test-eval5`, `make test-dist5`, and `make test-amd4` with leak checks and separate sealed logs. The combined branch passed those three focused gates on Ubuntu 22.04/Clang 21.1.8 under the shared build lock, including the PA4-Wider scripted benchmark. Earlier local Clang 22.1.8 focused evidence covers 2,324 finite-difference gradients, 3,478 Python-oracle values, MQA/GQA 24-step smokes, C++17, ASan/UBSan/LSan, Python isolation and topology. PR #244 merged the opt-in provider on `b49d177c`/tree `834349d2` after the exact six-gate diagnostic and 26-job required suite passed. Default M3 dispatch remains unchanged. PR #248 admitted the opt-in AC4/MOD5-B stack after its pinned native and two-build AOT gates and exact-tree required CI. The [MOD5-C live C1/IO5 gate](MOD5_E2E_C1_IO5.md) merged in PR #253 with pinned Ubuntu/Clang 21.1.8 AOT evidence for tied and untied 12-update training, ten lossless round trips, and corruption checks. The opt-in [width-eight O2 witness](MOD5_O2_CONTINUATION.md) verifies detached MQA/GQA optimizer continuation. The [short-MQA C2 witness](MOD5_C2_CONTINUATION.md) exercises the admitted width-four AC4, K2, detached P1/O2 and D2 cursor contracts, comparing exact checkpoint bytes through four updates after reload. Tagged MOD5 F16/BF16 safetensors passed bounded live evaluation in the [IO5 interoperability gate](IO5_QUANTIZED_INTERCHANGE.md). General trainer integration and larger C2 geometries remain open. | active |
+| SPEC5 live model witness | [Greedy private G3-C4 model and paged KV composition](SPEC_LIVE_MODEL_WITNESS.md) | SPEC5, PKV5, G3-C4 token forward | PR #264 admitted the private witness. The bridge exercises the #265 coordinator with live draft/target K/V and target verification rows. The optional pinned Ubuntu 22.04.5/Clang 21.1.8 gate covers correction, bonus, continuation, and callback failure/retry with bitwise A2 and full-prefix parity. Bridge review and admission are pending. Public generation and direct paged attention remain open. | active |
+| SPEC5/PKV5 round | [Opt-in greedy round API](SPEC_PAGED_ROUND.md) | SPEC5, PKV5 | PR #265 admitted the opt-in native coordinator. The optional `make test-spec-paged-round` gate covers acceptance, rejection, EOS, failure rollback, and retry. The bounded live witness supplies private CPU-f32 producers and a recompute callback. | complete |
+| MOD5 | [Bounded CPU-f32 native variant provider](MOD5_VARIANTS.md): RMSNorm, SwiGLU, GQA/MQA, ALiBi and sliding-window attention | M3, K1 | Separately linked K1 candidate replayed on main `8d185344`; explicit resolver keeps model selection opt-in and M3's fixed profile unchanged. `make test-mod5`, `make test-mp4`, and `make test-pa4-wider` plus the exact-PR-head, Ubuntu 22.04/Clang 21.1.8 six-slice diagnostic workflow provide opt-in repo gates outside required full CI. The workflow also runs `make test-eval5`, `make test-dist5`, and `make test-amd4` with leak checks and separate sealed logs. The combined branch passed those three focused gates on Ubuntu 22.04/Clang 21.1.8 under the shared build lock, including the PA4-Wider scripted benchmark. Earlier local Clang 22.1.8 focused evidence covers 2,324 finite-difference gradients, 3,478 Python-oracle values, MQA/GQA 24-step smokes, C++17, ASan/UBSan/LSan, Python isolation and topology. PR #244 merged the opt-in provider on `b49d177c`/tree `834349d2` after the exact six-gate diagnostic and 26-job required suite passed. Default M3 dispatch remains unchanged. PR #248 admitted the opt-in AC4/MOD5-B stack after its pinned native and two-build AOT gates and exact-tree required CI. The [MOD5-C live C1/IO5 gate](MOD5_E2E_C1_IO5.md) merged in PR #253 with pinned Ubuntu/Clang 21.1.8 AOT evidence for tied and untied 12-update training, ten lossless round trips, and corruption checks. The opt-in [width-eight O2 witness](MOD5_O2_CONTINUATION.md) verifies detached MQA/GQA optimizer continuation. The [short-MQA C2 witness](MOD5_C2_CONTINUATION.md) exercises the admitted width-four AC4, K2, detached P1/O2 and D2 cursor contracts, comparing exact checkpoint bytes through four updates after reload. Its fresh-process gate compares a six-update run with a separate two-update producer and four-update receiver, checking C2 and loss bytes, D2 cursor progress, O2 schedule factors, and two no-output rejection paths. Tagged MOD5 F16/BF16 safetensors passed bounded live evaluation in the [IO5 interoperability gate](IO5_QUANTIZED_INTERCHANGE.md). General trainer integration and larger C2 geometries remain open. | active |
 | DIST5 | [Local CPU collectives and weighted SGD](DIST5_DATA_PARALLEL.md) | TR3, K1 | PR #244 admitted the ABI 1.0 Unix-socket collectives with W=1/2/4 numeric and failure tests. The separate `make test-dist5-mod5` gate checks equal-rank GQA gradient and SGD parity. The opt-in ABI 1.1 candidate adds checked effective-token counts, binary64 numerator accumulation with one binary32 rounding, and coordinated plain SGD publication. Its `make test-dist5-weighted-sgd` gate checks four masked-token updates, nine finite differences, two three-rank binary32 range regressions, rank replica equality, and rejection with subsequent recovery in optimized and fully sanitized builds on pinned Ubuntu 22.04 and Clang 21.1.8. Hosted validation and live TR3/AOT integration remain open. | active |
 | EVAL5 | External evaluation adapters and contamination checks | E3, T2 | The [standalone benchmark and audit foundation](EVAL5_BENCHMARKS_CONTAMINATION.md) provides LM/MC scoring, exact document and n-gram checks, and checksummed manifests. Earlier replayed on main `8d185344` with accepted T2; `EVAL5_ASAN_DETECT_LEAKS=1 bash scripts/test-eval5.sh` passes deterministic normal/sanitized archives, C driver with ASan/UBSan/LSan, and four Python oracle cases. The bounded admission helper checks canonical T1/T2 fingerprints, exact D1 full-fingerprint and vocabulary equality, then decodes the domain-separated digest for the manifest; tests include accepted T1/T2 public-runtime fingerprints and identity negatives. The runner must source authenticated owners and bind the scored outputs to the manifest. PR #244 admitted this standalone benchmark/audit gate through the exact six-gate hosted diagnostic and required CI. The fixed V256 [live audit and in-memory manifest witness](EVAL5_BENCHMARKS_CONTAMINATION.md#in-memory-v256-manifest-round-trip-candidate) passed pinned Ubuntu/Clang 21 AOT with live LM/MC scores and four identity or shape rejections. The opt-in `et_eval5_run_benchmark` candidate checks both corpus tokenizer identities and the contamination audit before LM/MC scoring and returns canonical manifest bytes only on success. The caller binds document and score inputs to their authenticated owners. Installed E3 integration and general benchmark publication remain open. | active |
-| DOC5 | [Corpus-to-model tutorial](DOC5_CORPUS_TO_MODEL_TUTORIAL.md) and [API reference](DOC5_API_REFERENCE.md) | CLI3, DATA4 | The current-main composition documents corpus preparation, one CPU-f32 training update, checkpoint inspection, evaluation and one-byte generation with DATA4-C v2 reports bound to exact D1 manifest bytes. The clean pinned Ubuntu 22.04/LLVM 21.1.8 walkthrough at `3fbf81a0`/tree `8861a2f7` passed 42 API source rows, 42 DATA4 source checks, the CLI3 cross-command chain, 13 installed DATA4 tests, and the integrated recipe with v2 manifest digest verification and same-summary report-swap rejection; the local SHA256SUMS receipt verifies. The earlier DOC5 successor passed 11 targeted negative probes and independent source/test review; independent composition review found no blocking defect. The exact CLI tooling union `cb321034d`/tree `da3d20e8` passed the supported Ubuntu 22.04/LLVM 21.1.8 `make test-doc5` gate on 2026-11-25: 42 API rows, 42 DATA4 checks, the CLI3 cross-command chain, 13 installed DATA4 tests, and the integrated recipe. The sealed local receipt is `eshkol-doc5-cli-union-cb321034-20261125/SHA256SUMS` (SHA-256 `c5f14c9e...`). PR #245 merged this tutorial/API composition as `5744dc44`/tree `76e6128d` after 26 required jobs passed. `test-doc5` remains an optional local gate; its exact-source result and the downloaded-binary DATA4 v2 walkthrough support the bounded documentation, while broader tutorials remain open. The entry-point refresh on main `443dad4b` adds the installed D1 validation command and flags, links the sealed CLI3 replay, and rejects malformed API symbol cells. The source gate verified 43 rows and four checker mutations. The literal recipe and 18 installed D1/DATA4 tests passed on Ubuntu 22.04 with the sealed [PR #255 CLI3 artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773952998) from accepted tree `a00f10337`. The literal recipe and 18 installed D1/DATA4 tests also passed on the verified [PR #259 CLI3 artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45883398570) from exact tree `443b4fdc`. A fresh AOT walkthrough of the refresh remains unrun. | active |
+| DOC5 | [Corpus-to-model tutorial](DOC5_CORPUS_TO_MODEL_TUTORIAL.md) and [API reference](DOC5_API_REFERENCE.md) | CLI3, DATA4 | The current-main composition documents corpus preparation, one CPU-f32 training update, checkpoint inspection, evaluation and one-byte generation with DATA4-C v2 reports bound to exact D1 manifest bytes. The clean pinned Ubuntu 22.04/LLVM 21.1.8 walkthrough at `3fbf81a0`/tree `8861a2f7` passed 42 API source rows, 42 DATA4 source checks, the CLI3 cross-command chain, 13 installed DATA4 tests, and the integrated recipe with v2 manifest digest verification and same-summary report-swap rejection; the local SHA256SUMS receipt verifies. The earlier DOC5 successor passed 11 targeted negative probes and independent source/test review; independent composition review found no blocking defect. The exact CLI tooling union `cb321034d`/tree `da3d20e8` passed the supported Ubuntu 22.04/LLVM 21.1.8 `make test-doc5` gate on 2026-11-25: 42 API rows, 42 DATA4 checks, the CLI3 cross-command chain, 13 installed DATA4 tests, and the integrated recipe. The sealed local receipt is `eshkol-doc5-cli-union-cb321034-20261125/SHA256SUMS` (SHA-256 `c5f14c9e...`). PR #245 merged this tutorial/API composition as `5744dc44`/tree `76e6128d` after 26 required jobs passed. `test-doc5` remains an optional local gate; its exact-source result and the downloaded-binary DATA4 v2 walkthrough support the bounded documentation, while broader tutorials remain open. The entry-point refresh on main `443dad4b` adds the installed D1 validation command and flags, links the sealed CLI3 replay, and rejects malformed API symbol cells. The source gate verified 43 rows and four checker mutations. The literal recipe and 18 installed D1/DATA4 tests passed on Ubuntu 22.04 with the sealed [PR #255 CLI3 artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773952998) from accepted tree `a00f10337`. The literal recipe and 18 installed D1/DATA4 tests also passed on the verified [PR #259 CLI3 artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45883398570) from exact tree `443b4fdc`. A fresh AOT walkthrough of the refresh remains unrun. The [installed BPE corpus tutorial](DOC5_BPE_CORPUS_TUTORIAL.md) verifies canonical raw T2 training, inspection, D1 publication and validation using the exact PR #262 [CLI3 artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934721553). Replay produced byte-identical tokenizer and corpus artifacts and rejected a truncated shard. | active |
+
+The IO5 [live GGUF F16 candidate](IO5_QUANTIZED_INTERCHANGE.md#gguf-f16-evaluation)
+adds tagged mapped GGUF v3 ingress to the opt-in fixed M3 gate. It checks the
+wire layout and F16 bits independently, loads the restored tied C1 model for
+CPU F32 evaluation, and rejects damaged GGUF padding and payload before
+publication. Live Q8_0 requires a model with compatible tensor shapes.
 
 ## Orchestrator rules
 

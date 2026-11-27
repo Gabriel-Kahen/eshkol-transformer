@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from struct import unpack
 import subprocess
 import tempfile
 import unittest
@@ -45,10 +46,10 @@ class InstalledData4Tests(unittest.TestCase):
         return result
 
     def prepare(self, directory: Path | None = None, *, fault: str | None = None,
-                status: int = 0,
+                status: int = 0, tokenizer: Path | None = None,
                 sources: tuple[str, ...] = ("a", "dup", "b", "short")) -> subprocess.CompletedProcess[str]:
         directory = directory or self.output
-        arguments = ["corpus", "prepare", "--tokenizer", str(self.tokenizer)]
+        arguments = ["corpus", "prepare", "--tokenizer", str(tokenizer or self.tokenizer)]
         for name in sources:
             arguments.extend(("--source", f"{name}={self.root / name}"))
         arguments.extend(("--minimum-bytes", "2", "--maximum-bytes", "2",
@@ -141,6 +142,69 @@ class InstalledData4Tests(unittest.TestCase):
                             (other / "manifest.etm").read_bytes())
         (other / "data4-report.tsv").write_bytes(report)
         self.assert_report_rejected("corrupt-data", 12, other)
+
+    def test_raw_bpe_report_binds_manifest_and_tokenizer(self) -> None:
+        other = self.root / "other-bpe"
+        other.mkdir()
+        fingerprints, manifest_digests = [], []
+        for training, directory, tokens in (
+            (b"ABAB", self.output, (256, 67, 68)),
+            (b"CDCD", other, (65, 66, 256)),
+        ):
+            document = self.root / f"{directory.name}.txt"
+            document.write_bytes(training)
+            tokenizer = document.with_suffix(".tsv")
+            trained = self.command(
+                "tokenizer", "train-bpe", "--document", document,
+                "--maximum-merges", "1", "--minimum-frequency", "2",
+                "--utf8-policy", "raw", "--output", tokenizer,
+            )
+            identity = json.loads(trained.stdout)
+            fingerprint = identity["fingerprint"]
+            self.assertEqual(identity["family"], "byte-bpe")
+            self.assertEqual(identity["vocabulary_size"], 257)
+            self.assertRegex(fingerprint, r"^sha256:eshkol-bpe-tokenizer-v1:[0-9a-f]{64}$")
+            fingerprint_bytes = fingerprint.encode("ascii")
+            fingerprints.append(fingerprint_bytes)
+
+            built = self.prepare(directory, tokenizer=tokenizer)
+            self.assertEqual(json.loads(built.stdout), {
+                "artifact": "token-corpus", "shard_count": 1, "shard_token_limit": 3,
+                "tokenizer_fingerprint": fingerprint, "total_shard_bytes": 231,
+                "total_tokens": 3, "vocabulary_size": 257,
+            })
+            manifest = (directory / "manifest.etm").read_bytes()
+            header_bytes = int.from_bytes(manifest[12:16], "little")
+            self.assertEqual(manifest[96:header_bytes], fingerprint_bytes)
+            shard = (directory / "shard-0000000000000000.ets").read_bytes()
+            header_bytes = int.from_bytes(shard[12:16], "little")
+            self.assertEqual(unpack("<3q", shard[header_bytes:-32]), tokens)
+
+            digest = hashlib.sha256(manifest).hexdigest().encode("ascii")
+            manifest_digests.append(digest)
+            report = (directory / "data4-report.tsv").read_bytes()
+            self.assertEqual(report.splitlines()[14:16], [
+                b"total-tokens\t3", b"manifest-sha256\t" + digest,
+            ])
+            checked = self.validate(directory)
+            self.assertEqual(checked.stdout, built.stdout)
+            self.assertEqual(checked.stderr, "")
+
+        self.assertNotEqual(*fingerprints)
+        self.assertNotEqual(*manifest_digests)
+        report = other / "data4-report.tsv"
+        prefix = report.read_bytes().rsplit(b"checksum\t", 1)[0]
+        for field, values in (
+            (b"manifest-sha256\t", manifest_digests),
+            (b"tokenizer-fingerprint\t", fingerprints),
+        ):
+            with self.subTest(field=field):
+                first, second = values
+                stale = prefix.replace(field + second + b"\n", field + first + b"\n", 1)
+                self.assertNotEqual(stale, prefix)
+                checksum = hashlib.sha256(stale).hexdigest().encode("ascii")
+                report.write_bytes(stale + b"checksum\t" + checksum + b"\n")
+                self.assert_report_rejected("corrupt-data", 12, other)
 
     def test_legacy_unbound_report_is_rejected(self) -> None:
         self.prepare()

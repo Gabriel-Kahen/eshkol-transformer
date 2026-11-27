@@ -69,7 +69,8 @@ class ZeroControlContract(unittest.TestCase):
                 "tests/e3_private/zero_control_driver.esk",
                 "tests/e3_private/zero_control_negative_driver.esk",
             },
-            "undefined_symbols": {"fflush"},
+            "undefined_symbols": {"eshkol_tail_transfer_slot",
+                                  "eshkol_tensor_from_collection", "fflush"},
         }
         for suffix, added in additions.items():
             with self.subTest(suffix=suffix):
@@ -194,6 +195,32 @@ class ZeroControlContract(unittest.TestCase):
         self.assertEqual(result.returncode, 41)
         self.assertIn("mixed", result.stderr)
 
+    def test_i2_testing_define_is_scoped_to_the_package_bridge(self) -> None:
+        builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        start = builder.index("\npackage_bridge_flags=()\n")
+        end = builder.index('\n"${e1b_clean_toolchain_env[@]}"', start)
+        script = '''set -euo pipefail
+          PROJECT_ROOT=$1
+          package_policy=$2
+          e3_tuple_kind=$3
+          e3_public_tuple=$4
+          g3g_package_policy=0
+        ''' + builder[start:end] + '\nprintf "%s\\n" "${package_bridge_flags[@]}"'
+        e3_kinds = ("zero", "uniform", "base", "diagnostic", "public", "retention",
+                    "retention-first-eval-mutant", "retention-overflow", "mode-graph",
+                    "numerical")
+        cases = [("e3-private-aggregate", kind) for kind in e3_kinds]
+        cases.extend((("m3-model-aggregate", ""), ("cli3-tr3-aggregate", "")))
+        for policy, kind in cases:
+            with self.subTest(policy=policy, kind=kind):
+                run = subprocess.run(
+                    ["bash", "-c", script, "bridge-flags", str(ROOT), policy, kind,
+                     "1" if kind == "public" else "0"],
+                    text=True, capture_output=True, check=True,
+                )
+                self.assertEqual("-DET_F32_TENSOR_TESTING" in run.stdout.splitlines(),
+                                 kind in ("zero", "uniform"))
+
     def test_14_unique_model_paths_and_postload_encoder(self) -> None:
         driver = (ROOT / "tests/e3_private/zero_control_driver.esk").read_text()
         self.assertEqual(driver.count('("blocks" "0" "attention"'), 8)
@@ -296,6 +323,20 @@ class ZeroControlContract(unittest.TestCase):
         self.assertIn(b"(lambda (model modules handles carriers selector)",
                       module.INSERTION)
         self.assertNotIn(b"(module-parameters", module.INSERTION)
+        census = form(module.INSERTION.decode(), "(lambda ()")
+        trusted = "(define p1-trusted-surface"
+        self.assertIn(census, form(emitted.decode(), trusted))
+        self.assertNotIn(census, form(source.decode(), trusted))
+        for predicate in ("(shell-registry-current)", "(vector live dead)",
+                          "(vector? entry)", "(= (vector-length entry) 4)",
+                          "(eq? (vector-ref entry 1) 'module)",
+                          "(eq? (vector-ref entry 1) 'handle)",
+                          "(eq? (vector-ref entry 2) dead-construction-raw)",
+                          "(count (cdr remaining) live (+ dead 1))",
+                          "(count (cdr remaining) (+ live 1) dead)",
+                          "(count (cdr remaining) live dead)"):
+            self.assertIn(predicate, census)
+        self.assertNotIn("set!", census)
         for phrase in (b"'path-10", b"'shape-10", b"'tie-10",
                        b"'throw-path-10", b"(vector-set! target field original)",
                        b"(tr3-fixed-recheck!"):
@@ -423,9 +464,50 @@ class ZeroControlContract(unittest.TestCase):
                                       forged_include=True).returncode, 0)
             authentic = Path(temporary) / "authentic-module.esk"
             authentic.write_bytes(overlay.read_bytes())
+            source = authentic.read_bytes()
+            start = source.index(b"  ;; Zero-control-only P1 shell census")
+            end = source.index(b"  )))\n\n(define (module-parameters module)", start)
+            overlay.write_bytes(source[:start] + source[end:])
+            self.assertNotEqual(check("zero", overlay).returncode, 0)
+            for kind in ("retention", "retention-first-eval-mutant",
+                         "retention-overflow", "mode-graph"):
+                self.assertNotEqual(check(kind, overlay).returncode, 0, kind)
             overlay.unlink()
             overlay.symlink_to(authentic)
             self.assertNotEqual(check("zero", overlay).returncode, 0)
+
+    def test_mode_snapshots_use_the_authenticated_fixed_modules(self) -> None:
+        positive = (ROOT / "tests/e3_private/zero_control_driver.esk").read_text()
+        capture = form(positive, '(define (e3-zero-capture-modules model)')
+        for fragment in (
+            "(vector-ref (m3t-entry model 'model 'e3-zero-control #t) 8)",
+            '(modules (make-vector 17 #f))',
+            '(handles (make-vector 14 #f))',
+            '(carriers (make-vector 14 #f))',
+            '((vector-ref p1-trusted-surface 69)',
+            'model supplied modules handles carriers) 0)',
+            '(eq? (vector-ref modules 0) model)',
+        ):
+            self.assertIn(fragment, capture)
+        snapshot = form(positive, '(define (e3-zero-modes model)')
+        self.assertIn('(modules (e3-zero-capture-modules model))', snapshot)
+        self.assertIn('(if (= index 17) modes', snapshot)
+        self.assertIn('(module-mode-internal (vector-ref modules index))', snapshot)
+
+        run = ' '.join(form(positive, '(define (e3-zero-control-run').split())
+        load = run.index('(e3-zero-load! handles sources)')
+        evaluate = run.index('(e3-evaluate-into! model dataset frame)')
+        compare = '(e3-zero-same-modes? modes-before (e3-zero-modes model))'
+        self.assertIn('(modes (e3-zero-modes model))', run[:load])
+        self.assertIn(compare, run[load:evaluate])
+        self.assertIn(compare, run[evaluate:])
+
+        negative = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
+        shells = form(negative, '(define (e3-zero-negative-topology-shells?')
+        self.assertIn('(registered (e3-zero-capture-modules model))', shells)
+        self.assertNotIn('m3t-entry', shells)
+        self.assertIn('(if (= index 17) #t', shells)
+        self.assertIn('(vector-ref registered index)', shells)
 
     def test_topology_probe_restores_before_observing_tree(self) -> None:
         negative = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
@@ -433,7 +515,18 @@ class ZeroControlContract(unittest.TestCase):
         build = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
         probe = negative.split('(define (e3-zero-negative-topology! model handles name)', 1)[1].split(
             '(define (e3-zero-negative-fire', 1)[0]
-        self.assertIn('(e3-zero-negative-p1-shell-census)', negative)
+        census = '(e3-zero-negative-p1-shell-census)'
+        self.assertIn('((vector-ref p1-trusted-surface 74))',
+                      form(negative, '(define ' + census))
+        self.assertNotIn('shell-registry-current', negative)
+        self.assertNotIn('dead-construction-raw', negative)
+        self.assertLess(probe.index(f'(p1-before {census})'),
+                        probe.index('(vector-ref p1-trusted-surface 69)'))
+        self.assertLess(probe.rindex('(vector-ref p1-trusted-surface 70)'),
+                        probe.index(f'(p1-after {census})'))
+        for index in (0, 1):
+            self.assertIn(f'(= (vector-ref p1-before {index}) '
+                          f'(vector-ref p1-after {index}))', probe)
         self.assertIn('(e3-zero-negative-topology-shells? model modules)', probe)
         self.assertIn('(e3-zero-negative-topology-pairs? model retained carriers)', probe)
         self.assertLess(probe.index('(vector-ref p1-trusted-surface 69)'),

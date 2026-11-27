@@ -199,12 +199,25 @@ is calibrated against the real MOD5 gradient maximum. For f16, the scaled
 gradient exceeds 65,504; for bf16, it exceeds the finite-to-infinity rounding
 boundary `0x1.ffp127f`. The witness separately checks that every active raw gradient
 and every scaled f32 value is finite. MP4 narrowing rejects a finite out-of-range
-tile in each format. The optimized and
-sanitized gates both measured peak scaled values of 70,400 (f16) and
-`3.3995006e38` (bf16). The scaler backs off by half, all master parameters
-remain byte-identical, and the next normal attempt succeeds. The opt-in gate
-passed locally in optimized and ASan/UBSan/LSan builds with leak detection
-enabled; it leaves the standalone `test-mp4` and default test suites unchanged.
-This witnesses gradient storage and loss-scaler gating only: MOD5 forward and
-backward compute remain f32. It does not establish mixed compute, a production
-trainer, distributed synchronization, AOT, or checkpoint/resume support.
+tile in each format. The optimized and sanitized gates both measured peak
+scaled values of 70,400 (f16) and `3.3995006e38` (bf16). The scaler backs off
+by half, all master parameters remain byte-identical, and the next normal
+attempt succeeds.
+
+For each format, an independent trajectory starts with the same fixture and
+half the maximum scale. After its first accepted update, `clean_steps` is one
+of the two steps required for growth. The witness encodes the scaler into its
+44-byte v1 record and decodes it into a fresh scaler alongside a separate
+in-memory copy of the f32 master weights. The first resumed update grows the
+scale to its maximum. The following rejected cast skips SGD and backs off.
+Two more accepted updates recover and grow the scale again. Each attempt
+compares the scaled f32, narrow storage, and unscaled f32 bytes produced by
+both trajectories, their gradient and scaler outcomes, all master-weight
+bytes, the encoded scaler records, and the loss bits. The final loss after
+all four accepted updates also matches bit for bit.
+
+The opt-in gate runs optimized and ASan/UBSan/LSan builds with leak detection
+enabled. MOD5 forward and backward compute use f32. This continuation covers
+the standalone scaler record and the caller-owned master snapshot in the GQA
+fixture. Mixed compute, production trainer checkpoint integration, distributed
+synchronization, and AOT remain open.

@@ -3869,12 +3869,17 @@ static int exact_text(const char *actual, const char *expected) {
   return actual != NULL && strcmp(actual, expected) == 0;
 }
 
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#if defined(ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY) || \
+    defined(ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY)
+#define ET_I2_PRIVATE_MOD5_STORAGE_COPY
+#endif
+
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
 static const et_kernel_capability_v1 provider_capability;
 #endif
 
 static int provider_shape_supported(
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
     const et_kernel_capability_v1 *capability,
 #endif
     size_t rank, const uint64_t *shape) {
@@ -3889,8 +3894,8 @@ static int provider_shape_supported(
   if (rank == 1u) {
     return shape[0] <= ET_F32_RANK1_MAX;
   }
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
-  /* Both descriptors start with the scalar and rank-one rows. */
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
+  /* Every descriptor starts with the scalar and rank-one rows. */
   for (size_t index = 2u; index < capability->shape_range_count; index++) {
     const et_kernel_dimension_range_v1 *dimensions =
         capability->shape_ranges[index].dimensions;
@@ -3910,7 +3915,7 @@ static int provider_shape_supported(
 }
 
 static int32_t provider_view(
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
     const et_kernel_capability_v1 *capability,
 #endif
     const et_kernel_tensor_view_v1 *view, const et_kernel_request_v1 *request,
@@ -3934,7 +3939,7 @@ static int32_t provider_view(
   }
   if (view->rank != request->rank ||
       !provider_shape_supported(
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
           capability,
 #endif
           view->rank, view->shape)) {
@@ -3983,7 +3988,7 @@ static int32_t provider_view(
   return 0;
 }
 
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
 static int32_t provider_call_for_capability(
     const et_kernel_capability_v1 *capability, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
@@ -4005,7 +4010,7 @@ static int32_t provider_call(const et_kernel_call_v1 *call,
       !exact_text(call->request->dtype, "f32") ||
       !exact_text(call->request->device, "cpu") ||
       !provider_shape_supported(
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
           capability,
 #endif
           call->request->rank, call->request->shape)) {
@@ -4025,7 +4030,7 @@ static int32_t provider_call(const et_kernel_call_v1 *call,
   input = (const et_kernel_tensor_view_v1 *)call->inputs;
   output = (const et_kernel_tensor_view_v1 *)call->outputs;
   result = provider_view(
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
       capability,
 #endif
       input, call->request, error);
@@ -4033,7 +4038,7 @@ static int32_t provider_call(const et_kernel_call_v1 *call,
     return result;
   }
   result = provider_view(
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
       capability,
 #endif
       output, call->request, error);
@@ -4050,7 +4055,7 @@ static int32_t provider_call(const et_kernel_call_v1 *call,
   return 0;
 }
 
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
 static int32_t provider_call(const et_kernel_call_v1 *call,
                              et_kernel_error *error) {
   return provider_call_for_capability(&provider_capability, call, error);
@@ -4093,7 +4098,7 @@ static const et_kernel_dimension_range_v1 provider_rank2_256x4_dimensions[] = {
     {.minimum = 256u, .maximum = 256u, .maximum_unbounded = 0u, .reserved = {0}},
     {.minimum = 4u, .maximum = 4u, .maximum_unbounded = 0u, .reserved = {0}},
 };
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
 static const et_kernel_dimension_range_v1 mod5_rank2_8x16_dimensions[] = {
     {.minimum = 8u, .maximum = 8u}, {.minimum = 16u, .maximum = 16u},
 };
@@ -4107,6 +4112,11 @@ static const et_kernel_dimension_range_v1 mod5_rank2_32x16_dimensions[] = {
     {.minimum = 32u, .maximum = 32u}, {.minimum = 16u, .maximum = 16u},
 };
 #endif
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+static const et_kernel_dimension_range_v1 mod5_rank2_256x16_dimensions[] = {
+    {.minimum = 256u, .maximum = 256u}, {.minimum = 16u, .maximum = 16u},
+};
+#endif
 
 static const et_kernel_shape_range_v1 provider_ranges[] = {
     {.rank = 0u, .dimensions = NULL},
@@ -4116,11 +4126,14 @@ static const et_kernel_shape_range_v1 provider_ranges[] = {
     {.rank = 2u, .dimensions = provider_rank2_4x8_dimensions},
     {.rank = 2u, .dimensions = provider_rank2_8x4_dimensions},
     {.rank = 2u, .dimensions = provider_rank2_256x4_dimensions},
-#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#ifdef ET_I2_PRIVATE_MOD5_STORAGE_COPY
     {.rank = 2u, .dimensions = mod5_rank2_8x16_dimensions},
     {.rank = 2u, .dimensions = mod5_rank2_16x16_dimensions},
     {.rank = 2u, .dimensions = mod5_rank2_16x32_dimensions},
     {.rank = 2u, .dimensions = mod5_rank2_32x16_dimensions},
+#endif
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+    {.rank = 2u, .dimensions = mod5_rank2_256x16_dimensions},
 #endif
 };
 static const char *const provider_operations[] = {"storage.copy"};
@@ -4180,7 +4193,8 @@ static const et_kernel_capability_v1 mod5_storage_capability = {
     .dtypes = provider_dtypes,
     .device_count = 1u,
     .devices = provider_devices,
-    .shape_range_count = sizeof(provider_ranges) / sizeof(provider_ranges[0]),
+    /* This descriptor retains its exact V=16 prefix in a combined build. */
+    .shape_range_count = 11u,
     .shape_ranges = provider_ranges,
 };
 
@@ -4206,6 +4220,55 @@ static const et_kernel_provider_v1 mod5_storage_provider = {
 
 const et_kernel_provider_v1 *et_i2_private_mod5_width16_storage_provider_v1(void) {
   return &mod5_storage_provider;
+}
+#endif
+
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY
+#define MOD5_V256_STORAGE_VERSION "1.3"
+#define MOD5_V256_STORAGE_EVIDENCE "I2:mod5-v256-exact-f32-storage.copy-v1"
+static const et_kernel_capability_v1 mod5_v256_storage_capability = {
+    .struct_size = sizeof(et_kernel_capability_v1),
+    .name = "tensor.f32",
+    .status = ET_KERNEL_CAPABILITY_VERIFIED,
+    .implementation = "eshkol-transformer-f32",
+    .version = MOD5_V256_STORAGE_VERSION,
+    .evidence = MOD5_V256_STORAGE_EVIDENCE,
+    .deterministic = 1u,
+    .operation_count = 1u,
+    .operations = provider_operations,
+    .dtype_count = 1u,
+    .dtypes = provider_dtypes,
+    .device_count = 1u,
+    .devices = provider_devices,
+    .shape_range_count = sizeof(provider_ranges) / sizeof(provider_ranges[0]),
+    .shape_ranges = provider_ranges,
+};
+
+static int32_t mod5_v256_storage_call(const et_kernel_call_v1 *call,
+                                      et_kernel_error *error) {
+  return provider_call_for_capability(&mod5_v256_storage_capability, call,
+                                      error);
+}
+
+static const et_kernel_provider_v1 mod5_v256_storage_provider = {
+    .struct_size = sizeof(et_kernel_provider_v1),
+    .abi_major = ET_KERNEL_ABI_MAJOR,
+    .abi_minor = ET_KERNEL_ABI_MINOR,
+    .required_features = 0u,
+    .name = "eshkol-transformer-f32",
+    .version = MOD5_V256_STORAGE_VERSION,
+    .evidence = MOD5_V256_STORAGE_EVIDENCE,
+    .capability_count = 1u,
+    .capability_stride = sizeof(et_kernel_capability_v1),
+    .capability_bytes = sizeof(et_kernel_capability_v1),
+    .capabilities = &mod5_v256_storage_capability,
+    .validate_call = mod5_v256_storage_call,
+    .invoke_call = provider_invoke,
+};
+
+const et_kernel_provider_v1 *
+et_i2_private_mod5_width16_v256_storage_provider_v1(void) {
+  return &mod5_v256_storage_provider;
 }
 #endif
 

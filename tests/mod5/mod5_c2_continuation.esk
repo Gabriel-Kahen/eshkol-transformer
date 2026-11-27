@@ -8,7 +8,7 @@
         :real et_mod5_c2_test_copy_tokens_v1)
 (extern i64 mod5-native-full-mask ptr
         :real et_mod5_c2_test_full_mask_v1)
-(extern double mod5-native-gradients ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+(extern i64 mod5-native-gradients ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
         :real et_mod5_c2_test_gradients_v1)
 
 (define checks 0)
@@ -34,6 +34,11 @@
          (bytes (read-bytevector (file-size path) port)))
     (close-port port)
     bytes))
+
+(define (write-loss! path loss)
+  (let ((port (open-binary-output-file path)))
+    (write-bytevector loss port)
+    (close-port port)))
 
 (define (bytes=? a b)
   (and (= (bytevector-length a) (bytevector-length b))
@@ -77,8 +82,14 @@
                     "3c23d70a" "3e800000" "3f000000" "3c23d70a"
                     "00000000"))))
 
-(define corpus (car (cdr (command-line))))
-(define output (car (cdr (cdr (command-line)))))
+(define args (cdr (command-line)))
+(check "fixture argument count" (and (pair? args) (pair? (cdr args))))
+(define corpus (car args))
+(define output (car (cdr args)))
+(define mode-args (cdr (cdr args)))
+(define mode (if (null? mode-args) "live" (car mode-args)))
+(define mode-parameters (if (null? mode-args) '() (cdr mode-args)))
+(define seed (if (string=? mode "produce-foreign") 1730 1729))
 (define resolved
   (x1-private-config-resolve
     (x1-private-config-parse
@@ -87,7 +98,7 @@
         "\"model.context-length\":2,\"model.hidden-size\":4,"
         "\"model.layer-count\":1,\"model.query-head-count\":2,"
         "\"model.kv-head-count\":1,\"model.vocabulary-size\":256,"
-        "\"run.seed\":1729}"))
+        "\"run.seed\":" (number->string seed) "}"))
     '()))
 (define tokenizer (t2-wave2-tokenizer-byte resolved))
 (define policy (c2-public-persistence-policy 1048576 1048576 1048576 27 'cpu))
@@ -140,12 +151,13 @@
                   (lambda (view) (mod5-native-full-mask view)))))
     (let* ((inputs (token-bytes (d2-token-batch-inputs batch)))
            (targets (token-bytes (d2-token-batch-targets batch)))
-           (loss (mod5-native-gradients
-                   inputs targets (vector-ref params 0) (vector-ref params 1)
-                   (vector-ref params 2) (vector-ref params 3) (vector-ref params 4)
-                   (vector-ref params 5) (vector-ref params 6) (vector-ref params 7)
-                   (vector-ref params 8))))
-      (check "native MOD5 loss and gradient plan" (> loss 0.0))
+           (loss (make-bytevector 8 0)))
+      (check "native MOD5 loss and gradient plan"
+             (= 0 (mod5-native-gradients
+                    inputs targets loss (vector-ref params 0) (vector-ref params 1)
+                    (vector-ref params 2) (vector-ref params 3) (vector-ref params 4)
+                    (vector-ref params 5) (vector-ref params 6) (vector-ref params 7)
+                    (vector-ref params 8))))
       (check "release D2 batch" (d2-token-batch-release! batch))
       (check "native AdamW step" (o2-public-optimizer-step! optimizer))
       (check "clear gradients" (o2-public-optimizer-zero-grad! optimizer))
@@ -194,11 +206,21 @@
          (o2 (vector-ref projection 1))
          (controls (vector-ref projection 2))
          (topology (vector-ref projection 3))
+         (cursor-pair (vector-ref controls 2))
+         (x1 (vector-ref controls 3))
          (entries (vector-ref (state-dict-c2-owned-projection-internal
                                 p1 access operation) 4))
          (o2-projection (vector-ref projection 4))
          (weights (make-vector parameter-count #f))
          (moments (make-vector parameter-count #f)))
+    (check "X1 identity matches the initialized tokenizer and geometry"
+           (and (bytes=? (vector-ref x1 0)
+                         (string->utf8 (x1-private-config-canonical resolved)))
+                (equal? (vector-ref controls 1) (d2-tokenizer-identity tokenizer))))
+    (check "split counters and D2 ordinals"
+           (and (equal? (vector-ref controls 4) (vector 4 split-updates 0))
+                (= (vector-ref cursor-pair 8) split-updates)
+                (= (vector-ref cursor-pair 9) 0)))
     (check "checkpoint topology is the exact short-MQA block"
            (and (equal? (vector-ref topology 0) paths)
                 (equal? (vector-ref topology 1) shapes)
@@ -220,10 +242,7 @@
             (vector-set! moments i
                          (vector (state-entry-path-internal entry) shape avg sq))
             (loop (+ i 1) (cdr remaining) (cdr elements)))))
-    (let* ((cursor-pair (vector-ref controls 2))
-           (x1 (vector-ref controls 3))
-           (counter (vector-ref controls 4))
-           (current (copy-bytes (vector-ref cursor-pair 3)))
+    (let* ((current (copy-bytes (vector-ref cursor-pair 3)))
            (rng (vector-ref controls 0))
            (identity (vector-ref controls 1))
            (context
@@ -238,11 +257,6 @@
              (vector o2-c2-reconstruct-tag
                      (o2-copy-config-data operation (vector-ref o2-projection 0))
                      paths '() (vector-ref o2-projection 3) moments operation #f)))
-      (check "X1 identity matches the initialized tokenizer and geometry"
-             (and (bytes=? (vector-ref x1 0)
-                           (string->utf8 (x1-private-config-canonical resolved)))
-                  (equal? (vector-ref controls 1) (d2-tokenizer-identity tokenizer))))
-      (check "split counters" (equal? counter (vector 4 split-updates 0)))
       (c2-training-state-borrow-end-internal borrow)
       (check "seek independent D2 reader from loaded cursor"
              (d2-token-dataset-seek! dataset current))
@@ -269,14 +283,17 @@
     (save-owner! (checkpoint-owner live dataset context) path)
     path))
 
-(define (run)
+(define (initial-context start-cursor)
+  (vector (vector 'philox4x32-10 1 seed -1 42)
+          (d2-tokenizer-identity tokenizer) start-cursor
+          (vector (string->utf8 (x1-private-config-canonical resolved))
+                  (x1-private-config-fingerprint resolved))))
+
+(define (run-live)
   (let* ((source (make-live optimizer-config #f))
          (source-data (open-dataset))
          (start-cursor (d2-token-dataset-cursor source-data))
-         (context (vector (vector 'philox4x32-10 1 1729 -1 42)
-                          (d2-tokenizer-identity tokenizer) start-cursor
-                          (vector (string->utf8 (x1-private-config-canonical resolved))
-                                  (x1-private-config-fingerprint resolved)))))
+         (context (initial-context start-cursor)))
     (let advance ((update 0))
       (if (< update split-updates)
           (begin (advance! source source-data) (advance (+ update 1)))))
@@ -314,7 +331,7 @@
               (let* ((expected (advance! source source-data))
                      (actual (advance! target target-data))
                      (n (number->string update)))
-                (check "continuation loss is exact" (= expected actual))
+                (check "continuation loss is exact" (bytes=? expected actual))
                 (check "all model, moment, option and control bytes are exact"
                        (bytes=?
                          (read-file (save-live! source source-data context
@@ -325,6 +342,61 @@
         (check "close independent D2 readers"
                (and (d2-token-dataset-close! source-data)
                     (d2-token-dataset-close! target-data)))))))
+
+;;; O2 factors for the fixed warmup and decay: 1/4, 1/2, 3/4, 1, 13/16, 5/8.
+(define schedule-factors
+  (vector #x3e800000 #x3f000000 #x3f400000 #x3f800000 #x3f500000 #x3f200000))
+
+(define (fresh-updates! live dataset context completed limit)
+  (let ((optimizer (vector-ref live 1)))
+    (let loop ((previous completed))
+      (if (< previous limit)
+          (let* ((update (+ previous 1))
+                 (label (number->string update)))
+            (check "O2 next-update factor follows the fixed schedule"
+                   (= (o2-optimizer-schedule-factor-bits-internal optimizer)
+                      (vector-ref schedule-factors previous)))
+            (let ((loss (advance! live dataset)))
+              (check "O2 and D2 both advance by one"
+                     (and (= (o2-optimizer-completed-updates-internal optimizer)
+                             update)
+                          (= (vector-ref
+                               (d2-core-cursor-decode
+                                 (d2-token-dataset-cursor dataset)) 15)
+                             update)))
+              (save-live! live dataset context label)
+              (write-loss! (string-append output "/" label ".loss") loss))
+            (loop update))))
+    (check "close D2 reader" (d2-token-dataset-close! dataset))))
+
+(define (run-fresh-source limit)
+  (let* ((live (make-live optimizer-config #f))
+         (dataset (open-dataset))
+         (context (initial-context (d2-token-dataset-cursor dataset))))
+    (fresh-updates! live dataset context 0 limit)))
+
+(define (run-fresh-resume path)
+  (let* ((owner (c2-public-checkpoint-load path policy report))
+         (dataset (open-dataset))
+         (restored (restore-live owner dataset))
+         (live (vector-ref restored 0))
+         (context (vector-ref restored 1)))
+    (check "release loaded C2 owner before continuation"
+           (c2-public-trainer-state-release! owner))
+    (save-live! live dataset context (number->string split-updates))
+    (fresh-updates! live dataset context split-updates total-updates)))
+
+(define (run)
+  (cond ((null? mode-args) (run-live))
+        ((and (null? mode-parameters) (string=? mode "uninterrupted"))
+         (run-fresh-source total-updates))
+        ((and (null? mode-parameters)
+              (or (string=? mode "produce") (string=? mode "produce-foreign")))
+         (run-fresh-source split-updates))
+        ((and (string=? mode "resume") (pair? mode-parameters)
+              (null? (cdr mode-parameters)))
+         (run-fresh-resume (car mode-parameters)))
+        (else (check "fixture mode and arguments" #f))))
 
 (guard (caught
          (#t
@@ -344,5 +416,6 @@
   (run))
 (display "MOD5/C2 PASS ")
 (display checks)
-(display " checks, 2 + 4 updates, 27 exact tensors")
+(display " checks, ")
+(display (if (null? mode-args) "2 + 4 updates, 27 exact tensors" mode))
 (newline)
