@@ -19,6 +19,7 @@ import gguf_interop as gg  # noqa: E402
 import model_mapping as mapping  # noqa: E402
 import quantized_interchange as qi  # noqa: E402
 import safetensors_interop as safe  # noqa: E402
+from gguf_wire_fixture import unpack_quant_gguf  # noqa: E402
 from test_checkpoint_format import build_container, parse_golden  # noqa: E402
 from test_model_mapping import M3_ROWS, PROVIDER  # noqa: E402
 from test_safetensors_interop import safe as safetensors_wire, unpack as unpack_safetensors  # noqa: E402
@@ -119,43 +120,6 @@ def to_c1(state: safe.State) -> bytes:
     )
     parse_golden(raw, expected_provider=state.provider.encode("utf-8"))
     return raw
-
-
-def unpack_quant_gguf(raw: bytes):
-    """Independent GGUF v3 binary inspector supporting F32, F16, and Q8_0."""
-    magic, version, tensor_count, meta_count = struct.unpack_from("<4sIQQ", raw, 0)
-    assert magic == b"GGUF" and version == 3
-    reader = gg.Reader(raw, safe.Limits())
-    metadata = {}
-    for _ in range(meta_count):
-        key = reader.text(128, nonempty=True)
-        kind = reader.number("I")
-        value = reader.text(1024 * 1024) if kind == gg.STRING else reader.number("I")
-        metadata[key] = (kind, value)
-    infos = []
-    for _ in range(tensor_count):
-        name = reader.text(63, nonempty=True)
-        rank = reader.number("I")
-        dims = tuple(reader.number("Q") for _ in range(rank))
-        ggml_type = reader.number("I")
-        offset = reader.number("Q")
-        infos.append((name, dims, ggml_type, offset))
-    data_at = gg.aligned(reader.at)
-    rows = []
-    for name, dims, ggml_type, offset in infos:
-        count = 1
-        for d in dims:
-            count *= d
-        if ggml_type == qi.GGUF_TYPE_F32:
-            size = count * 4
-        elif ggml_type == qi.GGUF_TYPE_F16:
-            size = count * 2
-        elif ggml_type == qi.GGUF_TYPE_Q8_0:
-            size = (count // 32) * 34
-        else:
-            raise AssertionError(f"unexpected type {ggml_type}")
-        rows.append((name, dims, ggml_type, offset, raw[data_at + offset:data_at + offset + size]))
-    return metadata, rows, reader.at, data_at
 
 
 def build_raw_gguf(
