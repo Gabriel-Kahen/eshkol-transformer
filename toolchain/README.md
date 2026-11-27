@@ -27,11 +27,39 @@ Eshkol generally. The delivered smoke uses `--no-stdlib`, loads its internal lib
 through an explicit `-I src` path, emits a depfile in compile-only mode, then performs
 a separate AOT executable build and execution.
 
-CI does not restore a compiled dependency cache. Correct caching would need to bind
-the OS image, architecture, compiler/LLVM versions, CMake flags, Eshkol SHA, and all
-generated artifacts. Until such provenance is checked, rebuilding the source pin is
-slower but safer.
+CI can restore the workspace-local source and build cache. Bootstrap still runs
+CMake configure and verifies the pinned source and supported toolchain.
+See the [CI efficiency notes](../docs/CI_EFFICIENCY.md).
 
 `ESHKOL_ALLOW_UNSUPPORTED_HOST=1` exists only for explicitly labeled compatibility
 probes. A configure manifest records `host_supported=false`; such a probe is useful
 diagnostic evidence but does not expand the supported matrix or satisfy its CI gate.
+
+## Local F0 warm replay
+
+Run the opt-in probe with a trusted, populated `SEED_DEPS` containing
+`eshkol-src` and `eshkol-build` originally configured at `/workspace/.deps`.
+Use rootless Docker with a locally retained Ubuntu 22.04/LLVM 21.1.8 image
+identified by its full image ID. The checkout must include F0 commit
+`0d8bd51a` and its parent. The output directory must be new.
+
+```bash
+scripts/probe-f0-warm-replay.sh "$SEED_DEPS" "$IMAGE_SHA256" "$NEW_RECEIPT_DIR"
+(cd "$NEW_RECEIPT_DIR" && sha256sum -c SHA256SUMS)
+```
+
+The probe holds both shared build locks and runs the same `make toolchain`
+offline at the same container paths. Each run starts with a fresh copy whose
+contents, modes, ownership and nanosecond mtimes match the seed. The
+unmodified source and lock stay pinned. The two exact bootstrap script
+revisions differ by the header mtime fix.
+
+The receipt records the header digest and timestamp before configure, after
+CMake returns, and before and after Ninja. It also records the CMake cache
+and Ninja graph digests, compiler provenance, Ninja logs and phase timings.
+The gate requires equal post-configure header bytes, a changed mtime before
+Ninja in the predecessor, a restored mtime in the fixed run, and build
+commands only in the predecessor. CMake's glob check appears in both raw
+Ninja logs. An exit status of zero and a verified
+`SHA256SUMS` complete the gate. Single-pair elapsed times describe this
+local replay. Measurement of hosted savings requires a matched hosted run.
