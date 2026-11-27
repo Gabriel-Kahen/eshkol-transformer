@@ -227,11 +227,123 @@ original documents on pinned, network-disabled Ubuntu 22.04.
 [Hosted executable provenance](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773952998)
 
 The opt-in MOD5 provider advertises the fixed block shapes used here and has
-no vocabulary dimension. The existing compiled MOD5-C and old EVAL5 AOT
-fixtures hardcode V=16 in their model rosters, so they have not executed this
-V=256 checkpoint. The next live gate must make a development-only V=256
-Eshkol runner load these exact C1/D1 resources, source the tokenizer
-fingerprint and vocabulary from validated T1 and D1 owners, bind the complete
-D1 manifest inventory hashes, compare its scored logits and metrics to the
-reference, and only then publish an EVAL5 manifest. The reference fixture
-itself publishes no benchmark manifest and provides no external-corpus claim.
+no vocabulary dimension. The existing MOD5-C and older EVAL5 AOT fixtures
+hardcode V=16; the test-only source specialization below executes V=256
+without changing them. The reference fixture itself publishes no benchmark
+manifest and provides no external-corpus claim.
+
+The read-only hosted CLI receipt at
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-native-input-replay-20261126.w6iFhy`
+contains the accepted T1 artifact and both native D1 corpora. Its
+`SHA256SUMS` verifies, and all nine T1/D1 artifact files are byte-identical
+to fresh compiler-free fixture output. This establishes input byte parity;
+the receipt does not execute the V=256 model.
+
+`tests/eval5/build_mod5_v256_witness.py` is the bounded source preparation
+for the next gate. It requires SHA-256
+`593d9de4dc03521359941bacece2d159c7e022f96f4b0752943b83fc6ae3c31c`
+for the accepted MOD5-C E2E source, reuses that source's decoder, K1 calls,
+and trusted C1/P1/I2 loader, and only specializes the head/embedding roster
+to `[256,16]`, vocabulary to 256, and f32 scratch span to cover the largest
+weight. Its appended test-only entry point checks the T1 owner identity,
+three authenticated D1 shards, original document bytes, and full manifest
+and C1 hashes before scoring. The source-only gate checks these extraction
+contracts and balanced generated Eshkol forms; it is not an AOT build result.
+
+The test-only C bridge `tests/eval5/mod5_v256_score_bridge.c` passes four
+`[8,256]` binary32 live logit matrices to the existing EVAL5 LM and MC C
+scorers. It validates 18 D1 token IDs and finite logits, leaves outputs
+untouched on failure, and returns total/mean NLL, perplexity, bits per byte,
+MC accuracy/counts, and eight binary32 logit probes. The standalone C test
+passes under normal Clang 22 and ASan/UBSan/LSan; this is a bridge test, not a
+model execution. The comparator checks live metrics against the fixed Python
+reference with relative tolerance `5e-4` and absolute tolerance `5e-3`, and
+the eight f32 probes with relative tolerance `5e-4` and absolute tolerance
+`2e-3`; MC counts must match exactly. These numerical acceptance bounds were
+declared before the AOT run. A mismatched or nonfinite value fails closed.
+
+`scripts/test-eval5-v256-aot.sh` prepares one strict CPU-f32 AOT build using
+the same pinned MOD5-C native bridge, trusted C1/P1/I2 archives, and EVAL5
+scorer. It compares the live score and probes, then exercises a correctly
+checksummed C1 shape mutant and swapped D1 split identity. Its explicit
+`EVAL5_V256_AOT_SLOT=1` guard prevents an uncoordinated full AOT build.
+Set `EVAL5_V256_EVIDENCE_DIR` to a fresh directory to retain its compiled
+source, compiler log, score line, fixture, and negative-path outputs.
+
+The first pinned Ubuntu 22.04/Clang 21 replay on `a13051c5` stopped at AOT
+source generation before model execution: Eshkol rejected `volatile-load f64`
+and `cddddr`. The retained attempt directory is
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-aot-a13051c5-20261126T190906Z`.
+The focused successor uses an FFI f64 readback helper and the already used
+`cdddr` list primitive; source and normal/sanitized C checks pass locally.
+
+### Measured V=256 compiled scoring witness
+
+The one-slot replay of commit `a0f2f967d9dccd434faa9058131b26b0e034fa70`
+(tree `05224e53cd1de987f17073290c4584439ee9dcfd`) passed on Ubuntu
+22.04.5, Clang/LLVM 21.1.8, Eshkol
+`fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`, and the pinned
+`eshkol-r0-debug:20260928` image. The AOT ELF SHA-256 is
+`82be011d931c5143b1963ead2ab0a105e8dba80200657a999fdd7b95ba0022ef`.
+The compiled Eshkol decoder loaded the exact C1 checkpoint, validated the
+T1 owner fingerprint and all three D1 shards in each split, matched the
+original byte documents and complete D1 inventory hashes, and passed live
+binary32 logits into the EVAL5 C LM/MC scorers. The score was total NLL
+`90.780767317731659`, mean NLL `5.6737979573582287`, perplexity
+`291.13816763515604`, bits per byte `8.1855601760866463`, and MC `2/4`.
+All eight f32 logit probes and the metrics passed the predeclared comparator;
+the largest metric absolute difference from the Python reference was
+`6.98173608e-09`. Fresh-process C1 reload passed; a correctly checksummed
+head shape mutant and swapped train/eval D1 split both failed before scoring.
+
+The retained evidence directory is
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-aot-a0f2f967-20261126T191053Z`;
+its `SHA256SUMS` digest is
+`748e7287fc8d97b3194812bb545423c450d152e6ac57094862106381a0b79181`.
+It includes the generated source, compile log, executable, fixture, live
+score, and negative outputs. A second fresh, network-disabled Ubuntu
+container replayed that sealed executable without rebuilding it; its score
+and both rejected-path outputs matched byte for byte, with both rejects
+returning status 2. The independent receipt is
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-independent-replay-20261126.7DQDU2`;
+its `SHA256SUMS` digest is
+`0ad31dc93046564ce63be086200dfe0d62bb470812fb5011709953a7eb9e2164`.
+That exact source has one AOT build and one deterministic fixture, not a
+second-build reproducibility proof, training run, external corpus evaluation, live C
+contamination audit, or EVAL5 manifest publication.
+A full benchmark runner still needs a live contamination gate and admitted
+manifest publication over its scored data and owner-sourced identities.
+
+The measured AOT receipt above remains evidence for its exact source commit.
+A subsequent witness-source correction removes two independent path reopens:
+the D1 manifest digest now checks the validated `metadata[6]` bytevector,
+and the C1 digest checks the one bytevector passed to the accepted internal
+decoder. Its state and weight release path matches the existing MOD5 loader;
+the separate `--check-c1` path still tests a validly checksummed wrong-shape
+checkpoint. The AOT script makes its staged fixture files read-only after
+source generation and requires separate C1 shape, C1 identity, and D1 split
+identity failures. Source and fixture negative tests cover the correction;
+the corrected source passed a separately pinned AOT replay at commit
+`ab088449c159cabcf60fc6d1df30cc8722fe8046` (tree
+`9f2b763eb2c8985052db3271ed2e203d3a67b29b`) on the same pinned
+Ubuntu 22.04.5, Clang/LLVM 21.1.8, Eshkol commit, and image. Its AOT ELF
+SHA-256 is
+`ac18b4025652809c43f637198b40b36a8b3303cfaa3b3d665487525a45cf23ac`.
+The live score line, including eight f32 probes, was byte-identical to the
+earlier one, and the comparator again passed with maximum metric absolute
+difference `6.98173608e-09`. The well-formed wrong-shape C1 produced
+`unexpected MOD5 parameter metadata` in `--check-c1` mode; supplying that
+C1 to scoring produced `C1 checkpoint SHA-256 mismatch`. Swapping the D1
+splits produced `D1 manifest SHA-256 mismatch`. All three exited with status
+2 before any `SCORE` line. The fresh evidence directory is
+`/home/gabe/.codex/evidence/eshkol-transformer/eval5-v256-aot-ab088449-20261126T192020Z.E7a9YZ`;
+its verified `SHA256SUMS` digest is
+`79d1560bf66580162819455dba100cd6664e1873d9252ae473e0c771c22cdf49`.
+This replay proves the corrected fixed development witness, not an independent
+second build of the same source, live C contamination audit, benchmark manifest,
+external evaluation, training, or production runtime behavior.
+
+A second network-disabled Ubuntu container independently replayed the
+corrected executable. Its score and all three rejection outputs matched
+the sealed run byte for byte. The invalid C1 shape, C1 identity and D1
+manifest identity cases each exited with status 2.

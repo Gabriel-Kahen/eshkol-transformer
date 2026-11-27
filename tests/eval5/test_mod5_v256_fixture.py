@@ -83,6 +83,20 @@ class Mod5V256FixtureTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 fixture.verify(root)
 
+    def test_rejects_changed_checkpoint_or_manifest_bytes(self):
+        with TemporaryDirectory(prefix="eval5-v256-") as temp:
+            root = Path(temp) / "fixture"
+            fixture.build(root)
+            for path in (root / "model.etcp", root / "eval-clean" / "manifest.etm"):
+                original = path.read_bytes()
+                changed = bytearray(original)
+                changed[-1] ^= 1
+                path.write_bytes(changed)
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    fixture.verify(root)
+                path.write_bytes(original)
+            self.assertEqual(fixture.verify(root)["scope"], "development-reference-only")
+
 
 if __name__ == "__main__":
     unittest.main()
