@@ -38,13 +38,13 @@ trap diagnostics EXIT
 
 source_snapshot() {
   local label=$1 first last
-  first="$(git rev-parse --verify HEAD)"
+  first="$(git rev-parse --verify HEAD)" || return
   GIT_OPTIONAL_LOCKS=0 git status --porcelain=v1 --untracked-files=all \
-    --ignore-submodules=none >"${work}/source-${label}.status"
-  last="$(git rev-parse --verify HEAD)"
+    --ignore-submodules=none >"${work}/source-${label}.status" || return
+  last="$(git rev-parse --verify HEAD)" || return
   if [[ "${first}" != "${last}" ]]; then
     printf '%s\n' "HEAD moved during status observation" \
-      >>"${work}/source-${label}.status"
+      >>"${work}/source-${label}.status" || return
   fi
   printf '%s\n' "${first}"
 }
@@ -125,19 +125,22 @@ done
 
 if [[ -n "${MOD5_C2_EVIDENCE_DIR:-}" ]]; then
   head_after="$(source_snapshot after)"
+  runner_checksum="$(sha256sum <"${runner}")"
+  result="$(cat "${work}/runtime.stdout")"
   {
     if [[ "${head_before}" == "${head_after}" && \
           ! -s "${work}/source-before.status" && ! -s "${work}/source-after.status" ]]; then
+      source_tree="$(git rev-parse --verify "${head_before}^{tree}")"
       printf 'source_status\tclean\n'
       printf 'source_commit\t%s\n' "${head_before}"
-      printf 'source_tree\t%s\n' "$(git rev-parse --verify "${head_before}^{tree}")"
+      printf 'source_tree\t%s\n' "${source_tree}"
     else
       printf 'source_status\tworking-tree\n'
       printf 'observed_head_before\t%s\n' "${head_before}"
       printf 'observed_head_after\t%s\n' "${head_after}"
     fi
-    printf 'runner_sha256\t%s\n' "$(sha256sum "${runner}" | awk '{print $1}')"
-    printf 'result\t%s\n' "$(cat "${work}/runtime.stdout")"
+    printf 'runner_sha256\t%s\n' "${runner_checksum%% *}"
+    printf 'result\t%s\n' "${result}"
   } >"${work}/manifest.tsv"
   (
     cd "${work}"
@@ -148,6 +151,7 @@ if [[ -n "${MOD5_C2_EVIDENCE_DIR:-}" ]]; then
       find corpus checkpoints -type f -print0
     } | sort -z | xargs -0 sha256sum >SHA256SUMS
   )
+  seal_checksum="$(sha256sum <"${work}/SHA256SUMS")"
   printf 'MOD5/C2 evidence: %s\n' "${work}"
-  printf 'MOD5/C2 evidence seal: %s\n' "$(sha256sum "${work}/SHA256SUMS" | awk '{print $1}')"
+  printf 'MOD5/C2 evidence seal: %s\n' "${seal_checksum%% *}"
 fi
