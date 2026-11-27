@@ -25,6 +25,149 @@ The first/second raw[1] and staging[8], pending raw[2]/staging[16], and logical 
 
 The terminal anchor is separate from call/prefix anchor stacks and must survive their removal and `m3-call` return. A pending terminal anchor is rooted but cannot authorize reads or publication. It records the original output shell/entry/native handle, both original text carriers and their lengths, logical branch/count/cache expectations after authentication, and its own original record identity. No final RNG is available from the accepted Eshkol carriers before commit; leave it unknown here and obtain authentic final words only from a later native snapshot, not an invented precommit expectation. It does not retain an active-call/model/generator/tokenizer ownership edge after terminal success.
 
+### Idle owned-input prerequisite
+
+The source-private idle admission uses the existing fixed-budget native
+prefill preflight before creating a call or reserving output. The original
+P2 input is an owned `[1,2]` i64 copy created through the admitted
+same-aggregate T1 constructor. The generator's tokenizer is authenticated
+through the baseline raw V256 registry. Preflight captures the exact current
+registered generator, eval model and their native handles, tokenizer shell,
+entry and core, policy identity and values, and the owned input shell, entry
+and native handle. The returned lexical verifier takes the intended generator
+and input again after any unpublished preparation. It rechecks the same
+identities and runs native idle preflight before returning a fresh projection
+of the captured handles. The later coordinator must call it while idle.
+
+The native preflight authenticates its live idle generator, its internal
+sealed model owner, the live registered input and the fixed P2/budget-two
+tuple. The borrowed T1 source is copied at input construction, so the
+resulting owner has no source T1 shell or tokenizer field. The native
+preflight also receives no Scheme model or policy handle. The Scheme
+reference checks establish drift from the captured registry state. They
+supply no independent pre-construction provenance or call-bound release
+authority.
+
+The opt-in `G3C4_P2G2_TERMINAL_IDLE_INPUT_WITNESS=1` mode of
+`scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh` reuses the admitted native
+aggregate and queues normal, repeat and sanitizer qualification. Its fixture
+tests exact positive identities, same-content copies, genuine foreign
+registrations, stage drift, released owners, and idle native model, RNG,
+binding and cache state. Source checks pass. Aggregate execution remains
+pending.
+
+## Abort-only first-enrollment witness
+
+The add-only `g3c4-with-p2g2-first-enrollment-probe` is a development source
+macro for the exact private budget-two ownership gate and literal P2 reserve.
+It reuses the admitted constructor, protected record authentication and native
+reserve and abort. The development body observes the pending owner in one
+`m3-call` and the probe returns only `#t` after abort. It accepts no prebuilt
+bundle. The original auxiliary pair is present at the only registry insertion.
+All list nodes are allocated before native acquire. The pending root and the
+protected roots retain exact nodes and successors, and the complete registry
+scan detects a second shell entry even if normal lookup still finds the first.
+
+Before reserve failure propagates, authenticated abort drains the acquired call
+and restores the pre-attempt Eshkol registry and root heads. Before native
+acquire succeeds, the bundle is the only newly rooted allocation. The test gate
+asserts earlier-owner preservation, native owner and I1 census, exact I1
+active-borrow details, cache and RNG bytes, all eight allocation extents and
+payloads, and same-call fixture-owned retry with a genuine foreign control.
+The admitted allocation shim measures and challenges pre-acquire Eshkol
+allocations. It disarms at the native call boundary so reservation and abort
+cleanup have their own tests. The link guards observe external prefill and
+token-frame entry points. Source call checks and the native cache, RNG and
+token-frame snapshots cover the state of the shared aggregate.
+
+`bash scripts/test-g3c4-p2g2-first-enrollment.sh /path/to/evidence` uses the
+pinned normal, repeat and ASan/UBSan/LSan strict AOT recipe on Ubuntu 22.04
+x86-64 with Eshkol `fe9dfd5` and Clang 21.1.8 under the shared build lock.
+The source gate checks exact accepted native and installed source projection.
+The admitted abort-only pending-anchor and carrier scripts remain predecessor
+gates. Compiled first-enrollment evidence is pending.
+
+The fixture holder is development-only and proves I1 retry for this
+reservation. Integrating the idle owned-input prerequisite into reservation,
+production call-bound I1/A2 release authority, terminal close, detached
+readers, and dispatch remain later gates.
+
+### Native call-bound I1 prerequisite
+
+The optional native owner aggregate binds the active P2/G2 call to its
+first exact pending output and that output's original IDs tensor at
+reservation. A source-private begin stores the actual I1 borrow in a typed
+context slot. Begin and release each admit the active context, independently
+find its sole unpublished pending output, and match the original output and
+tensor. An allocation failure leaves the begin available. A successful
+begin consumes that opportunity for the call. Release admits and consumes
+only the recorded slot, and existing abort can drain the original call after
+that release. A second reservation during the same call cannot reuse the
+first reservation's lease authority.
+
+The slot is in an explicitly sized 32-byte optional suffix. Existing
+context offsets and default build profiles retain their admitted layout.
+Call drain clears the suffix, and the per-call output identity prevents a
+stale release from affecting a later call on the same generator. The helper
+adds no external symbol or Eshkol entry. The native fixture checks genuine
+I1 `[2]` bytes, foreign and equal owner controls, pre-begin allocation
+failure, repeated and stale operations, and unchanged cache, binding and RNG
+state on held-lease abort followed by release and retry.
+
+With both features enabled, prefix, second-frame and terminal preflight
+verify the retained pending owner and original IDs independently of the
+mutable pending slot. Prefix and terminal repeat the check after the final
+native view is closed. The native regression holds the original lease,
+substitutes a distinct zero-filled I1 `[2]`, and verifies that rejection
+preserves staged and committed cache data, RNG, output, and the active call
+before release and abort. It covers first-EOS and second-token terminal
+branches.
+
+`CC=clang bash tests/g3c4/test-p2-g2-call-i1-lease.sh EVIDENCE_DIRECTORY`
+runs the native gate with normal, repeat and ASan/UBSan/LSan modes and
+compares feature-on/off external symbols. This prerequisite covers native I1
+ownership and the actual protected-abort native hook. Eshkol composition
+and production A2 release authority are separate gates.
+
+## Constructor retirement prerequisite
+
+The source-private retirement scope preflights an exact current constructor
+head and the original eight bytevectors. It captures the head's original
+immutable successor, the six work carriers, the two lexical control cells and
+the fixed selected and unused text. Logical count one selects original text[1]
+and count two selects original text[2]. The direct retirement leaf consumes its
+preallocated phase byte once, verifies the constructor is still the head, and
+zeros the six work carriers and unused text before tombstoning the bundle and
+restoring its exact successor. Selected identity and bytes survive.
+The existing checker and abort retirement retain their original behavior.
+
+The scope installs its guard before the caller can cross the synthetic
+boundary. A normal return without activation expires the ticket. A recoverable
+exception before activation expires it and re-raises the same object.
+Repeated, expired or stale activation and ordinary exceptions after
+activation fail-stop through `_Exit(134)`. The eventual coordinator must keep
+the ticket internal and use its own fixed zero-return branch.
+
+The three tagged writes compile through the checked region barrier. The
+liveness flag and tombstone symbol are fixed before activation. The successor
+already lives as long as the exact destination root cell because it is the
+cdr of that cell's current head. In Eshkol `fe9dfd5`,
+`region_evacuate_batch` uses its no-promotion tagged copy path for these
+values. The emitted IR retains polymorphic tensor/error blocks for invalid
+operands generated by checked primitives. For authentic preflighted operands,
+the tail uses fixed indexed loads, literal byte stores and the three
+non-promoting tagged writes. Runtime emergency errors bypass Scheme guards.
+
+`bash scripts/test-g3c4-p2g2-terminal-carrier-retirement.sh /path/to/evidence`
+queues the pinned strict-AOT normal, repeat and ASan/UBSan/LSan poisoned gate.
+It checks the emitted static leaf, wraps the reachable allocation interfaces and
+counts its three tagged writes. The fixture covers both original selected
+texts, empty and nonempty successors, authentic predecessor states, rejection
+and unchanged bytes before activation, and the four fail-stop cases. A small
+pinned harness with aggregate dependencies stubbed passes 339 poisoned checks
+and the four fail-stop exits. Full aggregate qualification and real native
+terminal commit remain pending.
+
 ## Actual same-region sampling, decode, and rollback
 
 Reserve the sole pending output before first sampling. Use the EOS-capable authentic first carrier on the original P2 input. Authenticate the complete LE i64 ID, then perform genuine same-registry T1 decode into the original first raw carrier; reauthenticate every original identity/edge and payload after each recoverable step. Do not provide logits, sampled IDs, RNG words, or cache candidates from Eshkol.

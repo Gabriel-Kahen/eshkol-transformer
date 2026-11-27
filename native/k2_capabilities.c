@@ -2,6 +2,13 @@
 
 #include "eshkol_transformer/f32_tensor.h"
 #include "eshkol_transformer/kernel_abi.h"
+#ifdef ET_K2_PRIVATE_MOD5_V256
+#if !defined(ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY) || \
+    !defined(ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY)
+#error "V256 K2 requires the opt-in I2 width-16 V256 descriptor"
+#endif
+#include "f32_parameter_internal.h"
+#endif
 
 #include <limits.h>
 #include <stddef.h>
@@ -70,11 +77,22 @@ typedef struct et_k2_closure_body {
   uint32_t higher_order_type;
 } et_k2_closure_body;
 
-typedef struct et_k2_state {
+typedef struct et_k2_runtime_slot {
   et_kernel_runtime *runtime;
-  int64_t runtime_pid;
+  int64_t pid;
   int64_t generation;
   int busy;
+#if defined(ET_K2_TESTING) && defined(ET_K2_PRIVATE_MOD5_V256)
+  uint64_t match_count;
+#endif
+} et_k2_runtime_slot;
+
+typedef struct et_k2_state {
+  et_k2_runtime_slot baseline;
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  et_k2_runtime_slot mod5_v256;
+  uint64_t mod5_v256_factories[3];
+#endif
   uint64_t report_factory;
   uint64_t request_factory;
   uint64_t entry_factory;
@@ -104,6 +122,9 @@ ET_K2_STATIC_ASSERT(sizeof(et_k2_closure_body) == ET_K2_FACTORY_CLOSURE_BYTES,
 
 static et_k2_state state;
 static const unsigned char resolver_context_sentinel = 0x6bu;
+#ifdef ET_K2_PRIVATE_MOD5_V256
+static const unsigned char mod5_v256_resolver_sentinel = 0x76u;
+#endif
 
 static const char *const expected_names[ET_K2_ENTRY_COUNT] = {
     "autodiff.reverse",
@@ -256,6 +277,28 @@ protected_span_overlaps_provider(const void *protected_span,
   return 0;
 }
 
+static int protected_span_overlaps_runtime(
+    const void *protected_span, size_t protected_bytes,
+    const et_kernel_runtime *runtime) {
+  if (runtime != NULL) {
+    size_t count;
+    /* Exact-head K1 owns a 40-byte opaque runtime control allocation. */
+    if (overlaps(protected_span, protected_bytes, runtime,
+                 ET_K2_K1_RUNTIME_CONTROL_BYTES)) {
+      return 1;
+    }
+    count = et_kernel_runtime_capability_count(runtime);
+    for (size_t index = 0; index < count; index++) {
+      if (protected_span_overlaps_capability(
+              protected_span, protected_bytes,
+              et_kernel_runtime_capability_at(runtime, index))) {
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
 static int span_overlaps_protected(const void *protected_span,
                                    size_t protected_bytes) {
   const et_kernel_provider_v1 *provider = et_f32_tensor_provider_v1();
@@ -274,23 +317,19 @@ static int span_overlaps_protected(const void *protected_span,
       return 1;
     }
   }
-  if (state.runtime != NULL) {
-    size_t count;
-    /* Exact-head K1 owns a 40-byte opaque runtime control allocation. */
-    if (overlaps(protected_span, protected_bytes, state.runtime,
-                 ET_K2_K1_RUNTIME_CONTROL_BYTES)) {
-      return 1;
-    }
-    count = et_kernel_runtime_capability_count(state.runtime);
-    for (size_t index = 0; index < count; index++) {
-      if (protected_span_overlaps_capability(
-              protected_span, protected_bytes,
-              et_kernel_runtime_capability_at(state.runtime, index))) {
-        return 1;
-      }
-    }
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  if (overlaps(protected_span, protected_bytes, &mod5_v256_resolver_sentinel,
+               sizeof(mod5_v256_resolver_sentinel)) ||
+      protected_span_overlaps_provider(
+          protected_span, protected_bytes,
+          et_i2_private_mod5_width16_v256_storage_provider_v1()) ||
+      protected_span_overlaps_runtime(protected_span, protected_bytes,
+                                      state.mod5_v256.runtime)) {
+    return 1;
   }
-  return 0;
+#endif
+  return protected_span_overlaps_runtime(protected_span, protected_bytes,
+                                         state.baseline.runtime);
 }
 
 /*
@@ -489,16 +528,31 @@ static int reserved_zero(const uint8_t *bytes, size_t count) {
   return 1;
 }
 
-static int exact_i2_capability(const et_kernel_capability_v1 *entry) {
+static const uint64_t baseline_rank2_shapes[][2] = {
+    {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}};
+
+#ifdef ET_K2_PRIVATE_MOD5_V256
+static const char mod5_v256_version[] = "1.3";
+static const char mod5_v256_evidence[] = "I2:mod5-v256-exact-f32-storage.copy-v1";
+static const uint64_t mod5_v256_provider_shapes[][2] = {
+    {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}, {8u, 16u},
+    {16u, 16u}, {16u, 32u}, {32u, 16u}, {256u, 16u}};
+static const uint64_t mod5_v256_runtime_shapes[][2] = {
+    {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {8u, 16u},
+    {16u, 16u}, {16u, 32u}, {32u, 16u}, {256u, 4u}, {256u, 16u}};
+#endif
+
+static int exact_f32_capability(const et_kernel_capability_v1 *entry,
+                                const char *version, const char *evidence,
+                                const uint64_t rank2_shapes[][2],
+                                size_t rank2_count) {
   const uint64_t maximum = (uint64_t)(SIZE_MAX / sizeof(float));
-  static const uint64_t rank2_shapes[5][2] = {
-      {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}};
   if (entry == NULL || entry->struct_size != ET_KERNEL_CAPABILITY_V1_0_SIZE ||
       !exact_text(entry->name, "tensor.f32") ||
       entry->status != ET_KERNEL_CAPABILITY_VERIFIED ||
       !exact_text(entry->implementation, "eshkol-transformer-f32") ||
-      !exact_text(entry->version, "1.1") ||
-      !exact_text(entry->evidence, "I2:bounded-exact-f32-storage.copy-v2") ||
+      !exact_text(entry->version, version) ||
+      !exact_text(entry->evidence, evidence) ||
       entry->deterministic != 1u ||
       !reserved_zero(entry->reserved, sizeof(entry->reserved)) ||
       entry->operation_count != 1u || entry->operations == NULL ||
@@ -506,7 +560,7 @@ static int exact_i2_capability(const et_kernel_capability_v1 *entry) {
       entry->dtype_count != 1u || entry->dtypes == NULL ||
       !exact_text(entry->dtypes[0], "f32") || entry->device_count != 1u ||
       entry->devices == NULL || !exact_text(entry->devices[0], "cpu") ||
-      entry->shape_range_count != 7u || entry->shape_ranges == NULL) {
+      entry->shape_range_count != rank2_count + 2u || entry->shape_ranges == NULL) {
     return 0;
   }
   if (entry->shape_ranges[0].rank != 0u ||
@@ -522,7 +576,7 @@ static int exact_i2_capability(const et_kernel_capability_v1 *entry) {
                      sizeof(entry->shape_ranges[1].dimensions[0].reserved))) {
     return 0;
   }
-  for (size_t shape = 0u; shape < 5u; shape++) {
+  for (size_t shape = 0u; shape < rank2_count; shape++) {
     const et_kernel_shape_range_v1 *range = &entry->shape_ranges[shape + 2u];
     if (range->rank != 2u || range->dimensions == NULL) {
       return 0;
@@ -539,6 +593,14 @@ static int exact_i2_capability(const et_kernel_capability_v1 *entry) {
     }
   }
   return 1;
+}
+
+static int exact_i2_capability(const et_kernel_capability_v1 *entry) {
+  return exact_f32_capability(entry, "1.1",
+                              "I2:bounded-exact-f32-storage.copy-v2",
+                              baseline_rank2_shapes,
+                              sizeof(baseline_rank2_shapes) /
+                                  sizeof(baseline_rank2_shapes[0]));
 }
 
 static int exact_i2_provider(const et_kernel_provider_v1 *provider) {
@@ -615,7 +677,9 @@ static int exact_baseline(const et_kernel_capability_v1 *entry,
          entry->shape_range_count == 0u && entry->shape_ranges == NULL;
 }
 
-static int exact_runtime(const et_kernel_runtime *runtime) {
+static int exact_runtime(
+    const et_kernel_runtime *runtime,
+    int (*exact_capability)(const et_kernel_capability_v1 *)) {
   if (runtime == NULL ||
       et_kernel_runtime_capability_count(runtime) != ET_K2_ENTRY_COUNT) {
     return 0;
@@ -624,7 +688,7 @@ static int exact_runtime(const et_kernel_runtime *runtime) {
     const et_kernel_capability_v1 *entry =
         et_kernel_runtime_capability_at(runtime, index);
     if (index == 9u) {
-      if (!exact_i2_capability(entry)) {
+      if (!exact_capability(entry)) {
         return 0;
       }
     } else if (!exact_baseline(entry, expected_names[index])) {
@@ -652,16 +716,75 @@ static const et_kernel_provider_v1 *resolve_i2(void *context,
   return provider_for_discovery();
 }
 
-static void destroy_runtime(et_kernel_runtime *runtime) {
+#ifdef ET_K2_PRIVATE_MOD5_V256
+static int exact_mod5_v256_capability(const et_kernel_capability_v1 *entry) {
+  return exact_f32_capability(entry, mod5_v256_version, mod5_v256_evidence,
+                              mod5_v256_runtime_shapes,
+                              sizeof(mod5_v256_runtime_shapes) /
+                                  sizeof(mod5_v256_runtime_shapes[0]));
+}
+
+static enum et_k2_provider_audit
+audit_mod5_v256_provider(const et_kernel_provider_v1 *provider) {
+  const et_kernel_capability_v1 *entry;
+  if (provider == NULL) {
+    return ET_K2_PROVIDER_ABSENT;
+  }
+  if (provider->struct_size != ET_KERNEL_PROVIDER_V1_0_SIZE ||
+      provider->abi_major != ET_KERNEL_ABI_MAJOR ||
+      provider->abi_minor != ET_KERNEL_ABI_MINOR ||
+      provider->required_features !=
+          ET_KERNEL_PROVIDER_KNOWN_REQUIRED_FEATURES ||
+      !exact_text(provider->version, mod5_v256_version)) {
+    return ET_K2_PROVIDER_VERSION_MISMATCH;
+  }
+  if (provider != et_i2_private_mod5_width16_v256_storage_provider_v1() ||
+      !exact_text(provider->name, "eshkol-transformer-f32") ||
+      !exact_text(provider->evidence, mod5_v256_evidence) ||
+      provider->capability_count != 1u ||
+      provider->capability_stride != ET_KERNEL_CAPABILITY_V1_0_SIZE ||
+      provider->capability_bytes != ET_KERNEL_CAPABILITY_V1_0_SIZE ||
+      provider->capabilities == NULL ||
+      provider->validate_call == NULL || provider->invoke_call == NULL) {
+    return ET_K2_PROVIDER_METADATA_MISMATCH;
+  }
+  entry = (const et_kernel_capability_v1 *)provider->capabilities;
+  if (entry->struct_size != ET_KERNEL_CAPABILITY_V1_0_SIZE) {
+    return ET_K2_PROVIDER_VERSION_MISMATCH;
+  }
+  return exact_f32_capability(entry, mod5_v256_version, mod5_v256_evidence,
+                              mod5_v256_provider_shapes,
+                              sizeof(mod5_v256_provider_shapes) /
+                                  sizeof(mod5_v256_provider_shapes[0]))
+             ? ET_K2_PROVIDER_EXACT
+             : ET_K2_PROVIDER_METADATA_MISMATCH;
+}
+
+static const et_kernel_provider_v1 *resolve_mod5_v256(
+    void *context, const char *symbol_name) {
+  if (context != &mod5_v256_resolver_sentinel || symbol_name == NULL ||
+      strcmp(symbol_name, ET_KERNEL_PROVIDER_SYMBOL_V1) != 0) {
+    return NULL;
+  }
+  return et_i2_private_mod5_width16_v256_storage_provider_v1();
+}
+#endif
+
+static void destroy_runtime(const et_k2_runtime_slot *slot,
+                            et_kernel_runtime *runtime) {
   if (runtime == NULL) {
     return;
   }
   et_kernel_runtime_destroy(runtime);
 #ifdef ET_K2_TESTING
-  state.destroy_count++;
-  if (state.runtime_live_count != 0u) {
-    state.runtime_live_count--;
+  if (slot == &state.baseline) {
+    state.destroy_count++;
+    if (state.runtime_live_count != 0u) {
+      state.runtime_live_count--;
+    }
   }
+#else
+  (void)slot;
 #endif
 }
 
@@ -670,22 +793,29 @@ int64_t et_k2_private_runtime_pid_v1(void) {
   return pid > 0 ? (int64_t)pid : ET_K2_SCALAR_INTERNAL;
 }
 
-int64_t et_k2_private_runtime_generation_v1(void) {
+static int64_t runtime_generation(
+    const et_k2_runtime_slot *slot,
+    int (*exact_capability)(const et_kernel_capability_v1 *)) {
   const int64_t pid = et_k2_private_runtime_pid_v1();
   if (pid <= 0) {
     return ET_K2_SCALAR_INTERNAL;
   }
-  if (state.runtime == NULL || state.runtime_pid != pid) {
+  if (slot->runtime == NULL || slot->pid != pid) {
     return ET_K2_SCALAR_INVALID_STATE;
   }
-  if (state.generation <= 0 || !exact_runtime(state.runtime)) {
+  if (slot->generation <= 0 || !exact_runtime(slot->runtime, exact_capability)) {
     return ET_K2_SCALAR_INTERNAL;
   }
-  return state.generation;
+  return slot->generation;
 }
 
-int64_t et_k2_private_runtime_ensure_v1(void *error_bytes,
-                                        int64_t error_capacity) {
+static int64_t runtime_ensure(
+    et_k2_runtime_slot *slot,
+    const et_kernel_provider_v1 *(*get_provider)(void),
+    enum et_k2_provider_audit (*audit_provider)(const et_kernel_provider_v1 *),
+    int (*exact_capability)(const et_kernel_capability_v1 *),
+    et_kernel_provider_resolver_v1 resolve, const void *sentinel,
+    void *error_bytes, int64_t error_capacity) {
   void *error_payload;
   et_kernel_runtime *candidate = NULL;
   et_kernel_error k1_error;
@@ -697,7 +827,7 @@ int64_t et_k2_private_runtime_ensure_v1(void *error_bytes,
     return ET_K2_STATUS_INVALID_ARGUMENT;
   }
   error_bytes = error_payload;
-  if (state.busy) {
+  if (slot->busy) {
     return write_error(error_bytes, ET_K2_STATUS_INTERNAL, ET_K2_CODE_INVARIANT,
                        "capability-discover",
                        "concurrent or reentrant K2 use is unsupported");
@@ -708,104 +838,135 @@ int64_t et_k2_private_runtime_ensure_v1(void *error_bytes,
                        "capability-discover",
                        "cannot obtain a valid process identifier");
   }
-  state.busy = 1;
-  if (state.runtime != NULL && state.runtime_pid == pid) {
-    if (state.generation <= 0 || !exact_runtime(state.runtime)) {
-      state.busy = 0;
+  slot->busy = 1;
+  if (slot->runtime != NULL && slot->pid == pid) {
+    if (slot->generation <= 0 || !exact_runtime(slot->runtime, exact_capability)) {
+      slot->busy = 0;
       return write_error(error_bytes, ET_K2_STATUS_INTERNAL,
                          ET_K2_CODE_RUNTIME_AUDIT, "capability-discover",
                          "the published K1 runtime failed an invariant audit");
     }
-    state.busy = 0;
+    slot->busy = 0;
     return write_success(error_bytes);
   }
-  if (state.runtime != NULL) {
-    et_kernel_runtime *inherited = state.runtime;
-    state.runtime = NULL;
-    state.runtime_pid = 0;
-    destroy_runtime(inherited);
+  if (slot->runtime != NULL) {
+    et_kernel_runtime *inherited = slot->runtime;
+    slot->runtime = NULL;
+    slot->pid = 0;
+    destroy_runtime(slot, inherited);
   }
-  provider = provider_for_discovery();
-  provider_audit = audit_i2_provider(provider);
+  provider = get_provider();
+  provider_audit = audit_provider(provider);
   if (provider_audit == ET_K2_PROVIDER_ABSENT) {
-    state.busy = 0;
+    slot->busy = 0;
     return write_error(error_bytes, ET_K2_STATUS_UNSUPPORTED,
                        ET_K2_CODE_PROVIDER_ABSENT, "capability-discover",
                        "the fixed I2 provider is absent");
   }
   if (provider_audit == ET_K2_PROVIDER_VERSION_MISMATCH) {
-    state.busy = 0;
+    slot->busy = 0;
     return write_error(error_bytes, ET_K2_STATUS_VERSION_MISMATCH,
                        ET_K2_CODE_PROVIDER_AUDIT, "capability-discover",
                        "the fixed I2 provider ABI is incompatible");
   }
   if (provider_audit != ET_K2_PROVIDER_EXACT) {
-    state.busy = 0;
+    slot->busy = 0;
     return write_error(error_bytes, ET_K2_STATUS_INTERNAL,
                        ET_K2_CODE_PROVIDER_AUDIT, "capability-discover",
                        "the fixed I2 provider descriptor failed exact audit");
   }
 #ifdef ET_K2_TESTING
-  if (state.fail_stage == ET_K2_TEST_FAIL_BEFORE_DISCOVER) {
-    state.busy = 0;
+  if (slot == &state.baseline &&
+      state.fail_stage == ET_K2_TEST_FAIL_BEFORE_DISCOVER) {
+    slot->busy = 0;
     return write_error(error_bytes, ET_K2_STATUS_INTERNAL,
                        ET_K2_CODE_PROVIDER_AUDIT, "capability-discover",
                        "injected failure before K1 discovery");
   }
-  state.discovery_count++;
+  if (slot == &state.baseline) {
+    state.discovery_count++;
+  }
 #endif
   memset(&k1_error, 0, sizeof(k1_error));
   result = et_kernel_runtime_discover(
-      resolve_i2, (void *)&resolver_context_sentinel, &candidate, &k1_error);
+      resolve, (void *)sentinel, &candidate, &k1_error);
   if (result != 0) {
     if (candidate != NULL) {
-      destroy_runtime(candidate);
+      destroy_runtime(slot, candidate);
     }
-    state.busy = 0;
+    slot->busy = 0;
     return copy_k1_result(error_bytes, result, &k1_error,
                           "capability-discover");
   }
 #ifdef ET_K2_TESTING
-  state.runtime_live_count++;
-  if (state.fail_stage == ET_K2_TEST_FAIL_AFTER_DISCOVER ||
-      state.fail_stage == ET_K2_TEST_FAIL_RUNTIME_AUDIT) {
-    destroy_runtime(candidate);
-    state.busy = 0;
+  if (slot == &state.baseline) {
+    state.runtime_live_count++;
+  }
+  if (slot == &state.baseline &&
+      (state.fail_stage == ET_K2_TEST_FAIL_AFTER_DISCOVER ||
+       state.fail_stage == ET_K2_TEST_FAIL_RUNTIME_AUDIT)) {
+    destroy_runtime(slot, candidate);
+    slot->busy = 0;
     return write_error(error_bytes, ET_K2_STATUS_INTERNAL,
                        ET_K2_CODE_RUNTIME_AUDIT, "capability-discover",
                        "injected failure after K1 discovery");
   }
 #endif
   if (!zero_bytes(&k1_error, sizeof(k1_error))) {
-    destroy_runtime(candidate);
-    state.busy = 0;
+    destroy_runtime(slot, candidate);
+    slot->busy = 0;
     return write_error(error_bytes, ET_K2_STATUS_INTERNAL, ET_K2_CODE_INVARIANT,
                        "capability-discover",
                        "K1 returned malformed success diagnostics");
   }
-  if (!exact_runtime(candidate)) {
-    destroy_runtime(candidate);
-    state.busy = 0;
+  if (!exact_runtime(candidate, exact_capability)) {
+    destroy_runtime(slot, candidate);
+    slot->busy = 0;
     return write_error(error_bytes, ET_K2_STATUS_INTERNAL,
                        ET_K2_CODE_RUNTIME_AUDIT, "capability-discover",
                        "the eleven-row K1 report failed exact audit");
   }
-  if (state.generation == INT64_MAX) {
-    destroy_runtime(candidate);
-    state.busy = 0;
+  if (slot->generation == INT64_MAX) {
+    destroy_runtime(slot, candidate);
+    slot->busy = 0;
     return write_error(error_bytes, ET_K2_STATUS_INTERNAL, ET_K2_CODE_INVARIANT,
                        "capability-discover",
                        "K2 runtime generation overflowed");
   }
-  state.runtime = candidate;
-  state.runtime_pid = pid;
-  state.generation++;
-  if (state.generation <= 0) {
-    state.generation = 1;
+  slot->runtime = candidate;
+  slot->pid = pid;
+  slot->generation++;
+  if (slot->generation <= 0) {
+    slot->generation = 1;
   }
-  state.busy = 0;
+  slot->busy = 0;
   return write_success(error_bytes);
 }
+
+int64_t et_k2_private_runtime_generation_v1(void) {
+  return runtime_generation(&state.baseline, exact_i2_capability);
+}
+
+int64_t et_k2_private_runtime_ensure_v1(void *error_bytes,
+                                        int64_t error_capacity) {
+  return runtime_ensure(&state.baseline, provider_for_discovery,
+                        audit_i2_provider, exact_i2_capability, resolve_i2,
+                        &resolver_context_sentinel, error_bytes, error_capacity);
+}
+
+#ifdef ET_K2_PRIVATE_MOD5_V256
+int64_t et_k2_private_mod5_v256_generation_v1(void) {
+  return runtime_generation(&state.mod5_v256, exact_mod5_v256_capability);
+}
+
+int64_t et_k2_private_mod5_v256_ensure_v1(void *error_bytes,
+                                          int64_t error_capacity) {
+  return runtime_ensure(
+      &state.mod5_v256, et_i2_private_mod5_width16_v256_storage_provider_v1,
+      audit_mod5_v256_provider, exact_mod5_v256_capability, resolve_mod5_v256,
+      &mod5_v256_resolver_sentinel, error_bytes, error_capacity);
+}
+#endif
 
 static int valid_symbol_bytes(const void *bytes, int64_t byte_count) {
   const unsigned char *text = (const unsigned char *)bytes;
@@ -874,7 +1035,9 @@ static uint64_t decode_u64le(const unsigned char *bytes) {
   return value;
 }
 
-int64_t et_k2_private_runtime_require_v1(
+static int64_t runtime_require(
+    et_k2_runtime_slot *slot,
+    int (*exact_capability)(const et_kernel_capability_v1 *),
     int64_t expected_generation, int64_t sorted_entry_index,
     const void *operation, int64_t operation_bytes, const void *dtype,
     int64_t dtype_bytes, const void *device, int64_t device_bytes,
@@ -939,18 +1102,18 @@ int64_t et_k2_private_runtime_require_v1(
                        "sorted capability entry index is outside 0..10");
   }
   pid = et_k2_private_runtime_pid_v1();
-  if (state.busy) {
+  if (slot->busy) {
     return write_error(error_payload, ET_K2_STATUS_INTERNAL,
                        ET_K2_CODE_INVARIANT, "capability-require",
                        "concurrent or reentrant K2 use is unsupported");
   }
-  if (pid <= 0 || state.runtime == NULL || state.runtime_pid != pid ||
-      state.generation != expected_generation) {
+  if (pid <= 0 || slot->runtime == NULL || slot->pid != pid ||
+      slot->generation != expected_generation) {
     return write_error(error_payload, ET_K2_STATUS_INVALID_STATE,
                        ET_K2_CODE_STALE, "capability-require",
                        "K2 runtime origin or generation is stale");
   }
-  if (!exact_runtime(state.runtime)) {
+  if (!exact_runtime(slot->runtime, exact_capability)) {
     return write_error(
         error_payload, ET_K2_STATUS_INTERNAL, ET_K2_CODE_RUNTIME_AUDIT,
         "capability-require",
@@ -974,38 +1137,45 @@ int64_t et_k2_private_runtime_require_v1(
   request.shape = rank == 0 ? NULL : shape;
   request.deterministic = (uint8_t)deterministic;
   memset(&k1_error, 0, sizeof(k1_error));
-  state.busy = 1;
+  slot->busy = 1;
 #ifdef ET_K2_TESTING
-  state.require_count++;
-  if (request.rank == 1u && request.shape[0] == 4u) {
-    state.require_shape_count[0]++;
-  } else if (request.rank == 2u) {
-    static const uint64_t shapes[5][2] = {
-        {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}};
-    for (size_t index = 0u; index < 5u; index++) {
-      if (request.shape[0] == shapes[index][0] &&
-          request.shape[1] == shapes[index][1]) {
-        state.require_shape_count[index + 1u]++;
-        break;
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  if (slot == &state.mod5_v256) {
+    slot->match_count++;
+  }
+#endif
+  if (slot == &state.baseline) {
+    state.require_count++;
+    if (request.rank == 1u && request.shape[0] == 4u) {
+      state.require_shape_count[0]++;
+    } else if (request.rank == 2u) {
+      static const uint64_t shapes[5][2] = {
+          {2u, 4u}, {4u, 4u}, {4u, 8u}, {8u, 4u}, {256u, 4u}};
+      for (size_t index = 0u; index < 5u; index++) {
+        if (request.shape[0] == shapes[index][0] &&
+            request.shape[1] == shapes[index][1]) {
+          state.require_shape_count[index + 1u]++;
+          break;
+        }
       }
     }
-  }
-  if (state.require_fail_at != 0u &&
-      state.require_count == state.require_fail_at) {
-    state.require_fail_at = 0u;
-    state.busy = 0;
-    return write_error(error_payload, ET_K2_STATUS_UNSUPPORTED,
-                       ET_K2_CODE_PROVIDER_ABSENT, "capability-require",
-                       "injected K2 capability requirement failure");
+    if (state.require_fail_at != 0u &&
+        state.require_count == state.require_fail_at) {
+      state.require_fail_at = 0u;
+      slot->busy = 0;
+      return write_error(error_payload, ET_K2_STATUS_UNSUPPORTED,
+                         ET_K2_CODE_PROVIDER_ABSENT, "capability-require",
+                         "injected K2 capability requirement failure");
+    }
   }
 #endif
   result = et_kernel_runtime_capability_require(
-      state.runtime, expected_names[sorted_entry_index], &request, &entry,
+      slot->runtime, expected_names[sorted_entry_index], &request, &entry,
       &k1_error);
-  state.busy = 0;
+  slot->busy = 0;
   if (result == 0 &&
       (entry == NULL ||
-       entry != et_kernel_runtime_capability_at(state.runtime,
+       entry != et_kernel_runtime_capability_at(slot->runtime,
                                                 (size_t)sorted_entry_index))) {
     return write_error(error_payload, ET_K2_STATUS_INTERNAL,
                        ET_K2_CODE_RUNTIME_AUDIT, "capability-require",
@@ -1013,6 +1183,32 @@ int64_t et_k2_private_runtime_require_v1(
   }
   return copy_k1_result(error_payload, result, &k1_error, "capability-require");
 }
+
+int64_t et_k2_private_runtime_require_v1(
+    int64_t expected_generation, int64_t sorted_entry_index,
+    const void *operation, int64_t operation_bytes, const void *dtype,
+    int64_t dtype_bytes, const void *device, int64_t device_bytes,
+    const void *shape_u64le, int64_t shape_bytes, int64_t rank,
+    int64_t deterministic, void *error_bytes, int64_t error_capacity) {
+  return runtime_require(&state.baseline, exact_i2_capability,
+      expected_generation, sorted_entry_index, operation, operation_bytes,
+      dtype, dtype_bytes, device, device_bytes, shape_u64le, shape_bytes, rank,
+      deterministic, error_bytes, error_capacity);
+}
+
+#ifdef ET_K2_PRIVATE_MOD5_V256
+int64_t et_k2_private_mod5_v256_require_v1(
+    int64_t expected_generation, int64_t sorted_entry_index,
+    const void *operation, int64_t operation_bytes, const void *dtype,
+    int64_t dtype_bytes, const void *device, int64_t device_bytes,
+    const void *shape_u64le, int64_t shape_bytes, int64_t rank,
+    int64_t deterministic, void *error_bytes, int64_t error_capacity) {
+  return runtime_require(&state.mod5_v256, exact_mod5_v256_capability,
+      expected_generation, sorted_entry_index, operation, operation_bytes,
+      dtype, dtype_bytes, device, device_bytes, shape_u64le, shape_bytes, rank,
+      deterministic, error_bytes, error_capacity);
+}
+#endif
 
 static int closure_code(const void *closure, uint64_t *code) {
   et_k2_closure_header header;
@@ -1052,6 +1248,18 @@ static int closure_code(const void *closure, uint64_t *code) {
   return 1;
 }
 
+#ifdef ET_K2_PRIVATE_MOD5_V256
+static int mod5_v256_factory_conflicts(uint64_t code, const uint64_t *slot) {
+  for (size_t index = 0u; index < 3u; index++) {
+    const uint64_t *candidate = &state.mod5_v256_factories[index];
+    if (candidate != slot && *candidate == code) {
+      return 1;
+    }
+  }
+  return 0;
+}
+#endif
+
 static int64_t register_factory(const void *closure, uint64_t *slot,
                                 const uint64_t *other_a,
                                 const uint64_t *other_b) {
@@ -1061,14 +1269,18 @@ static int64_t register_factory(const void *closure, uint64_t *slot,
     return ET_K2_SCALAR_INVALID_ARGUMENT;
   }
   /* Factory identity freezes only after the exact runtime audit succeeds. */
-  if (pid <= 0 || state.runtime == NULL || state.runtime_pid != pid ||
-      state.generation <= 0 || !exact_runtime(state.runtime)) {
+  if (pid <= 0 || state.baseline.runtime == NULL || state.baseline.pid != pid ||
+      state.baseline.generation <= 0 || !exact_runtime(state.baseline.runtime, exact_i2_capability)) {
     return ET_K2_SCALAR_INTERNAL;
   }
   if (*slot == code) {
     return 1;
   }
-  if (*slot != 0u || *other_a == code || *other_b == code) {
+  if (*slot != 0u || *other_a == code || *other_b == code
+#ifdef ET_K2_PRIVATE_MOD5_V256
+      || mod5_v256_factory_conflicts(code, slot)
+#endif
+  ) {
     return ET_K2_SCALAR_INTERNAL;
   }
   *slot = code;
@@ -1123,6 +1335,42 @@ int64_t et_k2_private_entry_factory_authenticate_v1(const void *closure) {
   return authenticate_factory(closure, &state.entry_factory);
 }
 
+#ifdef ET_K2_PRIVATE_MOD5_V256
+int64_t et_k2_private_mod5_v256_factory_register_v1(
+    int64_t kind, const void *closure) {
+  uint64_t code;
+  uint64_t *slot;
+  if (kind < 0 || kind >= 3 || !closure_code(closure, &code)) {
+    return ET_K2_SCALAR_INVALID_ARGUMENT;
+  }
+  if (et_k2_private_mod5_v256_generation_v1() <= 0) {
+    return ET_K2_SCALAR_INTERNAL;
+  }
+  slot = &state.mod5_v256_factories[kind];
+  if (*slot == code) {
+    return 1;
+  }
+  if (*slot != 0u || state.report_factory == code ||
+      state.request_factory == code || state.entry_factory == code ||
+#ifdef ET_C2_CARRIER_FACTORIES
+      state.c2_policy_factory == code || state.c2_metadata_factory == code ||
+#endif
+      mod5_v256_factory_conflicts(code, slot)) {
+    return ET_K2_SCALAR_INTERNAL;
+  }
+  *slot = code;
+  return 1;
+}
+
+int64_t et_k2_private_mod5_v256_factory_authenticate_v1(
+    int64_t kind, const void *closure) {
+  if (kind < 0 || kind >= 3) {
+    return ET_K2_SCALAR_INVALID_ARGUMENT;
+  }
+  return authenticate_factory(closure, &state.mod5_v256_factories[kind]);
+}
+#endif
+
 #ifdef ET_C2_CARRIER_FACTORIES
 static int64_t register_c2_factory(const void *closure, uint64_t *slot,
                                    const uint64_t *other) {
@@ -1134,7 +1382,11 @@ static int64_t register_c2_factory(const void *closure, uint64_t *slot,
     return 1;
   }
   if (*slot != 0u || *other == code || state.report_factory == code ||
-      state.request_factory == code || state.entry_factory == code) {
+      state.request_factory == code || state.entry_factory == code
+#ifdef ET_K2_PRIVATE_MOD5_V256
+      || mod5_v256_factory_conflicts(code, slot)
+#endif
+  ) {
     return ET_K2_SCALAR_INTERNAL;
   }
   *slot = code;
@@ -1162,17 +1414,33 @@ int64_t et_c2_private_metadata_factory_authenticate_v1(const void *closure) {
 
 #ifdef ET_K2_TESTING
 void et_k2_test_reset_v1(void) {
-  if (state.runtime != NULL) {
-    et_kernel_runtime_destroy(state.runtime);
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  et_kernel_runtime_destroy(state.mod5_v256.runtime);
+#endif
+  if (state.baseline.runtime != NULL) {
+    et_kernel_runtime_destroy(state.baseline.runtime);
   }
   memset(&state, 0, sizeof(state));
 }
 
+#ifdef ET_K2_PRIVATE_MOD5_V256
+void et_k2_test_mod5_v256_drop_v1(void) {
+  et_kernel_runtime *runtime = state.mod5_v256.runtime;
+  state.mod5_v256.runtime = NULL;
+  state.mod5_v256.pid = 0;
+  destroy_runtime(&state.mod5_v256, runtime);
+}
+
+uint64_t et_k2_test_mod5_v256_match_count_v1(void) {
+  return state.mod5_v256.match_count;
+}
+#endif
+
 void et_k2_test_runtime_drop_v1(void) {
-  et_kernel_runtime *runtime = state.runtime;
-  state.runtime = NULL;
-  state.runtime_pid = 0;
-  destroy_runtime(runtime);
+  et_kernel_runtime *runtime = state.baseline.runtime;
+  state.baseline.runtime = NULL;
+  state.baseline.pid = 0;
+  destroy_runtime(&state.baseline, runtime);
 }
 
 void et_k2_test_provider_override_v1(const et_kernel_provider_v1 *provider,
@@ -1287,6 +1555,21 @@ test_protected_provider_graph(const et_kernel_provider_v1 *provider) {
   return 1;
 }
 
+static int test_protected_runtime_graph(const et_kernel_runtime *runtime) {
+  if (runtime == NULL ||
+      !span_overlaps_protected(runtime, ET_K2_K1_RUNTIME_CONTROL_BYTES)) {
+    return 0;
+  }
+  const size_t count = et_kernel_runtime_capability_count(runtime);
+  for (size_t index = 0; index < count; index++) {
+    if (!test_protected_capability_graph(
+            et_kernel_runtime_capability_at(runtime, index))) {
+      return 0;
+    }
+  }
+  return count == ET_K2_ENTRY_COUNT;
+}
+
 uint32_t et_k2_test_protected_overlap_mask_v1(void) {
   uint32_t mask = 0u;
   unsigned char disjoint = 0u;
@@ -1310,20 +1593,22 @@ uint32_t et_k2_test_protected_overlap_mask_v1(void) {
   if (test_protected_provider_graph(provider)) {
     mask |= ET_K2_TEST_PROTECTED_PROVIDER;
   }
-  if (state.runtime != NULL &&
-      span_overlaps_protected(state.runtime, ET_K2_K1_RUNTIME_CONTROL_BYTES)) {
-    int all_capabilities = 1;
-    const size_t count = et_kernel_runtime_capability_count(state.runtime);
-    for (size_t index = 0; index < count; index++) {
-      all_capabilities =
-          all_capabilities &&
-          test_protected_capability_graph(
-              et_kernel_runtime_capability_at(state.runtime, index));
-    }
-    if (all_capabilities) {
-      mask |= ET_K2_TEST_PROTECTED_RUNTIME;
-    }
+  if (test_protected_runtime_graph(state.baseline.runtime)) {
+    mask |= ET_K2_TEST_PROTECTED_RUNTIME;
   }
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  if (span_overlaps_protected(&mod5_v256_resolver_sentinel,
+                              sizeof(mod5_v256_resolver_sentinel))) {
+    mask |= ET_K2_TEST_PROTECTED_V256_RESOLVER;
+  }
+  if (test_protected_provider_graph(
+          et_i2_private_mod5_width16_v256_storage_provider_v1())) {
+    mask |= ET_K2_TEST_PROTECTED_V256_PROVIDER;
+  }
+  if (test_protected_runtime_graph(state.mod5_v256.runtime)) {
+    mask |= ET_K2_TEST_PROTECTED_V256_RUNTIME;
+  }
+#endif
   if (span_overlaps_protected(&state.report_factory,
                               sizeof(state.report_factory)) &&
       span_overlaps_protected(&state.request_factory,
