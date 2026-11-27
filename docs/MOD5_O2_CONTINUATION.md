@@ -29,6 +29,12 @@ failure after all moments are prepared. The mismatched recipient retains
 its exact prior state. The reconstruction failures publish no owner and
 restore the live snapshot, moment, and builder counts.
 
+Each run keeps six live optimizer and parameter fixtures until process exit.
+O2's generic live optimizer contract is process-scoped. The private G3-R
+retirement seam requires a fixed 14-entry candidate and does not admit
+these nine-entry fixtures. The gate explicitly releases detached state
+snapshots, reconstruction builders, temporary tensors, and gradient plans.
+
 The pinned Ubuntu 22.04 x86-64 environment with Clang 21.1.8 passes both
 variants in optimized and sanitized builds. This is an in-process component
 test using the fixture's fixed shape, parameter order, and optimizer
