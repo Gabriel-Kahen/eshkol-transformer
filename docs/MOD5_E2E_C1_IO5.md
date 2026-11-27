@@ -68,6 +68,14 @@ shape rejection. Plain external formats rely on explicit import metadata
 and validate structure. Checksum rejection applies where an expected
 checksum is available.
 
+The two tagged MOD5 safetensors routes cast the trained weights to F16 or BF16
+and restore F32 C1 for evaluation. They cover both tied and untied variants.
+The gate compares every restored path, shape and alias against the source.
+Each restored model produces a changed logits digest, repeatable in a second
+fresh process. Test limits for the maximum absolute weight error and absolute
+mean evaluation loss change are 0.001 and 0.002 for F16, and 0.008 and 0.010
+for BF16. See the [wire contract](IO5_QUANTIZED_INTERCHANGE.md#tagged-mod5-safetensors).
+
 ## Running and measured results
 
 Run `bash scripts/test-mod5-e2e-io5.sh` with the pinned toolchain on Ubuntu
