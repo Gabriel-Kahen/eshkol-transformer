@@ -1343,8 +1343,11 @@ first runtime case stopped at the mode snapshot. A diagnostic on the same
 compiled sanitizer ELF located the null read at a fixture lookup of an unused
 M3 transport field. The zero-only mode snapshot and topology shell comparison
 now obtain all 17 existing module shells from the authenticated P1 fixed-set
-capture. Focused source and pinned oracle checks pass. The repaired full
-runtime matrix remains pending.
+capture. All 24 positive runs passed in normal, repeated and sanitized
+binaries, with observed transcripts matching the pinned oracle. The first
+negative case trapped in the boxed bridge because the two-slot scenario
+lacked its one-slot wrapper. The development entry now supplies the
+wrapper. Full negative replay remains pending.
 
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
