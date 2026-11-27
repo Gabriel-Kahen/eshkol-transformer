@@ -887,6 +887,11 @@ network-disabled Ubuntu 22.04/LLVM 21 build and the focused CLI3-B executable
 gate (`cli3b-exact-63aec93d-20261125-fresh/SHA256SUMS`). This remains a
 fixed-profile continuation witness; hosted integration remains pending.
 
+The [fixed CPU CLI3 runtime baseline](CLI3_FIXED_RUNTIME_BASELINE.md) replays
+the verified #255 artifact in five fresh-output trial pairs. It records
+process latency and peak RSS for four-update pretrain and three-update resume,
+with separate receipts for exact checkpoint equality and generated files.
+
 The [D1 corpus validate command slice](CLI3_CORPUS_VALIDATE.md) is staged from
 `93ea6258` on this current-main source union. It adds a standalone Eshkol-native
 `corpus validate` executable and a retained-evidence gate with source,
