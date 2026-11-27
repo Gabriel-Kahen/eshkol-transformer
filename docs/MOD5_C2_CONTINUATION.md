@@ -32,6 +32,13 @@ nonzero moment data for every parameter, and covers a forged K2 report and use
 of a released C2 owner. It uses the canonical private C2 source composition
 and the same public C2 call bodies as the installed facade.
 
+Set `MOD5_C2_EVIDENCE_DIR` to an empty absolute directory to retain a receipt.
+The manifest records a commit and tree when both Git status observations are
+clean and identify the same HEAD. Dirty or changing checkouts produce a
+working-tree receipt with the observed HEADs and status files. The checksum
+inventory covers the manifest, status files, native archive, ELF, compiler and
+runtime logs, corpus, and checkpoints.
+
 The scope is a detached component continuation fixture. The live receiver is
 assembled in fixture code, with no generalized live restore transaction. The
 witness covers one shape row and one CPU-f32 trajectory, with RNG control bytes

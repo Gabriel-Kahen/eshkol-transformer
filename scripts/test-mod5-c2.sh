@@ -3,17 +3,11 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 cd "${PROJECT_ROOT}"
-verify_toolchain
 for command in ar cmp find git python3 rg sha256sum sort timeout xargs; do
   require_command "${command}"
 done
 export LC_ALL=C
 
-cc=
-cxx=
-resolve_provenance_compilers cc cxx \
-  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
-runner="$(eshkol_build_dir)/eshkol-run"
 if [[ -n "${MOD5_C2_EVIDENCE_DIR:-}" ]]; then
   work="${MOD5_C2_EVIDENCE_DIR}"
   [[ "${work}" == /* && -d "${work}" ]] || \
@@ -28,7 +22,8 @@ fi
 diagnostics() {
   local status=$?
   if (( status != 0 )); then
-    for log in compile.stdout compile.stderr runtime.stdout runtime.stderr; do
+    for log in native-compile.stdout native-compile.stderr \
+               compile.stdout compile.stderr runtime.stdout runtime.stderr; do
       if [[ -s "${work}/${log}" ]]; then
         tail -n 80 "${work}/${log}" >&2
       fi
@@ -40,6 +35,30 @@ diagnostics() {
   return "${status}"
 }
 trap diagnostics EXIT
+
+source_snapshot() {
+  local label=$1 first last
+  first="$(git rev-parse --verify HEAD)"
+  GIT_OPTIONAL_LOCKS=0 git status --porcelain=v1 --untracked-files=all \
+    --ignore-submodules=none >"${work}/source-${label}.status"
+  last="$(git rev-parse --verify HEAD)"
+  if [[ "${first}" != "${last}" ]]; then
+    printf '%s\n' "HEAD moved during status observation" \
+      >>"${work}/source-${label}.status"
+  fi
+  printf '%s\n' "${first}"
+}
+if [[ -n "${MOD5_C2_EVIDENCE_DIR:-}" ]]; then
+  head_before="$(source_snapshot before)"
+fi
+
+verify_toolchain
+cc=
+cxx=
+resolve_provenance_compilers cc cxx \
+  "${CC:-$(lock_value supported_cc)}" "${CXX:-$(lock_value supported_cxx)}"
+runner="$(eshkol_build_dir)/eshkol-run"
+
 mkdir "${work}/native" "${work}/cache" "${work}/corpus" "${work}/checkpoints"
 PYTHONDONTWRITEBYTECODE=1 python3 - "${work}/corpus" <<'PY'
 from pathlib import Path
@@ -63,21 +82,23 @@ compile() {
   "${cc}" "${flags[@]}" "$@" -c "${source}" \
     -o "${work}/native/$(basename "${source%.c}").o"
 }
-compile native/i2_wave2_package_bridge.c \
-  -DET_I2_NATIVE_HELPERS_ONLY -DET_C2_I2_MODEL_COPY
-compile native/o2_wave2_package_bridge.c \
-  -DET_O2_NATIVE_HELPERS_ONLY -DET_C2_O2_RECONSTRUCT_BRIDGE
-compile native/p1_identity.c -DET_P1_TRUSTED_BUILD=1
-compile native/k2_capabilities.c -DET_C2_CARRIER_FACTORIES
-for source in ac4_checkpointing mod5_primitives_provider data_io checkpoint_io \
-              kernel_abi i64_tensor t1_i64_shell f32_tensor d2_native o2_optimizer \
-              c2_x1_canonical c2_checkpoint_codec c2_checkpoint_format \
-              c2_checkpoint_save_bridge c2_checkpoint_reader c2_checkpoint_core \
-              c2_checkpoint_load_bridge c2_checkpoint_inspect_bridge; do
-  compile "native/${source}.c"
-done
-compile tests/mod5/mod5_c2_test_bridge.c
-ar rcsD "${work}/native/libmod5_c2_witness.a" "${work}/native/"*.o
+{
+  compile native/i2_wave2_package_bridge.c \
+    -DET_I2_NATIVE_HELPERS_ONLY -DET_C2_I2_MODEL_COPY
+  compile native/o2_wave2_package_bridge.c \
+    -DET_O2_NATIVE_HELPERS_ONLY -DET_C2_O2_RECONSTRUCT_BRIDGE
+  compile native/p1_identity.c -DET_P1_TRUSTED_BUILD=1
+  compile native/k2_capabilities.c -DET_C2_CARRIER_FACTORIES
+  for source in ac4_checkpointing mod5_primitives_provider data_io checkpoint_io \
+                kernel_abi i64_tensor t1_i64_shell f32_tensor d2_native o2_optimizer \
+                c2_x1_canonical c2_checkpoint_codec c2_checkpoint_format \
+                c2_checkpoint_save_bridge c2_checkpoint_reader c2_checkpoint_core \
+                c2_checkpoint_load_bridge c2_checkpoint_inspect_bridge; do
+    compile "native/${source}.c"
+  done
+  compile tests/mod5/mod5_c2_test_bridge.c
+  ar rcsD "${work}/native/libmod5_c2_witness.a" "${work}/native/"*.o
+} >"${work}/native-compile.stdout" 2>"${work}/native-compile.stderr"
 
 env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR -u ESHKOL_AOT_MODULE_CACHE_DIR \
   ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="${work}/cache" \
@@ -103,12 +124,30 @@ for update in 3 4 5 6; do
 done
 
 if [[ -n "${MOD5_C2_EVIDENCE_DIR:-}" ]]; then
+  head_after="$(source_snapshot after)"
   {
-    printf 'source_commit\t%s\n' "$(git rev-parse HEAD)"
-    printf 'source_tree\t%s\n' "$(git rev-parse 'HEAD^{tree}')"
+    if [[ "${head_before}" == "${head_after}" && \
+          ! -s "${work}/source-before.status" && ! -s "${work}/source-after.status" ]]; then
+      printf 'source_status\tclean\n'
+      printf 'source_commit\t%s\n' "${head_before}"
+      printf 'source_tree\t%s\n' "$(git rev-parse --verify "${head_before}^{tree}")"
+    else
+      printf 'source_status\tworking-tree\n'
+      printf 'observed_head_before\t%s\n' "${head_before}"
+      printf 'observed_head_after\t%s\n' "${head_after}"
+    fi
     printf 'runner_sha256\t%s\n' "$(sha256sum "${runner}" | awk '{print $1}')"
     printf 'result\t%s\n' "$(cat "${work}/runtime.stdout")"
   } >"${work}/manifest.tsv"
-  (cd "${work}" && find . -type f -name '*.c2' -print0 | \
-    LC_ALL=C sort -z | xargs -0 sha256sum >CHECKPOINT_SHA256SUMS)
+  (
+    cd "${work}"
+    {
+      printf '%s\0' manifest.tsv source-before.status source-after.status \
+        native/libmod5_c2_witness.a native-compile.stdout native-compile.stderr \
+        mod5-c2 compile.stdout compile.stderr runtime.stdout runtime.stderr
+      find corpus checkpoints -type f -print0
+    } | sort -z | xargs -0 sha256sum >SHA256SUMS
+  )
+  printf 'MOD5/C2 evidence: %s\n' "${work}"
+  printf 'MOD5/C2 evidence seal: %s\n' "$(sha256sum "${work}/SHA256SUMS" | awk '{print $1}')"
 fi
