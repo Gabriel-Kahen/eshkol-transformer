@@ -115,7 +115,8 @@ assert "pending terminal wrapper rejects feature-off entry" in feature_off
 assert "p2_g2_terminal_pending_anchor_test.esk" in runner
 assert "p2_g2_terminal_pending_anchor_feature_off_test.esk" in runner
 assert "g3c4_p2g2_terminal_carriers_source_closure.txt" in runner
-assert "for fault in return unwind inherited-abort" in runner
+assert "local -a faults=(return unwind inherited-abort)" in runner
+assert 'for fault in "${faults[@]}"' in runner
 assert "compile_mode normal" in runner and "compile_mode sanitize" in runner
 assert 'cmp "$evidence/normal-run.stdout"' in runner
 print(f"G3-C4 P2/G2 terminal pending anchor static PASS: mutants={len(mutations)}")
