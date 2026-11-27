@@ -217,7 +217,9 @@
         (release fingerprints) (release documents) (release train-ids) (release digests)
         (release audit-record) (release manifest) (release manifest-size)
         (check-data valid-manifest "in-memory EVAL5 manifest round-trip rejected")
-        (expect-status "EVAL5 one-shot manifest comparison" 0 runner-status)))))
+        (unless (= runner-status 0)
+          (check-data #f (string-append "EVAL5 one-shot manifest comparison rejected with status "
+                                       (number->string runner-status))))))))
 
 (define (release-score-buffers buffers targets metrics counts probes)
   (do ((i 0 (+ i 1))) ((= i 4)) (release (vector-ref buffers i)))

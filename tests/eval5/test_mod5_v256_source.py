@@ -70,6 +70,8 @@ class Mod5V256SourceTests(unittest.TestCase):
             self.assertLess(emit.index("(compare-runner-v256"), emit.index("(emit-score"))
             self.assertLess(emit.index("(if (and valid-manifest (= runner-status 0))"),
                             emit.index('(display "MANIFEST_BEGIN")'))
+            self.assertIn('(check-data #f (string-append "EVAL5 one-shot manifest comparison', emit)
+            self.assertNotIn("(expect-status", emit)
             self.assertIn("(vector all original manifest-sha (vector-ref metadata 4))", source)
             self.assertIn("(audit-splits train train -7)", source)
             control = source.split("(define (audit-control", 1)[1].split("(define (witness-main", 1)[0]
