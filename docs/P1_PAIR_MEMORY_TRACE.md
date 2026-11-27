@@ -56,8 +56,9 @@ evidence. Either hosted job is diagnostic-only.
 
 After both receipts are verified and extracted, save the original provider job
 JSON and raw log for each exact run attempt. Fetch both using
-`gh api repos/Gabriel-Kahen/eshkol-transformer/actions/jobs/<job-id>` and the
-same path with `/logs` appended. Run the offline comparison from this branch.
+`gh api repos/Gabriel-Kahen/eshkol-transformer/actions/jobs/<job-id>` for the
+JSON. Save the log with `gh api --allow-escape-sequences` and append `/logs`
+to the API path. Run the offline comparison from this branch.
 
 ```sh
 python3 -m tests.ci.p1_serial_comparison \
