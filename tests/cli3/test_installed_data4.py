@@ -164,7 +164,8 @@ class InstalledData4Tests(unittest.TestCase):
             self.assertEqual(identity["family"], "byte-bpe")
             self.assertEqual(identity["vocabulary_size"], 257)
             self.assertRegex(fingerprint, r"^sha256:eshkol-bpe-tokenizer-v1:[0-9a-f]{64}$")
-            fingerprints.append(fingerprint)
+            fingerprint_bytes = fingerprint.encode("ascii")
+            fingerprints.append(fingerprint_bytes)
 
             built = self.prepare(directory, tokenizer=tokenizer)
             self.assertEqual(json.loads(built.stdout), {
@@ -174,7 +175,7 @@ class InstalledData4Tests(unittest.TestCase):
             })
             manifest = (directory / "manifest.etm").read_bytes()
             header_bytes = int.from_bytes(manifest[12:16], "little")
-            self.assertEqual(manifest[96:header_bytes], fingerprint.encode("ascii"))
+            self.assertEqual(manifest[96:header_bytes], fingerprint_bytes)
             shard = (directory / "shard-0000000000000000.ets").read_bytes()
             header_bytes = int.from_bytes(shard[12:16], "little")
             self.assertEqual(unpack("<3q", shard[header_bytes:-32]), tokens)
@@ -191,20 +192,19 @@ class InstalledData4Tests(unittest.TestCase):
 
         self.assertNotEqual(*fingerprints)
         self.assertNotEqual(*manifest_digests)
-        report = (self.output / "data4-report.tsv").read_bytes()
-        swapped = other / "data4-report.tsv"
-        swapped.write_bytes(report)
-        self.assert_report_rejected("corrupt-data", 12, other)
-
-        # Rebind the report digest while preserving the stale tokenizer fingerprint.
-        prefix = report.rsplit(b"checksum\t", 1)[0]
-        prefix = prefix.replace(
-            b"manifest-sha256\t" + manifest_digests[0],
-            b"manifest-sha256\t" + manifest_digests[1],
-        )
-        swapped.write_bytes(prefix + b"checksum\t" +
-                            hashlib.sha256(prefix).hexdigest().encode("ascii") + b"\n")
-        self.assert_report_rejected("corrupt-data", 12, other)
+        report = other / "data4-report.tsv"
+        prefix = report.read_bytes().rsplit(b"checksum\t", 1)[0]
+        for field, values in (
+            (b"manifest-sha256\t", manifest_digests),
+            (b"tokenizer-fingerprint\t", fingerprints),
+        ):
+            with self.subTest(field=field):
+                first, second = values
+                stale = prefix.replace(field + second + b"\n", field + first + b"\n", 1)
+                self.assertNotEqual(stale, prefix)
+                checksum = hashlib.sha256(stale).hexdigest().encode("ascii")
+                report.write_bytes(stale + b"checksum\t" + checksum + b"\n")
+                self.assert_report_rejected("corrupt-data", 12, other)
 
     def test_legacy_unbound_report_is_rejected(self) -> None:
         self.prepare()
