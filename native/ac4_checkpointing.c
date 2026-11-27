@@ -28,7 +28,9 @@ typedef struct layout {
   uint64_t ntd[3];
   size_t rows, width, kv_width, elements, kv_elements, tape_floats;
   size_t parameter_offset[PARAMS];
+  et_ac4_policy policy;
   uint32_t stride;
+  int replay_gradients;
 } layout;
 
 typedef struct arena {
@@ -40,10 +42,15 @@ typedef struct tape {
   float *norm1, *q, *k, *v, *attention, *residual, *norm2, *gate, *up, *hidden;
 } tape;
 
+typedef struct backward_workspace {
+  float *scratch[SCRATCH_COUNT], *rolling, *segment_cache;
+} backward_workspace;
+
 typedef struct stack {
   const et_ac4_config_v1 *config;
   const layout *dims;
   const et_kernel_provider_v1 *provider;
+  int checked;
 } stack;
 
 static int valid_span(span range, size_t alignment) {
@@ -98,19 +105,25 @@ static et_ac4_status make_layout(const et_ac4_config_v1 *config, layout *dims) {
   const uint32_t layers = shape->layers;
   if (layers == 0 || layers > ET_AC4_MAX_LAYERS ||
       config->mode > ET_AC4_FORWARD_BACKWARD ||
-      config->policy > ET_AC4_POLICY_EVERY_K ||
+      config->policy > ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS ||
       !is_positive_finite_f32(config->epsilon) ||
       !is_valid_dropout_rate(config->dropout_rate))
     return ET_AC4_INVALID_ARGUMENT;
 
+  const int backward = config->mode == ET_AC4_FORWARD_BACKWARD;
+  const int gradient_replay_policy =
+      config->policy == ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS;
+  const et_ac4_policy policy =
+      gradient_replay_policy ? ET_AC4_POLICY_EVERY_K : config->policy;
+  const int replay_gradients = backward && gradient_replay_policy;
   uint32_t stride = 1;
-  if (config->policy == ET_AC4_POLICY_EVERY_K) {
+  if (policy == ET_AC4_POLICY_EVERY_K) {
     stride = config->checkpoint_every;
     if (stride == 0 || stride > layers)
       return ET_AC4_INVALID_ARGUMENT;
   } else if (config->checkpoint_every != 0) {
     return ET_AC4_INVALID_ARGUMENT;
-  } else if (config->policy == ET_AC4_POLICY_SQRT_SEGMENTS) {
+  } else if (policy == ET_AC4_POLICY_SQRT_SEGMENTS) {
     while (stride * stride < layers)
       ++stride;
   }
@@ -131,7 +144,6 @@ static et_ac4_status make_layout(const et_ac4_config_v1 *config, layout *dims) {
       !(short_mqa || (long_batch && (long_mqa_gqa || long_mha))))
     return ET_AC4_UNSUPPORTED;
 
-  const int backward = config->mode == ET_AC4_FORWARD_BACKWARD;
   if (!backward)
     stride = layers;
   const size_t width = shape->query_heads * shape->head_dim;
@@ -144,8 +156,7 @@ static et_ac4_status make_layout(const et_ac4_config_v1 *config, layout *dims) {
   const size_t kv_matrix = kv_width * width;
   const size_t per_layer = 2 * width + 5 * matrix + 2 * kv_matrix;
   const uint32_t checkpoints = (layers - 1) / stride;
-  const uint32_t tapes =
-      backward && config->policy == ET_AC4_POLICY_NONE ? layers : 1;
+  const uint32_t tapes = backward && policy == ET_AC4_POLICY_NONE ? layers : 1;
   size_t live_streams =
       2 + (stride > 1); /* Final output, temporary, rolling stream. */
   uint32_t replays = 0;
@@ -153,10 +164,10 @@ static et_ac4_status make_layout(const et_ac4_config_v1 *config, layout *dims) {
   if (backward) {
     live_streams =
         2 + SCRATCH_COUNT; /* Final output, carry, backward temporaries. */
-    if (config->policy == ET_AC4_POLICY_SQRT_SEGMENTS) {
+    if (policy == ET_AC4_POLICY_SQRT_SEGMENTS) {
       live_streams += stride - 1;
       replays = 2 * layers - (checkpoints + 1);
-    } else if (config->policy == ET_AC4_POLICY_EVERY_K) {
+    } else if (policy == ET_AC4_POLICY_EVERY_K) {
       live_streams +=
           stride > 1; /* Rolling replay must survive the backward call. */
       for (uint32_t begin = 0; begin < layers; begin += stride) {
@@ -164,14 +175,18 @@ static et_ac4_status make_layout(const et_ac4_config_v1 *config, layout *dims) {
         const uint32_t length = left < stride ? left : stride;
         replays += length * (length + 1) / 2;
       }
-    } else if (config->policy == ET_AC4_POLICY_EVERY_LAYER) {
+    } else if (policy == ET_AC4_POLICY_EVERY_LAYER) {
       replays = layers;
     }
   }
 
   const size_t peak =
       ((live_streams + checkpoints) * x + tapes * tape_floats) * sizeof(float);
-  const size_t staging = backward ? layers * per_layer * sizeof(float) : 0;
+  const size_t staging =
+      backward ? (replay_gradients ? 1 : layers) * per_layer * sizeof(float)
+               : 0;
+  if (replay_gradients)
+    replays *= 2;
   *dims = (layout){.memory = {x, per_layer, layers * per_layer, peak, staging,
                               peak + staging, checkpoints, tapes, replays},
                    .ntd = {shape->batch, shape->tokens, width},
@@ -181,7 +196,9 @@ static et_ac4_status make_layout(const et_ac4_config_v1 *config, layout *dims) {
                    .elements = x,
                    .kv_elements = kv,
                    .tape_floats = tape_floats,
-                   .stride = stride};
+                   .policy = policy,
+                   .stride = stride,
+                   .replay_gradients = replay_gradients};
   const size_t counts[PARAMS] = {width, matrix, kv_matrix, kv_matrix, matrix,
                                  width, matrix, matrix,    matrix};
   for (size_t i = 1; i < PARAMS; ++i)
@@ -321,9 +338,9 @@ static et_ac4_status dispatch(const stack *model, const char *capability,
       sizeof(*out), n_out * sizeof(*out), out};
   et_kernel_error error;
   const et_kernel_provider_v1 *provider = model->provider;
-  /* Statically linked, pinned K1 provider. Validation precedes every invoke;
-   * both phases borrow the same local descriptors and payloads. */
-  if (provider->validate_call(&call, &error) == 0) {
+  /* The publication pass repeats calls accepted in the checked pass.
+   * Both passes borrow the same payloads and stable FP controls. */
+  if (!model->checked || provider->validate_call(&call, &error) == 0) {
     provider->invoke_call(&call);
     return ET_AC4_OK;
   }
@@ -421,8 +438,9 @@ static void reorder_heads(const et_ac4_shape_v1 *s, size_t heads,
   }
 }
 
-static int project(const layout *dims, const float *x, const float *w,
+static int project(const stack *model, const float *x, const float *w,
                    size_t out_width, float *out) {
+  const layout *dims = model->dims;
   const size_t width = dims->width;
   for (size_t t = 0; t < dims->rows; ++t) {
     for (size_t o = 0; o < out_width; ++o) {
@@ -432,7 +450,7 @@ static int project(const layout *dims, const float *x, const float *w,
       out[t * out_width + o] = sum;
     }
   }
-  return finite_values(out, dims->rows * out_width);
+  return !model->checked || finite_values(out, dims->rows * out_width);
 }
 
 static void project_backward(const layout *dims, const float *x, const float *w,
@@ -490,20 +508,20 @@ static et_ac4_status layer_forward(const stack *model, uint32_t layer,
       rms(model, x, params + offset[GAMMA1], NULL, a.norm1, NULL);
   if (status != ET_AC4_OK)
     return status;
-  if (!project(dims, a.norm1, params + offset[WQ], width, tmp))
+  if (!project(model, a.norm1, params + offset[WQ], width, tmp))
     return ET_AC4_NUMERIC_ERROR;
   reorder_heads(shape, shape->query_heads, tmp, a.q, 1);
-  if (!project(dims, a.norm1, params + offset[WK], kv_width, tmp))
+  if (!project(model, a.norm1, params + offset[WK], kv_width, tmp))
     return ET_AC4_NUMERIC_ERROR;
   reorder_heads(shape, shape->kv_heads, tmp, a.k, 1);
-  if (!project(dims, a.norm1, params + offset[WV], kv_width, tmp))
+  if (!project(model, a.norm1, params + offset[WV], kv_width, tmp))
     return ET_AC4_NUMERIC_ERROR;
   reorder_heads(shape, shape->kv_heads, tmp, a.v, 1);
   status = attend(model, &a, NULL, tmp, NULL, NULL);
   if (status != ET_AC4_OK)
     return status;
   reorder_heads(shape, shape->query_heads, tmp, a.attention, 0);
-  if (!project(dims, a.attention, params + offset[WO], width, tmp))
+  if (!project(model, a.attention, params + offset[WO], width, tmp))
     return ET_AC4_NUMERIC_ERROR;
   const uint64_t key = layer_key(model->config, layer);
   dropout(model, key, ATTENTION_BRANCH, tmp, x, a.residual);
@@ -511,22 +529,24 @@ static et_ac4_status layer_forward(const stack *model, uint32_t layer,
   status = rms(model, a.residual, params + offset[GAMMA2], NULL, a.norm2, NULL);
   if (status != ET_AC4_OK)
     return status;
-  if (!project(dims, a.norm2, params + offset[WGATE], width, a.gate) ||
-      !project(dims, a.norm2, params + offset[WUP], width, a.up))
+  if (!project(model, a.norm2, params + offset[WGATE], width, a.gate) ||
+      !project(model, a.norm2, params + offset[WUP], width, a.up))
     return ET_AC4_NUMERIC_ERROR;
   status = swiglu(model, &a, NULL, a.hidden, NULL);
   if (status != ET_AC4_OK)
     return status;
-  if (!project(dims, a.hidden, params + offset[WDOWN], width, tmp))
+  if (!project(model, a.hidden, params + offset[WDOWN], width, tmp))
     return ET_AC4_NUMERIC_ERROR;
   dropout(model, key, FFN_BRANCH, tmp, a.residual, out);
-  return finite_values(out, dims->elements) ? ET_AC4_OK : ET_AC4_NUMERIC_ERROR;
+  return !model->checked || finite_values(out, dims->elements)
+             ? ET_AC4_OK
+             : ET_AC4_NUMERIC_ERROR;
 }
 
 static et_ac4_status layer_backward(const stack *model, uint32_t layer,
                                     const float *x, const float *params, tape a,
                                     float *carry, float *grad,
-                                    float *scratch[SCRATCH_COUNT]) {
+                                    float *const scratch[SCRATCH_COUNT]) {
   const layout *dims = model->dims;
   const et_ac4_shape_v1 *shape = &model->config->shape;
   const size_t *offset = dims->parameter_offset;
@@ -579,8 +599,9 @@ static et_ac4_status layer_backward(const stack *model, uint32_t layer,
     return status;
   for (size_t i = 0; i < dims->elements; ++i)
     carry[i] += s0[i];
-  return finite_values(carry, dims->elements) &&
-                 finite_values(grad, dims->memory.parameter_floats_per_layer)
+  return !model->checked ||
+                 (finite_values(carry, dims->elements) &&
+                  finite_values(grad, dims->memory.parameter_floats_per_layer))
              ? ET_AC4_OK
              : ET_AC4_NUMERIC_ERROR;
 }
@@ -635,20 +656,20 @@ static et_ac4_status replay(const stack *model, const et_ac4_io_v1 *io,
 static et_ac4_status
 backward_segment(const stack *model, const et_ac4_io_v1 *io, uint32_t begin,
                  uint32_t end, const float *initial_input, float *tapes,
-                 float *segment_cache, float *rolling, float *carry,
-                 float *staged, float *scratch[SCRATCH_COUNT],
-                 uint32_t *replayed) {
+                 float *carry, float *staged, float *published,
+                 const backward_workspace *work, uint32_t *replayed) {
   const layout *dims = model->dims;
-  const et_ac4_policy policy = model->config->policy;
+  const et_ac4_policy policy = dims->policy;
   const size_t x = dims->elements;
-  float *tmp = scratch[TMP0];
+  const size_t p = dims->memory.parameter_floats_per_layer;
+  float *tmp = work->scratch[TMP0];
   const tape working_tape = tape_at(dims, tapes);
 
   /* SQRT keeps just the inter-layer stream inside this segment. */
   if (policy == ET_AC4_POLICY_SQRT_SEGMENTS) {
     const float *input = initial_input;
     for (uint32_t layer = begin; layer + 1 < end; ++layer) {
-      float *next = segment_cache + (layer - begin) * x;
+      float *next = work->segment_cache + (layer - begin) * x;
       const et_ac4_status status =
           replay(model, io, layer, input, working_tape, tmp, next, replayed);
       if (status != ET_AC4_OK)
@@ -665,15 +686,15 @@ backward_segment(const stack *model, const et_ac4_io_v1 *io, uint32_t begin,
       a = tape_at(dims, tapes + layer * dims->tape_floats);
     } else {
       if (policy == ET_AC4_POLICY_SQRT_SEGMENTS && layer > begin) {
-        input = segment_cache + (layer - begin - 1) * x;
+        input = work->segment_cache + (layer - begin - 1) * x;
       } else if (policy == ET_AC4_POLICY_EVERY_K) {
         /* Stream the prefix anew, retaining only the current layer input. */
         for (uint32_t i = begin; i < layer; ++i) {
           const et_ac4_status status =
-              replay(model, io, i, input, a, tmp, rolling, replayed);
+              replay(model, io, i, input, a, tmp, work->rolling, replayed);
           if (status != ET_AC4_OK)
             return status;
-          input = rolling;
+          input = work->rolling;
         }
       }
       const et_ac4_status status =
@@ -681,35 +702,46 @@ backward_segment(const stack *model, const et_ac4_io_v1 *io, uint32_t begin,
       if (status != ET_AC4_OK)
         return status;
     }
-    float *grad = staged + layer * dims->memory.parameter_floats_per_layer;
+    float *grad = dims->replay_gradients ? staged : staged + layer * p;
+    memset(grad, 0, p * sizeof(float));
     const et_ac4_status status =
         layer_backward(model, layer, input, layer_parameters(model, io, layer),
-                       a, carry, grad, scratch);
+                       a, carry, grad, work->scratch);
     if (status != ET_AC4_OK)
       return status;
+    if (published != NULL)
+      memcpy(published + layer * p, grad, p * sizeof(float));
   }
   return ET_AC4_OK;
 }
 
-static et_ac4_status backward(const stack *model, const et_ac4_io_v1 *io,
-                              arena *storage, const float *checkpoints,
-                              float *tapes, const float *output, float *carry,
-                              float *staged, uint32_t *replayed) {
-  const layout *dims = model->dims;
-  const et_ac4_policy policy = model->config->policy;
+static et_ac4_status prepare_backward(const layout *dims, arena *storage,
+                                      backward_workspace *work) {
   const uint32_t stride = dims->stride;
   const size_t x = dims->elements;
-  float *scratch[SCRATCH_COUNT];
-  for (size_t i = 0; i < COUNT(scratch); ++i) {
-    scratch[i] = take(storage, x);
-    if (scratch[i] == NULL)
+  for (size_t i = 0; i < COUNT(work->scratch); ++i) {
+    work->scratch[i] = take(storage, x);
+    if (work->scratch[i] == NULL)
       return ET_AC4_WORKSPACE_TOO_SMALL;
   }
-  float *rolling =
-      take(storage, policy == ET_AC4_POLICY_EVERY_K && stride > 1 ? x : 0);
-  if (rolling == NULL)
-    return ET_AC4_WORKSPACE_TOO_SMALL;
-  const size_t mark = storage->used;
+  work->rolling = take(
+      storage, dims->policy == ET_AC4_POLICY_EVERY_K && stride > 1 ? x : 0);
+  const size_t cache =
+      dims->policy == ET_AC4_POLICY_SQRT_SEGMENTS ? (stride - 1) * x : 0;
+  work->segment_cache = take(storage, cache);
+  return work->rolling != NULL && work->segment_cache != NULL
+             ? ET_AC4_OK
+             : ET_AC4_WORKSPACE_TOO_SMALL;
+}
+
+static et_ac4_status backward(const stack *model, const et_ac4_io_v1 *io,
+                              const float *checkpoints, float *tapes,
+                              const float *output, float *carry, float *staged,
+                              float *published, const backward_workspace *work,
+                              uint32_t *replayed) {
+  const layout *dims = model->dims;
+  const uint32_t stride = dims->stride;
+  const size_t x = dims->elements;
   for (size_t i = 0; i < x; ++i)
     carry[i] = (float)(((double)output[i] - io->target.data[i]) / (double)x);
 
@@ -718,17 +750,11 @@ static et_ac4_status backward(const stack *model, const et_ac4_io_v1 *io,
     const uint32_t begin = ((end - 1) / stride) * stride;
     const float *input =
         begin == 0 ? io->input.data : checkpoints + (begin / stride - 1) * x;
-    const size_t cache =
-        policy == ET_AC4_POLICY_SQRT_SEGMENTS ? (end - begin - 1) * x : 0;
-    float *segment_cache = take(storage, cache);
-    if (segment_cache == NULL)
-      return ET_AC4_WORKSPACE_TOO_SMALL;
     const et_ac4_status status =
-        backward_segment(model, io, begin, end, input, tapes, segment_cache,
-                         rolling, carry, staged, scratch, replayed);
+        backward_segment(model, io, begin, end, input, tapes, carry, staged,
+                         published, work, replayed);
     if (status != ET_AC4_OK)
       return status;
-    storage->used = mark;
     end = begin;
   }
   return ET_AC4_OK;
@@ -766,7 +792,7 @@ et_ac4_status et_ac4_run_v1(const et_ac4_config_v1 *config,
   float *output = take(&storage, dims.elements);
   if (checkpoints == NULL || tapes == NULL || output == NULL)
     return ET_AC4_WORKSPACE_TOO_SMALL;
-  const stack model = {config, &dims, et_mod5_kernel_provider_v1()};
+  stack model = {config, &dims, et_mod5_kernel_provider_v1(), 1};
   status = forward(&model, io, &storage, checkpoints, tapes, output);
   if (status != ET_AC4_OK)
     return status;
@@ -783,13 +809,28 @@ et_ac4_status et_ac4_run_v1(const et_ac4_config_v1 *config,
     float *carry = take(&storage, dims.elements);
     if (carry == NULL)
       return ET_AC4_WORKSPACE_TOO_SMALL;
-    float *staged = storage.data + storage.capacity;
-    memset(staged, 0, dims.memory.gradient_staging_bytes);
-    status = backward(&model, io, &storage, checkpoints, tapes, output, carry,
-                      staged, &completed.memory.rematerialized_layers);
+    backward_workspace work;
+    status = prepare_backward(&dims, &storage, &work);
     if (status != ET_AC4_OK)
       return status;
-    memcpy(io->d_parameters.data, staged, dims.memory.gradient_staging_bytes);
+    float *staged = storage.data + storage.capacity;
+    status = backward(&model, io, checkpoints, tapes, output, carry, staged,
+                      NULL, &work, &completed.memory.rematerialized_layers);
+    if (status != ET_AC4_OK)
+      return status;
+    if (dims.replay_gradients) {
+      /* Replay starts from the same final output and retained boundaries.
+       * Every pass initializes carry, each rematerialized tape and each
+       * layer's gradient before use. All reservations and fallible checks are
+       * complete, so replay can publish the scratch gradient after each layer.
+       */
+      model.checked = 0;
+      (void)backward(&model, io, checkpoints, tapes, output, carry, staged,
+                     io->d_parameters.data, &work,
+                     &completed.memory.rematerialized_layers);
+    } else {
+      memcpy(io->d_parameters.data, staged, dims.memory.gradient_staging_bytes);
+    }
     memcpy(io->d_input.data, carry, dims.elements * sizeof(float));
   }
 

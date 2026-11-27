@@ -6,8 +6,8 @@ binary32. The public C11 and C++17 interface is
 `build/ac4/libeshkol_ac4.a` with `bash scripts/build-ac4.sh` and link it with the
 MOD5 archive from `bash scripts/build-mod5.sh`, the K1 ABI implementation, and
 `-lm`. AC4 calls the statically linked
-`et_mod5_kernel_provider_v1()` from `mod5_primitives_abi.h` and validates each
-operation with that provider before invoking it.
+`et_mod5_kernel_provider_v1()` from `mod5_primitives_abi.h`. The checked
+path validates each operation with that provider before invoking it.
 
 ## Model and API
 
@@ -102,6 +102,7 @@ successive segments, including any shorter tail.
 | `EVERY_LAYER` | Retain only interlayer streams and replay each tape once | `A + (L+6)×X` | `L` |
 | `SQRT_SEGMENTS` | Use `k = ceil(sqrt(L))`, keep `C` boundaries, and cache the streams of one segment | `A + (7+C+k-1)×X` | `2L-(C+1)` |
 | `EVERY_K` | Keep `C` boundaries and replay each layer's prefix from its nearest boundary | `A + (7+C+[k>1])×X` | `sum(m_i×(m_i+1)/2)` |
+| `EVERY_K_REPLAY_GRADIENTS` | Use the `EVERY_K` schedule for two backward passes | `A + (7+C+[k>1])×X` | `2×sum(m_i×(m_i+1)/2)` |
 
 The common training term `7X` holds the final stream, the gradient carry,
 and five temporary streams. Forward-only peaks at `A + (2+[L>1])×X`.
@@ -112,12 +113,35 @@ local evaluator scratch are outside the arena.
 
 With a fixed tensor shape, activation retention grows as `O(L)` for
 `NONE` and `EVERY_LAYER`, `O(sqrt(L))` for `SQRT_SEGMENTS`, and
-`O(ceil(L/k))` for `EVERY_K`. Setting `k = L` gives constant activation
-retention and `L(L+1)/2` replay forwards. The other checkpointing schedules
-with linear replay retain more intermediate state. One full parameter
-gradient buffer is staged in workspace to make publication failure-atomic.
-It costs `4 × L × (2D + 5D² + 2VD)` bytes, so total training workspace still
-grows linearly with depth. The plan and result report those bytes separately.
+`O(ceil(L/k))` for the `EVERY_K` policies. Setting `k = L` gives constant
+activation retention. The first four policies stage one full parameter
+gradient buffer in workspace to make publication failure-atomic. It costs
+`4 × L × (2D + 5D² + 2VD)` bytes, so their total training workspace still
+grows linearly with depth.
+
+`ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS` is an opt-in ABI 1.1 policy with the
+same struct layouts and `checkpoint_every` range as `EVERY_K`. It stages
+one layer of parameter gradients, `4 × (2D + 5D² + 2VD)` bytes. At `k = L`,
+its activation arena and gradient staging are both constant in depth for
+`L > 1`. Caller-owned parameters and the output gradient span still scale
+with depth. `activation_peak_bytes` excludes the separately reported
+`gradient_staging_bytes`. `rematerialized_layers` includes replay forwards
+from both backward passes.
+
+The first backward pass validates the full reverse traversal while
+overwriting the same one-layer staging buffer. Only after it succeeds does
+the second pass repeat that traversal and copy each staged gradient into
+its packed `d_parameters` slot. Both passes start with the same final
+stream, target, immutable boundaries and parameters, and recompute dropout
+from the same counters. They share the same reserved scratch and zero the
+gradient buffer before each layer. Replays initialize the tapes and scratch
+streams before their values are read. The publication pass uses the
+non-failing MOD5 invoke path for the already accepted operations. All
+allocation and numeric validation precede publication. This relies on the
+pinned, deterministic MOD5 provider and on the caller keeping inputs and FP
+controls stable for the full call. `d_input`, predictions, and the result
+are published after the second pass. Forward-only calls use the same
+rolling stream as the other policies.
 
 ## Measured results
 
@@ -159,6 +183,28 @@ loss with the current step's mask decreased on every update, and the fixed
 dropout-free evaluation loss decreased across the full sequence. At 16 layers
 with training dropout, evaluation loss decreased from `0.187536549` to
 `0.0771545581`.
+
+### Gradient replay candidate
+
+The same pinned image, CPU model, GQA shape and timing protocol measured the
+new policy against `EVERY_K` with `k = L`. Both used a 3,264-byte activation
+arena. Replay staged 1,600 bytes of parameter gradients at all three depths.
+
+| Layers | EVERY_K workspace B | Replay workspace B | Workspace saved | Replay forwards | Median µs/call | Time vs. EVERY_K |
+|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 9,664 | 4,864 | 49.67% | 10 → 20 | 140.112 → 188.553 | 1.346× |
+| 8 | 16,064 | 4,864 | 69.72% | 36 → 72 | 364.379 → 506.040 | 1.389× |
+| 16 | 28,864 | 4,864 | 83.15% | 136 → 272 | 1,124.097 → 1,610.385 | 1.433× |
+
+The optimized and ASan/UBSan/LSan suites each passed 5,440 central
+differences for replay gradients across all four supported shapes, 136
+depth/stride combinations for each `EVERY_K` policy, and byte-identical
+predictions, loss, gradients, and parameters after each of eight SGD steps
+across all five policies. A 16-layer GQA stack with a short tail at `k = 5`
+preserved every output byte when either a MOD5 backward input or a
+projection weight gradient overflowed at the last layer visited in
+reverse. The suite also checked malformed shapes and spans, unsupported
+FP controls, and short workspace.
 
 ```bash
 CC=clang-21 CXX=clang++-21 AC4_ASAN_DETECT_LEAKS=1 bash scripts/test-ac4.sh
