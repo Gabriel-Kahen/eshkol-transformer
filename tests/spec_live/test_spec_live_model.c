@@ -12,8 +12,7 @@
 #include "../../src/eshkol_transformer/m3_call_f32_integration.c"
 #include "../../src/eshkol_transformer/g3c4_model_owner.c"
 
-#include "eshkol_transformer/paged_kv_abi.h"
-#include "eshkol_transformer/spec_decode_abi.h"
+#include "eshkol_transformer/spec_paged_round_abi.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -30,12 +29,14 @@
 } while (0)
 #define OK(call) CHECK((call) == 0)
 
-enum { VOCAB = 256, CAPACITY = 4, HEADS = 2, WIDTH = 2, BLOCKS = 4 };
+enum { VOCAB = 256, CAPACITY = 4, HEADS = 2, WIDTH = 2, BLOCKS = 4,
+       BLOCK_SIZE = 2, MAX_HORIZON = 2, TOKEN_FLOATS = HEADS * WIDTH, INJECTED_ERROR = -17 };
+enum { DRAFT, TARGET, MODELS };
 typedef float logit_row[VOCAB];
 
 typedef struct {
-  float key[HEADS * WIDTH];
-  float value[HEADS * WIDTH];
+  float key[TOKEN_FLOATS];
+  float value[TOKEN_FLOATS];
 } token_kv;
 
 typedef struct {
@@ -50,6 +51,22 @@ typedef struct {
   uint32_t anchor;
   uint32_t branch;
 } model;
+
+typedef struct {
+  float key[MAX_HORIZON * TOKEN_FLOATS];
+  float value[MAX_HORIZON * TOKEN_FLOATS];
+} candidate_kv;
+
+typedef struct {
+  et_g3c4_model_owner_internal *owners[MODELS];
+  const float *target_logits;
+  uint32_t horizon;
+  int32_t injected_status;
+  uint32_t calls;
+  cache_prefix prefixes[MODELS];
+  token_kv kv[MODELS];
+  logit_row logits[MODELS];
+} round_scratch;
 
 static et_g3c4_model_owner_internal *new_owner(int64_t seed, char ids[14]) {
   et_g3c4_model_owner_internal *owner =
@@ -131,7 +148,7 @@ static cache_prefix read_a2(et_g3c4_context_internal *context) {
   return prefix;
 }
 
-static cache_prefix read_paged(et_paged_kv_pool *pool, uint32_t seq) {
+static cache_prefix read_paged(const et_paged_kv_pool *pool, uint32_t seq) {
   cache_prefix prefix = {0};
   OK(et_paged_kv_seq_len(pool, seq, &prefix.length));
   CHECK(prefix.length <= CAPACITY);
@@ -181,25 +198,62 @@ static void check_prefix(const cache_prefix *actual, const cache_prefix *expecte
   }
 }
 
-static void forward_paged(const model *m, uint32_t token,
-                          const logit_row selection, logit_row output) {
-  cache_prefix prefix = read_paged(m->pool, m->branch);
-  et_g3c4_context_internal *context = new_generator(m->owner);
-  restore_a2(context, &prefix);
+static token_kv forward_from_prefix(et_g3c4_model_owner_internal *owner,
+                                    const cache_prefix *prefix, uint32_t token,
+                                    const logit_row selection, logit_row output) {
+  et_g3c4_context_internal *context = new_generator(owner);
+  restore_a2(context, prefix);
   forward(context, token, selection, output);
   cache_prefix committed = read_a2(context);
-  CHECK(committed.length == prefix.length + 1);
-  committed.length = prefix.length;
-  check_prefix(&committed, &prefix);
-  const token_kv *appended = &committed.tokens[prefix.length];
-  OK(et_paged_kv_append_token(m->pool, m->branch, appended->key, appended->value));
+  CHECK(committed.length == prefix->length + 1);
+  committed.length = prefix->length;
+  check_prefix(&committed, prefix);
   OK(et_g3c4_private_generator_close_v1(context));
+  return committed.tokens[prefix->length];
+}
+
+static int32_t recompute(void *opaque, uint32_t token, uint32_t position,
+                         et_spec_paged_round_prefix_v1 draft,
+                         et_spec_paged_round_prefix_v1 target,
+                         et_spec_paged_kv_span_v1 *out_draft,
+                         et_spec_paged_kv_span_v1 *out_target) {
+  round_scratch *scratch = opaque;
+  const et_spec_paged_round_prefix_v1 views[MODELS] = {draft, target};
+  et_spec_paged_kv_span_v1 *const out[MODELS] = {out_draft, out_target};
+  CHECK(position > 0 && position <= scratch->horizon + 1 && position < CAPACITY);
+  const float *target_row = scratch->target_logits + (position - 1) * VOCAB;
+  ++scratch->calls;
+  for (size_t i = 0; i < MODELS; ++i) {
+    const et_spec_paged_round_prefix_v1 view = views[i];
+    scratch->prefixes[i] = read_paged(view.pool, view.seq_id);
+    CHECK(scratch->prefixes[i].length == position);
+
+    /* At position two the accepted child fits one block. A rejected
+       position-two candidate would have occupied a second child block. */
+    et_paged_kv_stats stats;
+    OK(et_paged_kv_stats_get(view.pool, &stats));
+    CHECK(stats.active_seqs == 2 && stats.shared_blocks == 0 &&
+          stats.used_blocks == 1 + (position + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+    token_kv *kv = &scratch->kv[i];
+    *kv = forward_from_prefix(scratch->owners[i], &scratch->prefixes[i],
+                              token, target_row, scratch->logits[i]);
+    *out[i] = (et_spec_paged_kv_span_v1){kv->key, kv->value, TOKEN_FLOATS};
+  }
+  return scratch->injected_status;
+}
+
+static void continue_paged(const model *m, uint32_t token,
+                           const logit_row selection, logit_row output) {
+  const cache_prefix prefix = read_paged(m->pool, m->branch);
+  const token_kv kv = forward_from_prefix(m->owner, &prefix, token, selection, output);
+  OK(et_paged_kv_append_token(m->pool, m->branch, kv.key, kv.value));
 }
 
 static void start_model(model *m, et_g3c4_model_owner_internal *owner,
                         uint32_t prompt, logit_row logits) {
   const et_paged_kv_config cfg = {
-    .num_blocks = BLOCKS, .block_size = 2, .num_layers = 1,
+    .num_blocks = BLOCKS, .block_size = BLOCK_SIZE, .num_layers = 1,
     .num_kv_heads = HEADS, .head_dim = WIDTH, .max_seqs = 2,
     .max_blocks_per_seq = 2,
   };
@@ -212,26 +266,33 @@ static void start_model(model *m, et_g3c4_model_owner_internal *owner,
   OK(et_paged_kv_seq_alloc(m->pool, &m->anchor));
   OK(et_paged_kv_append_token(m->pool, m->anchor,
       prefix.tokens[0].key, prefix.tokens[0].value));
-  OK(et_paged_kv_seq_fork(m->pool, m->anchor, &m->branch));
 }
 
-static void rollback(const model *m, uint32_t length, int rejected) {
-  uint32_t blocks[CAPACITY], count, refs, old_length;
-  OK(et_paged_kv_seq_len(m->pool, m->branch, &old_length));
-  OK(et_paged_kv_seq_block_table(m->pool, m->branch, blocks, CAPACITY, &count));
-  if (rejected) {
-    CHECK(old_length == 3 && length == 2 && count == 2);
-    OK(et_paged_kv_block_refcount(m->pool, blocks[1], &refs));
-    CHECK(refs == 1);
-  }
-  OK(et_paged_kv_seq_truncate(m->pool, m->branch, length));
-  if (rejected) {
-    OK(et_paged_kv_block_refcount(m->pool, blocks[1], &refs));
-    CHECK(refs == 0);
+static uint32_t anchor_block(const model *m) {
+  uint32_t block, count;
+  OK(et_paged_kv_seq_block_table(m->pool, m->anchor, &block, 1, &count));
+  CHECK(count == 1);
+  return block;
+}
+
+static void check_failed_round(const model *m, uint32_t original_block) {
+  const cache_prefix actual = read_paged(m->pool, m->anchor);
+  const cache_prefix expected = read_a2(m->control);
+  et_paged_kv_stats stats;
+  check_prefix(&actual, &expected);
+  CHECK(anchor_block(m) == original_block);
+  OK(et_paged_kv_stats_get(m->pool, &stats));
+  CHECK(stats.active_seqs == 1 && stats.used_blocks == 1 &&
+        stats.free_blocks == BLOCKS - 1 && stats.shared_blocks == 0 &&
+        stats.cow_copies == 1);
+  for (uint32_t block = 0; block < BLOCKS; ++block) {
+    uint32_t refs;
+    OK(et_paged_kv_block_refcount(m->pool, block, &refs));
+    CHECK(refs == (uint32_t)(block == original_block));
   }
 }
 
-static void finish_model(const model *m) {
+static void finish_model(const model *m, uint64_t expected_copies) {
   et_paged_kv_stats stats;
   const cache_prefix anchor = read_paged(m->pool, m->anchor);
   cache_prefix expected = read_a2(m->control);
@@ -240,7 +301,7 @@ static void finish_model(const model *m) {
   check_prefix(&anchor, &expected);
   OK(et_paged_kv_stats_get(m->pool, &stats));
   CHECK(stats.active_seqs == 2 && stats.used_blocks == 3 &&
-        stats.shared_blocks == 0 && stats.cow_copies == 1);
+        stats.shared_blocks == 0 && stats.cow_copies == expected_copies);
   OK(et_paged_kv_seq_free(m->pool, m->branch));
   OK(et_paged_kv_seq_free(m->pool, m->anchor));
   OK(et_paged_kv_stats_get(m->pool, &stats));
@@ -261,59 +322,118 @@ static void check_control(const model *m, const logit_row actual,
 static void run_case(const char *label, et_g3c4_model_owner_internal *target_owner,
                      et_g3c4_model_owner_internal *draft_owner,
                      uint32_t prompt, uint32_t horizon, uint32_t accepted) {
-  model target, draft;
-  float target_logits[CAPACITY * VOCAB];
-  float *const target_rows[CAPACITY] = {
-    target_logits, target_logits + VOCAB, target_logits + 2 * VOCAB,
-    target_logits + 3 * VOCAB,
-  };
-  logit_row draft_rows[CAPACITY];
-  logit_row control_rows[CAPACITY], draft_control;
-  uint32_t proposals[2], emitted[3];
+  model models[MODELS];
+  float target_logits[(MAX_HORIZON + 1) * VOCAB];
+  logit_row draft_rows[MAX_HORIZON + 1], control_rows[CAPACITY], draft_control;
+  uint32_t proposals[MAX_HORIZON];
   int64_t committed[CAPACITY] = {prompt};
-  et_spec_verify_result_v1 result;
-  CHECK(horizon > 0 && horizon <= 2 && accepted > 0 && accepted <= horizon);
-  start_model(&target, target_owner, prompt, target_rows[0]);
-  start_model(&draft, draft_owner, prompt, draft_rows[0]);
-  memcpy(control_rows[0], target_rows[0], sizeof(logit_row));
+  candidate_kv candidates[MODELS];
+  et_g3c4_context_internal *producers[MODELS];
 
+  CHECK(horizon > 0 && horizon <= MAX_HORIZON && accepted > 0 && accepted <= horizon);
+  start_model(&models[DRAFT], draft_owner, prompt, draft_rows[0]);
+  start_model(&models[TARGET], target_owner, prompt, target_logits);
+  memcpy(control_rows[0], target_logits, sizeof(logit_row));
+
+  for (size_t i = 0; i < MODELS; ++i) {
+    producers[i] = new_generator(models[i].owner);
+    const cache_prefix prefix = read_paged(models[i].pool, models[i].anchor);
+    restore_a2(producers[i], &prefix);
+  }
   for (uint32_t i = 0; i < horizon; ++i) {
     proposals[i] = greedy(draft_rows[i]);
-    forward_paged(&draft, proposals[i], draft_rows[i], draft_rows[i + 1]);
-    forward_paged(&target, proposals[i], draft_rows[i], target_rows[i + 1]);
+    forward(producers[DRAFT], proposals[i], draft_rows[i], draft_rows[i + 1]);
+    forward(producers[TARGET], proposals[i], draft_rows[i], target_logits + (i + 1) * VOCAB);
   }
-  OK(et_spec_verify_greedy_v1(proposals, target_logits, horizon, VOCAB,
-      UINT32_MAX, emitted, 3, &result));
-  CHECK(result.accepted_count == accepted && result.emitted_count == accepted + 1);
-  CHECK(result.rejected == (accepted < horizon) && result.eos_hit == 0);
-  CHECK(result.rng_draws == 0 && result.next_rng.seed == 0 && result.next_rng.counter == 0);
-  rollback(&target, 1 + accepted, result.rejected);
-  rollback(&draft, 1 + accepted, result.rejected);
-
-  /* Advance the controls without SPEC5. Their greedily selected target tokens
-     drive both models, including the first continuation after the span. */
-  for (uint32_t i = 0; i < accepted; ++i) {
-    const uint32_t token = greedy(control_rows[i]);
-    CHECK(token == emitted[i] && token == proposals[i]);
-    committed[i + 1] = token;
-    forward(target.control, token, control_rows[i], control_rows[i + 1]);
-    forward(draft.control, token, control_rows[i], draft_control);
+  for (size_t i = 0; i < MODELS; ++i) {
+    const cache_prefix prefix = read_a2(producers[i]);
+    CHECK(prefix.length == horizon + 1);
+    for (uint32_t candidate = 0; candidate < horizon; ++candidate) {
+      const token_kv *kv = &prefix.tokens[candidate + 1];
+      memcpy(candidates[i].key + candidate * TOKEN_FLOATS, kv->key, sizeof(kv->key));
+      memcpy(candidates[i].value + candidate * TOKEN_FLOATS, kv->value, sizeof(kv->value));
+    }
+    OK(et_g3c4_private_generator_close_v1(producers[i]));
   }
-  check_control(&target, target_rows[accepted], control_rows[accepted]);
-  check_control(&draft, draft_rows[accepted], draft_control);
 
-  for (uint32_t i = accepted; i < CAPACITY - 1; ++i) {
-    const uint32_t token = i == accepted ? emitted[i] : greedy(target_rows[i]);
+  round_scratch scratch = {
+    .owners = {draft_owner, target_owner},
+    .target_logits = target_logits,
+    .horizon = horizon,
+  };
+  const et_spec_paged_round_request_v1 request = {
+    .draft = {models[DRAFT].pool, models[DRAFT].anchor,
+              {candidates[DRAFT].key, candidates[DRAFT].value, horizon * TOKEN_FLOATS}},
+    .target = {models[TARGET].pool, models[TARGET].anchor,
+               {candidates[TARGET].key, candidates[TARGET].value, horizon * TOKEN_FLOATS}},
+    .draft_tokens = proposals,
+    .target_logits = target_logits,
+    .target_logit_count = (horizon + 1) * VOCAB,
+    .horizon = horizon,
+    .vocab_size = VOCAB,
+    .eos_token_id = UINT32_MAX,
+    .recompute = recompute,
+    .context = &scratch,
+  };
+  et_spec_paged_round_result_v1 result;
+  const uint32_t rejected = accepted < horizon;
+  if (rejected) {
+    unsigned char sentinel[sizeof(result)];
+    memset(sentinel, 0xA5, sizeof(sentinel));
+    memcpy(&result, sentinel, sizeof(result));
+    const uint32_t draft_block = anchor_block(&models[DRAFT]);
+    const uint32_t target_block = anchor_block(&models[TARGET]);
+    scratch.injected_status = INJECTED_ERROR;
+    const et_spec_paged_round_status_v1 status =
+        et_spec_paged_round_greedy_v1(&request, &result);
+    CHECK(status.kind == ET_SPEC_PAGED_ROUND_ERR_RECOMPUTE && status.code == INJECTED_ERROR);
+    CHECK(scratch.calls == 1 && memcmp(&result, sentinel, sizeof(result)) == 0);
+    check_failed_round(&models[DRAFT], draft_block);
+    check_failed_round(&models[TARGET], target_block);
+    scratch.injected_status = 0;
+  }
+  const et_spec_paged_round_status_v1 status =
+      et_spec_paged_round_greedy_v1(&request, &result);
+  CHECK(status.kind == ET_SPEC_PAGED_ROUND_OK && status.code == 0);
+  CHECK(scratch.calls == 1u + rejected);
+  const et_spec_verify_result_v1 verify = result.verification;
+  CHECK(verify.accepted_count == accepted && verify.emitted_count == accepted + 1);
+  CHECK(verify.rejected == rejected && verify.eos_hit == 0);
+  CHECK(verify.rng_draws == 0 && verify.next_rng.seed == 0 && verify.next_rng.counter == 0);
+  model *const draft = &models[DRAFT], *const target = &models[TARGET];
+  draft->branch = result.draft_seq_id;
+  target->branch = result.target_seq_id;
+
+  /* Drive the controls from the target alone and compare them at the
+     accepted prefix, after the round, and after any continuation. */
+  for (uint32_t i = 0; i < CAPACITY - 1; ++i) {
     const uint32_t control_token = greedy(control_rows[i]);
-    CHECK(token == control_token);
-    if (result.rejected && i == accepted) CHECK(token != proposals[i]);
-    committed[i + 1] = token;
-    forward_paged(&target, token, target_rows[i], target_rows[i + 1]);
-    forward_paged(&draft, token, target_rows[i], draft_rows[i + 1]);
-    forward(target.control, control_token, control_rows[i], control_rows[i + 1]);
-    forward(draft.control, control_token, control_rows[i], draft_control);
-    check_control(&target, target_rows[i + 1], control_rows[i + 1]);
-    check_control(&draft, draft_rows[i + 1], draft_control);
+    if (i < verify.emitted_count) CHECK(result.tokens[i] == control_token);
+    if (i < accepted) {
+      CHECK(result.tokens[i] == proposals[i]);
+    } else if (i == accepted) {
+      if (rejected) CHECK(result.tokens[i] != proposals[i]);
+      for (size_t m = 0; m < MODELS; ++m) {
+        const cache_prefix uninterrupted = read_a2(models[m].control);
+        check_prefix(&scratch.prefixes[m], &uninterrupted);
+      }
+      CHECK(memcmp(target_logits + i * VOCAB, control_rows[i], sizeof(logit_row)) == 0);
+      CHECK(memcmp(draft_rows[i], draft_control, sizeof(logit_row)) == 0);
+    } else {
+      const uint32_t token = greedy(scratch.logits[TARGET]);
+      CHECK(token == control_token);
+      logit_row selection;
+      memcpy(selection, scratch.logits[TARGET], sizeof(selection));
+      continue_paged(target, token, selection, scratch.logits[TARGET]);
+      continue_paged(draft, token, selection, scratch.logits[DRAFT]);
+    }
+    committed[i + 1] = control_token;
+    forward(target->control, control_token, control_rows[i], control_rows[i + 1]);
+    forward(draft->control, control_token, control_rows[i], draft_control);
+    if (i >= accepted) {
+      check_control(target, scratch.logits[TARGET], control_rows[i + 1]);
+      check_control(draft, scratch.logits[DRAFT], draft_control);
+    }
   }
 
   float batch[CAPACITY * VOCAB];
@@ -323,11 +443,12 @@ static void run_case(const char *label, et_g3c4_model_owner_internal *target_own
   OK(et_g3c4_private_call_finish_v1(reference));
   OK(et_g3c4_private_generator_close_v1(reference));
   CHECK(memcmp(batch, &control_rows, sizeof(batch)) == 0);
-  finish_model(&draft);
-  finish_model(&target);
+  finish_model(draft, scratch.calls);
+  finish_model(target, scratch.calls);
   printf("SPEC5 live %s: proposed=%u accepted=%u emitted=%u continuation=%u\n",
-         label, horizon, accepted, result.emitted_count,
-         CAPACITY - 1 - result.emitted_count);
+         label, horizon, accepted, verify.emitted_count,
+         CAPACITY - 1 - verify.emitted_count);
+  if (rejected) puts("SPEC5 live callback rollback and retry: PASS");
 }
 
 int main(void) {
