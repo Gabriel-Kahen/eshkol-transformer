@@ -26,6 +26,11 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   [input fixture](MOD5_E2E_C1_IO5.md#v256-c2-continuation-input-fixture)
   supplies six full-context rows, canonical X1 expectations, and independent
   D2 cursor hashes for the two-update prefix and four-update suffix.
+  The [independent V256 gradient witness](MOD5_E2E_C1_IO5.md#v256-cross-entropy-gradient-witness)
+  stages full-mask `T=8` cross-entropy, separate head and embedding gradients,
+  and canonical tied accumulation with seven preselected finite differences.
+  The compiler-free fixture and oracle checks pass. Supported AOT execution
+  and independent result review remain pending.
 
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,
