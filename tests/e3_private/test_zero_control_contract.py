@@ -52,6 +52,17 @@ class ZeroControlContract(unittest.TestCase):
                     visited += 1
                 self.assertEqual(visited, source.count("(define "))
 
+    def test_negative_scenario_crosses_the_boxed_bridge(self) -> None:
+        fixture = ROOT / "tests/e3_private"
+        runtime = (fixture / "zero_control_negative_runtime.esk").read_text()
+        scenario_call = form(runtime, "(e3-zero-negative-run\n")
+        self.assertEqual(
+            scenario_call,
+            '(e3-zero-negative-run\n'
+            '  (vector (vector case-name (string=? gradient-name "present")))\n'
+            '  (vector corpus) output)',
+        )
+
     def test_tuple_manifests_extend_the_current_union(self) -> None:
         base = ROOT / "native/e3_private_package"
         zero = ROOT / "tests/e3_private/zero_control_package"

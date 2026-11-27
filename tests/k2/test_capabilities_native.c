@@ -526,7 +526,13 @@ static void test_diagnostic_admission(void) {
   CHECK(diagnostic.error.code == ET_K2_CODE_TRANSPORT);
 }
 
-static int64_t require_request(int64_t generation, int64_t entry_index,
+typedef int64_t (*require_function)(
+    int64_t, int64_t, const void *, int64_t, const void *, int64_t,
+    const void *, int64_t, const void *, int64_t, int64_t, int64_t, void *,
+    int64_t);
+
+static int64_t require_request_with(require_function require,
+                                    int64_t generation, int64_t entry_index,
                                const char *operation, const char *dtype,
                                const char *device, const uint64_t *shape,
                                int64_t rank, int64_t deterministic,
@@ -545,12 +551,22 @@ static int64_t require_request(int64_t generation, int64_t entry_index,
           (unsigned char)(shape[index] >> (byte * 8u));
     }
   }
-  return et_k2_private_runtime_require_v1(
+  return require(
       generation, entry_index, &operation_bytes,
       operation_bytes.declared_length, &dtype_bytes,
       dtype_bytes.declared_length, &device_bytes, device_bytes.declared_length,
       &shape_bytes, shape_bytes.declared_length, rank, deterministic,
       diagnostic, 264);
+}
+
+static int64_t require_request(int64_t generation, int64_t entry_index,
+                               const char *operation, const char *dtype,
+                               const char *device, const uint64_t *shape,
+                               int64_t rank, int64_t deterministic,
+                               aligned_error *diagnostic) {
+  return require_request_with(et_k2_private_runtime_require_v1, generation,
+                              entry_index, operation, dtype, device, shape,
+                              rank, deterministic, diagnostic);
 }
 
 static void check_k1_no_match(const aligned_error *diagnostic) {
@@ -704,7 +720,12 @@ static void test_discovery_and_matching(void) {
   CHECK(generation > 0);
   CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == 0);
   CHECK(et_k2_test_discovery_count_v1() == 1u);
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  CHECK(et_k2_test_protected_overlap_mask_v1() ==
+        (ET_K2_TEST_PROTECTED_ALL | ET_K2_TEST_PROTECTED_V256_STATIC));
+#else
   CHECK(et_k2_test_protected_overlap_mask_v1() == ET_K2_TEST_PROTECTED_ALL);
+#endif
 
   register_factories();
   CHECK(require_request(generation, 9, "storage.copy", "f32", "cpu", NULL, 0, 0,
@@ -1169,6 +1190,86 @@ static void test_serialized_fork(void) {
   }
 }
 
+#ifdef ET_K2_PRIVATE_MOD5_V256
+static int64_t require_v256(int64_t generation, const uint64_t *shape,
+                            int64_t rank, aligned_error *diagnostic) {
+  return require_request_with(et_k2_private_mod5_v256_require_v1, generation, 9,
+                              "storage.copy", "f32", "cpu", shape, rank, 1,
+                              diagnostic);
+}
+
+static void test_mod5_v256_slots(void) {
+  const uint64_t scalar[1] = {16u};
+  const uint64_t v256[2] = {256u, 16u};
+  const uint64_t transposed[2] = {16u, 256u};
+  aligned_error diagnostic;
+  int64_t default_generation;
+  int64_t v256_generation;
+  int64_t child;
+  uint64_t v256_matches;
+  et_k2_test_reset_v1();
+  initialize_error(&diagnostic, 0xa5u);
+  CHECK(et_k2_private_mod5_v256_generation_v1() == -7);
+  CHECK(et_k2_private_mod5_v256_ensure_v1(&diagnostic, 264) == 0);
+  CHECK(et_k2_private_runtime_generation_v1() == -7);
+  CHECK(et_k2_test_discovery_count_v1() == 0u);
+  CHECK(et_k2_test_protected_overlap_mask_v1() ==
+        ((ET_K2_TEST_PROTECTED_ALL & ~ET_K2_TEST_PROTECTED_RUNTIME) |
+         ET_K2_TEST_PROTECTED_V256_ALL));
+  v256_generation = et_k2_private_mod5_v256_generation_v1();
+  CHECK(v256_generation > 0);
+  CHECK(require_v256(v256_generation, scalar, 1, &diagnostic) == 0);
+  CHECK(require_v256(v256_generation, v256, 2, &diagnostic) == 0);
+  CHECK(require_v256(v256_generation, transposed, 2, &diagnostic) ==
+        ET_K2_STATUS_UNSUPPORTED);
+  check_k1_no_match(&diagnostic);
+  CHECK(et_k2_test_require_count_v1() == 0u);
+  CHECK(et_k2_test_mod5_v256_match_count_v1() == 3u);
+
+  CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == 0);
+  CHECK(et_k2_test_protected_overlap_mask_v1() ==
+        (ET_K2_TEST_PROTECTED_ALL | ET_K2_TEST_PROTECTED_V256_ALL));
+  default_generation = et_k2_private_runtime_generation_v1();
+  CHECK(require_request(default_generation, 9, "storage.copy", "f32", "cpu",
+                        v256, 2, 1, &diagnostic) ==
+        ET_K2_STATUS_UNSUPPORTED);
+  check_k1_no_match(&diagnostic);
+  CHECK(require_request(default_generation, 9, "storage.copy", "f32", "cpu",
+                        scalar, 1, 1, &diagnostic) == 0);
+  CHECK(et_k2_test_require_count_v1() == 2u);
+  v256_matches = et_k2_test_mod5_v256_match_count_v1();
+
+  et_k2_test_mod5_v256_drop_v1();
+  CHECK(et_k2_test_protected_overlap_mask_v1() ==
+        (ET_K2_TEST_PROTECTED_ALL | ET_K2_TEST_PROTECTED_V256_STATIC));
+  CHECK(require_v256(v256_generation, v256, 2, &diagnostic) ==
+        ET_K2_STATUS_INVALID_STATE);
+  CHECK(et_k2_test_mod5_v256_match_count_v1() == v256_matches);
+  CHECK(et_k2_private_mod5_v256_ensure_v1(&diagnostic, 264) == 0);
+  CHECK(et_k2_private_mod5_v256_generation_v1() == v256_generation + 1);
+  CHECK(et_k2_private_runtime_generation_v1() == default_generation);
+
+  child = et_k2_test_fork_v1();
+  CHECK(child >= 0);
+  if (child == 0) {
+    if (et_k2_private_mod5_v256_generation_v1() != -7 ||
+        et_k2_private_runtime_generation_v1() != -7 ||
+        et_k2_private_mod5_v256_ensure_v1(&diagnostic, 264) != 0 ||
+        et_k2_private_mod5_v256_generation_v1() != v256_generation + 2 ||
+        et_k2_private_runtime_generation_v1() != -7) {
+      et_k2_test_exit_child_v1(2);
+    }
+    et_k2_test_reset_v1();
+    et_k2_test_exit_child_v1(0);
+  }
+  if (child > 0) {
+    CHECK(et_k2_test_wait_child_v1(child) == 1);
+  }
+  CHECK(et_k2_private_mod5_v256_generation_v1() == v256_generation + 1);
+  CHECK(et_k2_private_runtime_generation_v1() == default_generation);
+}
+#endif
+
 int main(void) {
   test_factory_identity();
   test_diagnostic_admission();
@@ -1184,6 +1285,9 @@ int main(void) {
   test_every_k1_discovery_allocation();
 #endif
   test_serialized_fork();
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  test_mod5_v256_slots();
+#endif
   et_k2_test_reset_v1();
   if (failures != 0) {
     (void)fprintf(stderr, "%d K2 native checks failed\n", failures);
