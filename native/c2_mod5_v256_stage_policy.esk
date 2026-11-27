@@ -1,0 +1,89 @@
+;;; Trusted MOD5 width-16 V256 staging policy. Load after the C2 aggregate.
+;;; This checks staged controls and metadata before any I2 decode. It never
+;;; selects a provider and receives only the aggregate's authenticated stage.
+
+(define c2-mod5-v256-roster
+  '((("blocks" "0" "attention" "key" "weight") (8 16))
+    (("blocks" "0" "attention" "output" "weight") (16 16))
+    (("blocks" "0" "attention" "query" "weight") (16 16))
+    (("blocks" "0" "attention" "value" "weight") (8 16))
+    (("blocks" "0" "ffn" "down" "weight") (16 32))
+    (("blocks" "0" "ffn" "gate" "weight") (32 16))
+    (("blocks" "0" "ffn" "up" "weight") (32 16))
+    (("blocks" "0" "norm1" "weight") (16))
+    (("blocks" "0" "norm2" "weight") (16))
+    (("head" "weight") (256 16))
+    (("norm_final" "weight") (16))
+    (("token_embedding" "weight") (256 16))))
+
+(define c2-mod5-v256-tie
+  '((("head" "weight") ("token_embedding" "weight"))))
+
+(define (c2-mod5-v256-controls-match? controls operation)
+  (let* ((rng (vector-ref controls 0))
+         (manifest (vector-ref controls 3))
+         (request (vector (vector-ref manifest 0) (vector-ref manifest 1)
+                          operation #f)))
+    (x1-canonical-inspect-internal request)
+    (equal? (vector-ref request 3)
+            (vector 'eshkol-resolved-run 1 0 256 8 16 1 4 2 4
+                    'f32 'cpu #t (vector-ref rng 2) 1))))
+
+(define (c2-mod5-v256-model-roster-match? descriptors roster)
+  (cond
+    ((null? roster) (null? descriptors))
+    ((null? descriptors) #f)
+    (else
+      (let* ((descriptor (car descriptors))
+             (row (car roster)))
+        (and (equal? (vector-ref descriptor 0) (car row))
+             (eq? (vector-ref descriptor 1) 'parameter)
+             (equal? (vector-ref descriptor 2) (cadr row))
+             (eq? (vector-ref descriptor 3) 'f32)
+             (c2-mod5-v256-model-roster-match? (cdr descriptors)
+                                              (cdr roster)))))))
+
+(define (c2-mod5-v256-optimizer-roster-match? projection tied?)
+  (let ((paths (vector-ref projection 1))
+        (entries (vector-ref projection 2))
+        (count (if tied? 11 12)))
+    (and (= (vector-length entries) count)
+         (let loop ((index 0) (rows c2-mod5-v256-roster) (remaining paths))
+           (if (= index count)
+               (null? remaining)
+               (and (pair? remaining)
+                    (let* ((expected (car rows))
+                           (entry (vector-ref entries index))
+                           (shape (cadr expected))
+                           (bytes (* 4 (c1-shape-product shape 'checkpoint-load))))
+                      (and (equal? (car expected) (car remaining))
+                           (equal? (car expected) (vector-ref entry 0))
+                           (equal? shape (vector-ref entry 1))
+                           (= bytes (bytevector-length (vector-ref entry 2)))
+                           (= bytes (bytevector-length (vector-ref entry 3)))
+                           (loop (+ index 1) (cdr rows) (cdr remaining))))))))))
+
+(define (c2-mod5-v256-check-stage! shell tied?)
+  (let* ((operation 'checkpoint-load)
+         (entry (c2-load-find-stage shell)))
+    (if (or (not entry) (not (boolean? tied?)))
+        (c2-load-fail 'invalid-argument operation
+                      "expected exact MOD5 V256 staging and topology" '()))
+    (if (not (eq? (vector-ref entry 2) 'live))
+        (c2-load-fail 'invalid-state operation
+                      "MOD5 V256 checkpoint staging is consumed or busy" '()))
+    (if (not (c2-mod5-v256-controls-match? (vector-ref entry 5) operation))
+        (c2-load-fail 'shape-mismatch operation
+                      "checkpoint X1 does not describe the MOD5 V256 training profile" '()))
+    ;; Reuse the canonical inert C1 parser. It checks the physical format,
+    ;; including equal payload bytes for aliases, before any provider callback.
+    (let ((model (c1-parse-container (vector-ref entry 3)
+                                     (vector-ref entry 6) operation)))
+      (if (or (not (string=? (vector-ref model 0) (symbol->string i2-provider-name)))
+              (not (c2-mod5-v256-model-roster-match? (vector-ref model 1)
+                                                     c2-mod5-v256-roster))
+              (not (equal? (vector-ref model 2) (if tied? c2-mod5-v256-tie '())))
+              (not (c2-mod5-v256-optimizer-roster-match? (vector-ref entry 4) tied?)))
+          (c2-load-fail 'shape-mismatch operation
+                        "checkpoint model or optimizer roster differs from MOD5 V256" '()))
+      #t)))

@@ -21,6 +21,9 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 - The [proposed V=256 MOD5 C2 gate](MOD5_E2E_C1_IO5.md#proposed-width-16-c2-gate)
   depends on exact native storage and K2 admission for `[256,16]` and a
   tied and untied C2 witness with matching T1, D2 and X1 identities.
+  A source-private C2 candidate shares the guarded load path and validates
+  the exact model, optimizer and X1 roster before reconstruction. Its
+  private-profile binding and live load and continuation gates remain open.
 
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,

@@ -59,10 +59,9 @@
 (define (c2-public-checkpoint-metadata-ref metadata key)
   (let ((result (c2-checkpoint-metadata-ref-internal metadata key))) result))
 
-(define (c2-public-checkpoint-load path policy report)
-  ;; Byte/semantic staging is complete before any K2 operation. Reconstruction
-  ;; starts only after the caller's exact report authenticates the verified
-  ;; tensor.f32 storage.copy row for the policy device.
+(define (c2-checkpoint-load-with-admission-internal path policy admit)
+  ;; Trusted source may supply a fixed admission policy. The live stage stays
+  ;; inside this guard through admission and one-shot reconstruction.
   (let ((stage-cell (vector #f)))
     (guard (caught
              (#t
@@ -79,7 +78,13 @@
         (let ((descriptors
                 (c2-checkpoint-load-capability-descriptors-internal
                   (vector-ref stage-cell 0) 'checkpoint-load)))
-          (c2-public-capability-admit-all report descriptors)
+          (if (not (eq? (admit (vector-ref stage-cell 0) descriptors) #t))
+              (let ((unreachable
+                      (et-e1b-private-raise
+                        'internal 'checkpoint-load
+                        "checkpoint admission policy returned no acknowledgement"
+                        '() #f)))
+                unreachable))
           (let ((result
                   (c2-checkpoint-load-reconstruct-internal
                     (vector-ref stage-cell 0) 'checkpoint-load)))
@@ -93,6 +98,13 @@
                   unreachable))
             (vector-set! stage-cell 0 #f)
             result))))))
+
+(define (c2-public-checkpoint-load path policy report)
+  ;; The public route admits every staged descriptor through ordinary K2.
+  (c2-checkpoint-load-with-admission-internal
+    path policy
+    (lambda (stage descriptors)
+      (c2-public-capability-admit-all report descriptors))))
 
 (define (c2-public-checkpoint-save! state path policy options)
   (let ((result

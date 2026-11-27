@@ -351,7 +351,7 @@ TARGETS = (
      "(o2-c2-native-reconstruct-create-internal (vector-length entries) (vector-ref clip 0) (vector-ref clip 1) (vector-ref schedule 0) (vector-ref schedule 1) (vector-ref schedule 2) (vector-ref schedule 3) completed)", 1),
     ("c2-training-state-release-internal!", None,
      "(c2-training-state-release-take-authority! record value #f operation)", 2),
-    ("c2-public-checkpoint-load", None, "(c2-checkpoint-load-stage-internal path policy)", 1),
+    ("c2-checkpoint-load-with-admission-internal", None, "(c2-checkpoint-load-stage-internal path policy)", 1),
     ("c2-checkpoint-load-reconstruct-internal", None, "(vector-set! entry 2 'consuming)", 6),
     ("c2-checkpoint-load-reconstruct-internal", None, "(c2-load-decode-model-internal model subpolicy)", 6),
     ("c2-checkpoint-load-reconstruct-internal", None, "(c2-load-release-p1-internal p1)", 5),
@@ -388,7 +388,7 @@ def validate(sources):
         ("c2-save-with-owner-borrow", None, "(transaction (vector #f #f #f #f))", TARGETS[4][2]),
         ("o2-state-reconstruct-internal", None, "(builder-cell (vector #f))", TARGETS[5][2]),
         ("c2-training-state-release-internal!", None, "(record (c2-training-state-release-record value))", TARGETS[6][2]),
-        ("c2-public-checkpoint-load", None, "(stage-cell (vector #f))", TARGETS[7][2]),
+        ("c2-checkpoint-load-with-admission-internal", None, "(stage-cell (vector #f))", TARGETS[7][2]),
         ("c2-checkpoint-load-reconstruct-internal", None, "(c2-release-record (c2-training-state-release-record #f))", TARGETS[8][2]),
     ):
         node = definition(sources, name, path)
@@ -449,10 +449,20 @@ def validate(sources):
              "(vector-set! record 2 'started)")
     contains(definition(sources, "c2-training-state-release-record-note-defect!"),
              "(if (not (eq? (vector-ref record 2) 'started)) (raise caught))")
-    public = definition(sources, "c2-public-checkpoint-load")
+    public = definition(sources, "c2-checkpoint-load-with-admission-internal")
     protected(public, "(c2-checkpoint-load-stage-internal path policy)", 1,
               "(c2-checkpoint-load-staging-release-internal! stage)")
     protected(public, "(vector-set! stage-cell 0 stage)", 1)
+    protected(public, "(admit (vector-ref stage-cell 0) descriptors)", 1)
+    effects = [node for node, _ in events(public)]
+    reconstruction = form("(c2-checkpoint-load-reconstruct-internal "
+                          "(vector-ref stage-cell 0) 'checkpoint-load)")
+    need(effects.index(form("(admit (vector-ref stage-cell 0) descriptors)"))
+         < effects.index(reconstruction), "trusted load admission must precede reconstruction")
+    route = definition(sources, "c2-public-checkpoint-load")
+    contains(route, "(c2-checkpoint-load-with-admission-internal path policy "
+                    "(lambda (stage descriptors) "
+                    "(c2-public-capability-admit-all report descriptors)))")
     contains(public, "(c2-checkpoint-load-staging-dead-internal? (vector-ref stage-cell 0))")
     load = definition(sources, "c2-checkpoint-load-reconstruct-internal")
     guards = unique(load, "(vector-set! entry 2 'consuming)")[1]
@@ -654,7 +664,7 @@ class HandlerOrder(unittest.TestCase):
             ("c2-training-state-borrow-activation-rollback!", "(vector-set! owner-token 2 #f)"),
             ("c2-training-state-borrow-activation-rollback!", "(vector-set! state 7 'live)"),
             ("c2-save-with-owner-borrow", "(vector-set! transaction 0 borrow)"),
-            ("c2-public-checkpoint-load", "(vector-set! stage-cell 0 stage)"),
+            ("c2-checkpoint-load-with-admission-internal", "(vector-set! stage-cell 0 stage)"),
             ("c2-training-state-release-take-authority!", "(vector-set! record 2 'started)"),
             ("c2-load-note-cleanup-defect-or-rethrow!", "(if (eq? (vector-ref entry 2) 'live) (raise caught))"),
         )
