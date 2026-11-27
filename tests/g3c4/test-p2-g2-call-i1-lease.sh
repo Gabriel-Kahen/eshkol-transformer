@@ -7,6 +7,8 @@ evidence="$(cd -- "$evidence" && pwd)"
 build="$(mktemp -d "$evidence/build.XXXXXX")"
 trap 'status=$?; if (( status == 0 )); then rm -rf -- "$build"; else
   printf "P2/G2 call I1 failure retained in %s\n" "$build" >&2; fi' EXIT
+a2_witness="${G3C4_CALL_A2_READ_WITNESS:-0}"
+[[ "$a2_witness" == 0 || "$a2_witness" == 1 ]] || exit 2
 cc="${CC:-cc}"
 "$cc" --version >"$evidence/compiler.txt"
 cd "$ROOT"
@@ -26,6 +28,11 @@ owner_flags=(-DET_G3C4_NATIVE_OWNER_PRIVATE -DET_G3C4_CONTEXT_PRIVATE
   -DET_G3C4_OUTPUT_DECODE_IDS_PRIVATE -DET_G3C4_OUTPUT_TEXT_PRIVATE
   -DET_G3C4_P2_G1_PENDING_PRIVATE -DET_G3C4_P2_G2_FIRST_FRAME_PRIVATE)
 feature=-DET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+prerequisite='C4 P2/G2 call I1 lease requires P2/G2 first-frame ownership'
+if [[ "$a2_witness" == 1 ]]; then
+  feature=-DET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  prerequisite='C4 P2/G2 committed A2 read requires P2/G2 first-frame ownership'
+fi
 owner=src/eshkol_transformer/g3c4_model_owner.c
 for mode in off on; do
   profile=("${owner_flags[@]}")
@@ -40,7 +47,7 @@ if "$cc" "${flags[@]}" "$feature" -fsyntax-only "$owner" \
   printf '%s\n' "The isolated lease feature unexpectedly compiled" >&2
   exit 1
 fi
-grep -F 'C4 P2/G2 call I1 lease requires P2/G2 first-frame ownership' \
+grep -F "$prerequisite" \
   "$evidence/isolated.stderr" >/dev/null
 
 sources=(src/eshkol_transformer/m3_i64_integration.c tests/m3t/kernel_fail_allocator.c
@@ -74,11 +81,22 @@ run_fixture() {
   cat "$evidence/$label-normal.stdout"
 }
 
-run_fixture lease tests/g3c4/test_p2_g2_call_i1_lease.c \
-  '^G3-C4 P2/G2 call I1 lease PASS: checks=[1-9][0-9]*$'
-run_fixture publication tests/g3c4/test_p2_g2_call_i1_publication.c \
-  '^G3-C4 P2/G2 call I1 publication guard PASS: checks=[1-9][0-9]*$' \
-  -DET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE \
-  -Wl,--wrap=et_a2_kv_cache_transaction_view_end_v1 \
-  -Wl,--wrap=et_a2_kv_cache_transaction_abort_v1 \
-  -Wl,--wrap=et_i64_tensor_copy_from_v1 -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1
+terminal_flags=(-DET_A2_KV_CACHE_TERMINAL_WITNESS_PRIVATE
+  -DET_F32_TENSOR_STORAGE_QUERY_PRIVATE
+  -Wl,--wrap=et_a2_kv_cache_transaction_view_end_v1
+  -Wl,--wrap=et_a2_kv_cache_transaction_abort_v1
+  -Wl,--wrap=et_i64_tensor_copy_from_v1 -Wl,--wrap=et_a2_kv_cache_transaction_commit_v1)
+if [[ "$a2_witness" == 1 ]]; then
+  run_fixture a2-read tests/g3c4/test_p2_g2_call_a2_read.c \
+    '^G3-C4 P2/G2 call A2 committed read PASS: checks=[1-9][0-9]*$' \
+    "${terminal_flags[@]}"
+  run_fixture a2-i1 tests/g3c4/test_p2_g2_call_a2_read.c \
+    '^G3-C4 P2/G2 call A2 committed read PASS: checks=[1-9][0-9]*$' \
+    "${terminal_flags[@]}" -DET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+else
+  run_fixture lease tests/g3c4/test_p2_g2_call_i1_lease.c \
+    '^G3-C4 P2/G2 call I1 lease PASS: checks=[1-9][0-9]*$'
+  run_fixture publication tests/g3c4/test_p2_g2_call_i1_publication.c \
+    '^G3-C4 P2/G2 call I1 publication guard PASS: checks=[1-9][0-9]*$' \
+    "${terminal_flags[@]}"
+fi

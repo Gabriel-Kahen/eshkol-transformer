@@ -849,6 +849,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
      !defined(ET_G3C4_TOKEN_FORWARD_PRIVATE))
 #error "C4 P2/G2 first frame requires pending output and token forward"
 #endif
+#if defined(ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE) && \
+    !defined(ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE)
+#error "C4 P2/G2 committed A2 read requires P2/G2 first-frame ownership"
+#endif
 #if defined(ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE) && \
     !defined(ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE)
 #error "C4 P2/G2 call I1 lease requires P2/G2 first-frame ownership"
@@ -1171,6 +1175,14 @@ typedef struct et_g3c4_context_internal {
     et_i64_tensor_borrow *borrow;
     uint32_t used;
   } p2g2_i1_lease;
+#endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  struct {
+    struct et_g3c4_output_internal *output;
+    et_a2_kv_cache *cache;
+    et_a2_kv_cache_read_borrow *borrow;
+    uint32_t used;
+  } p2g2_a2_read;
 #endif
 } et_g3c4_context_internal;
 
@@ -2305,6 +2317,33 @@ _Static_assert(sizeof(et_g3c4_transport_header_internal) == 32u,
                "G3-C4 transport header must be 32 bytes");
 _Static_assert(offsetof(et_g3c4_context_internal, transport) == 0u,
                "G3-C4 context header must be first");
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+#if defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) && \
+    defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
+#define ET_G3C4_LEASE_BASE_BYTES 8704u
+#elif defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE)
+#define ET_G3C4_LEASE_BASE_BYTES 8696u
+#elif defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
+#define ET_G3C4_LEASE_BASE_BYTES 6504u
+#else
+#define ET_G3C4_LEASE_BASE_BYTES 6496u
+#endif
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+_Static_assert(offsetof(et_g3c4_context_internal, p2g2_i1_lease) ==
+                   ET_G3C4_LEASE_BASE_BYTES &&
+               sizeof(((et_g3c4_context_internal *)0)->p2g2_i1_lease) == 32u,
+               "G3-C4 call I1 lease must precede A2 and occupy 32 bytes");
+#define ET_G3C4_A2_READ_OFFSET (ET_G3C4_LEASE_BASE_BYTES + 32u)
+#else
+#define ET_G3C4_A2_READ_OFFSET ET_G3C4_LEASE_BASE_BYTES
+#endif
+_Static_assert(offsetof(et_g3c4_context_internal, p2g2_a2_read) ==
+                   ET_G3C4_A2_READ_OFFSET &&
+               sizeof(et_g3c4_context_internal) == ET_G3C4_A2_READ_OFFSET + 32u,
+               "G3-C4 call A2 read must be the exact 32-byte private suffix");
+#undef ET_G3C4_A2_READ_OFFSET
+#undef ET_G3C4_LEASE_BASE_BYTES
+#else
 #ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
 #if defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) && \
     defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
@@ -2344,6 +2383,7 @@ _Static_assert(sizeof(et_g3c4_context_internal) == 1576u,
 #else
 _Static_assert(sizeof(et_g3c4_context_internal) == 1520u,
                "G3-C4 generator context must be 1520 bytes");
+#endif
 #endif
 _Static_assert(sizeof(et_g3c4_rng_internal) == 64u,
                "G3-C4 RNG record must be 64 bytes");
@@ -2980,6 +3020,11 @@ static et_g3c4_context_internal *et_g3c4_admit_idle_call(
       context->p2g2_i1_lease.ids != NULL ||
       context->p2g2_i1_lease.borrow != NULL || context->p2g2_i1_lease.used != 0u
 #endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+      || context->p2g2_a2_read.output != NULL ||
+      context->p2g2_a2_read.cache != NULL ||
+      context->p2g2_a2_read.borrow != NULL || context->p2g2_a2_read.used != 0u
+#endif
 #ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
       || !et_g3c4_token_frame_idle(context)
 #endif
@@ -3025,6 +3070,12 @@ static et_g3c4_context_internal *et_g3c4_admit_active_call(
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     return NULL;
   }
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (context->budget == 2 && context->p2g2_a2_read.cache != context->cache) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+#endif
   if (et_g3c4_capture_f32(
           et_g3c4_model_pins_check_internal(&context->pins, &error),
           &error) != 0)
@@ -3033,6 +3084,25 @@ static et_g3c4_context_internal *et_g3c4_admit_active_call(
 }
 
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+/* A committed-read lease belongs to the cache observed by this exact call.
+ * A2 must report its genuine held-lease error before any mutation. */
+static int64_t et_g3c4_p2g2_a2_read_transition_preflight(
+    et_g3c4_context_internal *context) {
+  if (context->budget != 2) return 0;
+  if (context->p2g2_a2_read.cache != context->cache)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+  if (context->p2g2_a2_read.borrow == NULL) return 0;
+  et_g3c4_output_internal *pending = NULL;
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0)
+    return et_g3c4_error_state.category;
+  if (pending == NULL || context->p2g2_a2_read.output != pending)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+  if (et_g3c4_cache_idle_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+  return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+}
+#endif
 static void et_g3c4_output_cleanup_unpublished(
     et_g3c4_output_internal *output) {
   if (output == NULL) return;
@@ -3153,8 +3223,72 @@ void *et_g3c4_private_output_reserve_v1(
     context->p2g2_i1_lease.ids = output->ids;
   }
 #endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (ET_G3C4_P2_G2_TUPLE(prompt_length, context->budget) &&
+      context->p2g2_a2_read.output == NULL)
+    context->p2g2_a2_read.output = output;
+#endif
   return output;
 }
+
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+static et_g3c4_context_internal *et_g3c4_p2g2_a2_read_admit(
+    void *context_candidate, void *output_candidate) {
+  et_g3c4_context_internal *context =
+      et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL) return NULL;
+  if (context->call_kind != 2 || context->budget != 2 ||
+      context->generator_policy[4] != 2 || !et_g3c4_token_frame_idle(context)) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  et_g3c4_output_internal *output = et_g3c4_admit_output(output_candidate, 0);
+  if (output == NULL) return NULL;
+  et_g3c4_output_internal *pending = NULL;
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0) return NULL;
+  if (pending != output || context->p2g2_a2_read.output != output ||
+      !ET_G3C4_P2_G2_TUPLE(output->prompt_length, output->generated_length) ||
+      output->numeric_ready != 0u) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  return context;
+}
+
+static inline __attribute__((unused)) int64_t
+et_g3c4_p2g2_a2_read_begin(void *context_candidate, void *output_candidate) {
+  et_g3c4_error_reset_internal();
+  et_g3c4_context_internal *context =
+      et_g3c4_p2g2_a2_read_admit(context_candidate, output_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->p2g2_a2_read.used != 0u ||
+      context->p2g2_a2_read.borrow != NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  et_kernel_error error;
+  if (et_g3c4_capture_kernel(et_a2_kv_cache_read_borrow_begin_v1(
+          context->p2g2_a2_read.cache,
+          &context->p2g2_a2_read.borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  context->p2g2_a2_read.used = 1u;
+  return 0;
+}
+
+static inline __attribute__((unused)) int64_t
+et_g3c4_p2g2_a2_read_end(void *context_candidate, void *output_candidate) {
+  et_g3c4_error_reset_internal();
+  et_g3c4_context_internal *context =
+      et_g3c4_p2g2_a2_read_admit(context_candidate, output_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->p2g2_a2_read.used != 1u ||
+      context->p2g2_a2_read.borrow == NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  et_kernel_error error;
+  if (et_a2_kv_cache_read_borrow_end_v1(
+          &context->p2g2_a2_read.borrow, &error) != 0)
+    abort();
+  return 0;
+}
+#endif
 
 #ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
 /* The original pending output is the per-call identity, even when
@@ -3289,6 +3423,16 @@ int64_t et_g3c4_private_output_release_v1(void *candidate) {
           ET_G3C4_TOKEN_FRAME_END_READY)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (output->generated_length == 2) {
+    et_g3c4_context_internal *context = et_g3c4_admit_active_call(output->parent_ctx);
+    if (context == NULL) return et_g3c4_error_state.category;
+    if (context->p2g2_a2_read.output != output)
+      return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+    if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+      return et_g3c4_error_state.category;
+  }
 #endif
   return et_g3c4_output_discard_pending(output);
 }
@@ -5340,6 +5484,10 @@ static int64_t et_g3c4_prefill2_impl(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return et_g3c4_error_state.category;
   }
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_ranges_overlap(
           token_ids, 2u * sizeof(token_ids[0]), context, sizeof(*context)) ||
       et_g3c4_ranges_overlap(
@@ -5568,6 +5716,10 @@ static int64_t et_g3c4_prefill2_impl(
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     goto fail;
   }
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    goto fail;
+#endif
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_transaction_commit_v1(&transaction, &error),
           &error) != 0)
@@ -5576,12 +5728,19 @@ static int64_t et_g3c4_prefill2_impl(
   n2_runtime = NULL;
   et_kernel_runtime_destroy(n3k_runtime);
   n3k_runtime = NULL;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    goto fail;
+#endif
   old_cache = context->cache;
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&old_cache, &error), &error) != 0)
     goto fail;
 
   context->cache = candidate_cache;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (context->budget == 2) context->p2g2_a2_read.cache = candidate_cache;
+#endif
   candidate_cache = NULL;
   memcpy(context->prefill_binding_identities, binding_identities,
          sizeof(binding_identities));
@@ -5949,6 +6108,10 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
     return et_g3c4_error_state.category;
   }
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
 #ifdef ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE
   if (second_frame ?
       (et_g3c4_p2g2_second_frame_preflight(context) != 0) :
@@ -6081,6 +6244,10 @@ int64_t et_g3c4_private_token_frame_begin_last_v1(
 #endif
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
   append_counts = et_g3c4_view(
       &append_count, sizeof(append_count), "i64", 1u, append_shape);
   if (et_g3c4_capture_kernel(
@@ -7214,6 +7381,10 @@ static int et_g3c4_p2g2_second_output_clean(
   if (et_g3c4_p2g2_i1_publication_preflight(context, output) != 0)
     return et_g3c4_error_state.category;
 #endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
   if (et_g3c4_capture_i64(et_m3_private_i64_unborrowed_v1(
           output->ids, &error), &error) != 0 ||
       et_g3c4_capture_i64(et_i64_tensor_borrow_begin_v1(
@@ -7579,6 +7750,10 @@ int64_t et_g3c4_private_p2g2_prefix_commit_v1(
   if (et_g3c4_p2g2_i1_publication_preflight(context, output) != 0)
     return et_g3c4_error_state.category;
 #endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
   selected = context->token_frame_candidate;
   /* First-token EOS needs the later terminal publication contract. */
   if (selected == context->generator_policy[5])
@@ -7659,6 +7834,10 @@ int64_t et_g3c4_private_p2g2_prefix_commit_v1(
     return et_g3c4_error_state.category;
 #endif
 
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
   /* All fallible work is above this point. The A2 commit must succeed on
    * the verified, view-free transaction or the process fails closed. */
   if (et_a2_kv_cache_transaction_commit_v1(
@@ -8188,6 +8367,9 @@ int64_t et_g3c4_private_call_acquire_v1(
   if (et_g3c4_active_call_inject(context, 4u))
     return et_g3c4_error_state.category;
 #endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (budget == 2) context->p2g2_a2_read.cache = context->cache;
+#endif
   return 0;
 }
 
@@ -8276,6 +8458,12 @@ static int64_t et_g3c4_active_call_drain(
   context->p2g2_i1_lease.ids = NULL;
   context->p2g2_i1_lease.used = 0u;
 #endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (context->p2g2_a2_read.borrow != NULL) abort();
+  context->p2g2_a2_read.output = NULL;
+  context->p2g2_a2_read.cache = NULL;
+  context->p2g2_a2_read.used = 0u;
+#endif
   et_g3c4_model_pins_end_internal(&context->pins);
   context->owner->active = NULL;
   context->call_kind = 0;
@@ -8296,6 +8484,10 @@ int64_t et_g3c4_private_call_finish_v1(void *candidate) {
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
 #ifdef ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE
   if (context->p2g2_prefix_committed != 0u)
     return et_g3c4_fail(
@@ -8355,6 +8547,10 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
   et_g3c4_error_reset_internal();
   context = et_g3c4_admit_active_call(candidate);
   if (context == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
 #ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
   if (context->token_frame_state == ET_G3C4_TOKEN_FRAME_COMMITTED)
     return et_g3c4_fail(
@@ -8664,6 +8860,10 @@ int64_t et_g3c4_private_p2g2_terminal_commit_v1(
     return et_g3c4_error_state.category;
 #ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
   if (et_g3c4_p2g2_i1_publication_preflight(context, output) != 0)
+    return et_g3c4_error_state.category;
+#endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
     return et_g3c4_error_state.category;
 #endif
   /* The validated I1 copy and A2 commit are the no-failure terminal tail. */

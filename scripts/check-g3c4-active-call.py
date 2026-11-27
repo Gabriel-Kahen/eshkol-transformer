@@ -69,6 +69,7 @@ def step5_projection(source):
         "ET_G3C4_P2_G1_PUBLICATION_PRIVATE",
         "ET_G3C4_P2_G1_COPYOUT_PRIVATE",
         "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
+        "ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE",
     ):
         source = without_conditional_feature(source, macro)
     return source

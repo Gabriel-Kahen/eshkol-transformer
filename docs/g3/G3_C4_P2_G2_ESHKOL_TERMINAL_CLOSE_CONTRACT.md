@@ -129,6 +129,33 @@ compares feature-on/off external symbols. This prerequisite covers native I1
 ownership and the actual protected-abort native hook. Eshkol composition
 and production A2 release authority are separate gates.
 
+### Native call-bound A2 committed-read prerequisite
+
+The optional native aggregate records the committed cache admitted at
+budget-two call acquire. The trusted P2 prefill replacement transfers that
+identity when it installs the candidate cache. Reservation binds the first
+sole pending output to the same call. Begin requires the original output and
+cache, a live budget-two call, and an idle token frame. It retains the
+actual typed A2 read borrow from the provider. Release authenticates the
+same context, pending owner and cache, and ends only the retained borrow.
+A failed begin leaves the slot reusable. A successful begin is one-use for
+that call. Drain clears the lease state before another call can start.
+
+The committed-read guard precedes prefill replacement, sampling, prefix
+and terminal publication, finish, pending output release, and abort. A
+genuine held borrow returns the provider's lease rejection before those
+paths change the active call or cache. A substituted owner or cache slot
+returns an identity error. The native gate covers committed lengths zero,
+two and three, real foreign and same-content controls, allocation cuts,
+preservation without publication, and exact release followed by abort
+retry. A separate combined run also holds the original output I1 borrow.
+
+Run the focused host gate with
+`G3C4_CALL_A2_READ_WITNESS=1 CC=clang bash tests/g3c4/test-p2-g2-call-i1-lease.sh EVIDENCE_DIRECTORY`.
+READY transaction views belong to a separate phase and type. This scope
+rejects READY and adds no Eshkol binding or external symbol. Call-bound
+staged-view release and Eshkol composition remain separate gates.
+
 ## Constructor retirement prerequisite
 
 The source-private retirement scope preflights an exact current constructor

@@ -2,6 +2,7 @@
 """Fast structural checks for the G3-C4 Step 13A last-logit adapter."""
 
 from pathlib import Path
+import runpy
 import subprocess
 import sys
 
@@ -26,8 +27,11 @@ def check():
         cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     source = (ROOT / "src/eshkol_transformer/g3c4_model_owner.c").read_text()
     header = (ROOT / "src/eshkol_transformer/g3c4_context_internal.h").read_text()
+    if "ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE" in source:
+        path = ROOT / "scripts/check-g3c4-active-call.py"
+        project = runpy.run_path(str(path))["without_conditional_feature"]
+        source = project(source, "ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE")
     if "ET_G3C4_P2_G2_SECOND_FRAME_PRIVATE" in source:
-        import runpy
         strip = runpy.run_path(str(ROOT / "scripts/check-g3c4-p2g2-second-frame.py"))["strip_second_frame"]
         source, header = strip(source), strip(header)
     test = (ROOT / "tests/g3c4/test_last_logit_frame.c").read_text()

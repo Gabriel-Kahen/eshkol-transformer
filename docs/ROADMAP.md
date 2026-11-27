@@ -3684,7 +3684,10 @@ publication, public G2 and continuation remain pending.
   retains the original pending output's actual typed borrow and releases it
   while the same call is active. Its native gate exercises lease rejection,
   abort retry, and equal-I1 substitution at prefix and terminal publication.
-  A2 release and Eshkol composition remain pending.
+  The [native call-bound A2 committed-read prerequisite](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#native-call-bound-a2-committed-read-prerequisite)
+  binds the typed borrow to the original committed cache and pending owner.
+  Its native gate covers entry, P2 and P3 cache states and I1 coexistence.
+  READY staged-view release and Eshkol composition remain pending.
   Same-call terminal publication, detached Eshkol output, public G2,
   and CLI adoption follow separately.
 
