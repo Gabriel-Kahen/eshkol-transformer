@@ -71,12 +71,14 @@ Every active input value is checked for finiteness before reduction.
 
 For nonnegative local counts `n_r`, the first exchange computes
 `N = sum(n_r)` with checked I64 arithmetic. Zero total or overflow rejects
-the step. The second exchange reduces binary32 contributions
-`float32((double(n_r) / double(N)) * double(local_mean_r))` in ascending
-rank order. Normalizing before the sum avoids multiplying a binary32 mean by
-a large count. Count reporting remains exact. Fraction conversion and each
-rank contribution can round, so serial arithmetic may differ by normal
-binary32 rounding. The caller's floating-point environment is restored.
+the step. The second exchange sums binary64 numerators
+`double(n_r) * double(local_mean_r)` in ascending rank order. Each rank
+divides that sum once by `double(N)` and rounds the result to binary32 before
+SGD. Binary64 accommodates the full finite binary32 input range multiplied
+by positive I64 counts. Count reporting remains exact. Integer-to-double
+conversion above 53 bits and binary64 products and sums can round. With
+opposing signs, cancellation can lose small contributions. The caller's
+floating-point environment is restored.
 
 Each rank then stages the plain SGD update `p_i - learning_rate * g_i`
 with separate binary32 multiply and subtract. The third exchange coordinates
@@ -102,9 +104,11 @@ each call that enters the protocol.
    adds count, weighted-sum, and update-vote phases as kinds 7 through 9.
    The count phase uses the count and root fields for parameter size and
    learning-rate bits, and sends one I64 effective count per rank. The
-   weighted-sum phase carries `P + 1` binary32 contributions and the vote has
-   no payload. The unused fields are zero. Gradient sync and the weighted
-   step report local finiteness before sending their operands.
+   weighted-sum phase carries `P + 1` packed little-endian binary64
+   numerators and returns their binary64 sums. Its dtype word is 3, a
+   private wire value. The vote has no payload. The unused fields are zero.
+   Gradient sync and the weighted step report local finiteness before
+   sending their operands.
 2. After matching requests, rank 0 sends each contributing worker a GRANT.
    That worker sends the exact number of bytes agreed in preflight. Rank 0
    consumes inputs in ascending rank order and stages the result.
@@ -146,10 +150,15 @@ a control frame there.
 
 The transport is single-host Unix socket IPC using Linux socket flags. It
 uses neither filesystem socket paths nor shared memory. The coordinator is a
-serial bottleneck. The ABI caps the world at 64 ranks and each full operand or
-result at 64 MiB, including expanded gather or scatter spans. Rank 0 may stage
-up to two such buffers. Remote hosts, heterogeneous peers, concurrent
-collectives on one communicator, RDMA, NCCL/RCCL, and GPU buffers are outside
+serial bottleneck. The ABI caps the world at 64 ranks and each public
+operand or result at 64 MiB, including expanded gather or scatter spans.
+Rank 0 may stage up to two such buffers for the generic collectives.
+Weighted SGD's private numerator array occupies up to 128 MiB. During
+that exchange rank 0 can allocate two additional double-sized buffers
+and each worker one, for up to 384 MiB on rank 0 and 256 MiB per worker.
+Afterward each rank stages up to 128 MiB for the binary32 mean and SGD
+update while it holds the numerator array. Remote hosts, heterogeneous
+peers, concurrent collectives on one communicator, RDMA, NCCL/RCCL, and GPU buffers are outside
 this implementation. Throughput and scale beyond the smoke workloads have
 not been measured.
 
@@ -190,6 +199,9 @@ It checks nine central differences, switches which rank has no effective
 tokens, and checks floating-point environment restoration across ranks.
 The gate also covers recoverable malformed counts, buffers and numeric
 inputs, one-rank overflow in the staged update, an exact `INT64_MAX` count,
-and fatal collective-kind and learning-rate disagreements. The standalone
+and fatal collective-kind and learning-rate disagreements. Three-rank
+range regressions preserve `FLT_MAX` under unequal counts and
+`FLT_TRUE_MIN` with two active ranks and one empty rank. Generic
+allreduce rejects the private dtype. The standalone
 collective and equal-rank MOD5 gates remain available. Hosted validation and
 TR3 integration for the ABI 1.1 step are pending.

@@ -19,6 +19,8 @@
 _Static_assert(sizeof(float) == 4 && FLT_RADIX == 2 && FLT_MANT_DIG == 24 &&
                    FLT_MAX_EXP == 128 && FLT_EVAL_METHOD == 0,
                "DIST5 requires binary32 floats");
+_Static_assert(sizeof(double) == 8 && DBL_MANT_DIG == 53 && DBL_MAX_EXP == 1024,
+               "DIST5 weighted SGD requires binary64 doubles");
 
 enum kind {
   BARRIER = 1,
@@ -33,6 +35,7 @@ enum kind {
 };
 enum phase { GRANT = 1, RESULT, COMMIT, ABORT };
 enum { REQUEST_WORDS = 11, REPLY_WORDS = 3 };
+enum { WEIGHTED_F64 = 3 }; /* Private WEIGHTED_SUM wire format. */
 #define WIRE_MAGIC UINT64_C(0x4554444953540501)
 
 struct et_dist5_comm {
@@ -321,6 +324,21 @@ static int finite_f32(const void *data, size_t count) {
   return 1;
 }
 
+static et_dist5_status_t accumulate_weighted(struct exchange *x,
+                                             const void *data, uint32_t rank) {
+  double *stage = (double *)x->stage;
+  const unsigned char *input = data;
+  for (size_t i = 0; i < x->call->count; ++i) {
+    double value;
+    memcpy(&value, input + i * sizeof(value), sizeof(value));
+    const double sum = rank == 0 ? value : stage[i] + value;
+    if (!isfinite(sum))
+      return ET_DIST5_ERR_NONFINITE;
+    stage[i] = sum;
+  }
+  return ET_DIST5_OK;
+}
+
 static et_dist5_status_t accumulate(struct exchange *x, const void *data,
                                     uint32_t rank) {
   const size_t size = x->input;
@@ -329,6 +347,8 @@ static et_dist5_status_t accumulate(struct exchange *x, const void *data,
     memcpy(x->stage + offset, data, size);
     return ET_DIST5_OK;
   }
+  if (x->call->kind == WEIGHTED_SUM)
+    return accumulate_weighted(x, data, rank);
   const et_dist5_op_t op = x->call->op;
   if (x->call->dtype == ET_DIST5_F32) {
     const size_t count = size / sizeof(float);
@@ -410,7 +430,8 @@ static et_dist5_status_t gather_inputs(struct exchange *x) {
 }
 
 static et_dist5_status_t compute(struct exchange *x) {
-  if (x->call->op == 0 || x->call->dtype != ET_DIST5_F32)
+  if (x->call->kind != WEIGHTED_SUM &&
+      (x->call->op == 0 || x->call->dtype != ET_DIST5_F32))
     return gather_inputs(x);
   fenv_t saved;
   if (fegetenv(&saved) != 0)
@@ -554,9 +575,13 @@ static et_dist5_status_t prepare(struct exchange *x) {
     x->total = x->input = x->output = sizeof(int64_t);
     return allocate_exchange(x);
   }
+  if (c->kind == WEIGHTED_SUM) {
+    /* The public packed binary32 shape has already been checked. */
+    x->total = x->input = x->output = c->count * sizeof(double);
+    return allocate_exchange(x);
+  }
   const int reduce =
-      c->kind == ALLREDUCE || c->kind == REDUCE_SCATTER || c->kind == SYNC ||
-      c->kind == WEIGHTED_SUM;
+      c->kind == ALLREDUCE || c->kind == REDUCE_SCATTER || c->kind == SYNC;
   const size_t element =
       c->dtype == ET_DIST5_F32 ? sizeof(float) : sizeof(int64_t);
   const size_t factor =
@@ -577,8 +602,7 @@ static et_dist5_status_t prepare(struct exchange *x) {
     return ET_DIST5_ERR_INVALID_ARG;
   const int in_place =
       c->kind == BROADCAST ||
-      ((c->kind == ALLREDUCE || c->kind == SYNC || c->kind == WEIGHTED_SUM) &&
-       c->send == c->recv);
+      ((c->kind == ALLREDUCE || c->kind == SYNC) && c->send == c->recv);
   if (!in_place && overlaps(c->send, x->input, c->recv, x->output))
     return ET_DIST5_ERR_INVALID_ARG;
   if (c->kind == SYNC && !finite_f32(c->send, c->count))
@@ -714,31 +738,34 @@ static et_dist5_status_t validate_weighted_step(
   return ET_DIST5_OK;
 }
 
-static et_dist5_status_t scale_weighted_mean(float *stage, size_t count,
-                                             const float *mean,
-                                             int64_t local, int64_t total) {
+static et_dist5_status_t form_weighted_numerators(double *stage, size_t count,
+                                                  const float *mean,
+                                                  int64_t local) {
   if (local == 0) {
-    memset(stage, 0, count * sizeof(float));
+    memset(stage, 0, count * sizeof(*stage));
     return ET_DIST5_OK;
   }
   fenv_t saved;
   if (fegetenv(&saved) != 0 || fesetenv(FE_DFL_ENV) != 0)
     return ET_DIST5_ERR_IO;
-  const double fraction = (double)local / (double)total;
+  const double weight = (double)local;
   for (size_t i = 0; i < count; ++i)
-    stage[i] = (float)((double)mean[i] * fraction);
+    stage[i] = (double)mean[i] * weight;
   return fesetenv(&saved) == 0 ? ET_DIST5_OK : ET_DIST5_ERR_IO;
 }
 
-static et_dist5_status_t stage_sgd(float *stage, size_t count,
-                                   const float *parameters,
-                                   const float *gradient, float rate) {
+static et_dist5_status_t stage_sgd(float *mean, float *updated, size_t count,
+                                   const double *numerators, int64_t total,
+                                   const float *parameters, float rate) {
   fenv_t saved;
   if (fegetenv(&saved) != 0 || fesetenv(FE_DFL_ENV) != 0)
     return ET_DIST5_ERR_IO;
+  const double divisor = (double)total;
+  for (size_t i = 0; i <= count; ++i)
+    mean[i] = (float)(numerators[i] / divisor);
   for (size_t i = 0; i < count; ++i)
-    stage[i] = parameters[i] - rate * gradient[i];
-  const int finite = finite_f32(stage, count);
+    updated[i] = parameters[i] - rate * mean[i + 1];
+  const int finite = finite_f32(mean, count + 1) && finite_f32(updated, count);
   if (fesetenv(&saved) != 0)
     return ET_DIST5_ERR_IO;
   return finite ? ET_DIST5_OK : ET_DIST5_ERR_NONFINITE;
@@ -761,10 +788,11 @@ et_dist5_status_t et_dist5_weighted_sgd_f32(
   et_dist5_status_t status = validate_weighted_step(
       local_count, local_mean, parameter_count, rate_bits, parameters,
       global_mean, global_count);
-  float *stage = NULL;
+  const size_t mean_count = parameter_count + 1;
+  double *numerators = NULL;
   if (status == ET_DIST5_OK) {
-    stage = malloc((2 * parameter_count + 1) * sizeof(float));
-    if (stage == NULL)
+    numerators = malloc(mean_count * sizeof(double));
+    if (numerators == NULL)
       status = ET_DIST5_ERR_ALLOC;
   }
 
@@ -773,27 +801,30 @@ et_dist5_status_t et_dist5_weighted_sgd_f32(
                               ET_DIST5_SUM, rate_bits, &local_count, &total};
   status = execute_before(comm, &counts, deadline, status);
   if (status != ET_DIST5_OK || total == 0) {
-    free(stage);
+    free(numerators);
     return status == ET_DIST5_OK ? ET_DIST5_ERR_INVALID_ARG : status;
   }
 
-  const size_t mean_count = parameter_count + 1;
-  status = scale_weighted_mean(stage, mean_count, local_mean, local_count, total);
-  const struct call sum = {WEIGHTED_SUM, tag, mean_count, ET_DIST5_F32,
-                           ET_DIST5_SUM, 0, stage, stage};
+  status = form_weighted_numerators(numerators, mean_count, local_mean, local_count);
+  const struct call sum = {WEIGHTED_SUM, tag, mean_count, WEIGHTED_F64,
+                           ET_DIST5_SUM, 0, numerators, numerators};
   status = execute_before(comm, &sum, deadline, status);
   if (status == ET_DIST5_OK) {
-    float *updated = stage + mean_count;
-    status = stage_sgd(updated, parameter_count, parameters, stage + 1,
-                       learning_rate);
+    float *stage = malloc((mean_count + parameter_count) * sizeof(float));
+    if (stage == NULL)
+      status = ET_DIST5_ERR_ALLOC;
+    else
+      status = stage_sgd(stage, stage + mean_count, parameter_count, numerators,
+                         total, parameters, learning_rate);
     const struct call vote = {.kind = WEIGHTED_VOTE, .tag = tag};
     status = execute_before(comm, &vote, deadline, status);
     if (status == ET_DIST5_OK) {
-      memcpy(parameters, updated, parameter_count * sizeof(float));
+      memcpy(parameters, stage + mean_count, parameter_count * sizeof(float));
       memcpy(global_mean, stage, mean_count * sizeof(float));
       *global_count = total;
     }
+    free(stage);
   }
-  free(stage);
+  free(numerators);
   return status;
 }

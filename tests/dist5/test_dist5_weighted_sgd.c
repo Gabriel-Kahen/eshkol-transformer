@@ -13,7 +13,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-enum { WORLD = 2, TIMEOUT_MS = 2000, PARAMS = PARAMETERS * WIDTH * WIDTH };
+enum { WORLD = 2, EXTREME_WORLD = 3, TIMEOUT_MS = 2000,
+       PARAMS = PARAMETERS * WIDTH * WIDTH };
 static const size_t KV_HEADS = 2;
 static const float RATE = 0.25f;
 static const unsigned masks[][WORLD] = {{0x15, 0x3e}, {0x3f, 0},
@@ -240,30 +241,59 @@ static void mismatch(et_dist5_comm_t *comm, unsigned rank, int wrong_kind) {
   CHECK(et_dist5_barrier(comm, 34, TIMEOUT_MS) == ET_DIST5_ERR_MISMATCH);
 }
 
-enum group { TRAINING, MISMATCH_RATE, MISMATCH_KIND };
+static void extreme_objectives(et_dist5_comm_t *comm, unsigned rank) {
+  const int64_t counts[EXTREME_WORLD] = {83, 8, 21};
+  float parameter = 2.0f;
+  float input[] = {FLT_MAX, 0.0f}, output[] = {-1.0f, -1.0f};
+  int64_t total = -1;
+  CHECK(et_dist5_weighted_sgd_f32(comm, counts[rank], input, 1, RATE,
+                                  &parameter, output, &total, 40,
+                                  TIMEOUT_MS) == ET_DIST5_OK);
+  CHECK(output[0] == FLT_MAX && output[1] == 0.0f && parameter == 2.0f);
+  CHECK(total == 112);
 
-static void rank_run(enum group group, unsigned rank, int fd) {
+  input[0] = FLT_TRUE_MIN;
+  CHECK(et_dist5_weighted_sgd_f32(
+            comm, rank == 0 ? 0 : 1, rank == 0 ? NULL : input, 1, RATE,
+            &parameter, output, &total, 41, TIMEOUT_MS) == ET_DIST5_OK);
+  CHECK(output[0] == FLT_TRUE_MIN && output[1] == 0.0f && parameter == 2.0f);
+  CHECK(total == 2);
+
+  double value = 1.0, result = -1.0;
+  CHECK(et_dist5_allreduce(comm, &value, &result, 1, 3u, ET_DIST5_SUM, 42,
+                           TIMEOUT_MS) == ET_DIST5_ERR_INVALID_ARG);
+  CHECK(result == -1.0);
+}
+
+enum group { TRAINING, MISMATCH_RATE, MISMATCH_KIND, EXTREME_OBJECTIVES };
+
+static void rank_run(enum group group, unsigned rank, unsigned world,
+                     const int *fds, size_t fd_count) {
   alarm(10);
   et_dist5_comm_t *comm = NULL;
   const uint32_t minor =
       group == MISMATCH_KIND && rank == 1 ? 0 : ET_DIST5_ABI_MINOR;
-  CHECK(et_dist5_comm_create(ET_DIST5_ABI_MAJOR, minor, rank, WORLD, &fd, 1,
-                             &comm) == ET_DIST5_OK);
-  CHECK(close(fd) == 0);
+  CHECK(et_dist5_comm_create(ET_DIST5_ABI_MAJOR, minor, rank, world, fds,
+                             fd_count, &comm) == ET_DIST5_OK);
+  for (size_t i = 0; i < fd_count; ++i)
+    CHECK(close(fds[i]) == 0);
   if (group == TRAINING) {
     training(comm, rank);
     rejection_cases(comm, rank);
+  } else if (group == EXTREME_OBJECTIVES) {
+    extreme_objectives(comm, rank);
   } else {
     mismatch(comm, rank, group == MISMATCH_KIND);
   }
   et_dist5_comm_destroy(comm);
 }
 
-static void pair(enum group group) {
-  int fds[2];
-  CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
-  pid_t child[WORLD] = {0};
-  for (unsigned rank = 0; rank < WORLD; ++rank) {
+static void spawn_group(enum group group, unsigned world) {
+  int sockets[EXTREME_WORLD - 1][2];
+  for (unsigned i = 0; i + 1 < world; ++i)
+    CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets[i]) == 0);
+  pid_t child[EXTREME_WORLD] = {0};
+  for (unsigned rank = 0; rank < world; ++rank) {
     child[rank] = fork();
     if (child[rank] < 0) {
       for (unsigned prior = 0; prior < rank; ++prior) {
@@ -273,15 +303,26 @@ static void pair(enum group group) {
       CHECK(child[rank] >= 0);
     }
     if (child[rank] == 0) {
-      CHECK(close(fds[1u - rank]) == 0);
-      rank_run(group, rank, fds[rank]);
+      int fds[EXTREME_WORLD - 1];
+      size_t fd_count = 0;
+      for (unsigned r = 1; r < world; ++r)
+        for (unsigned peer_end = 0; peer_end < 2; ++peer_end) {
+          int fd = sockets[r - 1][peer_end];
+          if (rank == (peer_end == 0 ? 0 : r))
+            fds[fd_count++] = fd;
+          else
+            CHECK(close(fd) == 0);
+        }
+      rank_run(group, rank, world, fds, fd_count);
       exit(EXIT_SUCCESS);
     }
   }
-  CHECK(close(fds[0]) == 0);
-  CHECK(close(fds[1]) == 0);
+  for (unsigned i = 0; i + 1 < world; ++i) {
+    CHECK(close(sockets[i][0]) == 0);
+    CHECK(close(sockets[i][1]) == 0);
+  }
   int passed = 1;
-  for (unsigned rank = 0; rank < WORLD; ++rank) {
+  for (unsigned rank = 0; rank < world; ++rank) {
     int status;
     pid_t waited;
     do {
@@ -298,10 +339,11 @@ static void pair(enum group group) {
 }
 
 int main(void) {
-  pair(TRAINING);
-  pair(MISMATCH_RATE);
-  pair(MISMATCH_KIND);
+  spawn_group(TRAINING, WORLD);
+  spawn_group(MISMATCH_RATE, WORLD);
+  spawn_group(MISMATCH_KIND, WORLD);
+  spawn_group(EXTREME_OBJECTIVES, EXTREME_WORLD);
   puts("DIST5 weighted SGD: PASS (4 MOD5 updates, 9 finite differences, "
-       "11 rejection/recovery cases and 2 protocol mismatches)");
+       "11 rejection/recovery cases, 2 protocol mismatches and 2 range regressions)");
   return 0;
 }
