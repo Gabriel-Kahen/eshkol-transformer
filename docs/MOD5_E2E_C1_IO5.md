@@ -107,6 +107,15 @@ oracle, and seeks a separately opened reader to the two-update split for
 four byte-exact cursor and row replays. Compiled input verification, training
 and C2 owner restoration remain pending.
 
+The private MOD5 V256 transfer bridge uses the same C1 path order to move
+exact binary32 parameter bits and prepare one normalized I2 gradient plan.
+The tied layout sends eleven distinct destinations and routes the decoder's
+already summed gradient to canonical `head.weight`. The transfer gate
+checks all 10,544 untied and 6,448 tied words, rejects mismatched shapes,
+duplicate destinations, nonfinite gradients and stale contribution ordinals,
+and checks that rejected batches preserve all gradient state. The live
+Eshkol decoder and AdamW composition remains pending.
+
 ### Order of admission and evidence
 
 1. After #266 is admitted, extend the opt-in native proof with the exact
