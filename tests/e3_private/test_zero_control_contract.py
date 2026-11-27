@@ -476,6 +476,39 @@ class ZeroControlContract(unittest.TestCase):
             overlay.symlink_to(authentic)
             self.assertNotEqual(check("zero", overlay).returncode, 0)
 
+    def test_mode_snapshots_use_the_authenticated_fixed_modules(self) -> None:
+        positive = (ROOT / "tests/e3_private/zero_control_driver.esk").read_text()
+        capture = form(positive, '(define (e3-zero-capture-modules model)')
+        for fragment in (
+            "(vector-ref (m3t-entry model 'model 'e3-zero-control #t) 8)",
+            '(modules (make-vector 17 #f))',
+            '(handles (make-vector 14 #f))',
+            '(carriers (make-vector 14 #f))',
+            '((vector-ref p1-trusted-surface 69)',
+            'model supplied modules handles carriers) 0)',
+            '(eq? (vector-ref modules 0) model)',
+        ):
+            self.assertIn(fragment, capture)
+        snapshot = form(positive, '(define (e3-zero-modes model)')
+        self.assertIn('(modules (e3-zero-capture-modules model))', snapshot)
+        self.assertIn('(if (= index 17) modes', snapshot)
+        self.assertIn('(module-mode-internal (vector-ref modules index))', snapshot)
+
+        run = ' '.join(form(positive, '(define (e3-zero-control-run').split())
+        load = run.index('(e3-zero-load! handles sources)')
+        evaluate = run.index('(e3-evaluate-into! model dataset frame)')
+        compare = '(e3-zero-same-modes? modes-before (e3-zero-modes model))'
+        self.assertIn('(modes (e3-zero-modes model))', run[:load])
+        self.assertIn(compare, run[load:evaluate])
+        self.assertIn(compare, run[evaluate:])
+
+        negative = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
+        shells = form(negative, '(define (e3-zero-negative-topology-shells?')
+        self.assertIn('(registered (e3-zero-capture-modules model))', shells)
+        self.assertNotIn('m3t-entry', shells)
+        self.assertIn('(if (= index 17) #t', shells)
+        self.assertIn('(vector-ref registered index)', shells)
+
     def test_topology_probe_restores_before_observing_tree(self) -> None:
         negative = (ROOT / "tests/e3_private/zero_control_negative_driver.esk").read_text()
         runner = (ROOT / "scripts/test-e3-zero-control.sh").read_text()

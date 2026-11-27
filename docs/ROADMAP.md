@@ -1337,8 +1337,14 @@ targets. Two pinned Python 3.14.6 and PyTorch 2.13.0+cpu generations produced
 byte-identical validated bundles and preserved the original D1 corpus files.
 The all-correct, all-wrong and mixed f32 accuracy words are `3f800000`,
 `00000000` and `3f19999a`, respectively, with D2 masks `11`, `11`, `10` in each
-case. Normal, repeat, poisoned and sanitizer runtime qualification remain
-pending.
+case. The supported `ecbe60182` gate passed oracle replay, canonical and
+zero-package checks, and normal and sanitizer binary repeat comparisons. Its
+first runtime case stopped at the mode snapshot. A diagnostic on the same
+compiled sanitizer ELF located the null read at a fixture lookup of an unused
+M3 transport field. The zero-only mode snapshot and topology shell comparison
+now obtain all 17 existing module shells from the authenticated P1 fixed-set
+capture. Focused source and pinned oracle checks pass. The repaired full
+runtime matrix remains pending.
 
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
