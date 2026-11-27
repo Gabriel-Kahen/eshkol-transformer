@@ -143,15 +143,23 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   The suite ran in 64m17s, including a 49m08s compile matrix. Both scheduled
   heavy pairs passed their 8 GiB pre-launch check. That run measured
   single-compiler peak RSS and initial host headroom.
-- The [paired memory diagnostic](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829)
-  passed the complete parameter-state suite on exact source `15f25229` and
-  tree `672e9da3`. The supported suite step took 4,091 seconds. Independent
-  receipt verification matched all six 250 ms process-group traces and
-  67 compiler invocations, including 43 expected failures. The maximum
-  sampled sum across the two paired compiler process groups was
-  7,487,873,024 bytes. The [serial control](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/270)
-  is queued through the branch-only workflow. Default compile scheduling
-  remains serial.
+- The hosted paired and serial diagnostics passed the complete parameter-state
+  suite on source `15f2522946b8ee13b9f166967a99f2665263d4d0` and tree
+  `672e9da3d40061278e94ca0aa1954e98936afa7e`. The sealed comparison matched
+  OS, Ubuntu 22.04 runner image `20261116.365.1`, toolchain and source-input
+  identities, toolchain cache key and restore outcome, and all 67 compiler
+  commands and exit statuses, including 43 expected failures. The suite step
+  took 4,091 seconds paired and 5,166 seconds serial, an observed difference
+  of 1,075 seconds (20.8% lower for the paired run). The runs used separate
+  hosted machines.
+  All six 250 ms paired traces observed overlap. The highest sampled sum
+  across both compiler process groups was 7,487,873,024 bytes. The highest
+  GNU time peak RSS for a single command was 4,248,352 KiB paired and
+  4,271,924 KiB serial. Serial job-wide memory was unmeasured. Compiler
+  pairing is opt-in.
+  [Paired run 45934920829, attempt 1, job 140295806350](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829/job/140295806350)
+  [Serial run 45941958637, attempt 1, job 140318040542](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941958637/job/140318040542)
+  [Trace and comparison contract](https://github.com/Gabriel-Kahen/eshkol-transformer/blob/a2634ddfb33e82d9e3fe0dc169a999cb45294627/docs/P1_PAIR_MEMORY_TRACE.md)
 
 ## Parallel execution strategy
 
@@ -1265,16 +1273,29 @@ Ubuntu-22.04/LLVM-21 zero-only inventory-discovery harness is source-staged:
 it retains the ordinary package authority checks, emits actual compiler
 closure and normal/sanitized import inventories into checksummed evidence, and
 never publishes an admitted object. Focused offline policy tests pass, and
-independent source/tests review accepted the exact `c4978ee` candidate.
+independent source and test review accepted the exact `c4978ee` candidate.
 [PR #206](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/206)
-merged the manually dispatched workflow into `main`. A qualifying runner can
-capture sealed inventories for independent review and exact sanitizer manifest
-pins. The compiled zero-control gates and E3 §9 qualification remain pending.
+merged the manually dispatched workflow into `main`. The first hosted
+[discovery run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45948199739)
+on `fa746a626` stopped at normal Eshkol AOT. Its manifest listed three hidden
+generated-source scratch copies that the uploader omitted. Their visible
+evidence copies verified. The workflow now moves private builder scratch
+outside the artifact root before sealing the visible evidence. Hosted
+receipt verification, exact sanitizer inventory review and pinning, the
+compiled zero-control gates, and E3 §9 qualification remain pending.
 PR #206's hosted CI run `38445613534`
 stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
 generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
 were added; a fresh exact-head hosted run remains pending.
+
+Hosted zero-inventory discovery run `45948199739` reached normal AOT on
+`fa746a626` and stopped on two P1 registry names outside their lexical scope.
+The source repair moves the same live/dead module and handle count into the
+pinned zero-only P1 overlay. The negative driver still compares both counts
+before capture and after restoring and rechecking the projection. The overlay
+returns only the two counts. Emitted inventory review and compiled runtime
+qualification remain pending.
 
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has

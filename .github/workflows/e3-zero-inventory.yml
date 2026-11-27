@@ -68,21 +68,46 @@ jobs:
           export TMPDIR="$RUNNER_TEMP"
           /usr/bin/bash scripts/discover-e3-zero-inventories.sh
       - name: Seal partial or complete discovery evidence
+        id: seal-discovery
         if: always()
         shell: /usr/bin/bash -euo pipefail {0}
         env:
           PREVIOUS_JOB_STATUS: ${{ job.status }}
         run: |
           root="$RUNNER_TEMP/e3-n3-zero-discovery"
-          test -d "$root" && test ! -L "$root"
+          [[ -d "$root" && ! -L "$root" && -O "$root" ]]
+          # Builder staging stays on the runner. The evidence copies stay in the receipt.
+          scratch="$(mktemp -d "${root}-scratch.XXXXXX")"
+          shopt -s nullglob
+          for mode in normal sanitize; do
+            gate="$root/$mode"
+            [[ -e "$gate" || -L "$gate" ]] || continue
+            [[ -d "$gate" && ! -L "$gate" && -O "$gate" ]]
+            for stage in "$gate"/.e3-zero-control.* "$gate"/.e3-zero-control-generated; do
+              [[ -e "$stage" || -L "$stage" ]] || continue
+              [[ "${stage##*/}" == .e3-zero-control-generated ||
+                 "${stage##*/}" =~ ^\.e3-zero-control\.[[:alnum:]]{6}$ ]]
+              [[ -d "$stage" && ! -L "$stage" && -O "$stage" ]]
+              mkdir -p -m 0700 -- "$scratch/$mode"
+              mv -- "$stage" "$scratch/$mode/"
+            done
+          done
+          # The uploader sees the same visible files as the seal.
+          unexpected="$(find "$root" -mindepth 1 \
+            \( -name '.*' -o ! \( -type d -o -type f \) \) -print -quit)"
+          if [[ -n "$unexpected" ]]; then
+            printf 'Unsupported discovery evidence entry: %q\n' "$unexpected" >&2
+            exit 1
+          fi
           printf 'workflow_status_before_upload\t%s\n' "$PREVIOUS_JOB_STATUS" >> "$root/status.tsv"
-          (cd "$root" && find . -type f ! -path './SHA256SUMS' -print0 | \
+          (cd -- "$root" && find . -type f ! -path './SHA256SUMS' -print0 | \
             LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$root/SHA256SUMS"
       - name: Upload discovery-only evidence even on failure
-        if: always()
+        if: always() && steps.seal-discovery.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: e3-zero-inventory-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/e3-n3-zero-discovery/
+          include-hidden-files: false
           if-no-files-found: error
           retention-days: 30

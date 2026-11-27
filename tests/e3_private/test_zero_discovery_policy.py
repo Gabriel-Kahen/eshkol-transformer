@@ -1,8 +1,10 @@
 """Offline guards for the non-admitting E3 zero inventory discovery route."""
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
+from textwrap import dedent
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -10,6 +12,16 @@ BUILDER = ROOT / "scripts/build-e1b-consumer.sh"
 HARNESS = ROOT / "scripts/discover-e3-zero-inventories.sh"
 HELPER = ROOT / "scripts/e3-zero-discovery-evidence.sh"
 WORKFLOW = ROOT / ".github/workflows/e3-zero-inventory.yml"
+
+
+def run_workflow_seal(runner_temp, status):
+    workflow = WORKFLOW.read_text()
+    seal = workflow.split("      - name: Seal partial or complete discovery evidence\n")[1]
+    seal = seal.split("      - name: Upload discovery-only evidence even on failure\n")[0]
+    script = dedent(seal.split("        run: |\n")[1])
+    env = dict(os.environ, RUNNER_TEMP=str(runner_temp), PREVIOUS_JOB_STATUS=status)
+    return subprocess.run(["bash", "-euo", "pipefail", "-c", script], env=env,
+                          capture_output=True, text=True)
 
 
 class ZeroDiscoveryPolicyTest(unittest.TestCase):
@@ -176,3 +188,88 @@ e3_zero_discovery_capture failure 12
             subprocess.run(["sha256sum", "-c", "SHA256SUMS"],
                            check=True, cwd=root, stdout=subprocess.DEVNULL)
             self.assertFalse((root / "normal").exists())
+
+    def test_workflow_receipt_survives_artifact_filter_on_success_and_failure(self):
+        upload = WORKFLOW.read_text().split(
+            "      - name: Upload discovery-only evidence even on failure\n")[1]
+        self.assertIn("if: always() && steps.seal-discovery.outcome == 'success'", upload)
+        self.assertIn("path: ${{ runner.temp }}/e3-n3-zero-discovery/", upload)
+        self.assertIn("include-hidden-files: false", upload)
+        sources = ("e3_d2_dataset.esk", "e3_d2_source_provenance.json",
+                   "transformer/module.esk")
+        for status, modes in (("success", ("normal", "sanitize")),
+                              ("failure", ("normal",))):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp:
+                runner_temp = Path(tmp)
+                root = runner_temp / "e3-n3-zero-discovery"
+                root.mkdir()
+                (root / "status.tsv").write_text(f"harness_exit\t{int(status == 'failure')}\n")
+                (runner_temp / "ambient.txt").write_text("unrelated\n")
+                expected = {"status.tsv", "SHA256SUMS"}
+                for mode in modes:
+                    gate = root / mode
+                    stage = gate / ".e3-zero-control.ABC123"
+                    stage.mkdir(parents=True)
+                    if status == "failure":
+                        (stage / "partial.tmp").write_text("builder scratch\n")
+                    generated = gate / "evidence/generated"
+                    scratch_source = gate / ".e3-zero-control-generated/source"
+                    for name in sources:
+                        for files in (generated, scratch_source):
+                            path = files / name
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_text(f"{mode}: {name}\n")
+                        expected.add(f"{mode}/evidence/generated/{name}")
+                    (gate / "evidence/builder-status.tsv").write_text(f"result\t{status}\n")
+                    expected.add(f"{mode}/evidence/builder-status.tsv")
+
+                seal = run_workflow_seal(runner_temp, status)
+                self.assertEqual(seal.returncode, 0, seal.stderr)
+                scratch, = runner_temp.glob("e3-n3-zero-discovery-scratch.*")
+                for mode in modes:
+                    self.assertTrue((scratch / mode / ".e3-zero-control.ABC123").is_dir())
+                    generated = scratch / mode / ".e3-zero-control-generated/source"
+                    for name in sources:
+                        self.assertTrue((generated / name).is_file())
+                if status == "failure":
+                    self.assertEqual(
+                        (scratch / "normal/.e3-zero-control.ABC123/partial.tmp").read_text(),
+                        "builder scratch\n")
+
+                downloaded = runner_temp / "downloaded"
+                shutil.copytree(root, downloaded, ignore=shutil.ignore_patterns(".*"))
+                self.assertEqual({str(p.relative_to(downloaded)) for p in downloaded.rglob("*")
+                                  if p.is_file()}, expected)
+                self.assertIn(f"workflow_status_before_upload\t{status}\n",
+                              (downloaded / "status.tsv").read_text())
+                manifest = (downloaded / "SHA256SUMS").read_text().splitlines()
+                self.assertCountEqual([line.split("  ./", 1)[1] for line in manifest],
+                                      expected - {"SHA256SUMS"})
+                check = ["sha256sum", "--check", "--strict", "SHA256SUMS"]
+                verified = subprocess.run(check, cwd=downloaded, capture_output=True, text=True)
+                self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
+                omitted = "normal/evidence/generated/transformer/module.esk"
+                (downloaded / omitted).unlink()
+                broken = subprocess.run(check, cwd=downloaded, capture_output=True, text=True)
+                self.assertNotEqual(broken.returncode, 0)
+                self.assertIn(omitted, broken.stdout)
+
+    def test_workflow_seal_rejects_hidden_and_nonregular_paths(self):
+        for entry in ("normal/evidence/.ambient", "symlink", "pipe"):
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as tmp:
+                runner_temp = Path(tmp)
+                root = runner_temp / "e3-n3-zero-discovery"
+                root.mkdir()
+                (root / "status.tsv").write_text("state\treserved\n")
+                path = root / entry
+                if entry == "symlink":
+                    path.symlink_to(runner_temp / "outside")
+                elif entry == "pipe":
+                    os.mkfifo(path)
+                else:
+                    path.parent.mkdir(parents=True)
+                    path.write_text("unexpected hidden file\n")
+                seal = run_workflow_seal(runner_temp, "failure")
+                self.assertNotEqual(seal.returncode, 0)
+                self.assertIn(f"Unsupported discovery evidence entry: {path}", seal.stderr)
+                self.assertFalse((root / "SHA256SUMS").exists())
