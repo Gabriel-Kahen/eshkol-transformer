@@ -198,11 +198,30 @@ Q8_0 fallback:
 | decoder, two layers | GGUF F16 | 85,548 | 45,888 | 4.883e-4 |
 | decoder, two layers | GGUF Q8_0 | 85,548 | 27,136 | 7.389e-3 |
 
+## Opt-in external M3 model evaluation
+
+`make test-io5-live-quantized` also builds untagged GGUF v3 F16 and
+Hugging Face safetensors BF16 fixtures from the seed-1729 M3 snapshot.
+The fixtures use independently rounded payloads and the fixed
+`eshkol-m3-v1` tensor roster. Each import supplies `--external`,
+`--profile eshkol-m3-v1`, `--provider i2-dense-cpu-f32-v1`,
+`--tie-head-to-embedding`, and the format's explicit `--scheme`.
+
+The fixed CPU M3 bridge loads the restored F32 C1 checkpoints and runs
+the same forward pass over `(3, 197)`. Each fixture must produce 512 finite
+logits within the absolute drift limits in the table below. The imported
+checkpoint and post-forward snapshot must match an independently built
+C1 file byte for byte, including the head and token-embedding tie. Omitted
+profiles, omitted providers, and unequal tied tensors fail before the
+import creates or replaces a destination. These external checks qualify
+GGUF F16 and safetensors BF16 for the fixed M3 profile.
+
 ## Opt-in M3 model evaluation
 
 Run `make test-io5-live-quantized` with the pinned Eshkol toolchain.
-The gate saves a finite, seed-1729 M3 model through the Eshkol C1 writer, then
-uses the IO5 CLI to export and import mapped Hugging Face safetensors in F16
+The tagged safetensors check saves a finite, seed-1729 M3 model through
+the Eshkol C1 writer, then uses the IO5 CLI to export and import mapped
+Hugging Face safetensors in F16
 and BF16. It loads each restored C1 checkpoint into a fresh seed-0 M3 model
 through the C1 reader and P1 module loader. The Eshkol M3 forward schedule
 evaluates the same `[1,2]` input `(3, 197)` in each model and returns all 512
@@ -244,13 +263,16 @@ compatible model profile.
 
 ## Limitations and scope
 
+The live coverage in this list describes the tagged model evaluation above.
+
 - Bounded non-streaming interchange (reuses IO5 64 MiB file / 32 MiB tensor /
   1 MiB metadata limits); peak memory and throughput are unmeasured.
 - Only `F16` and `BF16` safetensors and `F32`/`F16`/`Q8_0` GGUF v3 are admitted;
   4-bit/sub-byte GGML quantizers (`Q4_0`, `Q4_K`, etc.), sharded quantized
   indexes, live runtime dequantized matmul kernels, and GPU execution are
   outside this slice.
-- The M3 evaluation gate loads F32 C1 checkpoints restored from tagged
-  F16/BF16 safetensors or GGUF F16. The MOD5 gate covers tagged F16/BF16
-  safetensors. Direct narrow loading, live Q8_0 evaluation, quantized
-  training, and CLI3 C2 optimizer resume remain open.
+- The fixed M3 gate loads F32 C1 checkpoints restored from tagged F16/BF16
+  safetensors and GGUF F16, plus external GGUF F16 and safetensors BF16.
+  The MOD5 gate covers tagged F16/BF16 safetensors. Direct narrow loading,
+  live Q8_0 evaluation, quantized training, and CLI3 C2 optimizer resume
+  remain open.

@@ -74,7 +74,12 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   admitted lossless mapped/sharded IO5; [PR #247](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/247)
   admitted bounded F16/BF16 safetensors and F16/Q8_0 GGUF interchange. The
   required IO5 job passed 42 cases and the pinned GGML Q8_0 decoder witness
-  at 192 exact F32 bits. Live model/state ingress remains open.
+  at 192 exact F32 bits. The opt-in `make test-io5-live-quantized` candidate
+  adds independent external GGUF F16 and safetensors BF16 fixtures for the
+  fixed CPU F32 M3 bridge admitted in PR #262. The gate checks the explicit
+  IO5 import flags, exact tied C1 readback and drift across all 512 logits,
+  and rejects missing mapping arguments and unequal tie values before
+  publication. The external gate is limited to `eshkol-m3-v1`.
 - The [tagged MOD5 safetensors candidate](IO5_QUANTIZED_INTERCHANGE.md#tagged-mod5-safetensors)
   adds F16 and BF16 IO5 interchange with explicit MOD5 identity, canonical
   rosters and logical ties. Its live MOD5-C gate evaluates restored F32 C1
