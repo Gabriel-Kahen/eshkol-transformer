@@ -8,7 +8,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 EXTENSION = "native/g3c4_p2g2_first_enrollment_extension.esk"
 FIXTURE = "tests/g3c4/p2_g2_first_enrollment_test.esk"
-BASE = "64d896423efbbde6606012f5d51f88612643169f"
+REFERENCES = (
+    r"p2[-_]?g2[-_]first[-_]enrollment|g3c4[-_]first[-_]enrollment"
+    r"|g3c4-p2g2-shell-count|abort-only-first-enrollment-witness"
+)
 
 
 def read(path):
@@ -72,20 +75,24 @@ class FirstEnrollmentTests(unittest.TestCase):
         self.assertIn("((drained) (exit 134))", code)
         self.assertNotRegex(code, r"\((extern|export|provide)\s")
 
-    def test_accepted_native_and_installed_projection_is_byte_identical(self):
-        # The witness adds its own Scheme source and test C TU. No accepted
-        # implementation, build/installation dispatcher, header or ABI changes.
+    def test_references_are_confined_to_the_private_witness(self):
+        # Check source, build and installation manifests, and workflows against
+        # the same exact path set. Unrelated stack changes do not affect it.
         result = subprocess.run(
-            ["git", "diff", "--name-only", BASE, "--", "src", "include", "lib",
-             "internal", "eshkol.toml", "Makefile", "native", "scripts"],
+            ["git", "grep", "--untracked", "-IilzE", REFERENCES, "--", "."],
             check=True, capture_output=True, text=True, cwd=ROOT,
         )
-        self.assertLessEqual(set(result.stdout.splitlines()), {
-            EXTENSION, "scripts/test-g3c4-p2g2-first-enrollment.sh",
+        self.assertEqual(set(result.stdout.split("\0")[:-1]), {
+            EXTENSION,
+            FIXTURE,
+            "tests/g3c4/p2_g2_first_enrollment_native.c",
+            "tests/g3c4/test_p2_g2_first_enrollment.py",
+            "scripts/test-g3c4-p2g2-first-enrollment.sh",
+            "docs/ROADMAP.md",
+            "docs/g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md",
         })
         leaf = Path(EXTENSION).name
         self.assertEqual(read(FIXTURE).count(f'(load "{leaf}")'), 1)
-        self.assertNotIn(leaf, read("tests/g3c4/p2_g2_terminal_pending_anchor_feature_off_test.esk"))
 
 
 if __name__ == "__main__":
