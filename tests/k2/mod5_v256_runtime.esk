@@ -17,6 +17,11 @@
   (guard (caught (#t (and (transformer-error? caught)
                           (eq? (transformer-error-category caught) category))))
     (thunk) #f))
+(define (check-rejection-before-match label thunk category)
+  (let ((ordinary-count (baseline-matches)) (v256-count (v256-matches)))
+    (check label (and (rejects? thunk category)
+                      (= ordinary-count (baseline-matches))
+                      (= v256-count (v256-matches))))))
 (define (default-request shape)
   (k2-public-capability-request 'storage.copy 'f32 'cpu shape #t))
 (define (v256-request shape)
@@ -41,6 +46,12 @@
 (check 'default-request-rejected-before-match
        (and (rejects? (lambda () (v256-verified v256 width-default)) 'invalid-argument)
             (= (baseline-matches) 0) (= (v256-matches) 0)))
+(check-rejection-before-match 'v256-report-rejected-by-default
+  (lambda () (k2-public-capability-verified? v256 'tensor.f32 width-default))
+  'invalid-argument)
+(check-rejection-before-match 'v256-request-rejected-by-default
+  (lambda () (k2-public-capability-verified? ordinary 'tensor.f32 width-v256))
+  'invalid-argument)
 (check 'own-profile-ordinary
        (and (k2-public-capability-verified? ordinary 'tensor.f32 width-default)
             (= (baseline-matches) 1) (= (v256-matches) 0)))
@@ -62,9 +73,8 @@
 (let* ((report (k2-mod5-v256-discover))
        (state (report k2-v256-query)))
   (vector-set! state 6 (vector 'mod5-width16-v256))
-  (check 'wrong-profile-before-match
-         (and (rejects? (lambda () (v256-verified report head-v256)) 'unsupported)
-              (= (v256-matches) 3)))
+  (check-rejection-before-match 'wrong-profile-before-match
+    (lambda () (v256-verified report head-v256)) 'unsupported)
   (vector-set! state 6 k2-v256-profile)
   (vector-set! state 5 'dead)
   (check 'invalidated-before-match
@@ -80,6 +90,23 @@
 (check 'new-report-rejects-stale-request
        (rejects? (lambda () (v256-verified new-v256 width-v256)) 'invalid-state))
 (check 'new-generation-matches (v256-verified new-v256 (v256-request '(256 16))))
+
+(let* ((current-request (v256-request '(16)))
+       (ordinary-entry (k2-public-capability-require ordinary 'tensor.f32 width-default))
+       (v256-entry (k2-mod5-v256-require new-v256 'tensor.f32 current-request)))
+  (check-rejection-before-match 'v256-entry-rejected-by-default
+    (lambda () (k2-public-capability-entry-version v256-entry)) 'invalid-argument)
+  (check-rejection-before-match 'default-entry-rejected-by-v256
+    (lambda () (k2-mod5-v256-entry-description ordinary-entry)) 'invalid-argument)
+  (check-rejection-before-match 'default-request-rejected-as-entry
+    (lambda () (k2-public-capability-entry-version width-default)) 'invalid-argument)
+  (check-rejection-before-match 'v256-request-rejected-as-entry
+    (lambda () (k2-mod5-v256-entry-description current-request)) 'invalid-argument)
+  (check-rejection-before-match 'default-entry-rejected-as-request
+    (lambda () (k2-public-capability-verified? ordinary 'tensor.f32 ordinary-entry))
+    'invalid-argument)
+  (check-rejection-before-match 'v256-entry-rejected-as-request
+    (lambda () (v256-verified new-v256 v256-entry)) 'invalid-argument))
 
 (let ((child (test-fork)))
   (if (= child 0)

@@ -1555,6 +1555,21 @@ test_protected_provider_graph(const et_kernel_provider_v1 *provider) {
   return 1;
 }
 
+static int test_protected_runtime_graph(const et_kernel_runtime *runtime) {
+  if (runtime == NULL ||
+      !span_overlaps_protected(runtime, ET_K2_K1_RUNTIME_CONTROL_BYTES)) {
+    return 0;
+  }
+  const size_t count = et_kernel_runtime_capability_count(runtime);
+  for (size_t index = 0; index < count; index++) {
+    if (!test_protected_capability_graph(
+            et_kernel_runtime_capability_at(runtime, index))) {
+      return 0;
+    }
+  }
+  return count == ET_K2_ENTRY_COUNT;
+}
+
 uint32_t et_k2_test_protected_overlap_mask_v1(void) {
   uint32_t mask = 0u;
   unsigned char disjoint = 0u;
@@ -1578,20 +1593,22 @@ uint32_t et_k2_test_protected_overlap_mask_v1(void) {
   if (test_protected_provider_graph(provider)) {
     mask |= ET_K2_TEST_PROTECTED_PROVIDER;
   }
-  if (state.baseline.runtime != NULL &&
-      span_overlaps_protected(state.baseline.runtime, ET_K2_K1_RUNTIME_CONTROL_BYTES)) {
-    int all_capabilities = 1;
-    const size_t count = et_kernel_runtime_capability_count(state.baseline.runtime);
-    for (size_t index = 0; index < count; index++) {
-      all_capabilities =
-          all_capabilities &&
-          test_protected_capability_graph(
-              et_kernel_runtime_capability_at(state.baseline.runtime, index));
-    }
-    if (all_capabilities) {
-      mask |= ET_K2_TEST_PROTECTED_RUNTIME;
-    }
+  if (test_protected_runtime_graph(state.baseline.runtime)) {
+    mask |= ET_K2_TEST_PROTECTED_RUNTIME;
   }
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  if (span_overlaps_protected(&mod5_v256_resolver_sentinel,
+                              sizeof(mod5_v256_resolver_sentinel))) {
+    mask |= ET_K2_TEST_PROTECTED_V256_RESOLVER;
+  }
+  if (test_protected_provider_graph(
+          et_i2_private_mod5_width16_v256_storage_provider_v1())) {
+    mask |= ET_K2_TEST_PROTECTED_V256_PROVIDER;
+  }
+  if (test_protected_runtime_graph(state.mod5_v256.runtime)) {
+    mask |= ET_K2_TEST_PROTECTED_V256_RUNTIME;
+  }
+#endif
   if (span_overlaps_protected(&state.report_factory,
                               sizeof(state.report_factory)) &&
       span_overlaps_protected(&state.request_factory,

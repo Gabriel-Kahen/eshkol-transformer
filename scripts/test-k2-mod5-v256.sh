@@ -81,4 +81,4 @@ for repeat in a b; do
   test ! -s "$out/witness-$repeat.stderr"
 done
 cmp "$out/witness-a.stdout" "$out/witness-b.stdout"
-grep -Fx 'K2 MOD5 V256 PASS 14' "$out/witness-a.stdout"
+grep -Fx 'K2 MOD5 V256 PASS 22' "$out/witness-a.stdout"

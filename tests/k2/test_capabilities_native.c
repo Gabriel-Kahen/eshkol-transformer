@@ -720,7 +720,12 @@ static void test_discovery_and_matching(void) {
   CHECK(generation > 0);
   CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == 0);
   CHECK(et_k2_test_discovery_count_v1() == 1u);
+#ifdef ET_K2_PRIVATE_MOD5_V256
+  CHECK(et_k2_test_protected_overlap_mask_v1() ==
+        (ET_K2_TEST_PROTECTED_ALL | ET_K2_TEST_PROTECTED_V256_STATIC));
+#else
   CHECK(et_k2_test_protected_overlap_mask_v1() == ET_K2_TEST_PROTECTED_ALL);
+#endif
 
   register_factories();
   CHECK(require_request(generation, 9, "storage.copy", "f32", "cpu", NULL, 0, 0,
@@ -1208,6 +1213,9 @@ static void test_mod5_v256_slots(void) {
   CHECK(et_k2_private_mod5_v256_ensure_v1(&diagnostic, 264) == 0);
   CHECK(et_k2_private_runtime_generation_v1() == -7);
   CHECK(et_k2_test_discovery_count_v1() == 0u);
+  CHECK(et_k2_test_protected_overlap_mask_v1() ==
+        ((ET_K2_TEST_PROTECTED_ALL & ~ET_K2_TEST_PROTECTED_RUNTIME) |
+         ET_K2_TEST_PROTECTED_V256_ALL));
   v256_generation = et_k2_private_mod5_v256_generation_v1();
   CHECK(v256_generation > 0);
   CHECK(require_v256(v256_generation, scalar, 1, &diagnostic) == 0);
@@ -1219,6 +1227,8 @@ static void test_mod5_v256_slots(void) {
   CHECK(et_k2_test_mod5_v256_match_count_v1() == 3u);
 
   CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == 0);
+  CHECK(et_k2_test_protected_overlap_mask_v1() ==
+        (ET_K2_TEST_PROTECTED_ALL | ET_K2_TEST_PROTECTED_V256_ALL));
   default_generation = et_k2_private_runtime_generation_v1();
   CHECK(require_request(default_generation, 9, "storage.copy", "f32", "cpu",
                         v256, 2, 1, &diagnostic) ==
@@ -1230,6 +1240,8 @@ static void test_mod5_v256_slots(void) {
   v256_matches = et_k2_test_mod5_v256_match_count_v1();
 
   et_k2_test_mod5_v256_drop_v1();
+  CHECK(et_k2_test_protected_overlap_mask_v1() ==
+        (ET_K2_TEST_PROTECTED_ALL | ET_K2_TEST_PROTECTED_V256_STATIC));
   CHECK(require_v256(v256_generation, v256, 2, &diagnostic) ==
         ET_K2_STATUS_INVALID_STATE);
   CHECK(et_k2_test_mod5_v256_match_count_v1() == v256_matches);
