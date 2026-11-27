@@ -27,7 +27,7 @@ SHELL := /usr/bin/bash
 	test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics \
 	test-mod5 test-mod5-aot test-mod5-c2 test-mod5-o2-continuation \
-	test-mp4 test-mp4-mod5 test-ac4 test-pa4-wider test-pa4-wider-joint test-n2 test-n3k \
+	test-mp4 test-mp4-mod5 test-ac4 test-pa4-wider test-pa4-wider-joint test-pa4-wider-m3t test-n2 test-n3k \
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-t2-trainer test-t2-native-corpus test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
@@ -322,6 +322,9 @@ test-pa4-wider:
 
 test-pa4-wider-joint:
 	/usr/bin/bash scripts/test-pa4-wider-joint.sh
+
+test-pa4-wider-m3t:
+	/usr/bin/bash scripts/test-pa4-wider-m3t.sh
 
 test-k1: build
 	/usr/bin/bash scripts/test-k1.sh

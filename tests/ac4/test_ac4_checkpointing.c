@@ -23,7 +23,7 @@
     }                                                                          \
   } while (0)
 
-enum { MAX_X = 48, MAX_P = ET_AC4_MAX_LAYERS * 464, POLICIES = 4, STEPS = 8 };
+enum { MAX_X = 48, MAX_P = ET_AC4_MAX_LAYERS * 464, POLICIES = 5, STEPS = 8 };
 typedef struct fixture {
   size_t x, p, per_layer;
   float input[MAX_X], target[MAX_X], parameters[MAX_P];
@@ -44,8 +44,9 @@ static const et_ac4_shape_v1 shapes[] = {{4, 1, 2, 2, 1, 2},
                                          {2, 2, 3, 2, 2, 2}};
 static const et_ac4_policy policies[] = {
     ET_AC4_POLICY_NONE, ET_AC4_POLICY_EVERY_LAYER, ET_AC4_POLICY_SQRT_SEGMENTS,
-    ET_AC4_POLICY_EVERY_K};
-static const char *const policy_names[] = {"none", "layer", "sqrt", "every-k"};
+    ET_AC4_POLICY_EVERY_K, ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS};
+static const char *const policy_names[] = {"none", "layer", "sqrt", "every-k",
+                                           "every-k-replay-gradients"};
 
 static et_ac4_config_v1 config_for(et_ac4_shape_v1 shape, et_ac4_policy policy,
                                    float rate, uint32_t k) {
@@ -181,7 +182,7 @@ static void train_parity(void) {
         data[p] = evaluation;
         init_run(
             &trials[p],
-            config_for(shape, policies[p], rates[r], p == 3 ? shape.layers : 0),
+            config_for(shape, policies[p], rates[r], p >= 3 ? shape.layers : 0),
             &data[p]);
         trials[p].config.activation_limit_bytes =
             trials[p].plan.activation_peak_bytes;
@@ -222,11 +223,11 @@ static void train_parity(void) {
 
 static void schedules(void) {
   const uint32_t depths[] = {4, 8, 16};
-  const size_t expected[][POLICIES] = {{8832, 3648, 3456, 3264},
-                                       {16512, 4416, 3840, 3264},
-                                       {31872, 5952, 4224, 3264}};
+  const size_t expected[][POLICIES] = {{8832, 3648, 3456, 3264, 3264},
+                                       {16512, 4416, 3840, 3264, 3264},
+                                       {31872, 5952, 4224, 3264, 3264}};
   const uint32_t replays[][POLICIES] = {
-      {0, 4, 6, 10}, {0, 8, 13, 36}, {0, 16, 28, 136}};
+      {0, 4, 6, 10, 20}, {0, 8, 13, 36, 72}, {0, 16, 28, 136, 272}};
   for (size_t i = 0; i < COUNT(depths); ++i) {
     et_ac4_shape_v1 shape = shapes[2];
     shape.layers = depths[i];
@@ -235,12 +236,17 @@ static void schedules(void) {
     for (size_t p = 0; p < COUNT(policies); ++p) {
       run trial;
       init_run(&trial,
-               config_for(shape, policies[p], 0.25f, p == 3 ? shape.layers : 0),
+               config_for(shape, policies[p], 0.25f, p >= 3 ? shape.layers : 0),
                &data);
       execute(&trial);
       check_stats(&trial);
       CHECK(trial.result.memory.activation_peak_bytes == expected[i][p]);
       CHECK(trial.result.memory.rematerialized_layers == replays[i][p]);
+      const size_t gradient_layers =
+          policies[p] == ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS ? 1
+                                                                : shape.layers;
+      CHECK(trial.result.memory.gradient_staging_bytes ==
+            gradient_layers * data.per_layer * sizeof(float));
       close_run(&trial);
     }
     CHECK(expected[i][0] > expected[i][1] && expected[i][1] > expected[i][2] &&
@@ -249,7 +255,7 @@ static void schedules(void) {
   CHECK(expected[2][0] - expected[0][0] >
         4 * (expected[2][1] - expected[0][1]));
   CHECK(expected[2][1] - expected[0][1] > expected[2][2] - expected[0][2]);
-  CHECK(expected[2][3] == expected[0][3]);
+  CHECK(expected[2][3] == expected[0][3] && expected[2][4] == expected[0][4]);
 
   /* Exercise ragged segments, every legal depth and K, and loss-only parity. */
   unsigned cases = 0;
@@ -263,7 +269,7 @@ static void schedules(void) {
     execute(&baseline);
     for (size_t p = 0; p < COUNT(policies); ++p) {
       et_ac4_config_v1 config =
-          config_for(shape, policies[p], 0.3f, p == 3 ? layers : 0);
+          config_for(shape, policies[p], 0.3f, p >= 3 ? layers : 0);
       config.mode = ET_AC4_FORWARD_ONLY;
       run trial;
       init_run(&trial, config, &data);
@@ -286,6 +292,22 @@ static void schedules(void) {
       const uint32_t replay_count =
           (layers / k) * k * (k + 1) / 2 + tail * (tail + 1) / 2;
       CHECK(trial.result.memory.rematerialized_layers == replay_count);
+      run gradients;
+      init_run(
+          &gradients,
+          config_for(shape, ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS, 0.3f, k),
+          &data);
+      execute(&gradients);
+      check_stats(&gradients);
+      check_parity(&trial, &gradients);
+      CHECK(gradients.result.memory.retained_checkpoints == (layers - 1) / k);
+      CHECK(gradients.result.memory.retained_tapes == 1);
+      CHECK(gradients.result.memory.activation_peak_bytes ==
+            trial.result.memory.activation_peak_bytes);
+      CHECK(gradients.result.memory.gradient_staging_bytes ==
+            data.per_layer * sizeof(float));
+      CHECK(gradients.result.memory.rematerialized_layers == 2 * replay_count);
+      close_run(&gradients);
       close_run(&trial);
       ++cases;
     }
@@ -298,8 +320,8 @@ static void schedules(void) {
     close_run(&sqrt_trial);
     close_run(&baseline);
   }
-  printf("AC4 exact arena peaks and schedules: PASS (%u EVERY_K, 16 SQRT, 64 "
-         "forward-only cases)\n",
+  printf("AC4 exact arena peaks and schedules: PASS (%u per EVERY_K policy, "
+         "16 SQRT, 80 forward-only cases)\n",
          cases);
 }
 
@@ -317,6 +339,13 @@ static void derivatives(void) {
       run analytic;
       init_run(&analytic, cfg, &data);
       execute(&analytic);
+      cfg.policy = ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS;
+      cfg.checkpoint_every = shapes[s].layers;
+      run gradients;
+      init_run(&gradients, cfg, &data);
+      execute(&gradients);
+      check_stats(&gradients);
+      check_parity(&analytic, &gradients);
       cfg.mode = ET_AC4_FORWARD_ONLY;
       run numeric;
       init_run(&numeric, cfg, &data);
@@ -337,7 +366,7 @@ static void derivatives(void) {
         *slot = value;
         const double estimate = (plus - minus) / ((double)hi - lo);
         const double gradient =
-            i < data.p ? analytic.grad[i] : analytic.dx[i - data.p];
+            i < data.p ? gradients.grad[i] : gradients.dx[i - data.p];
         const double error = fabs(estimate - gradient);
         if (error > max_absolute)
           max_absolute = error;
@@ -350,6 +379,7 @@ static void derivatives(void) {
         ++checked;
       }
       close_run(&numeric);
+      close_run(&gradients);
       close_run(&analytic);
     }
   }
@@ -488,12 +518,11 @@ static void expect_rejected(run *trial, const et_ac4_config_v1 *config,
   ++rejected;
 }
 
-static void errors(void) {
-  const et_ac4_shape_v1 shape = shapes[0];
+static void errors(et_ac4_shape_v1 shape, et_ac4_policy policy, uint32_t k) {
   fixture data;
   fill_fixture(&data, shape);
   run trial;
-  const et_ac4_config_v1 valid = config_for(shape, ET_AC4_POLICY_EVERY_K, 0, 3);
+  const et_ac4_config_v1 valid = config_for(shape, policy, 0, k);
   init_run(&trial, valid, &data);
 
   et_ac4_config_v1 cfg;
@@ -631,34 +660,48 @@ static void errors(void) {
   _mm_setcsr(orig_mxcsr);
 
   /* Start with identity layers, then overflow a late forward projection. */
+  const size_t width = shape.query_heads * shape.head_dim;
+  const size_t kv_width = shape.kv_heads * shape.head_dim;
   for (size_t i = 0; i < data.x; ++i) {
     data.input[i] = 1.0f;
-    data.target[i] = -16.0f;
+    data.target[i] = -2.0f * (float)data.x;
   }
   memset(data.parameters, 0, data.p * sizeof(float));
   for (uint32_t l = 0; l < shape.layers; ++l)
-    for (size_t d = 0; d < 4; ++d)
+    for (size_t d = 0; d < width; ++d)
       data.parameters[l * data.per_layer + d] = 1.0f;
   float *last = data.parameters + (shape.layers - 1) * data.per_layer;
-  for (size_t d = 0; d < 4; ++d)
-    last[4 + d] = FLT_MAX;
+  for (size_t d = 0; d < width; ++d)
+    last[width + d] = FLT_MAX;
   expect_rejected(&trial, &valid, &trial.io, &trial.result,
                   ET_AC4_NUMERIC_ERROR, 0);
-  memset(last + 4, 0, 4 * sizeof(float));
+  memset(last + width, 0, width * sizeof(float));
 
   /* Zero hidden activations let forward succeed with huge first-layer Wdown.
    * Backward fails in that layer after later layers have staged gradients. */
-  const size_t wdown = data.per_layer - 4 * 4;
+  const size_t wdown = data.per_layer - width * width;
   data.parameters[wdown] = FLT_MAX;
   run forward_only;
   cfg = valid;
   cfg.mode = ET_AC4_FORWARD_ONLY;
   init_run(&forward_only, cfg, &data);
   execute(&forward_only);
-  close_run(&forward_only);
   expect_rejected(&trial, &valid, &trial.io, &trial.result,
                   ET_AC4_NUMERIC_ERROR, 0);
   data.parameters[wdown] = 0;
+
+  /* Only the first layer's dWo overflows. Zero Wo keeps the upstream
+   * attention gradient zero, so the provider and carried gradient are finite.
+   */
+  const size_t wv = width + width * width + kv_width * width;
+  data.parameters[wv] = 128.0f;
+  for (size_t i = 0; i < data.x; ++i)
+    data.target[i] = FLT_MAX;
+  execute(&forward_only);
+  close_run(&forward_only);
+  expect_rejected(&trial, &valid, &trial.io, &trial.result,
+                  ET_AC4_NUMERIC_ERROR, 0);
+  data.parameters[wv] = 0;
 
   execute(&trial);
   check_stats(&trial);
@@ -668,9 +711,6 @@ static void errors(void) {
   check_parity(&clean, &trial);
   close_run(&clean);
   close_run(&trial);
-  printf("AC4 rejection and failure atomicity: PASS (%u rejected runs, 4 plan "
-         "errors)\n",
-         rejected);
 }
 
 static double seconds(void) {
@@ -700,7 +740,7 @@ static void benchmark(void) {
     double times[POLICIES][SAMPLES];
     for (size_t j = 0; j < COUNT(policies); ++j) {
       init_run(&trials[j],
-               config_for(shape, policies[j], 0.2f, j == 3 ? shape.layers : 0),
+               config_for(shape, policies[j], 0.2f, j >= 3 ? shape.layers : 0),
                &data);
       for (unsigned warmup = 0; warmup < 8; ++warmup)
         execute(&trials[j]);
@@ -746,7 +786,12 @@ int main(int argc, char **argv) {
   schedules();
   derivatives();
   masks_and_causality();
-  errors();
+  errors(shapes[0], ET_AC4_POLICY_EVERY_K, 3);
+  const et_ac4_shape_v1 large = {16, 2, 3, 4, 2, 2};
+  errors(large, ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS, 5);
+  printf("AC4 rejection and failure atomicity: PASS (%u rejected runs, 8 plan "
+         "errors)\n",
+         rejected);
   puts("AC4 native suite: PASS");
   return EXIT_SUCCESS;
 }

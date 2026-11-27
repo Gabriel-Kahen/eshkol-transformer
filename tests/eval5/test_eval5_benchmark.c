@@ -685,6 +685,219 @@ static void test_tokenizer_identity(et_eval5_manifest *manifest) {
                                         256u, digest) == ET_EVAL5_ERR_ARGUMENT);
 }
 
+static void check_runner_error(const et_eval5_benchmark_request *request,
+                               et_eval5_status expected) {
+  et_eval5_benchmark_result result;
+  unsigned char before[sizeof(result)];
+  memset(&result, 0xa5, sizeof(result));
+  memcpy(before, &result, sizeof(result));
+  CHECK(et_eval5_run_benchmark(request, &result) == expected);
+  CHECK(memcmp(&result, before, sizeof(result)) == 0);
+}
+
+static void test_benchmark_runner(const char *directory) {
+  static const uint8_t t1[] =
+      "sha256:eshkol-byte-tokenizer-v1:aabb31f49216963582383a00fd2e85d7c20b658d5bef0e7945344ed6bfe50704";
+  static const uint8_t t2[] =
+      "sha256:eshkol-bpe-tokenizer-v1:1866ebedd76bf7d0e8e111ab25603a99aee927ea341e1305e4bb2c145648eb72";
+  const et_eval5_tokenizer_identity byte_identity = {t1, sizeof(t1) - 1, 256};
+  const et_eval5_tokenizer_identity bpe_identity = {t2, sizeof(t2) - 1, 263};
+  const et_eval5_document byte_train[] = {BYTE_DOC("abc")};
+  const et_eval5_document byte_eval[] = {BYTE_DOC("axy"), BYTE_DOC("pqr")};
+  const float byte_logits[2 * 256] = {0};
+  const uint32_t byte_targets[] = {'x', 'y'};
+  const et_eval5_sequence byte_lm = SEQUENCE(byte_logits, byte_targets, 256);
+  et_eval5_benchmark_request request = {
+      .suite = "fixture-suite", .task = "one-shot", .split = "validation",
+      .context_length = 1, .max_samples = 1,
+      .contamination = {ET_EVAL5_NGRAM_BYTES, 2, 1, 1.0, 0.0},
+      .tokenizer = byte_identity,
+      .train = {byte_train, COUNT(byte_train), byte_identity, {0x11}},
+      .eval = {byte_eval, COUNT(byte_eval), byte_identity, {0x22}},
+      .checkpoint_sha256 = {0x33},
+      .metric_mask = ET_EVAL5_METRIC_LM,
+      .lm_sequence = &byte_lm, .lm_byte_count = 2, .lm_sample_count = 1,
+  };
+  et_eval5_benchmark_result result;
+  CHECK(et_eval5_run_benchmark(&request, &result) == ET_EVAL5_OK);
+  CHECK(result.manifest.metric_mask == ET_EVAL5_METRIC_LM);
+  CHECK(result.manifest.context_length == 1 && result.manifest.max_samples == 1);
+  CHECK(result.manifest.lm.token_count == 2 && result.manifest.lm.byte_count == 2);
+  CHECK(fabs(result.manifest.lm.mean_nll - log(256.0)) < 1e-12);
+  CHECK(result.manifest.mc.total_count == 0 && result.manifest.mc.accuracy == 0.0);
+  CHECK(result.manifest.tokenizer_sha256[0] == 0xaa);
+  CHECK(result.manifest.tokenizer_sha256[ET_EVAL5_SHA256_BYTES - 1] == 0x04);
+  CHECK(result.manifest.audit.eval_documents == COUNT(byte_eval));
+  CHECK(result.manifest.audit.total_eval_ngrams == 4);
+  CHECK(result.manifest.audit.contaminated_documents == 0);
+
+  const uint32_t bpe_train_tokens[] = {256, 257, 258};
+  const uint32_t bpe_eval_first[] = {256, 257};
+  const uint32_t bpe_eval_second[] = {260, 261};
+  const et_eval5_document bpe_train[] = {TOKEN_DOC("abcdef", bpe_train_tokens)};
+  const et_eval5_document bpe_eval[] = {
+      TOKEN_DOC("abcd", bpe_eval_first), TOKEN_DOC("ghij", bpe_eval_second),
+  };
+  const float bpe_logits[2 * 263] = {0};
+  const uint32_t bpe_targets[] = {257, 261};
+  const et_eval5_sequence bpe_lm = SEQUENCE(bpe_logits, bpe_targets, 263);
+  const et_eval5_sequence short_choice = {bpe_logits, bpe_targets, 1, 263, 263};
+  et_eval5_sequence first_choices[] = {bpe_lm, short_choice};
+  const et_eval5_sequence second_choices[] = {short_choice, bpe_lm};
+  et_eval5_choice_item items[] = {
+      {first_choices, COUNT(first_choices), 1},
+      {second_choices, COUNT(second_choices), 0},
+  };
+  request.tokenizer = bpe_identity;
+  request.train = (et_eval5_benchmark_corpus){bpe_train, COUNT(bpe_train), bpe_identity, {0x44}};
+  request.eval = (et_eval5_benchmark_corpus){bpe_eval, COUNT(bpe_eval), bpe_identity, {0x55}};
+  request.contamination = (et_eval5_contamination_config){ET_EVAL5_NGRAM_TOKENS, 2, 1, 1.0, 0.5};
+  request.max_samples = 0;
+  request.metric_mask = ET_EVAL5_METRIC_MC;
+  request.lm_sequence = NULL;
+  request.lm_byte_count = 0;
+  request.lm_sample_count = 0;
+  request.mc_items = items;
+  request.mc_item_count = COUNT(items);
+  CHECK(et_eval5_run_benchmark(&request, &result) == ET_EVAL5_OK);
+  CHECK(result.manifest.metric_mask == ET_EVAL5_METRIC_MC);
+  CHECK(result.manifest.max_samples == 0 && result.manifest.mc_normalize_by_length == 0);
+  CHECK(result.manifest.lm.token_count == 0 && result.manifest.lm.perplexity == 0.0);
+  CHECK(result.manifest.mc.total_count == 2 && result.manifest.mc.correct_count == 2);
+  CHECK(result.manifest.mc.accuracy == 1.0);
+  CHECK(result.manifest.audit.eval_documents == 2);
+  CHECK(result.manifest.audit.total_eval_ngrams == 2);
+  CHECK(result.manifest.audit.matched_eval_ngrams == 1);
+  CHECK(result.manifest.audit.ngram_contaminated_docs == 1);
+  CHECK(result.manifest.audit.exact_doc_matches == 0 && result.manifest.audit.contamination_rate == 0.5);
+
+  request.max_samples = 2;
+  request.metric_mask = ET_EVAL5_METRIC_LM | ET_EVAL5_METRIC_MC;
+  request.lm_sequence = &bpe_lm;
+  request.lm_byte_count = 4;
+  request.lm_sample_count = COUNT(bpe_eval);
+  request.mc_normalize_by_length = 1;
+  CHECK(et_eval5_run_benchmark(&request, &result) == ET_EVAL5_OK);
+  CHECK(result.manifest.metric_mask == request.metric_mask);
+  CHECK(result.manifest.lm.token_count == 2 && result.manifest.lm.byte_count == 4);
+  CHECK(fabs(result.manifest.lm.mean_nll - log(263.0)) < 1e-12);
+  CHECK(result.manifest.mc.correct_count == 1 && result.manifest.mc.accuracy == 0.5);
+  CHECK(result.manifest.tokenizer_sha256[0] == 0x18);
+  CHECK(result.manifest.tokenizer_sha256[ET_EVAL5_SHA256_BYTES - 1] == 0x72);
+  CHECK(memcmp(result.manifest.train_dataset_sha256, request.train.dataset_sha256,
+               ET_EVAL5_SHA256_BYTES) == 0);
+  CHECK(memcmp(result.manifest.eval_dataset_sha256, request.eval.dataset_sha256,
+               ET_EVAL5_SHA256_BYTES) == 0);
+  CHECK(memcmp(result.manifest.checkpoint_sha256, request.checkpoint_sha256,
+               ET_EVAL5_SHA256_BYTES) == 0);
+  const size_t canonical_size = result.canonical_size;
+  CHECK(strlen(result.canonical_bytes) == canonical_size);
+
+  char path[4096];
+  make_path(path, sizeof(path), directory, "one-shot.manifest");
+  CHECK(et_eval5_manifest_write_atomic(path, &result.manifest) == ET_EVAL5_OK);
+  FILE *file = fopen(path, "rb");
+  CHECK(file != NULL);
+  char file_bytes[ET_EVAL5_MANIFEST_MAX_BYTES + 1u];
+  CHECK(fread(file_bytes, 1, sizeof(file_bytes), file) == canonical_size);
+  CHECK(!ferror(file) && feof(file) && fclose(file) == 0);
+  CHECK(memcmp(file_bytes, result.canonical_bytes, result.canonical_size) == 0);
+  et_eval5_manifest parsed;
+  CHECK(et_eval5_manifest_parse(result.canonical_bytes, result.canonical_size, &parsed) == ET_EVAL5_OK);
+  CHECK(memcmp(parsed.manifest_sha256, result.manifest.manifest_sha256,
+               ET_EVAL5_SHA256_BYTES) == 0);
+
+  const et_eval5_benchmark_request valid = request;
+  request.eval.tokenizer = byte_identity;
+  check_runner_error(&request, ET_EVAL5_ERR_IDENTITY);
+  request = valid;
+  request.train.tokenizer.vocab_size--;
+  check_runner_error(&request, ET_EVAL5_ERR_IDENTITY);
+  request = valid;
+  request.tokenizer.fingerprint_length--;
+  check_runner_error(&request, ET_EVAL5_ERR_FORMAT);
+  request = valid;
+  request.context_length = 0;
+  check_runner_error(&request, ET_EVAL5_ERR_FORMAT);
+  request = valid;
+  request.metric_mask = 4;
+  check_runner_error(&request, ET_EVAL5_ERR_FORMAT);
+
+  request = valid;
+  request.lm_sequence = NULL;
+  request.mc_items = NULL;
+  request.contamination.max_allowed_rate = 0.49;
+  check_runner_error(&request, ET_EVAL5_ERR_CONTAMINATED);
+  request.contamination.max_allowed_rate = 1.0;
+  request.eval.documents = bpe_train;
+  request.eval.document_count = COUNT(bpe_train);
+  check_runner_error(&request, ET_EVAL5_ERR_CONTAMINATED);
+
+  const uint32_t invalid_tokens[] = {263};
+  const et_eval5_document invalid_docs[] = {TOKEN_DOC("invalid", invalid_tokens)};
+  request = valid;
+  request.eval.documents = invalid_docs;
+  request.eval.document_count = COUNT(invalid_docs);
+  check_runner_error(&request, ET_EVAL5_ERR_TARGET);
+  request = valid;
+  request.train.documents = invalid_docs;
+  request.train.document_count = COUNT(invalid_docs);
+  check_runner_error(&request, ET_EVAL5_ERR_TARGET);
+  const et_eval5_document missing_tokens = {NULL, 0, NULL, 1};
+  request.train.documents = &missing_tokens;
+  check_runner_error(&request, ET_EVAL5_ERR_ARGUMENT);
+  request = valid;
+  request.eval.document_count = SIZE_MAX;
+  check_runner_error(&request, ET_EVAL5_ERR_OVERFLOW);
+
+  request = valid;
+  et_eval5_sequence wrong_lm = bpe_lm;
+  request.lm_sequence = &wrong_lm;
+  wrong_lm.vocab_size--;
+  check_runner_error(&request, ET_EVAL5_ERR_IDENTITY);
+  wrong_lm = bpe_lm;
+  wrong_lm.logit_count--;
+  check_runner_error(&request, ET_EVAL5_ERR_BOUNDS);
+  wrong_lm = bpe_lm;
+  const uint32_t out_of_vocab_targets[] = {257, 263};
+  wrong_lm.target_ids = out_of_vocab_targets;
+  check_runner_error(&request, ET_EVAL5_ERR_TARGET);
+  request = valid;
+  request.lm_sample_count++;
+  check_runner_error(&request, ET_EVAL5_ERR_BOUNDS);
+  request = valid;
+  request.lm_sample_count = 1;
+  request.max_samples = 1;
+  check_runner_error(&request, ET_EVAL5_ERR_BOUNDS);
+
+  request = valid;
+  first_choices[1].vocab_size--;
+  check_runner_error(&request, ET_EVAL5_ERR_IDENTITY);
+  first_choices[1] = short_choice;
+  items[1].correct_index = items[1].choice_count;
+  check_runner_error(&request, ET_EVAL5_ERR_TARGET);
+  items[1].correct_index = 0;
+  const float invalid_logits[263] = {NAN};
+  first_choices[1].logits = invalid_logits;
+  check_runner_error(&request, ET_EVAL5_ERR_NONFINITE);
+  first_choices[1] = short_choice;
+  request.metric_mask = ET_EVAL5_METRIC_MC;
+  check_runner_error(&request, ET_EVAL5_ERR_ARGUMENT);
+  request = valid;
+  request.metric_mask = ET_EVAL5_METRIC_LM;
+  request.mc_normalize_by_length = 0;
+  check_runner_error(&request, ET_EVAL5_ERR_ARGUMENT);
+
+  check_runner_error(NULL, ET_EVAL5_ERR_ARGUMENT);
+  CHECK(et_eval5_run_benchmark(&valid, NULL) == ET_EVAL5_ERR_ARGUMENT);
+  CHECK(fesetround(FE_DOWNWARD) == 0);
+  check_runner_error(&valid, ET_EVAL5_ERR_FP_ENV);
+  CHECK(fesetround(FE_TONEAREST) == 0);
+  CHECK(et_eval5_run_benchmark(&valid, &result) == ET_EVAL5_OK);
+  CHECK(result.canonical_size == canonical_size);
+  CHECK(memcmp(file_bytes, result.canonical_bytes, canonical_size) == 0);
+}
+
 int main(int argc, char **argv) {
   if (argc == 3 && strcmp(argv[1], "--read-status") == 0) {
     et_eval5_manifest manifest;
@@ -714,5 +927,6 @@ int main(int argc, char **argv) {
   test_mc(&manifest.mc);
   test_invalid_metrics();
   test_manifest(&manifest, argv[1]);
+  test_benchmark_runner(argv[1]);
   return 0;
 }

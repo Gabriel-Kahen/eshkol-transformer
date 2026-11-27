@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define ET_AC4_ABI_MAJOR 1u
-#define ET_AC4_ABI_MINOR 0u
+#define ET_AC4_ABI_MINOR 1u
 #define ET_AC4_MAX_LAYERS 16u
 
 typedef uint32_t et_ac4_status;
@@ -30,7 +30,8 @@ enum {
   ET_AC4_POLICY_NONE = 0,          /* Keep every layer's tape and input. */
   ET_AC4_POLICY_EVERY_LAYER = 1,   /* Keep every layer input. */
   ET_AC4_POLICY_SQRT_SEGMENTS = 2, /* Keep boundaries and cache one segment. */
-  ET_AC4_POLICY_EVERY_K = 3        /* Keep boundaries; replay prefixes. */
+  ET_AC4_POLICY_EVERY_K = 3,       /* Keep boundaries; replay prefixes. */
+  ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS = 4 /* Replay backward to publish. */
 };
 
 typedef uint32_t et_ac4_mode;
@@ -49,7 +50,7 @@ typedef struct et_ac4_config_v1 {
   et_ac4_shape_v1 shape;
   et_ac4_mode mode;
   et_ac4_policy policy;
-  uint32_t checkpoint_every; /* 1..layers for EVERY_K; zero otherwise. */
+  uint32_t checkpoint_every; /* 1..layers for either EVERY_K policy, else 0. */
   float epsilon;             /* Finite and strictly positive. */
   float dropout_rate;        /* Finite in [0, 1), applied to both branches. */
   uint64_t seed;
@@ -87,7 +88,7 @@ typedef struct et_ac4_memory_v1 {
   size_t workspace_bytes;
   uint32_t retained_checkpoints;  /* Excludes input owned by the caller. */
   uint32_t retained_tapes;        /* During the original forward pass. */
-  uint32_t rematerialized_layers; /* Replay forwards, counting repeats. */
+  uint32_t rematerialized_layers; /* Replay forwards across all passes. */
 } et_ac4_memory_v1;
 
 typedef struct et_ac4_result_v1 {
@@ -107,7 +108,11 @@ typedef struct et_ac4_result_v1 {
  *
  * Plan validates config and returns the workspace requirement even when the
  * configured activation cap is lower. Forward-only uses a rolling stream
- * for all policies. All structs and payload spans are naturally aligned and
+ * for all policies. EVERY_K_REPLAY_GRADIENTS uses the EVERY_K schedule and
+ * one layer of gradient staging. It checks the complete backward pass,
+ * then repeats that pass with the pinned deterministic MOD5 provider to
+ * publish gradients. Inputs and floating-point controls must remain stable
+ * for the whole call. All structs and payload spans are naturally aligned and
  * pairwise disjoint, including read-only spans and the full workspace span.
  * Counts must exactly match the plan. Workspace storage may be reused across
  * calls and its contents are scratch, including on failure. Plan and run

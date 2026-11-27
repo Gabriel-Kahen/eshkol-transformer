@@ -159,6 +159,29 @@ and benchmark parity use `3e-7 + 3e-6 * max(abs(ref),abs(online))`
 as an absolute error threshold. Every tested dQ, dK and dV matched
 bit for bit.
 
+## Native M3T dispatch diagnostic
+
+`make test-pa4-wider-m3t` runs the fixed-profile M3T native transport harness
+with an isolated linker override for A2 provider discovery. Each process
+explicitly selects A2 or the PA4-Wider reference, and the test checks the K1
+implementation name for both attention operations. Both selections use the
+same M3T owner, workspace, and role transport source and the same N3K and N2
+providers. The linker override exists only in the diagnostic executable.
+
+Two token pairs run full forward and reverse calls on seed-1729 initialized
+parameters with a different nonzero logit cotangent per pair. The diagnostic
+compares all 512 logits, 32 attention output and derivative values, and 1,184
+elements of the 14 parameter VJPs per pair. It injects a malformed mask at the
+attention boundary in each phase, then checks the K1 error, complete slot bytes
+and readiness, active owner, released tensor borrows, successful retry, and
+workspace reset and release.
+
+Local Clang 22.1.8 optimized and ASan/UBSan/LSan runs each passed 3,456
+bitwise comparisons and all lifecycle checks on x86-64. This gate exercises
+the native role schedule harness at attention shape `[1,2,2,2,2,2]`. The
+Eshkol AOT schedule, trainer updates, wider model shapes, the online provider,
+and model throughput are separate qualification gates.
+
 ## Supported scaling measurement
 
 The benchmark compares reference (A) and online (B) in the same
