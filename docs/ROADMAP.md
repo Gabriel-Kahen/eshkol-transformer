@@ -31,6 +31,9 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   and canonical tied accumulation with seven preselected finite differences.
   The compiler-free fixture and oracle checks pass. Supported AOT execution
   and independent result review remain pending.
+  A source-private C2 candidate shares the guarded load path and validates
+  the exact model, optimizer and X1 roster before reconstruction. Its
+  private-profile binding and live load and continuation gates remain open.
 
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,
