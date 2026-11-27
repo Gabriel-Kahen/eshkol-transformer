@@ -92,6 +92,9 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 - CI topology unit discovery now runs O2's existing exact public facade and
   header-tree pin before the expensive suites. The O2 package command retains
   the same test and expected digest.
+- CI topology unit discovery checks all seven predecessor source manifests
+  enforced by the required `native-numerics`, `g3n-forward`, `g3s-sampling`,
+  and `model-composition` suites. Stale pins fail before suite builds start.
 - Full CPU-v1 admission depends on trained save/reload and continuation,
   public terminal generation, and supported E3 numerical and resource
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
