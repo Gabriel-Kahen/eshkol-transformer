@@ -24,6 +24,20 @@ p1_require_pair_memory() {
   fi
 }
 
+p1_pair_selected() {
+  local stage="$1"
+  case "${p1_two_compilers}" in
+    0) return 1 ;;
+    1) return 0 ;;
+  esac
+  if p1_require_pair_memory; then
+    printf 'P1 compile schedule stage=%s mode=paired\n' "${stage}"
+    return 0
+  fi
+  printf 'P1 compile schedule stage=%s mode=serial reason=below-8GiB-headroom\n' "${stage}"
+  return 1
+}
+
 p1_flush_pair_timing() {
   if ((${#p1_pair_timing_files[@]})); then
     cat "${p1_pair_timing_files[@]}" >>"${p1_timing}"

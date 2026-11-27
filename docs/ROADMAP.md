@@ -196,6 +196,13 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   [Paired run 45934920829, attempt 1, job 140295806350](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829/job/140295806350)
   [Serial run 45941958637, attempt 1, job 140318040542](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941958637/job/140318040542)
   [Trace and comparison contract](https://github.com/Gabriel-Kahen/eshkol-transformer/blob/a2634ddfb33e82d9e3fe0dc169a999cb45294627/docs/P1_PAIR_MEMORY_TRACE.md)
+- The required `parameter-state` suite has a candidate for memory-gated
+  pairing. It checks for 8 GiB of headroom before the public object group
+  and before the trusted object/registry pair, and records each selection.
+  Below the floor it runs those commands in serial order. Local runs and
+  the other required suites default to serial. The candidate preserves the
+  current compiler budgets and checks. An exact hosted run must establish
+  that the required job completes and records the selected schedules.
 
 ## Parallel execution strategy
 
