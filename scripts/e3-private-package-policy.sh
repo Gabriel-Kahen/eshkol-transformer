@@ -14,6 +14,7 @@ e3_mode_graph_prefix="${PROJECT_ROOT}/tests/e3_mode_graph/package"
 e3_numerical_prefix="${PROJECT_ROOT}/tests/e3_private/numerical_package"
 e3_uniform_prefix="${PROJECT_ROOT}/tests/e3_private/uniform_package"
 e3_zero_prefix="${PROJECT_ROOT}/tests/e3_private/zero_control_package"
+e3_zero_overlay_sha=ef3acf621165f07fe5208d878fc8b041d38a3b8eb3e1298e14d99bb2ccf14f48
 e3_base_inputs=(
   "${PROJECT_ROOT}/native/e3_private_driver_root.esk"
   "${PROJECT_ROOT}/native/e3_private_bridge.c"
@@ -242,7 +243,7 @@ e3_check_zero_generated_dependency() {
   done
   [[ -f "${expected}" ]] || die "E3 zero P1 overlay is absent"
   [[ "$(sha256sum -- "${expected}" | cut -d' ' -f1)" == \
-     06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8 ]] ||
+     "${e3_zero_overlay_sha}" ]] ||
     die "E3 zero P1 overlay hash differs from the reviewed insertion"
 }
 
@@ -268,9 +269,10 @@ e3_normalize_source_dependencies() {
               "${e3_tuple_kind}" == retention-overflow ) && \
             "$(realpath -m -- "${dependency}")" == \
               "${e3_generated_source_root}/transformer/module.esk" ]]; then
-      [[ "$(sha256sum -- "${dependency}" 2>/dev/null | cut -d' ' -f1)" != \
-         06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8 ]] ||
-        die "E3 zero P1 overlay is forbidden for another tuple"
+      case "$(sha256sum -- "${dependency}" 2>/dev/null | cut -d' ' -f1)" in
+        "${e3_zero_overlay_sha}"|06f0d533f2ea1c1188ba939709ab814ba36e01391f91b434f7ca80a058c680c8)
+          die "E3 zero P1 overlay is forbidden for another tuple" ;;
+      esac
       printf '@BUILD@/source/transformer/module.esk\n'
     elif [[ "${e3_tuple_kind}" == mode-graph && \
             "$(realpath -m -- "${dependency}")" == \

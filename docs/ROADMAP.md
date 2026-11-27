@@ -1276,6 +1276,14 @@ generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
 were added; a fresh exact-head hosted run remains pending.
 
+Hosted zero-inventory discovery run `45948199739` reached normal AOT on
+`fa746a626` and stopped on two P1 registry names outside their lexical scope.
+The source repair moves the same live/dead module and handle count into the
+pinned zero-only P1 overlay. The negative driver still compares both counts
+before capture and after restoring and rechecking the projection. The overlay
+returns only the two counts. Emitted inventory review and compiled runtime
+qualification remain pending.
+
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
 the same `[3,197]` inputs and `11` mask and differs only in the second target.
