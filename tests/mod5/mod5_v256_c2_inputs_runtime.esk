@@ -1,0 +1,95 @@
+(load "d2_wave2_root.esk")
+
+(extern i64 match-view ptr i64 i64 i64 ptr i64
+        :real et_d2_test_view_match_v1)
+
+(define (check label condition)
+  (if (not condition)
+      (begin (display "MOD5 V256 inputs FAIL ") (display label)
+             (newline) (exit 1))))
+(define (path root leaf) (string-append root "/" leaf))
+(define (read-exact file)
+  (let* ((stream (open-binary-input-file file))
+         (size (file-size file))
+         (bytes (read-bytevector size stream)))
+    (close-port stream)
+    (check 'complete-file (= (bytevector-length bytes) size))
+    bytes))
+(define (save-bytes file bytes)
+  (let ((stream (open-binary-output-file file)))
+    (write-bytevector bytes stream)
+    (close-port stream)))
+(define (document-tokens document offset)
+  (let ((encoded (make-bytevector 64 0)))
+    (do ((i 0 (+ i 1))) ((= i 8) encoded)
+      (d2-core-store-unsigned-le! encoded (* i 8) 8
+                                 (bytevector-u8-ref document (+ i offset))))))
+(define (view=? tensor kind contents)
+  (d2-token-tensor-with-view-internal tensor
+    (lambda (view)
+      (= 1 (match-view view 1 8 kind contents (bytevector-length contents))))))
+
+(define args (cdr (command-line)))
+(check 'arguments (and (pair? args) (pair? (cdr args)) (null? (cddr args))))
+(define fixture (car args))
+(define output (cadr args))
+(define corpus (path fixture "train"))
+(define resolved
+  (x1-private-config-resolve
+    (x1-private-config-parse (utf8->string (read-exact (path fixture "config.json"))))
+    '()))
+(define canonical (string->utf8 (x1-private-config-canonical resolved)))
+(check 'canonical-x1 (c1-bytes=? canonical (read-exact (path fixture "expected-x1.json"))))
+(save-bytes (path output "resolved-x1.json") canonical)
+
+(define policy (c1-wave2-persistence-policy 1024 1024 1024 1 'cpu))
+(define tokenizer (t2-wave2-tokenizer-load (path fixture "tokenizer.etok") policy))
+(define identity (d2-tokenizer-identity tokenizer))
+(check 'tokenizer-vocabulary (= (vector-ref identity 1) 256))
+(save-bytes (path output "tokenizer-fingerprint.txt") (string->utf8 (vector-ref identity 0)))
+(define config
+  (list ':directory corpus ':batch-size 1 ':sequence-length 8
+        ':maximum-manifest-bytes 1024 ':maximum-shard-bytes 1024
+        ':maximum-total-tokens 54 ':maximum-batch-bytes 136
+        ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #f))
+
+(define (verify-row! dataset index)
+  (let* ((doc (read-exact (path corpus (string-append "doc-" (number->string index) ".bin"))))
+         (batch (d2-token-dataset-next-batch dataset)))
+    (check 'complete-row
+      (and (= (bytevector-length doc) 9)
+           (not (d2-token-dataset-end? batch))
+           (d2-token-batch-validate batch)))
+    (check 'all-live-shifted-inputs
+      (view=? (d2-token-batch-inputs batch) 1 (document-tokens doc 0)))
+    (check 'all-live-shifted-targets
+      (view=? (d2-token-batch-targets batch) 1 (document-tokens doc 1)))
+    (check 'full-valid-token-mask
+      (view=? (d2-token-batch-loss-mask batch) 2 (make-bytevector 8 1)))
+    (check 'release (d2-token-batch-release! batch))))
+
+(define (cursor-file ordinal)
+  (path output (string-append "cursor-" (number->string ordinal) ".bin")))
+(define (advance-all! dataset)
+  (do ((ordinal 0 (+ ordinal 1))) ((= ordinal 7))
+    (save-bytes (cursor-file ordinal) (d2-token-dataset-cursor dataset))
+    (if (< ordinal 6) (verify-row! dataset ordinal)))
+  (check 'exact-end (d2-token-dataset-end? (d2-token-dataset-next-batch dataset))))
+
+(let ((producer (d2-token-dataset-open config tokenizer)))
+  (advance-all! producer)
+  (check 'close-producer (d2-token-dataset-close! producer)))
+
+(let ((receiver (d2-token-dataset-open config tokenizer)))
+  (check 'fresh-epoch-start
+    (c1-bytes=? (d2-token-dataset-cursor receiver) (read-exact (cursor-file 0))))
+  (check 'restore-split-cursor (d2-token-dataset-seek! receiver (read-exact (cursor-file 2))))
+  (do ((ordinal 2 (+ ordinal 1))) ((= ordinal 7))
+    (check 'exact-suffix-cursor
+      (c1-bytes=? (d2-token-dataset-cursor receiver) (read-exact (cursor-file ordinal))))
+    (if (< ordinal 6) (verify-row! receiver ordinal)))
+  (check 'restored-end (d2-token-dataset-end? (d2-token-dataset-next-batch receiver)))
+  (check 'close-receiver (d2-token-dataset-close! receiver)))
+
+(display "MOD5 V256 X1/D2 PASS rows=6 split=2 suffix=4")
+(newline)
