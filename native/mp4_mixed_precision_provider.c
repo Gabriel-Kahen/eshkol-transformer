@@ -1,4 +1,4 @@
-#include "eshkol_transformer/mp4_mixed_precision_abi.h"
+#include "eshkol_transformer/mp4_loss_scaler_record.h"
 
 #include <errno.h>
 #include <fenv.h>
@@ -617,4 +617,81 @@ et_mp4_loss_scaler_update(et_mp4_loss_scaler_v1 *state,
   if (status != ET_MP4_LOSS_SCALER_UNDERFLOW_FAULT)
     *state = next;
   return status;
+}
+
+static const uint8_t scaler_magic[] = {'E', 'T', 'M', 'P', '4', 'L', 'S', 0u};
+enum { SCALER_RECORD_VERSION = 1u, SCALER_CRC_OFFSET = 40u };
+
+static void put_le32(uint8_t *out, uint32_t word) {
+  for (unsigned int i = 0; i < 4u; ++i)
+    out[i] = (uint8_t)(word >> (8u * i));
+}
+
+static uint32_t get_le32(const uint8_t *in) {
+  return (uint32_t)in[0] | (uint32_t)in[1] << 8u | (uint32_t)in[2] << 16u |
+         (uint32_t)in[3] << 24u;
+}
+
+/* CRC-32/ISO-HDLC over the fixed-size record prefix. */
+static uint32_t scaler_record_crc(const uint8_t *record) {
+  uint32_t crc = UINT32_MAX;
+  for (size_t i = 0; i < SCALER_CRC_OFFSET; ++i) {
+    crc ^= record[i];
+    for (unsigned int bit = 0; bit < 8u; ++bit)
+      crc = (crc >> 1u) ^ (UINT32_C(0xedb88320) & (0u - (crc & 1u)));
+  }
+  return ~crc;
+}
+
+static int valid_record_spans(const uint8_t *record, size_t record_bytes,
+                              const et_mp4_loss_scaler_v1 *state) {
+  return record_bytes == ET_MP4_LOSS_SCALER_RECORD_V1_BYTES &&
+         aligned_span(record, 1u, record_bytes) &&
+         aligned_span(state, _Alignof(et_mp4_loss_scaler_v1), sizeof(*state)) &&
+         !spans_overlap(record, record_bytes, state, sizeof(*state));
+}
+
+et_mp4_loss_scaler_record_status
+et_mp4_loss_scaler_encode_v1(const et_mp4_loss_scaler_v1 *state,
+                             uint8_t *record, size_t record_bytes) {
+  if (!valid_record_spans(record, record_bytes, state) || !valid_state(state))
+    return ET_MP4_LOSS_SCALER_RECORD_INVALID_ARGUMENT;
+
+  memcpy(record, scaler_magic, sizeof(scaler_magic));
+  put_le32(record + 8u, SCALER_RECORD_VERSION);
+  put_le32(record + 12u, load32(&state->scale));
+  put_le32(record + 16u, load32(&state->growth_factor));
+  put_le32(record + 20u, load32(&state->backoff_factor));
+  put_le32(record + 24u, state->growth_interval);
+  put_le32(record + 28u, state->clean_steps);
+  put_le32(record + 32u, load32(&state->min_scale));
+  put_le32(record + 36u, load32(&state->max_scale));
+  put_le32(record + SCALER_CRC_OFFSET, scaler_record_crc(record));
+  return ET_MP4_LOSS_SCALER_RECORD_OK;
+}
+
+et_mp4_loss_scaler_record_status
+et_mp4_loss_scaler_decode_v1(const uint8_t *record, size_t record_bytes,
+                             et_mp4_loss_scaler_v1 *state) {
+  if (!valid_record_spans(record, record_bytes, state))
+    return ET_MP4_LOSS_SCALER_RECORD_INVALID_ARGUMENT;
+  if (memcmp(record, scaler_magic, sizeof(scaler_magic)) != 0 ||
+      get_le32(record + SCALER_CRC_OFFSET) != scaler_record_crc(record))
+    return ET_MP4_LOSS_SCALER_RECORD_INVALID_RECORD;
+  if (get_le32(record + 8u) != SCALER_RECORD_VERSION)
+    return ET_MP4_LOSS_SCALER_RECORD_UNSUPPORTED_VERSION;
+
+  const et_mp4_loss_scaler_v1 decoded = {
+      .scale = f32_from_bits(get_le32(record + 12u)),
+      .growth_factor = f32_from_bits(get_le32(record + 16u)),
+      .backoff_factor = f32_from_bits(get_le32(record + 20u)),
+      .growth_interval = get_le32(record + 24u),
+      .clean_steps = get_le32(record + 28u),
+      .min_scale = f32_from_bits(get_le32(record + 32u)),
+      .max_scale = f32_from_bits(get_le32(record + 36u))};
+  if (!valid_state(&decoded))
+    return ET_MP4_LOSS_SCALER_RECORD_INVALID_RECORD;
+
+  *state = decoded;
+  return ET_MP4_LOSS_SCALER_RECORD_OK;
 }
