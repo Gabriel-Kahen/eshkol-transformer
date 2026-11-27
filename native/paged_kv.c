@@ -264,6 +264,8 @@ struct et_paged_kv_pool {
   prefix_cache_entry *prefix_table;
   uint32_t prefix_table_cap; /* power of 2 >= 2 * num_blocks */
   uint32_t prefix_cached_count;
+  int prefix_context_bound;
+  et_paged_kv_prefix_context_v1 prefix_context;
 
   uint64_t cow_copies;
   uint64_t prefix_cache_hits;
@@ -551,17 +553,19 @@ et_paged_kv_status et_paged_kv_pool_float_count(const et_paged_kv_config *cfg,
   return validate_config_and_count(cfg, out_count);
 }
 
-et_paged_kv_status et_paged_kv_create_raw(const et_paged_kv_config *cfg,
-                                          void *external_pool,
-                                          size_t external_pool_floats,
-                                          et_paged_kv_pool **out_pool) {
+static et_paged_kv_status create_pool(
+    const et_paged_kv_config *cfg, const et_paged_kv_prefix_context_v1 *context,
+    void *external_pool, size_t external_pool_floats,
+    et_paged_kv_pool **out_pool) {
   if (out_pool == NULL)
     return ET_PAGED_KV_ERR_ARGUMENT;
   size_t pool_floats = 0u;
   const et_paged_kv_status st = validate_config_and_count(cfg, &pool_floats);
   if (st != ET_PAGED_KV_OK)
     return st;
-  if (spans_overlap(cfg, sizeof(*cfg), out_pool, sizeof(*out_pool)))
+  if (spans_overlap(cfg, sizeof(*cfg), out_pool, sizeof(*out_pool)) ||
+      (context != NULL &&
+       spans_overlap(context, sizeof(*context), out_pool, sizeof(*out_pool))))
     return ET_PAGED_KV_ERR_ALIAS;
 
   const size_t pool_bytes = pool_floats * sizeof(float);
@@ -581,7 +585,9 @@ et_paged_kv_status et_paged_kv_create_raw(const et_paged_kv_config *cfg,
         {out_pool, sizeof(*out_pool)},
         {external_pool, ext_bytes},
     };
-    if (any_spans_overlap(spans, 3u))
+    if (any_spans_overlap(spans, 3u) ||
+        (context != NULL &&
+         spans_overlap(context, sizeof(*context), external_pool, ext_bytes)))
       return ET_PAGED_KV_ERR_ALIAS;
   }
 
@@ -590,6 +596,10 @@ et_paged_kv_status et_paged_kv_create_raw(const et_paged_kv_config *cfg,
     return ET_PAGED_KV_ERR_NOMEM;
 
   pool->cfg = *cfg;
+  if (context != NULL) {
+    pool->prefix_context_bound = 1;
+    pool->prefix_context = *context;
+  }
   pool->pool_floats = pool_floats;
   pool->pool_bytes = pool_bytes;
   pool->floats_per_head = (size_t)cfg->block_size * (size_t)cfg->head_dim;
@@ -638,12 +648,29 @@ et_paged_kv_status et_paged_kv_create_raw(const et_paged_kv_config *cfg,
   return ET_PAGED_KV_OK;
 }
 
+et_paged_kv_status et_paged_kv_create_raw(const et_paged_kv_config *cfg,
+                                         void *external_pool,
+                                         size_t external_pool_floats,
+                                         et_paged_kv_pool **out_pool) {
+  return create_pool(cfg, NULL, external_pool, external_pool_floats, out_pool);
+}
+
 et_paged_kv_status et_paged_kv_create(const et_paged_kv_config *cfg,
                                       float *external_pool,
                                       size_t external_pool_floats,
                                       et_paged_kv_pool **out_pool) {
   return et_paged_kv_create_raw(cfg, external_pool, external_pool_floats,
                                 out_pool);
+}
+
+et_paged_kv_status et_paged_kv_create_with_prefix_context_v1(
+    const et_paged_kv_config *cfg, const et_paged_kv_prefix_context_v1 *context,
+    float *external_pool, size_t external_pool_floats,
+    et_paged_kv_pool **out_pool) {
+  if (context == NULL)
+    return ET_PAGED_KV_ERR_ARGUMENT;
+  return create_pool(cfg, context, external_pool, external_pool_floats,
+                     out_pool);
 }
 
 void et_paged_kv_destroy(et_paged_kv_pool *pool) {
@@ -1175,6 +1202,24 @@ et_paged_kv_status et_paged_kv_decode_attention_v1(
                                              num_q_heads, scale, q, out);
 }
 
+static void hash_token_block_finish(
+    sha256_state *st, const uint8_t *prev_hash_or_null,
+    const uint32_t *token_ids, uint32_t block_size,
+    uint8_t out_hash[ET_PAGED_KV_HASH_BYTES]) {
+  static const uint8_t zero_prev[ET_PAGED_KV_HASH_BYTES] = {0u};
+  uint8_t le[4];
+
+  sha256_update(st, prev_hash_or_null != NULL ? prev_hash_or_null : zero_prev,
+                ET_PAGED_KV_HASH_BYTES);
+  encode_u32_le(le, block_size);
+  sha256_update(st, le, sizeof(le));
+  for (uint32_t i = 0u; i < block_size; ++i) {
+    encode_u32_le(le, token_ids[i]);
+    sha256_update(st, le, sizeof(le));
+  }
+  sha256_final(st, out_hash);
+}
+
 et_paged_kv_status et_paged_kv_hash_token_block(
     const uint8_t *prev_hash_or_null, const uint32_t *token_ids,
     uint32_t block_size, uint8_t out_hash[ET_PAGED_KV_HASH_BYTES]) {
@@ -1184,29 +1229,62 @@ et_paged_kv_status et_paged_kv_hash_token_block(
     return ET_PAGED_KV_ERR_SHAPE;
 
   static const uint8_t domain[8] = {'E', 'T', 'P', 'K', 'V', '1', 0u, 0u};
-  static const uint8_t zero_prev[ET_PAGED_KV_HASH_BYTES] = {0u};
-  uint8_t le[4];
-
   sha256_state st;
   sha256_init(&st);
   sha256_update(&st, domain, sizeof(domain));
-  sha256_update(&st, prev_hash_or_null != NULL ? prev_hash_or_null : zero_prev,
-                ET_PAGED_KV_HASH_BYTES);
-  encode_u32_le(le, block_size);
-  sha256_update(&st, le, sizeof(le));
-  for (uint32_t i = 0u; i < block_size; ++i) {
-    encode_u32_le(le, token_ids[i]);
-    sha256_update(&st, le, sizeof(le));
-  }
-  sha256_final(&st, out_hash);
+  hash_token_block_finish(&st, prev_hash_or_null, token_ids, block_size,
+                          out_hash);
   return ET_PAGED_KV_OK;
 }
 
-et_paged_kv_status et_paged_kv_prefix_cache_register(
+et_paged_kv_status et_paged_kv_hash_token_block_with_context_v1(
+    const et_paged_kv_prefix_context_v1 *context,
+    const et_paged_kv_prefix_key_v1 *previous_or_null,
+    const uint32_t *token_ids, uint32_t block_size,
+    et_paged_kv_prefix_key_v1 *out_key) {
+  if (context == NULL || token_ids == NULL || out_key == NULL)
+    return ET_PAGED_KV_ERR_ARGUMENT;
+  if (block_size < 1u || block_size > ET_PAGED_KV_MAX_BLOCK_SIZE)
+    return ET_PAGED_KV_ERR_SHAPE;
+  if (!aligned_span(context, _Alignof(et_paged_kv_prefix_context_v1),
+                    sizeof(*context)) ||
+      !aligned_span(token_ids, _Alignof(uint32_t),
+                    (size_t)block_size * sizeof(*token_ids)) ||
+      !aligned_span(out_key, _Alignof(et_paged_kv_prefix_key_v1),
+                    sizeof(*out_key)))
+    return ET_PAGED_KV_ERR_ALIGNMENT;
+  if (previous_or_null != NULL) {
+    if (!aligned_span(previous_or_null, _Alignof(et_paged_kv_prefix_key_v1),
+                      sizeof(*previous_or_null)))
+      return ET_PAGED_KV_ERR_ALIGNMENT;
+    if (memcmp(context, &previous_or_null->context, sizeof(*context)) != 0)
+      return ET_PAGED_KV_ERR_CONTEXT;
+    if (previous_or_null->block_size != block_size)
+      return ET_PAGED_KV_ERR_SHAPE;
+  }
+
+  static const uint8_t domain[8] = {'E', 'T', 'P', 'K', 'V', '2', 0u, 0u};
+  const uint8_t has_previous = previous_or_null != NULL;
+  et_paged_kv_prefix_key_v1 key;
+  key.context = *context;
+  key.block_size = block_size;
+  sha256_state st;
+  sha256_init(&st);
+  sha256_update(&st, domain, sizeof(domain));
+  sha256_update(&st, context->model, sizeof(context->model));
+  sha256_update(&st, context->tokenizer, sizeof(context->tokenizer));
+  sha256_update(&st, context->producer_config, sizeof(context->producer_config));
+  sha256_update(&st, &has_previous, sizeof(has_previous));
+  hash_token_block_finish(&st,
+                          has_previous ? previous_or_null->digest : NULL,
+                          token_ids, block_size, key.digest);
+  *out_key = key;
+  return ET_PAGED_KV_OK;
+}
+
+static et_paged_kv_status prefix_cache_register(
     et_paged_kv_pool *pool, uint32_t seq_id, uint32_t logical_block,
     const uint8_t prefix_hash[ET_PAGED_KV_HASH_BYTES]) {
-  if (pool == NULL || prefix_hash == NULL)
-    return ET_PAGED_KV_ERR_ARGUMENT;
   if (seq_id >= pool->cfg.max_seqs || !pool->seqs[seq_id].alive)
     return ET_PAGED_KV_ERR_INVALID_SEQ;
 
@@ -1227,11 +1305,9 @@ et_paged_kv_status et_paged_kv_prefix_cache_register(
   return prefix_table_insert(pool, phys, prefix_hash);
 }
 
-et_paged_kv_status et_paged_kv_prefix_cache_attach(
+static et_paged_kv_status prefix_cache_attach(
     et_paged_kv_pool *pool, uint32_t seq_id,
     const uint8_t prefix_hash[ET_PAGED_KV_HASH_BYTES], uint32_t *out_hit) {
-  if (pool == NULL || prefix_hash == NULL || out_hit == NULL)
-    return ET_PAGED_KV_ERR_ARGUMENT;
   if (seq_id >= pool->cfg.max_seqs || !pool->seqs[seq_id].alive)
     return ET_PAGED_KV_ERR_INVALID_SEQ;
   if (output_overlaps_pool(pool, out_hit, sizeof(*out_hit)) ||
@@ -1260,4 +1336,63 @@ et_paged_kv_status et_paged_kv_prefix_cache_attach(
   pool->prefix_cache_hits++;
   *out_hit = 1u;
   return ET_PAGED_KV_OK;
+}
+
+et_paged_kv_status et_paged_kv_prefix_cache_register(
+    et_paged_kv_pool *pool, uint32_t seq_id, uint32_t logical_block,
+    const uint8_t prefix_hash[ET_PAGED_KV_HASH_BYTES]) {
+  if (pool == NULL || prefix_hash == NULL)
+    return ET_PAGED_KV_ERR_ARGUMENT;
+  if (pool->prefix_context_bound)
+    return ET_PAGED_KV_ERR_STATE;
+  return prefix_cache_register(pool, seq_id, logical_block, prefix_hash);
+}
+
+et_paged_kv_status et_paged_kv_prefix_cache_attach(
+    et_paged_kv_pool *pool, uint32_t seq_id,
+    const uint8_t prefix_hash[ET_PAGED_KV_HASH_BYTES], uint32_t *out_hit) {
+  if (pool == NULL || prefix_hash == NULL || out_hit == NULL)
+    return ET_PAGED_KV_ERR_ARGUMENT;
+  if (pool->prefix_context_bound)
+    return ET_PAGED_KV_ERR_STATE;
+  return prefix_cache_attach(pool, seq_id, prefix_hash, out_hit);
+}
+
+static et_paged_kv_status validate_pool_prefix_key(
+    const et_paged_kv_pool *pool, const et_paged_kv_prefix_key_v1 *key) {
+  if (pool == NULL || key == NULL)
+    return ET_PAGED_KV_ERR_ARGUMENT;
+  if (!pool->prefix_context_bound)
+    return ET_PAGED_KV_ERR_STATE;
+  if (!aligned_span(key, _Alignof(et_paged_kv_prefix_key_v1), sizeof(*key)))
+    return ET_PAGED_KV_ERR_ALIGNMENT;
+  if (memcmp(&pool->prefix_context, &key->context, sizeof(key->context)) != 0)
+    return ET_PAGED_KV_ERR_CONTEXT;
+  if (key->block_size != pool->cfg.block_size)
+    return ET_PAGED_KV_ERR_SHAPE;
+  return ET_PAGED_KV_OK;
+}
+
+et_paged_kv_status et_paged_kv_prefix_cache_register_with_context_v1(
+    et_paged_kv_pool *pool, uint32_t seq_id, uint32_t logical_block,
+    const et_paged_kv_prefix_key_v1 *key) {
+  const et_paged_kv_status st = validate_pool_prefix_key(pool, key);
+  if (st != ET_PAGED_KV_OK)
+    return st;
+  return prefix_cache_register(pool, seq_id, logical_block, key->digest);
+}
+
+et_paged_kv_status et_paged_kv_prefix_cache_attach_with_context_v1(
+    et_paged_kv_pool *pool, uint32_t seq_id,
+    const et_paged_kv_prefix_key_v1 *key, uint32_t *out_hit) {
+  if (out_hit == NULL)
+    return ET_PAGED_KV_ERR_ARGUMENT;
+  const et_paged_kv_status st = validate_pool_prefix_key(pool, key);
+  if (st != ET_PAGED_KV_OK)
+    return st;
+  if (!aligned_span(out_hit, _Alignof(uint32_t), sizeof(*out_hit)))
+    return ET_PAGED_KV_ERR_ALIGNMENT;
+  if (spans_overlap(key, sizeof(*key), out_hit, sizeof(*out_hit)))
+    return ET_PAGED_KV_ERR_ALIAS;
+  return prefix_cache_attach(pool, seq_id, key->digest, out_hit);
 }

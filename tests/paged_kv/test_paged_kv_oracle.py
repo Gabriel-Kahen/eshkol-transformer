@@ -1,5 +1,7 @@
-"""Independent double-precision Python oracle for Paged GQA Decode Attention."""
+"""Independent Paged GQA attention and canonical prefix key oracles."""
+import hashlib
 import math
+import struct
 import subprocess
 import sys
 
@@ -80,5 +82,34 @@ def verify(binary):
     )
 
 
+def verify_hashes(binary):
+    actual = subprocess.run(
+        [binary, "--hash-oracle"], check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    expected = []
+    for block_size in range(1, 65):
+        tokens = [0xFFFFFFFF - 0x01234567 * i for i in range(block_size)]
+        payload = struct.pack(f"<{block_size + 1}I", block_size, *tokens)
+        legacy = b"ETPKV1\0\0"
+        bound = b"ETPKV2\0\0" + bytes(range(96))
+        zeros = bytes(32)
+        legacy_root = hashlib.sha256(legacy + zeros + payload).digest()
+        bound_root = hashlib.sha256(bound + b"\0" + zeros + payload).digest()
+        expected.extend([
+            legacy_root.hex(),
+            hashlib.sha256(legacy + legacy_root + payload).hexdigest(),
+            bound_root.hex(),
+            hashlib.sha256(bound + b"\1" + bound_root + payload).hexdigest(),
+            hashlib.sha256(bound + b"\1" + zeros + payload).hexdigest(),
+        ])
+    if len(actual) != len(expected):
+        raise AssertionError(f"expected {len(expected)} hashes, saw {len(actual)}")
+    for index, (produced, reference) in enumerate(zip(actual, expected)):
+        if produced != reference:
+            raise AssertionError(f"hash {index}: native={produced} oracle={reference}")
+    print(f"PAGED_KV Python SHA-256 oracle: PASS ({len(expected)} exact digests)")
+
+
 if __name__ == "__main__":
     verify(sys.argv[1])
+    verify_hashes(sys.argv[1])

@@ -59,13 +59,17 @@ T et_paged_kv_block_refcount
 T et_paged_kv_config_get
 T et_paged_kv_create
 T et_paged_kv_create_raw
+T et_paged_kv_create_with_prefix_context_v1
 T et_paged_kv_decode_attention_v1
 T et_paged_kv_decode_attention_v1_raw
 T et_paged_kv_destroy
 T et_paged_kv_hash_token_block
+T et_paged_kv_hash_token_block_with_context_v1
 T et_paged_kv_pool_float_count
 T et_paged_kv_prefix_cache_attach
+T et_paged_kv_prefix_cache_attach_with_context_v1
 T et_paged_kv_prefix_cache_register
+T et_paged_kv_prefix_cache_register_with_context_v1
 T et_paged_kv_read_token
 T et_paged_kv_read_token_raw
 T et_paged_kv_reset
