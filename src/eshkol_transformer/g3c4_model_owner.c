@@ -849,6 +849,10 @@ int64_t et_g3c4_private_model_owner_abort_v1(void *candidate) {
      !defined(ET_G3C4_TOKEN_FORWARD_PRIVATE))
 #error "C4 P2/G2 first frame requires pending output and token forward"
 #endif
+#if defined(ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE) && \
+    !defined(ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE)
+#error "C4 P2/G2 call I1 lease requires P2/G2 first-frame ownership"
+#endif
 #if defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) && \
     (!defined(ET_G3C4_P2_G2_FIRST_FRAME_PRIVATE) || \
      !defined(ET_G3C4_OUTPUT_DECODE_IDS_PRIVATE))
@@ -1159,6 +1163,14 @@ typedef struct et_g3c4_context_internal {
   unsigned char prefill_binding_values[4768];
   int64_t prefill_tokens[3];
 #endif
+#endif
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  struct {
+    struct et_g3c4_output_internal *output;
+    et_i64_tensor *ids;
+    et_i64_tensor_borrow *borrow;
+    uint32_t used;
+  } p2g2_i1_lease;
 #endif
 } et_g3c4_context_internal;
 
@@ -2293,7 +2305,24 @@ _Static_assert(sizeof(et_g3c4_transport_header_internal) == 32u,
                "G3-C4 transport header must be 32 bytes");
 _Static_assert(offsetof(et_g3c4_context_internal, transport) == 0u,
                "G3-C4 context header must be first");
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
 #if defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) && \
+    defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
+#define ET_G3C4_I1_LEASE_BASE_BYTES 8704u
+#elif defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE)
+#define ET_G3C4_I1_LEASE_BASE_BYTES 8696u
+#elif defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
+#define ET_G3C4_I1_LEASE_BASE_BYTES 6504u
+#else
+#define ET_G3C4_I1_LEASE_BASE_BYTES 6496u
+#endif
+_Static_assert(offsetof(et_g3c4_context_internal, p2g2_i1_lease) ==
+                   ET_G3C4_I1_LEASE_BASE_BYTES &&
+               sizeof(et_g3c4_context_internal) ==
+                   ET_G3C4_I1_LEASE_BASE_BYTES + 32u,
+               "G3-C4 call I1 lease must be the exact 32-byte private suffix");
+#undef ET_G3C4_I1_LEASE_BASE_BYTES
+#elif defined(ET_G3C4_P2_G2_PREFIX_COMMIT_PRIVATE) && \
     defined(ET_G3C4_MANUAL_FRAME_BEGIN_PRIVATE)
 _Static_assert(sizeof(et_g3c4_context_internal) == 8704u,
                "G3-C4 prefix/manual context must be 8704 bytes");
@@ -2946,6 +2975,11 @@ static et_g3c4_context_internal *et_g3c4_admit_idle_call(
   }
   if (context->acquired_mask != 0u || context->call_kind != 0 ||
       context->budget != 0 || !et_g3c4_pins_idle(&context->pins)
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+      || context->p2g2_i1_lease.output != NULL ||
+      context->p2g2_i1_lease.ids != NULL ||
+      context->p2g2_i1_lease.borrow != NULL || context->p2g2_i1_lease.used != 0u
+#endif
 #ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
       || !et_g3c4_token_frame_idle(context)
 #endif
@@ -3015,6 +3049,17 @@ static int64_t et_g3c4_output_discard_preflight(
   if (output->transport.state != 0u || output->parent_ctx == NULL ||
       output->ids == NULL)
     return et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  if (output->generated_length == 2) {
+    const et_g3c4_context_internal *context =
+        et_g3c4_admit_context(output->parent_ctx);
+    if (context == NULL) return et_g3c4_error_state.category;
+    if (context->p2g2_i1_lease.borrow != NULL &&
+        (context->p2g2_i1_lease.output != output ||
+         context->p2g2_i1_lease.ids != output->ids))
+      return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+  }
+#endif
   if (et_g3c4_capture_i64(
           et_m3_private_i64_unborrowed_v1(output->ids, &error), &error) != 0)
     return et_g3c4_error_state.category;
@@ -3100,8 +3145,83 @@ void *et_g3c4_private_output_reserve_v1(
   output->prompt_length = prompt_length;
   output->generated_length = context->budget;
   et_g3c4_enroll_output(output);
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  /* The first exact reservation is the native identity for this call. */
+  if (ET_G3C4_P2_G2_TUPLE(prompt_length, context->budget) &&
+      context->p2g2_i1_lease.output == NULL) {
+    context->p2g2_i1_lease.output = output;
+    context->p2g2_i1_lease.ids = output->ids;
+  }
+#endif
   return output;
 }
+
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+/* The original pending output is the per-call identity, even when
+ * another call reuses the same context. */
+static inline et_g3c4_context_internal *et_g3c4_p2g2_call_i1_lease_admit(
+    void *context_candidate, void *output_candidate) {
+  et_g3c4_context_internal *context;
+  et_g3c4_output_internal *output, *pending = NULL;
+  context = et_g3c4_admit_active_call(context_candidate);
+  if (context == NULL) return NULL;
+  if (context->call_kind != 2 || context->budget != 2 ||
+      context->generator_policy[4] != 2) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  output = et_g3c4_admit_output(output_candidate, 0);
+  if (output == NULL) return NULL;
+  if (output->transport.state != 0u ||
+      !ET_G3C4_P2_G2_TUPLE(output->prompt_length, output->generated_length) ||
+      output->numeric_ready != 0u) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+    return NULL;
+  }
+  if (et_g3c4_pending_output_lookup(context, &pending) != 0) return NULL;
+  if (pending != output || context->p2g2_i1_lease.output != output ||
+      output->ids != context->p2g2_i1_lease.ids) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+  return context;
+}
+
+static inline __attribute__((unused)) int64_t
+et_g3c4_p2g2_call_i1_lease_begin(
+    void *context_candidate, void *output_candidate) {
+  et_i64_tensor_error error;
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_p2g2_call_i1_lease_admit(context_candidate, output_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->p2g2_i1_lease.used != 0u ||
+      context->p2g2_i1_lease.borrow != NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_g3c4_capture_i64(et_i64_tensor_borrow_begin_v1(
+          context->p2g2_i1_lease.ids,
+          &context->p2g2_i1_lease.borrow, &error), &error) != 0)
+    return et_g3c4_error_state.category;
+  context->p2g2_i1_lease.used = 1u;
+  return 0;
+}
+
+static inline __attribute__((unused)) int64_t
+et_g3c4_p2g2_call_i1_lease_end(
+    void *context_candidate, void *output_candidate) {
+  et_i64_tensor_error error;
+  et_g3c4_context_internal *context;
+  et_g3c4_error_reset_internal();
+  context = et_g3c4_p2g2_call_i1_lease_admit(context_candidate, output_candidate);
+  if (context == NULL) return et_g3c4_error_state.category;
+  if (context->p2g2_i1_lease.used != 1u ||
+      context->p2g2_i1_lease.borrow == NULL)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
+  if (et_i64_tensor_borrow_end_v1(&context->p2g2_i1_lease.borrow, &error) != 0)
+    abort();
+  return 0;
+}
+#endif
 
 int64_t et_g3c4_private_output_release_v1(void *candidate) {
   et_g3c4_output_internal *output;
@@ -8120,6 +8240,12 @@ int64_t et_g3c4_private_call_prepare_end_v1(void *candidate) {
 
 static int64_t et_g3c4_active_call_drain(
     et_g3c4_context_internal *context) {
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  if (context->p2g2_i1_lease.borrow != NULL) abort();
+  context->p2g2_i1_lease.output = NULL;
+  context->p2g2_i1_lease.ids = NULL;
+  context->p2g2_i1_lease.used = 0u;
+#endif
   et_g3c4_model_pins_end_internal(&context->pins);
   context->owner->active = NULL;
   context->call_kind = 0;
@@ -8212,6 +8338,11 @@ int64_t et_g3c4_private_call_abort_v1(void *candidate) {
 #ifdef ET_G3C4_OUTPUT_RESERVATION_PRIVATE
   if (et_g3c4_pending_output_lookup(context, &pending_output) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+  if (context->p2g2_i1_lease.borrow != NULL &&
+      pending_output != context->p2g2_i1_lease.output)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+#endif
   if (pending_output != NULL &&
       et_g3c4_output_discard_preflight(pending_output) != 0)
     return et_g3c4_error_state.category;

@@ -92,6 +92,34 @@ reservation. Integrating the idle owned-input prerequisite into reservation,
 production call-bound I1/A2 release authority, terminal close, detached
 readers, and dispatch remain later gates.
 
+### Native call-bound I1 prerequisite
+
+The optional native owner aggregate binds the active P2/G2 call to its
+first exact pending output and that output's original IDs tensor at
+reservation. A source-private begin stores the actual I1 borrow in a typed
+context slot. Begin and release each admit the active context, independently
+find its sole unpublished pending output, and match the original output and
+tensor. An allocation failure leaves the begin available. A successful
+begin consumes that opportunity for the call. Release admits and consumes
+only the recorded slot, and existing abort can drain the original call after
+that release. A second reservation during the same call cannot reuse the
+first reservation's lease authority.
+
+The slot is in an explicitly sized 32-byte optional suffix. Existing
+context offsets and default build profiles retain their admitted layout.
+Call drain clears the suffix, and the per-call output identity prevents a
+stale release from affecting a later call on the same generator. The helper
+adds no external symbol or Eshkol entry. The native fixture checks genuine
+I1 `[2]` bytes, foreign and equal owner controls, pre-begin allocation
+failure, repeated and stale operations, and unchanged cache, binding and RNG
+state on held-lease abort followed by release and retry.
+
+`CC=clang bash tests/g3c4/test-p2-g2-call-i1-lease.sh EVIDENCE_DIRECTORY`
+runs the native gate with normal, repeat and ASan/UBSan/LSan modes and
+compares feature-on/off external symbols. This prerequisite covers native I1
+ownership and the actual protected-abort native hook. Eshkol composition
+and production A2 release authority are separate gates.
+
 ## Constructor retirement prerequisite
 
 The source-private retirement scope preflights an exact current constructor
