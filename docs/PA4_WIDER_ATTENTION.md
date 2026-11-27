@@ -275,3 +275,47 @@ dispatches, dO calculation, and loop and clock overhead. The script
 prints all batch times, per-shape total-time ratios and order-specific
 ranges, and fixed-mix total-time ratios. These times describe standalone
 attention on the ten common shapes.
+
+### Paired result, 2026-11-27
+
+Regular and ASan/UBSan/LSan checks passed with Clang 21.1.8 and 22.1.8.
+All 816 words matched between A2 and Wider reference. Online differed on
+166 words and met the tolerance everywhere. Its largest absolute difference
+was `1.1920929e-7` (dV). Online backward matched A2 on all 456 gradient
+words with the same A2 dO.
+
+The timing run used clean commit `1c2d88e442651e26cf5531912804273c78a0d825`
+and tree `e202b7540981485a522e7889dc88de1d8b5df572` in the Ubuntu 22.04.5
+image pinned above, with Clang 21.1.8, `-O2 -ffp-contract=off -fno-lto`,
+and CPU affinity 6 on an AMD Ryzen 7 3700X running Linux
+`7.2.7-1-cachyos`. The starting host load averages were 6.89, 7.93 and
+7.75. CPU 6 and its SMT sibling CPU 14 were 16.0% and 11.9% busy in the
+three-second pre-run sample. CPU 14 averaged 7.5% busy over the container
+run. CPU frequency and other host activity were uncontrolled.
+SHA-256 of the full timing log is
+`4b961cb41868bbed3573251e18206fb7911cf208632698d662d4045a6b468830`.
+
+| Shape `[N,Hq,Hkv,Tq,Tk,Dh]` | Reference / A2 | Online / A2 |
+|---|---:|---:|
+| `[1,2,2,1,1,1]` | 1.171337 | 1.068851 |
+| `[1,2,2,1,2,1]` | 0.958145 | 0.914183 |
+| `[1,2,2,1,2,2]` | 0.780393 | 0.738386 |
+| `[1,2,2,2,2,1]` | 0.855047 | 0.765798 |
+| `[1,2,2,2,2,2]` | 0.658684 | 0.607448 |
+| `[1,4,2,1,1,2]` | 0.867875 | 0.746881 |
+| `[1,4,2,3,3,2]` | 0.420940 | 0.369896 |
+| `[2,4,2,1,3,2]` | 0.333920 | 0.285059 |
+| `[2,4,2,2,3,4]` | 0.140967 | 0.098970 |
+| `[2,4,2,3,3,2]` | 0.230341 | 0.172156 |
+| Equal-count mix | 0.352313 | 0.294181 |
+
+Ratios divide all Wider batch time by all A2 batch time in each matchup.
+A2 was sampled separately for reference and online. All 240 pairs
+contributed. Across individual pairs, reference/A2 ranged from 0.139554
+to 1.330245 in AB and 0.138864 to 1.433661 in BA. Online/A2 ranged from
+0.087413 to 1.191973 in AB and 0.082938 to 1.153703 in BA. Both Wider
+variants took more total time on the smallest shape. The timing includes
+the different provider preflights. A2 evaluates arithmetic during
+preflight, while the bounded values in this fixture take the Wider
+finite-scan path. These results characterize joint K1 dispatch on this
+host and shape mix.
