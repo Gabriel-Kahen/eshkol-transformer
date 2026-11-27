@@ -785,15 +785,269 @@ static int run_oracle_dump(void) {
   return 0;
 }
 
+static et_paged_kv_prefix_context_v1 prefix_context_fixture(void) {
+  et_paged_kv_prefix_context_v1 context;
+  for (uint32_t i = 0u; i < ET_PAGED_KV_HASH_BYTES; ++i) {
+    context.model[i] = (uint8_t)i;
+    context.tokenizer[i] = (uint8_t)(32u + i);
+    context.producer_config[i] = (uint8_t)(64u + i);
+  }
+  return context;
+}
+
+static void test_context_prefix_ownership(void) {
+  const et_paged_kv_config cfg = {4u, 1u, 1u, 2u, 1u, 3u, 2u, 0u};
+  const et_paged_kv_prefix_context_v1 context = prefix_context_fixture();
+  et_paged_kv_prefix_context_v1 caller_context = context;
+  float storage[16] = {0.0f};
+  et_paged_kv_pool *pool = NULL;
+  CHECK(et_paged_kv_create_with_prefix_context_v1(&cfg, NULL, storage, 16u,
+                                                   &pool) ==
+        ET_PAGED_KV_ERR_ARGUMENT);
+  CHECK(pool == NULL);
+  union {
+    et_paged_kv_prefix_context_v1 context;
+    et_paged_kv_pool *out;
+    float storage[24];
+  } aliased = {.context = context};
+  CHECK(et_paged_kv_create_with_prefix_context_v1(
+            &cfg, &aliased.context, NULL, 0u, &aliased.out) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  CHECK(et_paged_kv_create_with_prefix_context_v1(
+            &cfg, &aliased.context, aliased.storage, 24u, &pool) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  CHECK(memcmp(&aliased.context, &context, sizeof(context)) == 0 &&
+        pool == NULL);
+  CHECK(et_paged_kv_create_with_prefix_context_v1(&cfg, &caller_context, storage,
+                                                   16u, &pool) ==
+        ET_PAGED_KV_OK);
+  caller_context.model[0] ^= 1u;
+
+  const uint32_t first_tokens[2] = {1u, UINT32_C(0x89abcdef)};
+  const uint32_t next_tokens[2] = {UINT32_MAX, UINT32_C(0x12345678)};
+  const float k[4] = {1.0f, 2.0f, 3.0f, 4.0f};
+  const float v[4] = {-1.0f, -2.0f, -3.0f, -4.0f};
+  const float replacement_k = 20.0f, replacement_v = -20.0f;
+  et_paged_kv_prefix_key_v1 root, next, unsuitable;
+  CHECK(et_paged_kv_hash_token_block_with_context_v1(
+            &context, NULL, first_tokens, 2u, &root) == ET_PAGED_KV_OK);
+  next = root;
+  CHECK(et_paged_kv_hash_token_block_with_context_v1(
+            &context, &next, next_tokens, 2u, &next) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_hash_token_block_with_context_v1(
+            &context, NULL, first_tokens, 1u, &unsuitable) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_hash_token_block_with_context_v1(
+            &context, &unsuitable, next_tokens, 2u, &next) ==
+        ET_PAGED_KV_ERR_SHAPE);
+
+  uint32_t source = 0u, consumer = 0u, probe = 0u, hit = 91u;
+  CHECK(et_paged_kv_seq_alloc(pool, &source) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_alloc(pool, &consumer) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_alloc(pool, &probe) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_append_tokens(pool, source, 3u, k, v) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_register_with_context_v1(pool, source, 1u,
+                                                           &next) ==
+        ET_PAGED_KV_ERR_INVALID_RANGE);
+  CHECK(et_paged_kv_append_token(pool, source, k + 3, v + 3) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_register_with_context_v1(pool, source, 0u,
+                                                           &root) ==
+        ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_register_with_context_v1(pool, source, 1u,
+                                                           &next) ==
+        ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_register_with_context_v1(pool, source, 1u,
+                                                           &next) ==
+        ET_PAGED_KV_OK);
+
+  et_paged_kv_stats before, after;
+  float storage_before[16];
+  memcpy(storage_before, storage, sizeof(storage_before));
+  CHECK(et_paged_kv_stats_get(pool, &before) == ET_PAGED_KV_OK);
+  et_paged_kv_prefix_context_v1 foreign_contexts[] = {
+      caller_context, context, context};
+  foreign_contexts[1].tokenizer[31] ^= 1u;
+  foreign_contexts[2].producer_config[31] ^= 1u;
+  for (size_t i = 0u; i < 3u; ++i) {
+    et_paged_kv_prefix_key_v1 foreign_key;
+    CHECK(et_paged_kv_hash_token_block_with_context_v1(
+              &foreign_contexts[i], NULL, first_tokens, 2u, &foreign_key) ==
+          ET_PAGED_KV_OK);
+    const et_paged_kv_prefix_key_v1 saved = foreign_key;
+    CHECK(et_paged_kv_hash_token_block_with_context_v1(
+              &context, &foreign_key, next_tokens, 2u, &foreign_key) ==
+          ET_PAGED_KV_ERR_CONTEXT);
+    CHECK(memcmp(&foreign_key, &saved, sizeof(saved)) == 0);
+    CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(
+              pool, consumer, &foreign_key, &hit) == ET_PAGED_KV_ERR_CONTEXT);
+    CHECK(et_paged_kv_prefix_cache_register_with_context_v1(
+              pool, source, 0u, &foreign_key) == ET_PAGED_KV_ERR_CONTEXT);
+  }
+  CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(
+            pool, consumer, &unsuitable, &hit) == ET_PAGED_KV_ERR_SHAPE);
+  CHECK(et_paged_kv_prefix_cache_register_with_context_v1(
+            pool, source, 0u, &unsuitable) == ET_PAGED_KV_ERR_SHAPE);
+  et_paged_kv_prefix_key_v1 alias_key = root;
+  CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(
+            pool, consumer, &alias_key, &alias_key.block_size) ==
+        ET_PAGED_KV_ERR_ALIAS);
+  CHECK(memcmp(&alias_key, &root, sizeof(root)) == 0);
+  CHECK(et_paged_kv_prefix_cache_attach(pool, consumer, root.digest, &hit) ==
+        ET_PAGED_KV_ERR_STATE);
+  CHECK(et_paged_kv_prefix_cache_register(pool, source, 0u, root.digest) ==
+        ET_PAGED_KV_ERR_STATE);
+  uint32_t length = 99u, refs = 99u;
+  CHECK(hit == 91u && et_paged_kv_stats_get(pool, &after) == ET_PAGED_KV_OK);
+  CHECK(memcmp(&before, &after, sizeof(before)) == 0 &&
+        memcmp(storage_before, storage, sizeof(storage)) == 0);
+  CHECK(et_paged_kv_seq_len(pool, consumer, &length) == ET_PAGED_KV_OK &&
+        length == 0u);
+  CHECK(et_paged_kv_block_refcount(pool, 0u, &refs) == ET_PAGED_KV_OK &&
+        refs == 1u);
+  CHECK(et_paged_kv_block_refcount(pool, 1u, &refs) == ET_PAGED_KV_OK &&
+        refs == 1u);
+
+  CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(pool, consumer, &root,
+                                                         &hit) ==
+            ET_PAGED_KV_OK &&
+        hit == 1u);
+  CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(pool, consumer, &next,
+                                                         &hit) ==
+            ET_PAGED_KV_OK &&
+        hit == 1u);
+  CHECK(et_paged_kv_block_refcount(pool, 0u, &refs) == ET_PAGED_KV_OK &&
+        refs == 2u);
+  CHECK(et_paged_kv_block_refcount(pool, 1u, &refs) == ET_PAGED_KV_OK &&
+        refs == 2u);
+  CHECK(et_paged_kv_seq_truncate(pool, consumer, 3u) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_append_token(pool, consumer, &replacement_k,
+                                  &replacement_v) == ET_PAGED_KV_OK);
+  float read_k = 0.0f, read_v = 0.0f;
+  CHECK(et_paged_kv_read_token(pool, source, 3u, 0u, 0u, &read_k, &read_v) ==
+            ET_PAGED_KV_OK &&
+        read_k == k[3] && read_v == v[3]);
+  CHECK(et_paged_kv_read_token(pool, consumer, 3u, 0u, 0u, &read_k, &read_v) ==
+            ET_PAGED_KV_OK &&
+        read_k == replacement_k && read_v == replacement_v);
+  CHECK(et_paged_kv_stats_get(pool, &after) == ET_PAGED_KV_OK &&
+        after.used_blocks == 3u && after.shared_blocks == 1u &&
+        after.prefix_cached_blocks == 2u && after.cow_copies == 1u &&
+        after.prefix_cache_hits == 2u);
+  CHECK(et_paged_kv_block_refcount(pool, 1u, &refs) == ET_PAGED_KV_OK &&
+        refs == 1u);
+  CHECK(et_paged_kv_seq_free(pool, source) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_block_refcount(pool, 1u, &refs) == ET_PAGED_KV_OK &&
+        refs == 0u);
+
+  CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(pool, probe, &root,
+                                                         &hit) ==
+            ET_PAGED_KV_OK &&
+        hit == 1u);
+  uint32_t reuse = 0u;
+  CHECK(et_paged_kv_seq_alloc(pool, &reuse) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_append_tokens(pool, reuse, 2u, k, v) == ET_PAGED_KV_OK);
+  uint32_t reused_block = 99u, num_blocks = 0u;
+  CHECK(et_paged_kv_seq_block_table(pool, reuse, &reused_block, 1u,
+                                     &num_blocks) ==
+            ET_PAGED_KV_OK &&
+        num_blocks == 1u && reused_block == 1u);
+  CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(pool, probe, &next,
+                                                         &hit) ==
+            ET_PAGED_KV_OK &&
+        hit == 0u);
+  CHECK(et_paged_kv_seq_len(pool, probe, &length) == ET_PAGED_KV_OK &&
+        length == 2u);
+  CHECK(et_paged_kv_seq_free(pool, reuse) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_free(pool, consumer) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_free(pool, probe) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_stats_get(pool, &after) == ET_PAGED_KV_OK &&
+        after.used_blocks == 0u && after.prefix_cached_blocks == 0u &&
+        after.shared_blocks == 0u && after.free_blocks == cfg.num_blocks);
+  CHECK(et_paged_kv_seq_alloc(pool, &source) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_append_tokens(pool, source, 2u, k, v) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_register_with_context_v1(pool, source, 0u,
+                                                           &root) ==
+        ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_reset(pool) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_alloc(pool, &probe) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(pool, probe, &root,
+                                                         &hit) ==
+            ET_PAGED_KV_OK &&
+        hit == 0u);
+  et_paged_kv_destroy(pool);
+
+  CHECK(et_paged_kv_create(&cfg, NULL, 0u, &pool) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_alloc(pool, &source) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_seq_alloc(pool, &consumer) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_append_tokens(pool, source, 2u, k, v) == ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_register_with_context_v1(pool, source, 0u,
+                                                           &root) ==
+        ET_PAGED_KV_ERR_STATE);
+  CHECK(et_paged_kv_prefix_cache_attach_with_context_v1(pool, consumer, &root,
+                                                         &hit) ==
+            ET_PAGED_KV_ERR_STATE &&
+        hit == 0u);
+  uint8_t legacy[ET_PAGED_KV_HASH_BYTES];
+  CHECK(et_paged_kv_hash_token_block(NULL, first_tokens, 2u, legacy) ==
+        ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_register(pool, source, 0u, legacy) ==
+        ET_PAGED_KV_OK);
+  CHECK(et_paged_kv_prefix_cache_attach(pool, consumer, legacy, &hit) ==
+            ET_PAGED_KV_OK &&
+        hit == 1u);
+  et_paged_kv_destroy(pool);
+  puts("PAGED_KV context binding and ownership: PASS");
+}
+
+static void print_digest(const uint8_t digest[ET_PAGED_KV_HASH_BYTES]) {
+  for (size_t i = 0u; i < ET_PAGED_KV_HASH_BYTES; ++i)
+    printf("%02x", (unsigned)digest[i]);
+  putchar('\n');
+}
+
+static int run_hash_oracle_dump(void) {
+  const et_paged_kv_prefix_context_v1 context = prefix_context_fixture();
+  uint32_t tokens[ET_PAGED_KV_MAX_BLOCK_SIZE];
+  for (uint32_t i = 0u; i < ET_PAGED_KV_MAX_BLOCK_SIZE; ++i)
+    tokens[i] = UINT32_MAX - UINT32_C(0x1234567) * i;
+
+  for (uint32_t size = 1u; size <= ET_PAGED_KV_MAX_BLOCK_SIZE; ++size) {
+    uint8_t legacy[ET_PAGED_KV_HASH_BYTES];
+    CHECK(et_paged_kv_hash_token_block(NULL, tokens, size, legacy) ==
+          ET_PAGED_KV_OK);
+    print_digest(legacy);
+    CHECK(et_paged_kv_hash_token_block(legacy, tokens, size, legacy) ==
+          ET_PAGED_KV_OK);
+    print_digest(legacy);
+
+    et_paged_kv_prefix_key_v1 root, next;
+    CHECK(et_paged_kv_hash_token_block_with_context_v1(
+              &context, NULL, tokens, size, &root) == ET_PAGED_KV_OK);
+    CHECK(root.block_size == size &&
+          memcmp(&root.context, &context, sizeof(context)) == 0);
+    print_digest(root.digest);
+    CHECK(et_paged_kv_hash_token_block_with_context_v1(
+              &context, &root, tokens, size, &next) == ET_PAGED_KV_OK);
+    print_digest(next.digest);
+    memset(root.digest, 0, sizeof(root.digest));
+    CHECK(et_paged_kv_hash_token_block_with_context_v1(
+              &context, &root, tokens, size, &next) == ET_PAGED_KV_OK);
+    print_digest(next.digest);
+  }
+  return 0;
+}
+
 int main(int argc, char **argv) {
   if (argc == 2 && strcmp(argv[1], "--oracle") == 0)
     return run_oracle_dump();
+  if (argc == 2 && strcmp(argv[1], "--hash-oracle") == 0)
+    return run_hash_oracle_dump();
   if (argc != 1)
     return 2;
 
   const double max_err = test_cow_prefix_truncate_and_parity();
   test_oom_rollback_safety();
   test_negative_contracts();
+  test_context_prefix_ownership();
   printf("PAGED_KV native C11 tests: PASS (max_attn_abs_err=%.3e)\n", max_err);
   return 0;
 }

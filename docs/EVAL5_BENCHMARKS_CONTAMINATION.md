@@ -65,6 +65,39 @@ out-of-range targets. Language modeling also rejects a zero byte count and
 perplexity overflow. Dimensions and element counts are checked before a
 sequence is read. The caller supplies buffers with the declared extents.
 
+## One-shot native runner
+
+`et_eval5_run_benchmark` accepts training and evaluation document spans, a
+tokenizer identity for each corpus, and the active tokenizer's identity. It
+requires complete T1/T2 fingerprint and vocabulary agreement across all
+three identities, then decodes the tokenizer digest for the manifest.
+In token-audit mode it checks that both corpora's token IDs are in vocabulary.
+The audit must pass before the runner reads any metric inputs.
+
+Set `metric_mask` for LM, MC, or both. Each scoring sequence uses exactly
+the admitted vocabulary width. LM takes one flat sequence of scored rows,
+its original target byte count, and the number of evaluation documents
+providing those rows. The document count cannot exceed either the audit
+evaluation count or the number of scored rows. Rows may span multiple
+model context windows. MC uses the caller's item and choice arrays. A nonzero
+`max_samples` caps each enabled metric's sample count independently. The
+audit always covers the supplied evaluation documents. Leave disabled
+adapter inputs empty.
+
+The result includes the parsed manifest with its checksum and the exact
+canonical bytes, with a convenience NUL outside the record length. Every
+error leaves the result buffer untouched. Call
+`et_eval5_manifest_write_atomic(path, &result.manifest)` after success to
+publish the same record to a file. To inspect rejected audit indices,
+call the audit API directly.
+
+The caller obtains the checkpoint and corpus digests and all three
+tokenizer identities from their validated owners. The caller also binds the
+supplied documents, logits, target IDs, original byte count, sample
+selection, and model context length to those owners. The runner checks
+agreement and declared dimensions at the native boundary. Ownership
+validation, loading, tokenization, and inference happen at the caller.
+
 ## Canonical manifest v1.0
 
 Initialize `et_eval5_manifest` with version 1.0, the benchmark suite, task
@@ -151,7 +184,9 @@ instrumented archives, checks their repeat-build SHA-256s and exports,
 runs the same driver under both builds, compares the resulting metrics and
 manifests byte for byte, and runs a stdlib Python oracle from `tests/eval5/`.
 The driver includes an intentional uint64 n-gram collision, malformed input
-fixtures, and an end-to-end audit, scoring, publication, and reload.
+fixtures, and byte-audit LM-only, token-audit MC-only, and combined runner
+cases. It checks audit-first rejection, untouched result buffers on failure,
+and byte-identical atomic publication of the combined result.
 
 The audit indexes documents and n-gram occurrences in memory before
 deduplication. Memory scales with the training document and window counts.
@@ -347,3 +382,64 @@ A second network-disabled Ubuntu container independently replayed the
 corrected executable. Its score and all three rejection outputs matched
 the sealed run byte for byte. The invalid C1 shape, C1 identity and D1
 manifest identity cases each exited with status 2.
+
+### Development-only V=256 live audit candidate
+
+The successor witness retains the same validated T1 artifact, canonical D1
+manifest and ordered shards, and original nine-byte documents. Its test-only
+C bridge calls `et_eval5_audit_contamination` with those original bytes and
+their raw-byte T1/D1 token IDs. The fixed policy is token 3-grams, minimum
+overlap `0.25`, maximum contamination rate `0.0`, and exact matches
+forbidden. The normal train/eval pair must produce status `0`, two evaluation
+documents, 14 windows, and zero exact, n-gram, or matched-window counts
+before the C1 load or scoring call. A separate `--audit-control` invocation
+uses the already validated training documents as evaluation input; it must
+produce status `ET_EVAL5_ERR_CONTAMINATED` (`-7`), two exact and n-gram
+matches, all 14 windows matched, and matching indices `0,1`. That control
+returns without loading C1, computing logits, or writing a manifest.
+
+The audit bridge passed direct C11 and ASan/UBSan tests. Generated-source
+checks enforce audit before C1 load. The compiled composition below runs the
+same audit and retains the canonical manifest in the test evidence stream.
+
+### In-memory V=256 manifest round-trip candidate
+
+The successor test-only C bridge `et_eval5_v256_manifest_roundtrip` accepts
+the validated T1 and D1 summary fingerprint spans, SHA-256 of each canonical
+D1 manifest and the checked C1 bytes, the live audit status and counts, and
+the LM/MC score outputs. It calls the accepted
+`et_eval5_bind_tokenizer_identity`, formats a fixed development suite/task/
+split manifest in local memory, parses it, and requires byte-identical
+canonical reformatting. It copies text and size to the caller only after all
+checks pass. Contamination, an inconsistent clean audit, tokenizer identity
+rejection, invalid metrics, and insufficient output capacity leave both
+outputs untouched. The bridge performs no file I/O or publication.
+
+The focused C test uses exact fixture digests, a fresh direct EVAL5 audit,
+and score values recorded by the earlier sealed V=256 AOT run. It passes
+normal and sanitizer builds, but it does not run the model again or prove
+a compiled same-run Eshkol call. No EVAL5 manifest has been published.
+
+The next opt-in source candidate connects this bridge to the same compiled
+V=256 witness through a fixed eight-pointer test-only FFI seam. The Eshkol
+path retains the parsed T1 fingerprint, both D1 summary fingerprints and
+SHA-256 digests of the validated manifest bytevectors, and the SHA-256 of
+the same C1 bytes passed to decoding. After a clean live audit and LM/MC
+score, it passes those values and the native score buffers to the in-memory
+round-trip bridge. The canonical text is emitted between `MANIFEST_BEGIN`
+and `MANIFEST_END` on stdout and retained only in the test evidence stream.
+The comparator independently checks canonical field order, owner-sourced
+digests, exact binary64 metric bits, and final SHA-256. The contaminated
+control and T1/D1/C1 identity failures have no manifest-output call. This
+source at `b0593e4b` on tree `27b4c78d` passed a network-disabled Ubuntu
+22.04 and Clang/LLVM 21.1.8 AOT run using the pinned Eshkol compiler. The
+clean audit counted two documents and 14 windows with zero matches. Live
+LM and MC scores agreed with the reference within `6.982e-09` absolute error.
+The compiled manifest matched the independent canonical comparator. The
+contaminated control matched all 14 windows and emitted only its audit
+record. The wrong T1 owner, D1 split, and C1 shape and digest cases exited
+with status 2 before scoring or manifest output. The test-only manifest
+is retained in the local evidence stream.
+
+The sealed receipt is
+`/home/gabe/.codex/evidence/eshkol-eval5-live-manifest-20261127.LMcYvd/live.SHA256SUMS`.

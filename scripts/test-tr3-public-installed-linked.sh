@@ -170,8 +170,12 @@ for pair in "m3_model e3_frame" "m3t_f32_integration m3_call_f32_integration"; d
     awk "{print \$1}" | LC_ALL=C sort -u > "/out/superset/${base}.symbols"
   nm -g --defined-only --format=posix "/out/native/${replacement}.o" | \
     awk "{print \$1}" | LC_ALL=C sort -u > "/out/superset/${replacement}.symbols"
-  test ! -s <(comm -23 "/out/superset/${base}.symbols" \
+  missing=$(LC_ALL=C comm -23 "/out/superset/${base}.symbols" \
     "/out/superset/${replacement}.symbols")
+  if [[ -n "${missing}" ]]; then
+    printf "Missing symbols from %s in %s:\n%s\n" "${base}" "${replacement}" "${missing}" >&2
+    exit 1
+  fi
   test ! -e "/out/native/${base}.o"
 done
 test ! -e /out/native/d2_native.o

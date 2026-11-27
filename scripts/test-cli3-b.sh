@@ -8,26 +8,17 @@ for command in cmp python3; do require_command "${command}"; done
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/cli3-b.XXXXXX")"
 trap 'rm -rf -- "${scratch}"' EXIT
 
-cat >"${scratch}/config.json" <<'JSON'
-{"config-schema-major":1,"config-schema-minor":0,"model.context-length":2,"model.hidden-size":4,"model.layer-count":1,"model.query-head-count":2,"model.vocabulary-size":256,"run.seed":1729,"training.accumulation-steps":2}
-JSON
+bash "${PROJECT_ROOT}/scripts/prepare-cli3-b-fixed-training.sh" "${binary}" "${scratch}"
 python3 - "${scratch}" <<'PY'
 from pathlib import Path
 import sys
 root = Path(sys.argv[1])
-# Three D2 rows have mask weights 2, 2, 1; update two crosses finite EOS.
-(root / 'train.txt').write_bytes(bytes((3, 197, 41, 7, 11, 19)))
 (root / 'validation.txt').write_bytes(bytes((20, 21, 22, 23, 24, 25)))
 config = (root / 'config.json').read_text()
 (root / 'wrong-profile.json').write_text(
     config.replace('"model.context-length":2', '"model.context-length":4'))
 PY
-"${binary}" tokenizer byte --config "${scratch}/config.json" \
-  --output "${scratch}/byte.t1" >"${scratch}/tokenizer.json"
-mkdir "${scratch}/train" "${scratch}/validation"
-"${binary}" corpus build --tokenizer "${scratch}/byte.t1" \
-  --document "${scratch}/train.txt" --output-directory "${scratch}/train" \
-  --shard-token-limit 4 >"${scratch}/train.json"
+mkdir "${scratch}/validation"
 "${binary}" corpus build --tokenizer "${scratch}/byte.t1" \
   --document "${scratch}/validation.txt" \
   --output-directory "${scratch}/validation" --shard-token-limit 4 \

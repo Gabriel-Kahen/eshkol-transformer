@@ -130,6 +130,21 @@ checks in normal and ASan/UBSan/LSan builds (925 checks per C11 run on
 that host). The Clang 21.1.8 container gate passed 923 checks per C11 run
 with KFD absent and HIP and rocBLAS libraries unavailable.
 
+`AMD4_TEST_LOADER_FIXTURES=1 make test-amd4` also builds test-only LP64
+shared libraries and loads them through `et_amd4_probe_v1`. Their search path
+applies only to the fixture subprocesses. The gate checks HIP R0600 property
+marshalling, 64-bit memory values, device restoration and failure precedence,
+rocBLAS handle ordering, missing exports, and libraries that fail to load.
+The ordinary host probe still runs in the same gate. Set
+`AMD4_EXPECT_NO_HIP=1` on a host with neither library to require the
+unavailable-library observation.
+
+The fixture cases passed with Clang 21.1.8 and 22.1.8 in normal and
+ASan/UBSan/LSan builds. Fixture runs print an explicit fixture result and
+verify that both K1 capabilities still reject dispatch. `source=live`
+identifies the loader path, which also resolves fixture libraries in these
+tests.
+
 Live device enumeration and rocBLAS handle checks on hardware, direct AMD GPU
 execution, numerical parity, and GPU benchmarks remain pending a
 ROCm-provisioned runner.

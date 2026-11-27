@@ -1,0 +1,238 @@
+;;; Opt-in DATA4-Q corpus publication. Load after t2_wave2_root.esk and
+;;; data4_corpus.esk in a trusted aggregate linked to the DATA4-Q archive.
+
+(extern ptr data4-quality-allocate i64 :real malloc)
+(extern void data4-quality-release ptr :real free)
+(extern ptr data4-quality-create :real et_data4_aot_session_create)
+(extern void data4-quality-destroy ptr :real et_data4_aot_session_destroy)
+(extern i32 data4-quality-set-limits ptr i64 i64 i64 i64 :real et_data4_aot_set_limits)
+(extern i32 data4-quality-set-ratios ptr f64 f64 f64 f64 i32 :real et_data4_aot_set_quality)
+(extern i32 data4-quality-set-near ptr i32 i32 i32 i32 i64 f64 :real et_data4_aot_set_near_dedup)
+(extern i32 data4-quality-add ptr ptr i64 ptr i64 :real et_data4_aot_add_doc)
+(extern i32 data4-quality-run ptr :real et_data4_aot_run)
+(extern i64 data4-quality-stat ptr i32 :real et_data4_aot_get_stat)
+(extern i32 data4-quality-disposition ptr i64 :real et_data4_aot_get_doc_disposition)
+(extern i32 data4-quality-copy-report ptr ptr i64 :real et_data4_aot_copy_report)
+(extern i32 data4-quality-copy-digest ptr ptr i64 :real et_data4_aot_copy_report_sha256)
+(extern i32 data4-quality-verify-report ptr i64 :real et_data4_aot_verify_report)
+(extern i32 data4-quality-store-byte ptr i64 i64 i64 :real et_data4_aot_buf_store_u8)
+(extern i64 data4-quality-load-byte ptr i64 i64 :real et_data4_aot_buf_load_u8)
+
+(define-syntax data4-quality-pointer
+  (syntax-rules ()
+    ((_ pointer) (ptr-add pointer 0))))
+
+(define (data4-quality-fail category message)
+  (t1-core-fail category 'data4-quality-corpus-write! message))
+
+(define (data4-quality-require-status status stage)
+  (if (not (= status 0))
+      (data4-quality-fail
+       (cond ((or (= status -1) (= status -5) (= status -6)) 'invalid-argument)
+             ((or (= status -7) (= status -8) (= status -9)) 'corrupt-data)
+             ((= status -12) 'unsupported)
+             (else 'internal))
+       (string-append stage " (DATA4-Q status " (number->string status) ")"))))
+
+(define (data4-quality-int-in? value lower upper)
+  (and (real? value) (integer? value) (exact? value)
+       (<= lower value) (<= value upper)))
+
+(define (data4-quality-ratio? value)
+  (and (real? value) (<= 0.0 value) (<= value 1.0)))
+
+(define (data4-quality-configure! session config)
+  (if config
+      (begin
+        (if (not (and (vector? config) (= (vector-length config) 10)
+                      (data4-quality-int-in? (vector-ref config 1) 0 data4-max-input-bytes)
+                      (data4-quality-int-in? (vector-ref config 0) 0 (vector-ref config 1))
+                      (data4-quality-int-in? (vector-ref config 3) 0 data4-max-input-bytes)
+                      (data4-quality-int-in? (vector-ref config 2) 0 (vector-ref config 3))
+                      (data4-quality-ratio? (vector-ref config 4))
+                      (data4-quality-ratio? (vector-ref config 5))
+                      (data4-quality-ratio? (vector-ref config 6))
+                      (data4-quality-ratio? (vector-ref config 7))
+                      (data4-quality-int-in? (vector-ref config 8) 1 64)))
+            (data4-quality-fail 'invalid-argument "invalid quality configuration"))
+        (data4-quality-require-status
+         (data4-quality-set-limits
+          (data4-quality-pointer session) (vector-ref config 0) (vector-ref config 1)
+          (vector-ref config 2) (vector-ref config 3))
+         "set byte and codepoint bounds")
+        (data4-quality-require-status
+         (data4-quality-set-ratios
+          (data4-quality-pointer session) (vector-ref config 4) (vector-ref config 5)
+          (vector-ref config 6) (vector-ref config 7) (vector-ref config 8))
+         "set quality and repetition ratios")
+        (let ((near (vector-ref config 9)))
+          (cond
+           ((eq? near #t) #t)
+           ((eq? near #f)
+            (data4-quality-require-status
+             (data4-quality-set-near (data4-quality-pointer session) 0 0 0 0 0 0.0)
+             "disable near deduplication"))
+           (else
+            (if (not (and (vector? near) (= (vector-length near) 5)
+                          (data4-quality-int-in? (vector-ref near 0) 1 64)
+                          (data4-quality-int-in? (vector-ref near 1) 1 256)
+                          (data4-quality-int-in? (vector-ref near 2) 1 (vector-ref near 1))
+                          (data4-quality-int-in? (vector-ref near 3)
+                                                -9223372036854775808 t1-core-max-i64)
+                          (data4-quality-ratio? (vector-ref near 4))))
+                (data4-quality-fail 'invalid-argument "invalid near-dedup configuration"))
+            (data4-quality-require-status
+             (data4-quality-set-near
+              (data4-quality-pointer session) 1 (vector-ref near 0) (vector-ref near 1)
+              (vector-ref near 2) (vector-ref near 3) (vector-ref near 4))
+             "set near-dedup configuration")))))))
+
+(define (data4-quality-snapshot documents)
+  (let ((count (data4-bounded-length documents data4-max-documents)))
+    (if (not count)
+        (data4-quality-fail 'invalid-argument "expected 0..128 proper documents"))
+    (let loop ((rest documents) (total 0) (maximum 0) (reversed '()))
+      (if (null? rest)
+          (vector (data4-reverse reversed) count total maximum)
+          (let ((entry (car rest)))
+            (if (not (and (pair? entry) (pair? (cdr entry)) (null? (cddr entry))
+                          (data4-source-id? (car entry)) (bytevector? (cadr entry))))
+                (data4-quality-fail 'invalid-argument "malformed source document"))
+            (let* ((bytes (cadr entry)) (size (bytevector-length bytes))
+                   (next (+ total size)))
+              (if (> next data4-max-input-bytes)
+                  (data4-quality-fail 'invalid-argument "input exceeds 65536 bytes"))
+              (loop (cdr rest) next (max maximum size)
+                    (cons (cons (utf8->string (string->utf8 (car entry)))
+                                (bytevector-copy bytes 0 size))
+                          reversed))))))))
+
+(define (data4-quality-with-buffer size use)
+  (let ((buffer (data4-quality-allocate size)))
+    (if (= (ptr->usize buffer) 0)
+        (data4-quality-fail 'internal "quality bridge buffer allocation failed"))
+    (let ((result (guard (caught (#t (data4-quality-release buffer) (raise caught)))
+                    (use buffer))))
+      (data4-quality-release buffer)
+      result)))
+
+(define (data4-quality-store! buffer bytes)
+  (let ((size (bytevector-length bytes)))
+    (let loop ((index 0))
+      (if (< index size)
+          (begin
+            (data4-quality-require-status
+             (data4-quality-store-byte (data4-quality-pointer buffer) size index
+                                       (bytevector-u8-ref bytes index))
+             "marshal source bytes")
+            (loop (+ index 1)))))))
+
+(define (data4-quality-load buffer size)
+  (let ((bytes (make-bytevector size 0)))
+    (let loop ((index 0))
+      (if (= index size) bytes
+          (let ((byte (data4-quality-load-byte (data4-quality-pointer buffer) size index)))
+            (if (< byte 0)
+                (data4-quality-fail 'internal "read quality bridge buffer failed"))
+            (bytevector-u8-set! bytes index byte)
+            (loop (+ index 1)))))))
+
+(define (data4-quality-add-documents! session snapshot)
+  (if (not (null? (vector-ref snapshot 0)))
+      (data4-quality-with-buffer
+       (+ 64 (max 1 (vector-ref snapshot 3)))
+       (lambda (scratch)
+         (let ((body (ptr-add scratch 64)))
+           (let loop ((rest (vector-ref snapshot 0)))
+             (if (not (null? rest))
+                 (let* ((id (string->utf8 (caar rest))) (bytes (cdar rest)))
+                   (data4-quality-store! scratch id)
+                   (data4-quality-store! body bytes)
+                   (data4-quality-require-status
+                    (data4-quality-add
+                     (data4-quality-pointer session)
+                     (data4-quality-pointer scratch) (bytevector-length id)
+                     (data4-quality-pointer body) (bytevector-length bytes))
+                    "add source document")
+                   (loop (cdr rest))))))))))
+
+(define (data4-quality-report session)
+  (let ((size (data4-quality-stat (data4-quality-pointer session) 10)))
+    (if (or (< size 65) (> size data4-manifest-maximum-bytes))
+        (data4-quality-fail 'internal "quality report size is out of bounds"))
+    (data4-quality-with-buffer
+     (+ size 32)
+     (lambda (digest-buffer)
+       (let ((buffer (ptr-add digest-buffer 32)))
+         (data4-quality-require-status
+          (data4-quality-copy-report (data4-quality-pointer session)
+                                     (data4-quality-pointer buffer) size)
+          "copy quality report")
+         (data4-quality-require-status
+          (data4-quality-verify-report (data4-quality-pointer buffer) size)
+          "verify quality report")
+         (data4-quality-require-status
+          (data4-quality-copy-digest (data4-quality-pointer session)
+                                     (data4-quality-pointer digest-buffer) 32)
+          "copy quality report digest")
+         (let* ((report (data4-quality-load buffer size))
+                (digest (t1-core-hex (data4-quality-load digest-buffer 32))))
+           (if (not (data4-bytes=? (bytevector-copy report (- size 65) (- size 1))
+                                   (string->utf8 digest)))
+               (data4-quality-fail 'corrupt-data "quality report does not match session"))
+           report))))))
+
+(define (data4-quality-select session snapshot)
+  (if (not (and (= (data4-quality-stat (data4-quality-pointer session) 0)
+                   (vector-ref snapshot 1))
+                (= (data4-quality-stat (data4-quality-pointer session) 8)
+                   (vector-ref snapshot 2))))
+      (data4-quality-fail 'corrupt-data "quality run does not cover input snapshot"))
+  (let loop ((rest (vector-ref snapshot 0)) (ordinal 0) (count 0) (size 0)
+             (selected '()) (ids '()))
+    (if (null? rest)
+        (begin
+          (if (not (and (= count (data4-quality-stat (data4-quality-pointer session) 1))
+                        (= size (data4-quality-stat (data4-quality-pointer session) 9))))
+              (data4-quality-fail 'corrupt-data "kept dispositions disagree with quality summary"))
+          (vector (data4-reverse selected) (data4-reverse ids) (data4-quality-report session)))
+        (let ((disposition (data4-quality-disposition (data4-quality-pointer session) ordinal)))
+          (cond ((= disposition 0)
+                 (loop (cdr rest) (+ ordinal 1) (+ count 1)
+                       (+ size (bytevector-length (cdar rest)))
+                       (cons (car rest) selected) (cons (caar rest) ids)))
+                ((<= 1 disposition 6)
+                 (loop (cdr rest) (+ ordinal 1) count size selected ids))
+                (else
+                 (data4-quality-fail 'corrupt-data "quality disposition is out of bounds")))))))
+
+(define (data4-quality-prepare snapshot config)
+  (let ((session (data4-quality-create)))
+    (if (= (ptr->usize session) 0)
+        (data4-quality-fail 'internal "quality session allocation failed"))
+    (let ((result
+           (guard (caught (#t (data4-quality-destroy (data4-quality-pointer session))
+                               (raise caught)))
+             (data4-quality-configure! session config)
+             (data4-quality-add-documents! session snapshot)
+             (data4-quality-require-status
+              (data4-quality-run (data4-quality-pointer session)) "run quality selection")
+             (data4-quality-select session snapshot))))
+      (data4-quality-destroy (data4-quality-pointer session))
+      result)))
+
+;;; One-shot prepublication staging. The caller gets only the D1 summary, the
+;;; verified DATA4-Q report bytes and kept source IDs after D1 commits.
+(define (data4-quality-corpus-write! tokenizer directory shard-token-limit documents config)
+  (if (not (data4-quality-int-in? shard-token-limit 1 data4-max-tokens))
+      (data4-quality-fail 'invalid-argument "invalid shard token limit"))
+  (let* ((fingerprint (t2-private-tokenizer-fingerprint tokenizer))
+         (vocab (t2-private-tokenizer-vocab-size tokenizer))
+         (snapshot (data4-quality-snapshot documents))
+         (prepared (data4-quality-prepare snapshot config))
+         (tokens (data4-encode-selected tokenizer (vector-ref prepared 0)))
+         (receipt (vector #f (vector-ref prepared 2) (vector-ref prepared 1))))
+    (vector-set! receipt 0
+                 (et-d1-private-token-corpus-write
+                  directory fingerprint vocab shard-token-limit tokens))
+    receipt))

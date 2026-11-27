@@ -62,8 +62,15 @@ while IFS= read -r row; do
     die "DOC5 API reference: malformed source cell in row: ${row}"
   source_file="${BASH_REMATCH[1]}"
   [[ -f "${source_file}" ]] || die "DOC5 missing source: ${source_file}"
+  if [[ "${references//[[:space:]]/}" == '—' ]]; then
+    references=''
+  elif [[ ! "${references}" =~ ${span} ]]; then
+    die "DOC5 API reference: malformed symbol cell in row: ${row}"
+  fi
+  reference_remainder="${references}"
   while [[ "${references}" =~ ${span} ]]; do
     symbol="${BASH_REMATCH[1]}"
+    reference_remainder="${reference_remainder/"${BASH_REMATCH[0]}"/}"
     references="${references#*"${BASH_REMATCH[0]}"}"
     awk -v needle="${symbol}" '
       {
@@ -82,6 +89,8 @@ while IFS= read -r row; do
     ' "${source_file}" ||
       die "DOC5 missing reference '${symbol}' in ${source_file}"
   done
+  [[ -z "${reference_remainder//[[:space:],]/}" ]] ||
+    die "DOC5 API reference: malformed symbol cell in row: ${row}"
   gate_count=0
   gate_remainder="${gates}"
   while [[ "${gates}" =~ ${span} ]]; do
@@ -215,6 +224,12 @@ run_json prepare "${cli}" corpus prepare \
 run_json report-validate "${cli}" corpus report-validate \
   --input-directory "${cli_root}/prepared-train"
 cmp "${scratch}/prepare.json" "${scratch}/report-validate.json"
+"${cli}" corpus validate "${cli_root}/prepared-train" --max-total-tokens 6 \
+  >"${scratch}/corpus-validate.stdout" 2>"${scratch}/corpus-validate.stderr"
+[[ ! -s "${scratch}/corpus-validate.stderr" &&
+  $(wc -l <"${scratch}/corpus-validate.stdout") == 1 ]] &&
+  grep -Exq 'shards=2 tokens=6 vocab=256 limit=4 bytes=[0-9]+ fingerprint_hex=[0-9a-f]+' \
+    "${scratch}/corpus-validate.stdout" || die 'DOC5 corpus validate: unexpected summary'
 python3 - "${cli_root}/prepared-train" <<'PYREPORT'
 from pathlib import Path
 import hashlib

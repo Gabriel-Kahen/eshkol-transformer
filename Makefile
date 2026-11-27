@@ -26,18 +26,21 @@ SHELL := /usr/bin/bash
 	test-e3-native-parity test-e3-private-package test-e3-private-runtime \
 	test-e1 test-e1b \
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics \
-	test-mod5 test-mod5-aot test-mod5-o2-continuation test-mp4 test-mp4-mod5 \
-	test-ac4 test-pa4-wider test-n2 test-n3k \
+	test-mod5 test-mod5-aot test-mod5-c2 test-mod5-o2-continuation \
+	test-mp4 test-mp4-mod5 test-ac4 test-pa4-wider test-pa4-wider-joint test-pa4-wider-m3t test-n2 test-n3k \
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-t2-trainer test-t2-native-corpus test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
 	test-paged-kv-model-attention \
-	test-beam-cd-composition test-beam-cd-live-cpu test-spec-paged-witness \
+	test-beam-cd-composition test-beam-cd-live-cpu test-constrained-beam test-spec-paged-witness test-spec-live-model \
 	test-data4-quality-t2-d1 \
+	build-spec-paged-round test-spec-paged-round \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
+	test-tr3-c-i2-restore-current-main test-tr3-c-o2-restore-current-main \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
-	benchmark-attention-supported test-amd4 test-dist5 test-dist5-mod5 test-eval5 clean
+	benchmark-attention-supported test-amd4 test-dist5 test-dist5-mod5 \
+	test-dist5-weighted-sgd test-eval5 clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -306,6 +309,9 @@ test-mod5-aot:
 test-mod5-o2-continuation:
 	/usr/bin/bash scripts/test-mod5-o2-continuation.sh
 
+test-mod5-c2:
+	/usr/bin/bash scripts/test-mod5-c2.sh
+
 test-mp4-mod5:
 	/usr/bin/bash scripts/test-mp4-mod5.sh
 
@@ -314,6 +320,12 @@ test-ac4:
 
 test-pa4-wider:
 	/usr/bin/bash scripts/test-pa4-wider.sh
+
+test-pa4-wider-joint:
+	/usr/bin/bash scripts/test-pa4-wider-joint.sh
+
+test-pa4-wider-m3t:
+	/usr/bin/bash scripts/test-pa4-wider-m3t.sh
 
 test-k1: build
 	/usr/bin/bash scripts/test-k1.sh
@@ -383,6 +395,12 @@ test-tr3-c-i2-restore:
 test-tr3-c-o2-restore:
 	/usr/bin/bash scripts/test-tr3-c-o2-restore.sh
 
+test-tr3-c-i2-restore-current-main:
+	/usr/bin/bash scripts/test-tr3-c-i2-restore.sh --current-main
+
+test-tr3-c-o2-restore-current-main:
+	/usr/bin/bash scripts/test-tr3-c-o2-restore.sh --current-main
+
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh
 
@@ -398,6 +416,9 @@ test-dist5:
 
 test-dist5-mod5:
 	/usr/bin/bash scripts/test-dist5-mod5.sh
+
+test-dist5-weighted-sgd:
+	/usr/bin/bash scripts/test-dist5-weighted-sgd.sh
 
 test-eval5:
 	/usr/bin/bash scripts/test-eval5.sh
@@ -431,8 +452,19 @@ test-beam-cd-composition:
 test-beam-cd-live-cpu:
 	/usr/bin/bash scripts/test-beam-cd-live-cpu.sh
 
+test-constrained-beam:
+	/usr/bin/bash scripts/test-constrained-beam.sh
+
 test-spec-paged-witness:
 	/usr/bin/bash scripts/test-spec-paged-witness.sh
+test-spec-live-model:
+	/usr/bin/bash scripts/test-spec-live-model.sh
+
+build-spec-paged-round:
+	/usr/bin/bash scripts/build-spec-paged-round.sh
+
+test-spec-paged-round:
+	/usr/bin/bash scripts/test-spec-paged-round.sh
 
 test-data4-quality-t2-d1:
 	/usr/bin/bash scripts/test-data4-quality-t2-d1.sh

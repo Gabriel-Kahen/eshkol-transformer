@@ -23,10 +23,15 @@ archives=(build/ac4/libeshkol_ac4.a build/mod5/libeshkol_transformer_mod5.a)
   -x c++ - -x none "${archives[@]}" "${scratch}/kernel.o" -lm -o "${scratch}/header" <<'CPP'
 #include "eshkol_transformer/ac4_checkpointing_abi.h"
 int main() {
-  const et_ac4_config_v1 config{{1, 1, 2, 2, 1, 2}, ET_AC4_FORWARD_BACKWARD,
+  et_ac4_config_v1 config{{16, 2, 3, 4, 2, 2}, ET_AC4_FORWARD_BACKWARD,
                                ET_AC4_POLICY_NONE, 0, 0.125f, 0.0f, 0, 0, 0};
-  et_ac4_memory_v1 memory{};
-  return et_ac4_plan_v1(&config, &memory) == ET_AC4_OK && memory.workspace_bytes > 0 ? 0 : 1;
+  et_ac4_memory_v1 retained{}, replay{};
+  if (et_ac4_plan_v1(&config, &retained) != ET_AC4_OK)
+    return 1;
+  config.policy = ET_AC4_POLICY_EVERY_K_REPLAY_GRADIENTS;
+  config.checkpoint_every = config.shape.layers;
+  return et_ac4_plan_v1(&config, &replay) == ET_AC4_OK &&
+         replay.workspace_bytes < retained.workspace_bytes ? 0 : 1;
 }
 CPP
 "${scratch}/header"

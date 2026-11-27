@@ -2,6 +2,10 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
+profile="${1-}"
+[[ $# == 0 || ( $# == 1 && "${profile}" == --current-main ) ]] ||
+  die "usage: ${0##*/} [--current-main]"
+
 for command in awk clang cmp comm gcc git grep nm readelf tar timeout; do
   require_command "${command}"
 done
@@ -24,21 +28,39 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Preserve the accepted union's SHARED-R2 provider and runtime prerequisites.
-# Only the three reviewed constructor initializers below modify this baseline.
-baseline_ref=d5fa9a71b000ab1139a25e9b734b230ab5bda759
-baseline_root="${tmp}/pre-repair"
-mkdir -p "${baseline_root}"
-git -C "${PROJECT_ROOT}" cat-file -e "${baseline_ref}^{commit}"
-git -C "${PROJECT_ROOT}" archive "${baseline_ref}" \
-  native/f32_tensor.c native/f32_parameter_internal.h |
-  tar -x -C "${baseline_root}"
-if cmp -s "${PROJECT_ROOT}/native/f32_tensor.c" \
-    "${baseline_root}/native/f32_tensor.c"; then
-  die "pre-repair f32 baseline unexpectedly matches the current source"
-fi
-baseline_patched="${tmp}/f32_tensor-approved-portability.c"
-awk '
+common_cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -O0
+               -ffp-contract=off -fexcess-precision=standard -frounding-math
+               -fPIC -fvisibility=hidden -fno-common -fstack-protector-all)
+cflags=("${common_cflags[@]}" -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native")
+baseline_cflags=("${cflags[@]}")
+owned_match_undefined="${PROJECT_ROOT}/native/f32_tensor_owned_match_undefined_symbols.txt"
+
+if [[ "${profile}" == --current-main ]]; then
+  baseline_ref=5d2df96ecdc5f4d7ccb8cbc560dfd322c3e2813d
+  baseline_root="${tmp}/wave3-merge"
+  mkdir -p "${baseline_root}"
+  git --no-replace-objects -C "${PROJECT_ROOT}" archive "${baseline_ref}" \
+    native/f32_tensor.c native/f32_parameter_internal.h \
+    include/eshkol_transformer/f32_tensor.h include/eshkol_transformer/kernel_abi.h |
+    tar -x -C "${baseline_root}"
+  baseline_cflags=("${common_cflags[@]}" -I "${baseline_root}/include" -I "${baseline_root}/native")
+  owned_match_undefined="${PROJECT_ROOT}/native/f32_tensor_owned_match_current_undefined_symbols.txt"
+else
+  # Preserve the accepted union's SHARED-R2 provider and runtime prerequisites.
+  # Only the three reviewed constructor initializers below modify this baseline.
+  baseline_ref=d5fa9a71b000ab1139a25e9b734b230ab5bda759
+  baseline_root="${tmp}/pre-repair"
+  mkdir -p "${baseline_root}"
+  git -C "${PROJECT_ROOT}" cat-file -e "${baseline_ref}^{commit}"
+  git -C "${PROJECT_ROOT}" archive "${baseline_ref}" \
+    native/f32_tensor.c native/f32_parameter_internal.h |
+    tar -x -C "${baseline_root}"
+  if cmp -s "${PROJECT_ROOT}/native/f32_tensor.c" \
+      "${baseline_root}/native/f32_tensor.c"; then
+    die "pre-repair f32 baseline unexpectedly matches the current source"
+  fi
+  baseline_patched="${tmp}/f32_tensor-approved-portability.c"
+  awk '
   $0 == "int32_t et_f32_tensor_create_v1(size_t rank, const uint64_t *shape," {
     in_create = 1
   }
@@ -61,13 +83,9 @@ awk '
       exit 1
     }
   }
-' "${baseline_root}/native/f32_tensor.c" >"${baseline_patched}"
-mv "${baseline_patched}" "${baseline_root}/native/f32_tensor.c"
-
-cflags=(-std=c11 -Wall -Wextra -Werror -Wpedantic -O0
-        -ffp-contract=off -fexcess-precision=standard -frounding-math
-        -fPIC -fvisibility=hidden -fno-common -fstack-protector-all
-        -I "${PROJECT_ROOT}/include" -I "${PROJECT_ROOT}/native")
+  ' "${baseline_root}/native/f32_tensor.c" >"${baseline_patched}"
+  mv "${baseline_patched}" "${baseline_root}/native/f32_tensor.c"
+fi
 
 symbols() {
   local mode=$1 object=$2 output=$3
@@ -87,9 +105,9 @@ check_hidden() {
 
 for compiler in clang gcc; do
   ordinary_f32="${tmp}/${compiler}-f32-ordinary.o"
-  baseline_f32="${tmp}/${compiler}-f32-pre-repair.o"
+  baseline_f32="${tmp}/${compiler}-f32-${baseline_root##*/}.o"
   optimized_ordinary_f32="${tmp}/${compiler}-f32-ordinary-optimized.o"
-  optimized_baseline_f32="${tmp}/${compiler}-f32-pre-repair-optimized.o"
+  optimized_baseline_f32="${tmp}/${compiler}-f32-${baseline_root##*/}-optimized.o"
   feature_f32="${tmp}/${compiler}-f32-feature.o"
   ordinary_bridge="${tmp}/${compiler}-bridge-ordinary.o"
   declaration_bridge="${tmp}/${compiler}-bridge-declaration-only.o"
@@ -114,7 +132,7 @@ for compiler in clang gcc; do
   )
   (
     cd "${baseline_root}"
-    "${compiler}" "${cflags[@]}" -c native/f32_tensor.c -o "${baseline_f32}"
+    "${compiler}" "${baseline_cflags[@]}" -c native/f32_tensor.c -o "${baseline_f32}"
   )
   cmp "${ordinary_f32}" "${baseline_f32}"
   (
@@ -124,7 +142,7 @@ for compiler in clang gcc; do
   )
   (
     cd "${baseline_root}"
-    "${compiler}" "${cflags[@]}" -O2 -fstrict-aliasing \
+    "${compiler}" "${baseline_cflags[@]}" -O2 -fstrict-aliasing \
       -c native/f32_tensor.c -o "${optimized_baseline_f32}"
   )
   cmp "${optimized_ordinary_f32}" "${optimized_baseline_f32}"
@@ -175,7 +193,7 @@ for compiler in clang gcc; do
     "${tmp}/${compiler}-ordinary_f32.undefined"
   cmp "${PROJECT_ROOT}/native/f32_tensor_owned_match_defined_symbols.txt" \
     "${tmp}/${compiler}-feature_f32.defined"
-  cmp "${PROJECT_ROOT}/native/f32_tensor_owned_match_undefined_symbols.txt" \
+  cmp "${owned_match_undefined}" \
     "${tmp}/${compiler}-feature_f32.undefined"
   cmp "${PROJECT_ROOT}/native/tr3_c_i2_restore_bridge_defined_symbols.txt" \
     "${tmp}/${compiler}-feature_bridge.defined"
@@ -191,10 +209,12 @@ for compiler in clang gcc; do
                     "${tmp}/${compiler}-feature_f32.defined")" == \
       et_i2_private_owned_clone_match_v1 ]] ||
     die "${compiler} matcher gate changed an unexpected defined symbol"
-  test ! -s <(comm -23 "${tmp}/${compiler}-ordinary_f32.defined" \
-                       "${tmp}/${compiler}-feature_f32.defined")
-  test ! -s <(comm -3 "${tmp}/${compiler}-ordinary_f32.undefined" \
-                      "${tmp}/${compiler}-feature_f32.undefined")
+  comm -23 "${tmp}/${compiler}-ordinary_f32.defined" \
+    "${tmp}/${compiler}-feature_f32.defined" | cmp -s - /dev/null ||
+    die "${compiler} matcher gate removed an ordinary F32 definition"
+  comm -3 "${tmp}/${compiler}-ordinary_f32.undefined" \
+    "${tmp}/${compiler}-feature_f32.undefined" | cmp -s - /dev/null ||
+    die "${compiler} matcher gate changed the F32 undefined-symbol set"
   grep -Fx et_i2_private_owned_clone_match_v1 \
     "${tmp}/${compiler}-feature_bridge.undefined" >/dev/null
 
@@ -268,7 +288,26 @@ UBSAN_OPTIONS=halt_on_error=1 \
 test ! -s "${tmp}/sanitized.stderr"
 cmp "${tmp}/clang-1.stdout" "${tmp}/sanitized.stdout"
 
-if grep -R -E 'et_tr3_c_i2_|et_i2_private_owned_clone_match_v1' \
+if [[ "${profile}" == --current-main ]]; then
+  # Main's E3 frame uses the matcher only in the guarded zero-control test.
+  e3_frame="${PROJECT_ROOT}/src/eshkol_transformer/e3_frame.c"
+  git --no-replace-objects -C "${PROJECT_ROOT}" cat-file blob \
+    8e3753fe01931975200e776bed18f5d089b52baf | cmp - "${e3_frame}" ||
+    die "current-main E3 zero-control source differs from the reviewed blob"
+  references="$(grep -RlE 'et_tr3_c_i2_|et_i2_private_owned_clone_match_v1' \
+    "${PROJECT_ROOT}/include" "${PROJECT_ROOT}/lib" "${PROJECT_ROOT}/src")" ||
+    die "current-main I2 source reference inventory failed"
+  [[ "${references}" == "${e3_frame}" ]] ||
+    die "TR3-C I2 restore references escaped the private E3 test source"
+  for compiler in clang gcc; do
+    "${compiler}" "${cflags[@]}" -I "${PROJECT_ROOT}/src" \
+      -I "${PROJECT_ROOT}/src/eshkol_transformer" -E -P "${e3_frame}" \
+      -o "${tmp}/${compiler}-e3-feature-off.i"
+    awk '/et_tr3_c_i2_|et_i2_private_owned_clone_match_v1/ { exit 1 }' \
+      "${tmp}/${compiler}-e3-feature-off.i" ||
+      die "${compiler} feature-off E3 contains a private I2 restore reference"
+  done
+elif grep -R -E 'et_tr3_c_i2_|et_i2_private_owned_clone_match_v1' \
     "${PROJECT_ROOT}/include" "${PROJECT_ROOT}/lib" \
     "${PROJECT_ROOT}/src" >/dev/null; then
   die "TR3-C I2 restore leaked into a public header or Scheme binding"

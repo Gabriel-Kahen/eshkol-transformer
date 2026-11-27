@@ -230,6 +230,7 @@ static size_t window_count(const et_eval5_document *doc,
 static et_eval5_status count_windows(const et_eval5_document *documents,
                                      size_t count,
                                      const et_eval5_contamination_config *config,
+                                     uint32_t vocab_size,
                                      uint64_t *out) {
   uint64_t total = 0;
   for (size_t i = 0; i < count; ++i) {
@@ -242,6 +243,11 @@ static et_eval5_status count_windows(const et_eval5_document *documents,
         (config->ngram_mode == ET_EVAL5_NGRAM_TOKENS &&
          doc->token_count != 0 && doc->tokens == NULL))
       return ET_EVAL5_ERR_ARGUMENT;
+    if (vocab_size != 0 && config->ngram_mode == ET_EVAL5_NGRAM_TOKENS) {
+      for (size_t j = 0; j < doc->token_count; ++j) {
+        if (doc->tokens[j] >= vocab_size) return ET_EVAL5_ERR_TARGET;
+      }
+    }
     size_t windows = window_count(doc, config);
     if (windows > UINT64_MAX - total) return ET_EVAL5_ERR_OVERFLOW;
     total += windows;
@@ -304,29 +310,33 @@ static size_t index_ngrams(ngram_key *keys, size_t total,
   return unique;
 }
 
-et_eval5_status et_eval5_audit_contamination(
+static et_eval5_status audit_contamination(
     const et_eval5_document *train, size_t train_count,
     const et_eval5_document *eval, size_t eval_count,
-    const et_eval5_contamination_config *config,
+    const et_eval5_contamination_config *config, uint32_t vocab_size,
     uint64_t *contaminated_indices, size_t index_capacity,
     et_eval5_contamination_summary *out) {
   if (config == NULL || out == NULL || eval == NULL || eval_count == 0 ||
-      contaminated_indices == NULL || (train == NULL && train_count != 0))
+      (train == NULL && train_count != 0))
     return ET_EVAL5_ERR_ARGUMENT;
   if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
   if (!valid_policy(config)) return ET_EVAL5_ERR_ARGUMENT;
   if (train_count > PTRDIFF_MAX / sizeof(*train) ||
       train_count > PTRDIFF_MAX / sizeof(document_key) ||
       eval_count > PTRDIFF_MAX / sizeof(*eval) ||
-      eval_count > PTRDIFF_MAX / sizeof(*contaminated_indices))
+      (contaminated_indices != NULL &&
+       eval_count > PTRDIFF_MAX / sizeof(*contaminated_indices)))
     return ET_EVAL5_ERR_OVERFLOW;
-  if (index_capacity < eval_count) return ET_EVAL5_ERR_BOUNDS;
+  if (contaminated_indices != NULL && index_capacity < eval_count)
+    return ET_EVAL5_ERR_BOUNDS;
 
   uint64_t train_windows;
   et_eval5_contamination_summary summary = {.eval_documents = eval_count};
-  et_eval5_status status = count_windows(train, train_count, config, &train_windows);
+  et_eval5_status status = count_windows(train, train_count, config, vocab_size,
+                                         &train_windows);
   if (status != ET_EVAL5_OK) return status;
-  status = count_windows(eval, eval_count, config, &summary.total_eval_ngrams);
+  status = count_windows(eval, eval_count, config, vocab_size,
+                         &summary.total_eval_ngrams);
   if (status != ET_EVAL5_OK) return status;
   if (train_windows > PTRDIFF_MAX / sizeof(ngram_key)) return ET_EVAL5_ERR_OVERFLOW;
 
@@ -373,7 +383,11 @@ et_eval5_status et_eval5_audit_contamination(
     summary.matched_eval_ngrams += matched;
     summary.exact_doc_matches += (uint64_t)exact;
     summary.ngram_contaminated_docs += (uint64_t)overlap;
-    if (exact || overlap) contaminated_indices[summary.contaminated_documents++] = i;
+    if (exact || overlap) {
+      if (contaminated_indices != NULL)
+        contaminated_indices[summary.contaminated_documents] = i;
+      ++summary.contaminated_documents;
+    }
   }
   free(ngrams);
   free(documents);
@@ -385,13 +399,25 @@ et_eval5_status et_eval5_audit_contamination(
   return ET_EVAL5_OK;
 }
 
+et_eval5_status et_eval5_audit_contamination(
+    const et_eval5_document *train, size_t train_count,
+    const et_eval5_document *eval, size_t eval_count,
+    const et_eval5_contamination_config *config,
+    uint64_t *contaminated_indices, size_t index_capacity,
+    et_eval5_contamination_summary *out) {
+  if (contaminated_indices == NULL) return ET_EVAL5_ERR_ARGUMENT;
+  return audit_contamination(train, train_count, eval, eval_count, config, 0,
+                             contaminated_indices, index_capacity, out);
+}
+
 static et_eval5_status sequence_nll(const et_eval5_sequence *sequence,
-                                    double *out) {
+                                    uint32_t vocab_size, double *out) {
   if (sequence == NULL || sequence->logits == NULL || sequence->target_ids == NULL ||
       sequence->token_count == 0 || sequence->vocab_size == 0)
     return ET_EVAL5_ERR_ARGUMENT;
   size_t rows = sequence->token_count;
   size_t cols = sequence->vocab_size;
+  if (vocab_size != 0 && cols != vocab_size) return ET_EVAL5_ERR_IDENTITY;
   if (rows > PTRDIFF_MAX / sizeof(*sequence->target_ids) ||
       cols > (PTRDIFF_MAX / sizeof(float)) / rows ||
       cols - 1 > UINT32_MAX)
@@ -420,12 +446,13 @@ static et_eval5_status sequence_nll(const et_eval5_sequence *sequence,
   return ET_EVAL5_OK;
 }
 
-et_eval5_status et_eval5_score_lm(const et_eval5_sequence *sequence,
-                                 uint64_t byte_count, et_eval5_lm_metrics *out) {
+static et_eval5_status score_lm(const et_eval5_sequence *sequence,
+                                uint64_t byte_count, uint32_t vocab_size,
+                                et_eval5_lm_metrics *out) {
   if (out == NULL || byte_count == 0) return ET_EVAL5_ERR_ARGUMENT;
   if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
   double total;
-  et_eval5_status status = sequence_nll(sequence, &total);
+  et_eval5_status status = sequence_nll(sequence, vocab_size, &total);
   if (status != ET_EVAL5_OK) return status;
 
   double mean = total / (double)sequence->token_count;
@@ -444,9 +471,14 @@ et_eval5_status et_eval5_score_lm(const et_eval5_sequence *sequence,
   return ET_EVAL5_OK;
 }
 
-et_eval5_status et_eval5_score_mc(const et_eval5_choice_item *items,
-                                 size_t item_count, uint32_t normalize_by_length,
-                                 et_eval5_mc_metrics *out) {
+et_eval5_status et_eval5_score_lm(const et_eval5_sequence *sequence,
+                                 uint64_t byte_count, et_eval5_lm_metrics *out) {
+  return score_lm(sequence, byte_count, 0, out);
+}
+
+static et_eval5_status score_mc(const et_eval5_choice_item *items,
+                                size_t item_count, uint32_t normalize_by_length,
+                                uint32_t vocab_size, et_eval5_mc_metrics *out) {
   if (items == NULL || item_count == 0 || normalize_by_length > 1 || out == NULL)
     return ET_EVAL5_ERR_ARGUMENT;
   if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
@@ -466,7 +498,7 @@ et_eval5_status et_eval5_score_mc(const et_eval5_choice_item *items,
     for (size_t j = 0; j < item->choice_count; ++j) {
       const et_eval5_sequence *choice = &item->choices[j];
       double cost;
-      et_eval5_status status = sequence_nll(choice, &cost);
+      et_eval5_status status = sequence_nll(choice, vocab_size, &cost);
       if (status != ET_EVAL5_OK) return status;
       if (normalize_by_length) cost /= (double)choice->token_count;
       if (cost < best_cost) {
@@ -478,6 +510,12 @@ et_eval5_status et_eval5_score_mc(const et_eval5_choice_item *items,
   }
   *out = (et_eval5_mc_metrics){correct, item_count, fraction(correct, item_count)};
   return ET_EVAL5_OK;
+}
+
+et_eval5_status et_eval5_score_mc(const et_eval5_choice_item *items,
+                                 size_t item_count, uint32_t normalize_by_length,
+                                 et_eval5_mc_metrics *out) {
+  return score_mc(items, item_count, normalize_by_length, 0, out);
 }
 
 typedef enum { NAME, SHA256, U32, U64, F64 } field_kind;
@@ -577,10 +615,8 @@ static int valid_mc(const et_eval5_manifest *manifest) {
   const et_eval5_mc_metrics *mc = &manifest->mc;
   if (!valid_rate(mc->accuracy)) return 0;
   if (!(manifest->metric_mask & ET_EVAL5_METRIC_MC))
-    return mc->total_count == 0 && mc->correct_count == 0 && mc->accuracy == 0.0 &&
-           manifest->mc_normalize_by_length == 0;
-  return manifest->mc_normalize_by_length <= 1 && mc->total_count != 0 &&
-         mc->correct_count <= mc->total_count &&
+    return mc->total_count == 0 && mc->correct_count == 0 && mc->accuracy == 0.0;
+  return mc->total_count != 0 && mc->correct_count <= mc->total_count &&
          mc->accuracy == fraction(mc->correct_count, mc->total_count);
 }
 
@@ -598,15 +634,21 @@ static int valid_audit(const et_eval5_contamination_summary *audit) {
              fraction(audit->contaminated_documents, audit->eval_documents);
 }
 
+static int valid_manifest_metadata(const et_eval5_manifest *manifest) {
+  return valid_name(manifest->suite) && valid_name(manifest->task) &&
+         valid_name(manifest->split) && manifest->context_length != 0 &&
+         valid_policy(&manifest->contamination) && manifest->metric_mask != 0 &&
+         (manifest->metric_mask & ~(ET_EVAL5_METRIC_LM | ET_EVAL5_METRIC_MC)) == 0 &&
+         manifest->mc_normalize_by_length <=
+             (uint32_t)((manifest->metric_mask & ET_EVAL5_METRIC_MC) != 0);
+}
+
 static et_eval5_status validate_manifest(const et_eval5_manifest *manifest) {
   if (manifest->version_major != ET_EVAL5_VERSION_MAJOR ||
       manifest->version_minor != ET_EVAL5_VERSION_MINOR)
     return ET_EVAL5_ERR_VERSION;
   if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
-  if (!valid_name(manifest->suite) || !valid_name(manifest->task) ||
-      !valid_name(manifest->split) || manifest->context_length == 0 ||
-      !valid_policy(&manifest->contamination) || manifest->metric_mask == 0 ||
-      (manifest->metric_mask & ~(ET_EVAL5_METRIC_LM | ET_EVAL5_METRIC_MC)) != 0 ||
+  if (!valid_manifest_metadata(manifest) ||
       !valid_lm(&manifest->lm, manifest->metric_mask & ET_EVAL5_METRIC_LM) ||
       !valid_mc(manifest) || !valid_audit(&manifest->audit))
     return ET_EVAL5_ERR_FORMAT;
@@ -846,6 +888,84 @@ et_eval5_status et_eval5_manifest_parse(const char *bytes, size_t size,
   et_eval5_status status = validate_manifest(&manifest);
   if (status != ET_EVAL5_OK) return status;
   *out = manifest;
+  return ET_EVAL5_OK;
+}
+
+et_eval5_status et_eval5_run_benchmark(const et_eval5_benchmark_request *request,
+                                      et_eval5_benchmark_result *out) {
+  if (request == NULL || out == NULL) return ET_EVAL5_ERR_ARGUMENT;
+  if (!fp_environment_supported()) return ET_EVAL5_ERR_FP_ENV;
+
+  et_eval5_benchmark_result result = {0};
+  et_eval5_manifest *manifest = &result.manifest;
+  manifest->version_major = ET_EVAL5_VERSION_MAJOR;
+  manifest->version_minor = ET_EVAL5_VERSION_MINOR;
+  memcpy(manifest->suite, request->suite, sizeof(manifest->suite));
+  memcpy(manifest->task, request->task, sizeof(manifest->task));
+  memcpy(manifest->split, request->split, sizeof(manifest->split));
+  manifest->context_length = request->context_length;
+  manifest->max_samples = request->max_samples;
+  manifest->contamination = request->contamination;
+  manifest->metric_mask = request->metric_mask;
+  manifest->mc_normalize_by_length = request->mc_normalize_by_length;
+  if (!valid_manifest_metadata(manifest)) return ET_EVAL5_ERR_FORMAT;
+
+  const et_eval5_tokenizer_identity *tokenizer = &request->tokenizer;
+  const et_eval5_tokenizer_identity *corpus_tokenizers[] = {
+      &request->train.tokenizer, &request->eval.tokenizer,
+  };
+  for (size_t i = 0; i < sizeof(corpus_tokenizers) / sizeof(*corpus_tokenizers); ++i) {
+    const et_eval5_tokenizer_identity *corpus = corpus_tokenizers[i];
+    et_eval5_status status = et_eval5_bind_tokenizer_identity(
+        tokenizer->fingerprint, tokenizer->fingerprint_length, tokenizer->vocab_size,
+        corpus->fingerprint, corpus->fingerprint_length, corpus->vocab_size,
+        manifest->tokenizer_sha256);
+    if (status != ET_EVAL5_OK) return status;
+  }
+  memcpy(manifest->train_dataset_sha256, request->train.dataset_sha256,
+         ET_EVAL5_SHA256_BYTES);
+  memcpy(manifest->eval_dataset_sha256, request->eval.dataset_sha256,
+         ET_EVAL5_SHA256_BYTES);
+  memcpy(manifest->checkpoint_sha256, request->checkpoint_sha256,
+         ET_EVAL5_SHA256_BYTES);
+
+  et_eval5_status status = audit_contamination(
+      request->train.documents, request->train.document_count,
+      request->eval.documents, request->eval.document_count,
+      &manifest->contamination, tokenizer->vocab_size, NULL, 0, &manifest->audit);
+  if (status != ET_EVAL5_OK) return status;
+
+  if (request->metric_mask & ET_EVAL5_METRIC_LM) {
+    if (request->lm_sequence == NULL || request->lm_sample_count == 0)
+      return ET_EVAL5_ERR_ARGUMENT;
+    if (request->lm_sample_count > request->eval.document_count ||
+        request->lm_sample_count > request->lm_sequence->token_count ||
+        (request->max_samples != 0 && request->lm_sample_count > request->max_samples))
+      return ET_EVAL5_ERR_BOUNDS;
+    status = score_lm(request->lm_sequence, request->lm_byte_count,
+                      tokenizer->vocab_size, &manifest->lm);
+    if (status != ET_EVAL5_OK) return status;
+  } else if (request->lm_sequence != NULL || request->lm_sample_count != 0 ||
+             request->lm_byte_count != 0) {
+    return ET_EVAL5_ERR_ARGUMENT;
+  }
+  if (request->metric_mask & ET_EVAL5_METRIC_MC) {
+    if (request->max_samples != 0 && request->mc_item_count > request->max_samples)
+      return ET_EVAL5_ERR_BOUNDS;
+    status = score_mc(request->mc_items, request->mc_item_count,
+                      request->mc_normalize_by_length, tokenizer->vocab_size,
+                      &manifest->mc);
+    if (status != ET_EVAL5_OK) return status;
+  } else if (request->mc_items != NULL || request->mc_item_count != 0) {
+    return ET_EVAL5_ERR_ARGUMENT;
+  }
+
+  status = et_eval5_manifest_format(manifest, result.canonical_bytes,
+                                    sizeof(result.canonical_bytes), &result.canonical_size);
+  if (status != ET_EVAL5_OK) return status;
+  status = et_eval5_manifest_parse(result.canonical_bytes, result.canonical_size, manifest);
+  if (status != ET_EVAL5_OK) return status;
+  *out = result;
   return ET_EVAL5_OK;
 }
 

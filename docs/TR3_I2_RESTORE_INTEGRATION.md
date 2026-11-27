@@ -51,3 +51,52 @@ linearly with restore count. This is not constant-total retention. No native
 trainer, O2 restore participant, joint live restore, public evaluator, overfit,
 full-state resume, or end-to-end CLI acceptance is claimed here. The runtime
 union's inherited package gates and full CI remain separate acceptance gates.
+
+## Current-main standalone provenance
+
+On clean main `443dad4ba205f931211f821a86667c9cc91dd0e2`, tree
+`443b4fdcd1e672c219d2e694f8de766d6574492d`, the pinned image above reproduces
+all four historical feature-off F32 object matches between `b3e84641` and the
+three-initializer `d5fa9a7` predecessor. For the same Clang/GCC O0 and O2
+strict-aliasing comparisons, current main matches the accepted Wave 3 merge
+`5d2df96e` byte-for-byte and differs from the historical predecessor in all
+four cases. Defined symbol names match. The unconditional F32 retired-control
+index integrated by `ca21861e` adds `abort`, the sole added undefined symbol
+in each comparison. The unchanged `make test-tr3-c-i2-restore` exits at the
+first Clang O0 byte comparison.
+
+Both compilers also find `abort` missing from
+`native/f32_tensor_owned_match_undefined_symbols.txt`. The ordinary F32
+manifests and restore bridge manifests match. The standalone bridge's
+declaration-only object comparison still passes with both compilers.
+The 122-file local audit seal is
+`eshkol-tr3c-feature-off-443dad4b.0ElUoa/evidence/SHA256SUMS`
+(`330fd077d6a585a7c26d8dee83fcc4dd9457635fe0b19e4c17cafcab72e7ca7c`).
+
+## Current-main opt-in gate
+
+Run `make test-tr3-c-i2-restore-current-main` for I2 or
+`make test-tr3-c-o2-restore-current-main` for O2 with its nested I2 gate. The
+explicit profile compares all four feature-off F32 objects against
+`5d2df96ecdc5f4d7ccb8cbc560dfd322c3e2813d`, using its archived F32 source and
+three repository headers. Its separate matcher undefined-symbol manifest
+includes `abort`. Both targets keep the existing native runtime, sanitizer,
+and coexistence assertions.
+
+The current profile authenticates E3 frame blob
+`8e3753fe01931975200e776bed18f5d089b52baf` for the six matcher calls under
+`ET_E3_ZERO_CONTROL_TESTING`. The source scan rejects any other location,
+and ordinary Clang and GCC preprocessing must omit all private I2 restore
+references from that translation unit. Changes to that source blob require
+review before the current profile can pass.
+
+The two opt-in Make targets passed locally in the pinned image on the source
+identified above. Modified arguments, ordinary object bytes, matcher manifest,
+E3 source, and an extra public header reference each failed their respective
+checks. The unchanged default profile also passed the full historical O2 and
+nested I2 gate when the updated runners were mounted into accepted source
+`2aeefad2`, which carries the same F32 source and headers as `b3e84641`.
+The 60-file local qualification seal is
+`eshkol-tr3c-feature-off-443dad4b.0ElUoa/successor-qualification/SHA256SUMS`
+(`9d94cb59fcb1d2ddcdc63918dec2dad135aeeadbe001c61eda90e0a332df01a6`).
+The opt-in candidate awaits independent review.

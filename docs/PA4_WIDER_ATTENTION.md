@@ -159,6 +159,29 @@ and benchmark parity use `3e-7 + 3e-6 * max(abs(ref),abs(online))`
 as an absolute error threshold. Every tested dQ, dK and dV matched
 bit for bit.
 
+## Native M3T dispatch diagnostic
+
+`make test-pa4-wider-m3t` runs the fixed-profile M3T native transport harness
+with an isolated linker override for A2 provider discovery. Each process
+explicitly selects A2 or the PA4-Wider reference, and the test checks the K1
+implementation name for both attention operations. Both selections use the
+same M3T owner, workspace, and role transport source and the same N3K and N2
+providers. The linker override exists only in the diagnostic executable.
+
+Two token pairs run full forward and reverse calls on seed-1729 initialized
+parameters with a different nonzero logit cotangent per pair. The diagnostic
+compares all 512 logits, 32 attention output and derivative values, and 1,184
+elements of the 14 parameter VJPs per pair. It injects a malformed mask at the
+attention boundary in each phase, then checks the K1 error, complete slot bytes
+and readiness, active owner, released tensor borrows, successful retry, and
+workspace reset and release.
+
+Local Clang 22.1.8 optimized and ASan/UBSan/LSan runs each passed 3,456
+bitwise comparisons and all lifecycle checks on x86-64. This gate exercises
+the native role schedule harness at attention shape `[1,2,2,2,2,2]`. The
+Eshkol AOT schedule, trainer updates, wider model shapes, the online provider,
+and model throughput are separate qualification gates.
+
 ## Supported scaling measurement
 
 The benchmark compares reference (A) and online (B) in the same
@@ -242,3 +265,80 @@ docker run --rm --network none --cpuset-cpus 6 \
     python3 -m unittest -v tests.ci.test_attention_predecessor_pins
     bash scripts/check-ci-topology.sh'
 ```
+
+## Paired A2 joint execution
+
+`make test-pa4-wider-joint` links current A2, Wider reference and Wider
+online into one executable. It runs the ten singleton CPU-f32 shapes in
+A2's discovered K1 capability in lexicographic order. Each arm uses the
+same Wider fixture inputs, mask and positions. The `[1,4,2,3,3,2]` case
+also masks its last query row.
+
+Each iteration dispatches forward, derives `dO[i] = 0.5 * O[i] + c[i]`
+using that arm's output, and dispatches backward. The dyadic coefficients
+come from fixture seed 101. This is the gradient of the separable test
+loss `sum(O[i]^2 / 4 + c[i] * O[i])`. Forward and backward use the same
+Q, K and V but disjoint output and gradient buffers.
+
+The check compares every word of O, dO, dQ, dK and dV against A2. Wider
+reference must match exactly. Wider online reports bit differences and
+must meet the existing `3e-7 + 3e-6 * max(abs(A2), abs(online))` absolute
+tolerance. Online backward must also match A2 bit for bit when it receives
+the same A2 dO. For each arm, nonfinite dO on the empty query row must
+fail backward with all four output buffers intact. Restoring dO must
+reproduce the certified bits.
+
+On an otherwise idle host, `taskset -c 6 bash scripts/test-pa4-wider-joint.sh
+--time` checks all ten shapes before timing. For each shape it pairs A2
+with Wider reference, then A2 with Wider online. Each matchup uses
+12 pairs alternating AB and BA, with A2 as A. Each batch uses 100
+warmup iterations and 1,000 timed iterations, and its final O, dO, dQ, dK
+and dV must match that arm's checked bits. The timer includes both K1
+dispatches, dO calculation, and loop and clock overhead. The script
+prints all batch times, per-shape total-time ratios and order-specific
+ranges, and fixed-mix total-time ratios. These times describe standalone
+attention on the ten common shapes.
+
+### Paired result, 2026-11-27
+
+Regular and ASan/UBSan/LSan checks passed with Clang 21.1.8 and 22.1.8.
+All 816 words matched between A2 and Wider reference. Online differed on
+166 words and met the tolerance everywhere. Its largest absolute difference
+was `1.1920929e-7` (dV). Online backward matched A2 on all 456 gradient
+words with the same A2 dO.
+
+The timing run used clean commit `1c2d88e442651e26cf5531912804273c78a0d825`
+and tree `e202b7540981485a522e7889dc88de1d8b5df572` in the Ubuntu 22.04.5
+image pinned above, with Clang 21.1.8, `-O2 -ffp-contract=off -fno-lto`,
+and CPU affinity 6 on an AMD Ryzen 7 3700X running Linux
+`7.2.7-1-cachyos`. The starting host load averages were 6.89, 7.93 and
+7.75. CPU 6 and its SMT sibling CPU 14 were 16.0% and 11.9% busy in the
+three-second pre-run sample. CPU 14 averaged 7.5% busy over the container
+run. CPU frequency and other host activity were uncontrolled.
+SHA-256 of the full timing log is
+`4b961cb41868bbed3573251e18206fb7911cf208632698d662d4045a6b468830`.
+
+| Shape `[N,Hq,Hkv,Tq,Tk,Dh]` | Reference / A2 | Online / A2 |
+|---|---:|---:|
+| `[1,2,2,1,1,1]` | 1.171337 | 1.068851 |
+| `[1,2,2,1,2,1]` | 0.958145 | 0.914183 |
+| `[1,2,2,1,2,2]` | 0.780393 | 0.738386 |
+| `[1,2,2,2,2,1]` | 0.855047 | 0.765798 |
+| `[1,2,2,2,2,2]` | 0.658684 | 0.607448 |
+| `[1,4,2,1,1,2]` | 0.867875 | 0.746881 |
+| `[1,4,2,3,3,2]` | 0.420940 | 0.369896 |
+| `[2,4,2,1,3,2]` | 0.333920 | 0.285059 |
+| `[2,4,2,2,3,4]` | 0.140967 | 0.098970 |
+| `[2,4,2,3,3,2]` | 0.230341 | 0.172156 |
+| Equal-count mix | 0.352313 | 0.294181 |
+
+Ratios divide all Wider batch time by all A2 batch time in each matchup.
+A2 was sampled separately for reference and online. All 240 pairs
+contributed. Across individual pairs, reference/A2 ranged from 0.139554
+to 1.330245 in AB and 0.138864 to 1.433661 in BA. Online/A2 ranged from
+0.087413 to 1.191973 in AB and 0.082938 to 1.153703 in BA. Both Wider
+variants took more total time on the smallest shape. The timing includes
+the different provider preflights. A2 evaluates arithmetic during
+preflight, while the bounded values in this fixture take the Wider
+finite-scan path. These results characterize joint K1 dispatch on this
+host and shape mix.

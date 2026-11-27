@@ -68,6 +68,14 @@ shape rejection. Plain external formats rely on explicit import metadata
 and validate structure. Checksum rejection applies where an expected
 checksum is available.
 
+The two tagged MOD5 safetensors routes cast the trained weights to F16 or BF16
+and restore F32 C1 for evaluation. They cover both tied and untied variants.
+The gate compares every restored path, shape and alias against the source.
+Each restored model produces a changed logits digest, repeatable in a second
+fresh process. Test limits for the maximum absolute weight error and absolute
+mean evaluation loss change are 0.001 and 0.002 for F16, and 0.008 and 0.010
+for BF16. See the [wire contract](IO5_QUANTIZED_INTERCHANGE.md#tagged-mod5-safetensors).
+
 ## Running and measured results
 
 Run `bash scripts/test-mod5-e2e-io5.sh` with the pinned toolchain on Ubuntu
@@ -128,3 +136,32 @@ the pinned CPU toolchain. The checkpoint persists model weights and logical
 ties. Training resume, optimizer state, alternate devices or dtypes,
 quantized GGUF, and execution by HF or GGML model runtimes require separate
 validation.
+
+## Width-16 C2 storage prerequisite
+
+The native opt-in proof covers the fixture's 16-token vocabulary, width 16,
+FFN width 32 and key/value width 8. All 12 logical C1 paths use `[16]`,
+`[8,16]`, `[16,16]`, `[16,32]` or `[32,16]`. The rank-one row already covers
+`[16]`. The private I2 1.2 descriptor with evidence
+`I2:bounded-exact-f32-storage.copy-v3` appends the four exact matrix rows to
+I2 1.1. It advertises deterministic CPU-f32 `storage.copy` through K1 ABI
+1.0. Dispatch uses the existing dense, zero-offset, non-overlapping copy
+preflight and copies the bytes without reinterpretation.
+
+Run `scripts/test-mod5-width16-storage-copy.sh [evidence-directory]` for the
+native and sanitizer proof. It checks the merged fixture's roster, both exact
+descriptors and K1 reports, legacy and width-16 copies, and unchanged buffers
+on unlisted shapes and an equal-byte mismatched view. The opt-in build exposes
+one hidden accessor. The canonical accessor still returns I2 1.1 and the
+existing K2 audit rejects both I2 1.2 and attempts to relabel its descriptor.
+Default K2 rejects all four new matrix requests at the capability check used
+by C2 before reconstruction.
+
+The next gate is an independently reviewed K2 profile with fixed provider
+selection and an exact native descriptor, live K1 row and Eshkol report audit.
+The report must authenticate its process, live generation and provider profile
+when the existing public C2 LOAD path requires each authenticated staged model
+and optimizer descriptor. The supported C2 witness must prove tied and untied
+LOAD, byte-identical SAVE, owner release, and early rejection of a forged or
+stale report, a report from the default profile, and unlisted shapes. Native
+storage admission alone does not establish optimizer or training resume.

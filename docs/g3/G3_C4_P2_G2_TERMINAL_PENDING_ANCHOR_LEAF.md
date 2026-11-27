@@ -14,9 +14,10 @@ after authenticated reservation and before any frame. It roots a working
 record and separate allocation-time anchor, binds the original protected
 record/anchor, pending output shell/native owner, first and second carrier
 identities, and expected header-plus-payload sizes 10/24, 9/16, 9/16, 9/10.
-The four newly allocated second/text objects and exact list nodes/successors
-are also captured in a lexical root inaccessible to the diagnostic record.
-Paired replacement of mutable records cannot change those originals.
+Both original record identities, all eight original carriers, the extent
+vector identity, and exact list nodes and successors are captured in a
+lexical root inaccessible to the diagnostic record. Paired replacement of
+mutable records cannot change those originals.
 
 `g3c4-p2g2-terminal-pending-check` is read-only. Its status is valid only
 while the authentic protected call and pending output are live. Equal-length
@@ -27,6 +28,11 @@ checks the complete anchor before invoking accepted native abort through the
 protected scope. A held genuine I1 lease leaves the anchor and text unchanged;
 successful abort scrubs the second carriers/text and removes both anchor
 nodes. The private diagnostic wrapper also cleans up a pre-sampling exception.
+It checks the lexical root to distinguish a completed abort from an unwind
+that still needs one. A forged completion tag or bypass through the protected
+abort triggers exit 134 when authenticated terminal cleanup cannot proceed.
+The runner checks these fault paths with the actual protected fixture and
+seals the shared native and Eshkol source closure.
 
 The existing protected and prefix wrappers remain unchanged and abort-only.
 This leaf deliberately has no terminal-success path. A later separate

@@ -3869,7 +3869,15 @@ static int exact_text(const char *actual, const char *expected) {
   return actual != NULL && strcmp(actual, expected) == 0;
 }
 
-static int provider_shape_supported(size_t rank, const uint64_t *shape) {
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+static const et_kernel_capability_v1 provider_capability;
+#endif
+
+static int provider_shape_supported(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+    const et_kernel_capability_v1 *capability,
+#endif
+    size_t rank, const uint64_t *shape) {
   if (rank == 0u) {
     return shape == NULL;
   }
@@ -3881,16 +3889,32 @@ static int provider_shape_supported(size_t rank, const uint64_t *shape) {
   if (rank == 1u) {
     return shape[0] <= ET_F32_RANK1_MAX;
   }
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+  /* Both descriptors start with the scalar and rank-one rows. */
+  for (size_t index = 2u; index < capability->shape_range_count; index++) {
+    const et_kernel_dimension_range_v1 *dimensions =
+        capability->shape_ranges[index].dimensions;
+    if (shape[0] == dimensions[0].minimum &&
+        shape[1] == dimensions[1].minimum) {
+      return 1;
+    }
+  }
+  return 0;
+#else
   return (shape[0] == 2u && shape[1] == 4u) ||
          (shape[0] == 4u && shape[1] == 4u) ||
          (shape[0] == 4u && shape[1] == 8u) ||
          (shape[0] == 8u && shape[1] == 4u) ||
          (shape[0] == 256u && shape[1] == 4u);
+#endif
 }
 
-static int32_t provider_view(const et_kernel_tensor_view_v1 *view,
-                             const et_kernel_request_v1 *request,
-                             et_kernel_error *error) {
+static int32_t provider_view(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+    const et_kernel_capability_v1 *capability,
+#endif
+    const et_kernel_tensor_view_v1 *view, const et_kernel_request_v1 *request,
+    et_kernel_error *error) {
   size_t expected = sizeof(float);
   if (!exact_text(view->dtype, "f32")) {
     return set_kernel_error(error, ET_KERNEL_ERROR_DTYPE_MISMATCH,
@@ -3909,7 +3933,11 @@ static int32_t provider_view(const et_kernel_tensor_view_v1 *view,
                             "storage.copy requires dense zero-offset views");
   }
   if (view->rank != request->rank ||
-      !provider_shape_supported(view->rank, view->shape)) {
+      !provider_shape_supported(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+          capability,
+#endif
+          view->rank, view->shape)) {
     return set_kernel_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                             ET_KERNEL_CODE_INVALID_SHAPE,
                             "storage.copy shape is unsupported");
@@ -3955,8 +3983,14 @@ static int32_t provider_view(const et_kernel_tensor_view_v1 *view,
   return 0;
 }
 
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+static int32_t provider_call_for_capability(
+    const et_kernel_capability_v1 *capability, const et_kernel_call_v1 *call,
+    et_kernel_error *error) {
+#else
 static int32_t provider_call(const et_kernel_call_v1 *call,
                              et_kernel_error *error) {
+#endif
   const et_kernel_tensor_view_v1 *input;
   const et_kernel_tensor_view_v1 *output;
   int32_t result;
@@ -3970,8 +4004,11 @@ static int32_t provider_call(const et_kernel_call_v1 *call,
       !exact_text(call->request->operation, "storage.copy") ||
       !exact_text(call->request->dtype, "f32") ||
       !exact_text(call->request->device, "cpu") ||
-      !provider_shape_supported(call->request->rank,
-                                call->request->shape)) {
+      !provider_shape_supported(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+          capability,
+#endif
+          call->request->rank, call->request->shape)) {
     return set_kernel_error(error, ET_KERNEL_ERROR_UNSUPPORTED,
                             ET_KERNEL_CODE_PROVIDER_REJECTED,
                             "storage.copy request is outside I2 evidence");
@@ -3987,11 +4024,19 @@ static int32_t provider_call(const et_kernel_call_v1 *call,
   }
   input = (const et_kernel_tensor_view_v1 *)call->inputs;
   output = (const et_kernel_tensor_view_v1 *)call->outputs;
-  result = provider_view(input, call->request, error);
+  result = provider_view(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+      capability,
+#endif
+      input, call->request, error);
   if (result != 0) {
     return result;
   }
-  result = provider_view(output, call->request, error);
+  result = provider_view(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+      capability,
+#endif
+      output, call->request, error);
   if (result != 0) {
     return result;
   }
@@ -4004,6 +4049,13 @@ static int32_t provider_call(const et_kernel_call_v1 *call,
   et_kernel_error_clear(error);
   return 0;
 }
+
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+static int32_t provider_call(const et_kernel_call_v1 *call,
+                             et_kernel_error *error) {
+  return provider_call_for_capability(&provider_capability, call, error);
+}
+#endif
 
 static void provider_invoke(const et_kernel_call_v1 *call) {
   const et_kernel_tensor_view_v1 *input =
@@ -4041,6 +4093,21 @@ static const et_kernel_dimension_range_v1 provider_rank2_256x4_dimensions[] = {
     {.minimum = 256u, .maximum = 256u, .maximum_unbounded = 0u, .reserved = {0}},
     {.minimum = 4u, .maximum = 4u, .maximum_unbounded = 0u, .reserved = {0}},
 };
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+static const et_kernel_dimension_range_v1 mod5_rank2_8x16_dimensions[] = {
+    {.minimum = 8u, .maximum = 8u}, {.minimum = 16u, .maximum = 16u},
+};
+static const et_kernel_dimension_range_v1 mod5_rank2_16x16_dimensions[] = {
+    {.minimum = 16u, .maximum = 16u}, {.minimum = 16u, .maximum = 16u},
+};
+static const et_kernel_dimension_range_v1 mod5_rank2_16x32_dimensions[] = {
+    {.minimum = 16u, .maximum = 16u}, {.minimum = 32u, .maximum = 32u},
+};
+static const et_kernel_dimension_range_v1 mod5_rank2_32x16_dimensions[] = {
+    {.minimum = 32u, .maximum = 32u}, {.minimum = 16u, .maximum = 16u},
+};
+#endif
+
 static const et_kernel_shape_range_v1 provider_ranges[] = {
     {.rank = 0u, .dimensions = NULL},
     {.rank = 1u, .dimensions = provider_rank1_dimensions},
@@ -4049,6 +4116,12 @@ static const et_kernel_shape_range_v1 provider_ranges[] = {
     {.rank = 2u, .dimensions = provider_rank2_4x8_dimensions},
     {.rank = 2u, .dimensions = provider_rank2_8x4_dimensions},
     {.rank = 2u, .dimensions = provider_rank2_256x4_dimensions},
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+    {.rank = 2u, .dimensions = mod5_rank2_8x16_dimensions},
+    {.rank = 2u, .dimensions = mod5_rank2_16x16_dimensions},
+    {.rank = 2u, .dimensions = mod5_rank2_16x32_dimensions},
+    {.rank = 2u, .dimensions = mod5_rank2_32x16_dimensions},
+#endif
 };
 static const char *const provider_operations[] = {"storage.copy"};
 static const char *const provider_dtypes[] = {"f32"};
@@ -4090,6 +4163,51 @@ static const et_kernel_provider_v1 provider = {
 const et_kernel_provider_v1 *et_f32_tensor_provider_v1(void) {
   return &provider;
 }
+
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#define MOD5_STORAGE_EVIDENCE "I2:bounded-exact-f32-storage.copy-v3"
+static const et_kernel_capability_v1 mod5_storage_capability = {
+    .struct_size = sizeof(et_kernel_capability_v1),
+    .name = "tensor.f32",
+    .status = ET_KERNEL_CAPABILITY_VERIFIED,
+    .implementation = "eshkol-transformer-f32",
+    .version = "1.2",
+    .evidence = MOD5_STORAGE_EVIDENCE,
+    .deterministic = 1u,
+    .operation_count = 1u,
+    .operations = provider_operations,
+    .dtype_count = 1u,
+    .dtypes = provider_dtypes,
+    .device_count = 1u,
+    .devices = provider_devices,
+    .shape_range_count = sizeof(provider_ranges) / sizeof(provider_ranges[0]),
+    .shape_ranges = provider_ranges,
+};
+
+static int32_t mod5_storage_call(const et_kernel_call_v1 *call,
+                                 et_kernel_error *error) {
+  return provider_call_for_capability(&mod5_storage_capability, call, error);
+}
+
+static const et_kernel_provider_v1 mod5_storage_provider = {
+    .struct_size = sizeof(et_kernel_provider_v1),
+    .abi_major = ET_KERNEL_ABI_MAJOR,
+    .abi_minor = ET_KERNEL_ABI_MINOR,
+    .name = "eshkol-transformer-f32",
+    .version = "1.2",
+    .evidence = MOD5_STORAGE_EVIDENCE,
+    .capability_count = 1u,
+    .capability_stride = sizeof(et_kernel_capability_v1),
+    .capability_bytes = sizeof(et_kernel_capability_v1),
+    .capabilities = &mod5_storage_capability,
+    .validate_call = mod5_storage_call,
+    .invoke_call = provider_invoke,
+};
+
+const et_kernel_provider_v1 *et_i2_private_mod5_width16_storage_provider_v1(void) {
+  return &mod5_storage_provider;
+}
+#endif
 
 #ifdef ET_F32_TENSOR_TESTING
 const uint64_t *et_f32_tensor_test_shape_storage_v1(
