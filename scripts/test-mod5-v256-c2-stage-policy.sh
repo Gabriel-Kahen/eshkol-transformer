@@ -70,4 +70,4 @@ for variant in a b; do
   [[ ! -s "$out/$variant.stderr" ]] || die "MOD5 staged LOAD runtime diagnostics"
 done
 cmp "$out/a.stdout" "$out/b.stdout"
-grep -Fx 'MOD5 V256 staged LOAD PASS' "$out/a.stdout"
+grep -Fx 'MOD5 V256 roster and ordinary LOAD guard PASS' "$out/a.stdout"

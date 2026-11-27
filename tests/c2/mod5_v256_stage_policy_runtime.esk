@@ -65,5 +65,5 @@
 (check 'ordinary-consumes-stage
   (equal? (c2-load-stage-counts-internal) (vector 0 0 3 0)))
 (check 'ordinary-owner-release (c2-public-trainer-state-release! owner))
-(display "MOD5 V256 staged LOAD PASS")
+(display "MOD5 V256 roster and ordinary LOAD guard PASS")
 (newline)
