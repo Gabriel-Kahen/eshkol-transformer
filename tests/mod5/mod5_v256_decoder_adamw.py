@@ -20,7 +20,7 @@ OPTION_BITS = ("3c800000", "3f000000", "3f400000", "35800000", "3c800000")
 
 
 def generate(directory):
-    training.build(directory / "training")
+    record = training.build(directory / "training")
     evaluation.build(directory / "evaluation")
     untied = (directory / "evaluation/model.etcp").read_bytes()
     tied = tied_model(untied)
@@ -35,8 +35,13 @@ def generate(directory):
         raise ValueError("expected one gradient witness boundary")
     prefix = one(gradient.split(marker, 1)[0], '(load "i2_wave2_root.esk")',
                  '(load "d2_wave2_root.esk")\n(load "o2_wave2_extension.esk")')
+    # D2 supplies its own T2 tokenizer and live rows. The EVAL5/T1 source
+    # helpers belong to the other aggregate and are unnecessary here.
+    prefix = one(prefix, section(prefix, "(define expected-train-sha ",
+                                "(define (load-checked-weights "), "")
     tied_code = section(gradient, "(define (canonicalize-tied! ", "(define (gradient-witness ")
     tail = one(TAIL.read_text(), "@@TIED_SHA@@", digest_literal(evaluation.sha(tied)))
+    tail = one(tail, "@@TOKENIZER_SHA@@", digest_literal(record["tokenizer_artifact_sha256"]))
     tail = one(tail, "@@OPTIONS@@", " ".join(f'"{value}"' for value in OPTION_BITS))
     with (directory / "witness.esk").open("x") as stream:
         stream.write(prefix + tied_code + tail)
