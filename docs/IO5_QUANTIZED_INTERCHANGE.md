@@ -180,7 +180,10 @@ and BF16. It loads each restored C1 checkpoint into a fresh seed-0 M3 model
 through the C1 reader and P1 module loader. The Eshkol M3 forward schedule
 evaluates the same `[1,2]` input `(3, 197)` in each model and returns all 512
 CPU F32 logits. The test measures finite, nonzero changes in weights and
-logits from the original F32 evaluation. Both dtypes use 4,416 wire payload
+logits from the original F32 evaluation. An independent standard-library
+reference checks every mapped wire tensor's offsets, shape and narrowed
+values against the source C1 tensors, then widens the wire payload and
+compares every restored F32 weight bit. Both dtypes use 4,416 wire payload
 bytes, half the F32 payload size. On Ubuntu 22.04 with LLVM and Clang 21.1.8,
 the gate measured these fixture-specific maximum absolute deltas.
 
@@ -192,8 +195,9 @@ the gate measured these fixture-specific maximum absolute deltas.
 The post-evaluation model snapshot must reserialize to the input C1 bytes,
 including the tied head and token embedding. A flipped safetensors payload
 byte fails import before creating or replacing a destination. Independently,
-a stale C1 payload checksum and a validly checksummed C1 file without the tie
-fail the live load before logits or a model-state readback are published.
+a stale C1 payload checksum, a validly checksummed C1 file without the tie,
+and a validly checksummed C1 file with a wrong shape and unchanged element
+count fail the live load before logits or a model-state readback are published.
 
 ## Limitations and scope
 
