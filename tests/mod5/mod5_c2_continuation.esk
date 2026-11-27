@@ -1,0 +1,348 @@
+;;; Opt-in fixture over the canonical C2 composition. No installed authoring
+;;; surface is needed for the fixture to enroll its exact detached owner.
+(load "c2_wave2_root.esk")
+
+(extern ptr mod5-native-parameter i64 ptr i64
+        :real et_mod5_c2_test_parameter_v1)
+(extern i64 mod5-native-copy-tokens ptr ptr
+        :real et_mod5_c2_test_copy_tokens_v1)
+(extern i64 mod5-native-full-mask ptr
+        :real et_mod5_c2_test_full_mask_v1)
+(extern double mod5-native-gradients ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr
+        :real et_mod5_c2_test_gradients_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition
+      (set! checks (+ checks 1))
+      (begin
+        (display "MOD5/C2 FAIL ")
+        (display label)
+        (newline)
+        (exit 1))))
+
+(define (throws? category operation thunk)
+  (guard (caught
+           (#t (and (transformer-error? caught)
+                    (eq? (transformer-error-category caught) category)
+                    (eq? (transformer-error-operation caught) operation))))
+    (thunk)
+    #f))
+
+(define (read-file path)
+  (let* ((port (open-binary-input-file path))
+         (bytes (read-bytevector (file-size path) port)))
+    (close-port port)
+    bytes))
+
+(define (bytes=? a b)
+  (and (= (bytevector-length a) (bytevector-length b))
+       (let loop ((i 0))
+         (or (= i (bytevector-length a))
+             (and (= (bytevector-u8-ref a i) (bytevector-u8-ref b i))
+                  (loop (+ i 1)))))))
+
+(define (copy-bytes bytes)
+  (bytevector-copy bytes 0 (bytevector-length bytes)))
+
+(define (active-moment? bytes)
+  ;; Ignore the sign bit so negative zero alone cannot pass the check.
+  (let loop ((i 0))
+    (and (< i (bytevector-length bytes))
+         (or (not (= 0
+                    (bitwise-and (bytevector-u8-ref bytes i)
+                                 (if (= (modulo i 4) 3) 127 255))))
+             (loop (+ i 1))))))
+
+;;; Prefixes keep P1's canonical path order identical to the AC4 wire order.
+(define paths
+  '(("0-norm1") ("1-query") ("2-key") ("3-value") ("4-attention-out")
+    ("5-norm2") ("6-gate") ("7-up") ("8-down")))
+(define shapes '((4) (4 4) (2 4) (2 4) (4 4) (4) (4 4) (4 4) (4 4)))
+(define counts '(4 16 8 8 16 4 16 16 16))
+(define parameter-count 9)
+(define operation 'trainer-state)
+(define split-updates 2)
+(define total-updates 6)
+(define optimizer-config
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(linear 4 8 "3e800000")
+        (list (list 'group paths
+                    "3d4ccccd" "3f000000" "3f400000" "3a83126f"
+                    "3c23d70a"))))
+(define receiver-config
+  (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
+        '(none) '(constant)
+        (list (list 'group paths
+                    "3c23d70a" "3e800000" "3f000000" "3c23d70a"
+                    "00000000"))))
+
+(define corpus (car (cdr (command-line))))
+(define output (car (cdr (cdr (command-line)))))
+(define resolved
+  (x1-private-config-resolve
+    (x1-private-config-parse
+      (string-append
+        "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+        "\"model.context-length\":2,\"model.hidden-size\":4,"
+        "\"model.layer-count\":1,\"model.query-head-count\":2,"
+        "\"model.kv-head-count\":1,\"model.vocabulary-size\":256,"
+        "\"run.seed\":1729}"))
+    '()))
+(define tokenizer (t2-wave2-tokenizer-byte resolved))
+(define policy (c2-public-persistence-policy 1048576 1048576 1048576 27 'cpu))
+(define report (k2-public-capability-discover))
+
+(define (open-dataset)
+  (d2-token-dataset-open
+    (list ':directory corpus ':batch-size 1 ':sequence-length 2
+          ':maximum-manifest-bytes 1048576 ':maximum-shard-bytes 1048576
+          ':maximum-total-tokens 64 ':maximum-batch-bytes 34
+          ':shuffle-seed #f ':shuffle-window-rows 1 ':packing? #t)
+    tokenizer))
+
+(define (make-live config image)
+  (let ((module (i2-module-create-internal))
+        (parameters (make-vector parameter-count #f)))
+    (let loop ((i 0) (remaining paths))
+      (if (null? remaining)
+          (vector module
+                  (o2-public-optimizer-create config (module-parameters module))
+                  parameters)
+          (let* ((bytes (if image (vector-ref image i) (make-bytevector 0 0)))
+                 (native (mod5-native-parameter i bytes (bytevector-length bytes))))
+            (check "construct exact-shape parameter" (not (null? native)))
+            (let* ((handle
+                     (i2-module-register-parameter-internal!
+                       module (car (car remaining))
+                       (i2-carrier 'parameter native 'parameter)))
+                   (carrier (parameter-handle-tensor-identity-internal handle)))
+              (vector-set! parameters i
+                           (vector-ref
+                             (i2-carrier-preflight carrier 'parameter operation) 2))
+              (loop (+ i 1) (cdr remaining))))))))
+
+(define (token-bytes tensor)
+  (let ((bytes (make-bytevector 16 0)))
+    (check "copy D2 i64 plane under borrow"
+           (= 0 (d2-token-tensor-with-view-internal tensor
+                  (lambda (view) (mod5-native-copy-tokens view bytes)))))
+    bytes))
+
+(define (advance! live dataset)
+  (let ((batch (d2-token-dataset-next-batch dataset))
+        (params (vector-ref live 2))
+        (optimizer (vector-ref live 1)))
+    (check "obtain next D2 row" (not (d2-token-dataset-end? batch)))
+    (check "fixture batch contributes both tokens"
+           (= 1 (d2-token-tensor-with-view-internal
+                  (d2-token-batch-loss-mask batch)
+                  (lambda (view) (mod5-native-full-mask view)))))
+    (let* ((inputs (token-bytes (d2-token-batch-inputs batch)))
+           (targets (token-bytes (d2-token-batch-targets batch)))
+           (loss (mod5-native-gradients
+                   inputs targets (vector-ref params 0) (vector-ref params 1)
+                   (vector-ref params 2) (vector-ref params 3) (vector-ref params 4)
+                   (vector-ref params 5) (vector-ref params 6) (vector-ref params 7)
+                   (vector-ref params 8))))
+      (check "native MOD5 loss and gradient plan" (> loss 0.0))
+      (check "release D2 batch" (d2-token-batch-release! batch))
+      (check "native AdamW step" (o2-public-optimizer-step! optimizer))
+      (check "clear gradients" (o2-public-optimizer-zero-grad! optimizer))
+      loss)))
+
+;;; Context slots are RNG, tokenizer identity, epoch-start cursor and X1.
+(define (checkpoint-owner live dataset context)
+  (let* ((optimizer (vector-ref live 1))
+         (updates (o2-optimizer-completed-updates-internal optimizer))
+         (controls
+           (vector (vector-ref context 0) (vector-ref context 1)
+                   (vector (d2-token-dataset-cursor dataset) (vector-ref context 2))
+                   (vector-ref context 3) (vector (* 2 updates) updates 0)))
+         (request
+           (vector c2-training-state-compose-tag
+                   (module-state-dict (vector-ref live 0))
+                   (o2-public-optimizer-state optimizer) controls operation #f)))
+    (c2-training-state-compose-internal request)
+    (check "C2 consumes exact P1 and O2 snapshots"
+           (and (not (vector-ref request 1)) (not (vector-ref request 2))
+                (vector-ref request 5)))
+    (vector-ref request 5)))
+
+(define (save-owner! owner path)
+  (check "public C2 save" (c2-public-checkpoint-save! owner path policy '()))
+  (check "release exact C2 owner" (c2-public-trainer-state-release! owner)))
+
+(define (p1-entry-bytes p1 access entry shape)
+  (let* ((tensor
+           (state-dict-c2-owned-tensor-borrow-begin-internal
+             p1 access entry operation))
+         (bytes
+           (i2-checkpoint-encode
+             (vector tensor 'parameter shape 'f32 'cpu
+                     'dense-row-major-contiguous operation))))
+    (state-dict-c2-owned-tensor-borrow-end-internal p1 access entry operation)
+    bytes))
+
+;;; Reconstitute separate live component owners from the authorized C2 borrow.
+;;; In particular the ordinary O2 loader never receives a C2-claimed state.
+(define (restore-live owner dataset)
+  (let* ((borrow (c2-training-state-borrow-begin-internal owner operation))
+         (projection (c2-training-state-borrow-projection-internal borrow))
+         (access (c2-training-state-borrow-owner-token-internal borrow operation))
+         (p1 (vector-ref projection 0))
+         (o2 (vector-ref projection 1))
+         (controls (vector-ref projection 2))
+         (topology (vector-ref projection 3))
+         (entries (vector-ref (state-dict-c2-owned-projection-internal
+                                p1 access operation) 4))
+         (o2-projection (vector-ref projection 4))
+         (weights (make-vector parameter-count #f))
+         (moments (make-vector parameter-count #f)))
+    (check "checkpoint topology is the exact short-MQA block"
+           (and (equal? (vector-ref topology 0) paths)
+                (equal? (vector-ref topology 1) shapes)
+                (null? (vector-ref topology 2))))
+    (let loop ((i 0) (remaining entries) (elements counts))
+      (if (not (null? remaining))
+          (let* ((entry (car remaining))
+                 (shape (state-entry-shape-internal entry))
+                 (count (car elements))
+                 (avg (make-bytevector (* 4 count) 0))
+                 (sq (make-bytevector (* 4 count) 0)))
+            (vector-set! weights i (p1-entry-bytes p1 access entry shape))
+            (o2-state-copy-moment-bits-c2-owned-internal
+              (vector o2 i 0 avg count access operation))
+            (o2-state-copy-moment-bits-c2-owned-internal
+              (vector o2 i 1 sq count access operation))
+            (check "saved moments contain nonzero data"
+                   (and (active-moment? avg) (active-moment? sq)))
+            (vector-set! moments i
+                         (vector (state-entry-path-internal entry) shape avg sq))
+            (loop (+ i 1) (cdr remaining) (cdr elements)))))
+    (let* ((cursor-pair (vector-ref controls 2))
+           (x1 (vector-ref controls 3))
+           (counter (vector-ref controls 4))
+           (current (copy-bytes (vector-ref cursor-pair 3)))
+           (rng (vector-ref controls 0))
+           (identity (vector-ref controls 1))
+           (context
+             (vector (vector (vector-ref rng 0) (vector-ref rng 1)
+                             (vector-ref rng 2) (vector-ref rng 3) (vector-ref rng 4))
+                     (vector (string-copy (vector-ref identity 0))
+                             (vector-ref identity 1))
+                     (copy-bytes (vector-ref cursor-pair 4))
+                     (vector (copy-bytes (vector-ref x1 0))
+                             (string-copy (vector-ref x1 1)))))
+           (request
+             (vector o2-c2-reconstruct-tag
+                     (o2-copy-config-data operation (vector-ref o2-projection 0))
+                     paths '() (vector-ref o2-projection 3) moments operation #f)))
+      (check "X1 identity matches the initialized tokenizer and geometry"
+             (and (bytes=? (vector-ref x1 0)
+                           (string->utf8 (x1-private-config-canonical resolved)))
+                  (equal? (vector-ref controls 1) (d2-tokenizer-identity tokenizer))))
+      (check "split counters" (equal? counter (vector 4 split-updates 0)))
+      (c2-training-state-borrow-end-internal borrow)
+      (check "seek independent D2 reader from loaded cursor"
+             (d2-token-dataset-seek! dataset current))
+      (o2-state-reconstruct-internal request)
+      (let* ((live (make-live receiver-config weights))
+             (optimizer (vector-ref live 1))
+             (state (vector-ref request 7)))
+        (check "receiver starts with distinct constant schedule"
+               (= (o2-optimizer-schedule-factor-bits-internal optimizer)
+                  1065353216))
+        (check "load detached optimizer state"
+               (o2-public-optimizer-load-state! optimizer state))
+        (check "release independently reconstructed O2 state"
+               (o2-public-optimizer-state-release! state))
+        (check "restore successful-update count and next warmup factor"
+               (and (= (o2-optimizer-completed-updates-internal optimizer)
+                       split-updates)
+                    (= (o2-optimizer-schedule-factor-bits-internal optimizer)
+                       1061158912)))
+        (vector live context)))))
+
+(define (save-live! live dataset context label)
+  (let ((path (string-append output "/" label ".c2")))
+    (save-owner! (checkpoint-owner live dataset context) path)
+    path))
+
+(define (run)
+  (let* ((source (make-live optimizer-config #f))
+         (source-data (open-dataset))
+         (start-cursor (d2-token-dataset-cursor source-data))
+         (context (vector (vector 'philox4x32-10 1 1729 -1 42)
+                          (d2-tokenizer-identity tokenizer) start-cursor
+                          (vector (string->utf8 (x1-private-config-canonical resolved))
+                                  (x1-private-config-fingerprint resolved)))))
+    (let advance ((update 0))
+      (if (< update split-updates)
+          (begin (advance! source source-data) (advance (+ update 1)))))
+    (check "split cursor advanced"
+           (not (bytes=? start-cursor (d2-token-dataset-cursor source-data))))
+    (let* ((split (save-live! source source-data context "split"))
+           (metadata (c2-public-checkpoint-inspect split policy))
+           (target-data (open-dataset)))
+      (check "inspect 9 model tensors and 18 moments"
+             (and (= (c2-public-checkpoint-metadata-ref metadata 'tensor-count) 27)
+                  (= (c2-public-checkpoint-metadata-ref metadata 'payload-bytes)
+                     (* 3 104 4))))
+      (check "public C2 load rejects a forged K2 report"
+             (throws? 'invalid-argument 'checkpoint-load
+               (lambda () (c2-public-checkpoint-load split policy 'forged))))
+      (let* ((loaded (c2-public-checkpoint-load split policy report))
+             (restored (restore-live loaded target-data))
+             (target (vector-ref restored 0))
+             (target-context (vector-ref restored 1))
+             (copied (string-append output "/loaded.c2")))
+        (save-owner! loaded copied)
+        (check "release loaded C2 owner is idempotent"
+               (c2-public-trainer-state-release! loaded))
+        (check "released C2 owner rejects save"
+               (throws? 'invalid-state 'checkpoint-save!
+                 (lambda () (c2-public-checkpoint-save! loaded copied policy '()))))
+        (check "public load and resave preserve all file bytes"
+               (bytes=? (read-file split) (read-file copied)))
+        (check "fresh live receiver reproduces split checkpoint"
+               (bytes=? (read-file split)
+                        (read-file
+                          (save-live! target target-data target-context "receiver"))))
+        (let suffix ((update (+ split-updates 1)))
+          (if (<= update total-updates)
+              (let* ((expected (advance! source source-data))
+                     (actual (advance! target target-data))
+                     (n (number->string update)))
+                (check "continuation loss is exact" (= expected actual))
+                (check "all model, moment, option and control bytes are exact"
+                       (bytes=?
+                         (read-file (save-live! source source-data context
+                                                (string-append "source-" n)))
+                         (read-file (save-live! target target-data target-context
+                                                (string-append "receiver-" n)))))
+                (suffix (+ update 1)))))
+        (check "close independent D2 readers"
+               (and (d2-token-dataset-close! source-data)
+                    (d2-token-dataset-close! target-data)))))))
+
+(guard (caught
+         (#t
+           (display "MOD5/C2 ERROR ")
+           (if (transformer-error? caught)
+               (begin
+                 (display (transformer-error-category caught))
+                 (display " ")
+                 (display (transformer-error-operation caught))
+                 (display " ")
+                 (display (transformer-error-message caught))
+                 (display " ")
+                 (display (transformer-error-details caught)))
+               (display caught))
+           (newline)
+           (exit 2)))
+  (run))
+(display "MOD5/C2 PASS ")
+(display checks)
+(display " checks, 2 + 4 updates, 27 exact tensors")
+(newline)
