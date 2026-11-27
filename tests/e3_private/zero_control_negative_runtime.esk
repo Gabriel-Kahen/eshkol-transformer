@@ -17,8 +17,9 @@
 (check (or (string=? gradient-name "absent")
            (string=? gradient-name "present")))
 (define output (vector #f))
+;; The native bridge unwraps a single tagged value from each argument.
 (e3-zero-negative-run
-  (vector case-name (string=? gradient-name "present"))
+  (vector (vector case-name (string=? gradient-name "present")))
   (vector corpus) output)
 (define result (vector-ref output 0))
 (check (and (vector? result) (= (vector-length result) 2)

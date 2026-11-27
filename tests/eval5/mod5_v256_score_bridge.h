@@ -11,6 +11,18 @@ int32_t et_eval5_v256_score(const float *doc0, const float *doc1,
                             const uint32_t *eval_tokens, double metrics_out[5],
                             int64_t counts_out[2], float probes_out[8]);
 
+/* Compare the one-shot runner with expected_size legacy canonical bytes
+ * and their trailing NUL. Fingerprints are T1, train D1, and eval D1 (3 x 96).
+ * Digests are train D1, eval D1, and checked C1 (3 x 32). Documents hold the
+ * original train and eval bytes in order (2 x 18), matched by their ID spans.
+ * All inputs are borrowed reads. The comparison performs no I/O. */
+int32_t et_eval5_v256_compare_runner(
+    const uint8_t fingerprints[288], const uint8_t digests[96],
+    const uint8_t documents[36], const uint32_t train_tokens[18],
+    const uint32_t eval_tokens[18], const float *doc0, const float *doc1,
+    const float *context_a, const float *context_b,
+    const char *expected, uint64_t expected_size);
+
 /* Two owner-validated nine-byte documents per split, with their ordered raw
  * T1/D1 IDs. Token 3-grams, overlap >= 0.25, rate <= 0, and no exact match.
  * summary_out holds six audit counts followed by two matching eval indices;

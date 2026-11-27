@@ -1,0 +1,134 @@
+(load "m3_package_root.esk")
+(load "g3c4_i2_construction_extension.esk")
+(load "g3c4_model_extension.esk")
+(load "g3c4_p2g2_terminal_carriers_extension.esk")
+(load "g3c4_p2g2_terminal_carrier_retirement_extension.esk")
+
+;; Test-only probes surround the synthetic boundary. They are never loaded by
+;; the retirement source. Exit 135 identifies an attempted wrapped allocation.
+(extern void retirement-witness-arm :real et_g3c4_test_retirement_arm_v1)
+(extern i64 retirement-witness-seal :real et_g3c4_test_retirement_seal_v1)
+(extern void retirement-witness-flush :real et_g3c4_test_retirement_flush_v1)
+
+(define checks 0)
+(define (check label condition)
+  (if condition (set! checks (+ checks 1))
+      (begin (display "P2/G2 retirement FAIL ") (display label) (newline) (exit 1))))
+(define (rejects? category thunk)
+  (guard (caught (#t (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught) category))))
+    (thunk) #f))
+(define (valid bundle)
+  (g3c4-p2g2-terminal-carriers-check bundle 'retirement-witness))
+(define (retire-witness bundle logical-count)
+  ;; This fixture has no native commit or output publication.
+  (g3c4-with-p2g2-terminal-carrier-retirement bundle logical-count
+    'retirement-witness (selected retirement)
+    (retirement-witness-arm)
+    (g3c4-p2g2-terminal-carrier-retirement-tail! retirement)
+    (check "three checked writes without wrapped allocations"
+      (= 3 (retirement-witness-seal)))
+    selected))
+
+(define (mark bundle offset)
+  (do ((i 0 (+ i 1))) ((= i 8))
+    (let ((carrier (vector-ref bundle i)))
+      (do ((j 0 (+ j 1))) ((= j (bytevector-length carrier)))
+        (bytevector-u8-set! carrier j (+ offset i j))))))
+
+(define (check-bytes bundle selected offset)
+  (do ((i 0 (+ i 1))) ((= i 8))
+    (let ((carrier (vector-ref bundle i)))
+      (do ((j 0 (+ j 1))) ((= j (bytevector-length carrier)))
+        (check "origin bytes preserved or scrubbed"
+          (= (bytevector-u8-ref carrier j) (if (or (= selected i) (= selected -1))
+                                             (+ offset i j) 0)))))))
+
+(define (try-retirement older logical-count)
+  (let* ((current (g3c4-p2g2-terminal-carriers-create))
+         (selected-index (if (= logical-count 1) 6 7))
+         (original-text (vector-ref current selected-index)))
+    (mark current 20)
+    (check "non-head is rejected before the boundary"
+      (rejects? 'invalid-state (lambda () (retire-witness older logical-count))))
+    (check "invalid logical count rejected"
+      (rejects? 'invalid-argument (lambda () (retire-witness current 3))))
+    (check "equal-content bundle clone rejected"
+      (rejects? 'invalid-state (lambda () (retire-witness (vector-copy current) logical-count))))
+    (let ((unused-index (if (= logical-count 1) 7 6)))
+      (let ((unused (vector-ref current unused-index)))
+        (vector-set! current unused-index (vector-ref older unused-index))
+        (check "genuine foreign carrier rejected before the boundary"
+          (rejects? 'invalid-state (lambda () (retire-witness current logical-count))))
+        (vector-set! current unused-index unused)))
+    (let ((original-error
+            (guard (caught (#t caught))
+              (g3c4-fail 'unsupported 'retirement-witness "before activation"))))
+      (check "exact prior error survives scope unwind"
+        (guard (caught (#t (eq? caught original-error)))
+          (g3c4-with-p2g2-terminal-carrier-retirement current logical-count
+            'retirement-witness (selected retirement)
+            (raise original-error))
+          #f)))
+    (check "unused scope preserves live constructor"
+      (g3c4-with-p2g2-terminal-carrier-retirement current logical-count
+        'retirement-witness (selected retirement)
+        (and (eq? selected original-text) (valid current))))
+    (check-bytes current -1 20)
+    ;; Construct both root nodes before entering the child region. This makes
+    ;; the captured successor older than the nested activation and proves that
+    ;; ending that region preserves original selected and predecessor bytes.
+    (let ((retained
+            (with-region ('g3c4-retirement-witness 65536)
+              (retire-witness current logical-count))))
+      (check "retained original text identity" (eq? retained original-text)))
+    (check "constructor tombstoned" (eq? (vector-ref current 9) 'dead))
+    (check "former head cannot be authenticated"
+      (rejects? 'invalid-state (lambda () (valid current))))
+    (check "legacy abort cannot touch retained text"
+      (rejects? 'invalid-state
+        (lambda () (g3c4-p2g2-terminal-carriers-retire! current))))
+    (check "predecessor remains original and live" (valid older))
+    (check-bytes current selected-index 20)
+    (check-bytes older -1 41)))
+
+(define (fail-stop-probe mode)
+  (let ((current (g3c4-p2g2-terminal-carriers-create)))
+    (if (string=? mode "expired")
+        (let ((expired
+                (g3c4-with-p2g2-terminal-carrier-retirement current 1
+                  'retirement-witness (selected retirement)
+                  retirement)))
+          (display "P2/G2 retirement intentional expired activation") (newline)
+          (retirement-witness-flush)
+          (g3c4-p2g2-terminal-carrier-retirement-tail! expired))
+        (g3c4-with-p2g2-terminal-carrier-retirement current 1
+          'retirement-witness (selected retirement)
+          (cond
+            ((or (string=? mode "repeat") (string=? mode "unwind"))
+             (g3c4-p2g2-terminal-carrier-retirement-tail! retirement))
+            ((string=? mode "stale") (g3c4-p2g2-terminal-carriers-create))
+            (else (exit 2)))
+          (display "P2/G2 retirement intentional ") (display mode)
+          (display " activation") (newline)
+          (retirement-witness-flush)
+          (if (string=? mode "unwind")
+              (g3c4-fail 'unsupported 'retirement-witness "after activation")
+              (g3c4-p2g2-terminal-carrier-retirement-tail! retirement)))))
+  (exit 3))
+
+(let ((args (cdr (command-line))))
+  (if (pair? args) (fail-stop-probe (car args))))
+(let ((older (g3c4-p2g2-terminal-carriers-create)))
+  (mark older 41)
+  (try-retirement older 1)
+  (try-retirement older 2)
+  (check "legacy abort retirement still works"
+    (g3c4-p2g2-terminal-carriers-retire! older))
+  (check-bytes older 8 41))
+(let* ((sole (g3c4-p2g2-terminal-carriers-create))
+       (original-text (vector-ref sole 6)))
+  (mark sole 61)
+  (check "empty successor preserves selected identity" (eq? (retire-witness sole 1) original-text))
+  (check-bytes sole 6 61))
+(display "P2/G2 retirement PASS checks=") (display checks) (newline)

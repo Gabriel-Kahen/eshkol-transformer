@@ -221,3 +221,33 @@ enabled. MOD5 forward and backward compute use f32. This continuation covers
 the standalone scaler record and the caller-owned master snapshot in the GQA
 fixture. Mixed compute, production trainer checkpoint integration, distributed
 synchronization, and AOT remain open.
+
+
+## Live MOD5 gradient storage through AdamW
+
+The opt-in native witness runs the admitted CPU F32 MOD5 grouped-query
+fixture with two batches, three tokens, four query heads and two KV heads.
+It applies the existing MP4 F16 or BF16 narrowing and unscaling path to
+each actual backward gradient. The accepted native F32 gradient plan and
+O2 AdamW update consume the unscaled results for all nine parameter tensors.
+Each next backward pass uses the updated native weights.
+
+Two clean attempts grow the scale. The next target produces a finite F32
+gradient whose scaled value exceeds the narrow format's limit. The MP4
+cast rejection backs off the scaler. The test observes zero gradient-plan
+or optimizer-step calls during that attempt and checks the live weights,
+both moments, optimizer options, schedule factor and completed-update
+counter byte for byte. Retrying the same target at the lower scale computes
+the same raw gradient and loss, then unscales and updates successfully.
+One further clean update grows the scale again.
+
+```bash
+bash scripts/test-mp4-mod5-o2.sh
+```
+
+Normal, repeat and ASan/UBSan/LSan processes produce identical per-format
+traces across four accepted updates and one rejected attempt. The captured
+scaled peaks at rejection were 70,400 for F16 and approximately
+`3.3995008e38` for BF16. The model computation, master weights and optimizer
+state use CPU F32. This witness covers gradient storage and scaler behavior
+during an in-process optimizer trajectory.

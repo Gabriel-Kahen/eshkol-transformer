@@ -195,6 +195,7 @@ def check(root, overrides=None):
         "ESHKOL_JOBS": "'2'",
         "LLVM_CONFIG_EXECUTABLE": "llvm-config-21", "A0_COMPILER_TIMEOUT_SECONDS": "'60'",
         "P1_COMPILER_TIMEOUT_SECONDS": "${{ matrix.suite == 'parameter-state' && '1200' || '900' }}",
+        "P1_TWO_COMPILERS": "${{ matrix.suite == 'parameter-state' && 'auto' || '0' }}",
         **{k: "'1'" for k in ("P1_LSAN", "C1_LSAN", "I2_ASAN_DETECT_LEAKS",
            "K2_ASAN_DETECT_LEAKS", "D2_ASAN_DETECT_LEAKS", "N2_ASAN_DETECT_LEAKS",
            "O2_ASAN_DETECT_LEAKS", "L3S_ASAN_DETECT_LEAKS", "N3K_ASAN_DETECT_LEAKS",
