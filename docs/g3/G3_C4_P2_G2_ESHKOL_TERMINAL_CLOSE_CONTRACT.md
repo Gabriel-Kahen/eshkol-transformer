@@ -25,6 +25,42 @@ The first/second raw[1] and staging[8], pending raw[2]/staging[16], and logical 
 
 The terminal anchor is separate from call/prefix anchor stacks and must survive their removal and `m3-call` return. A pending terminal anchor is rooted but cannot authorize reads or publication. It records the original output shell/entry/native handle, both original text carriers and their lengths, logical branch/count/cache expectations after authentication, and its own original record identity. No final RNG is available from the accepted Eshkol carriers before commit; leave it unknown here and obtain authentic final words only from a later native snapshot, not an invented precommit expectation. It does not retain an active-call/model/generator/tokenizer ownership edge after terminal success.
 
+## Abort-only first-enrollment witness
+
+The add-only `g3c4-with-p2g2-first-enrollment-probe` is a development source
+macro for the exact private budget-two ownership gate and literal P2 reserve.
+It reuses the admitted constructor, protected record authentication and native
+reserve and abort. The development body observes the pending owner in one
+`m3-call` and the probe returns only `#t` after abort. It accepts no prebuilt
+bundle. The original auxiliary pair is present at the only registry insertion.
+All list nodes are allocated before native acquire. The pending root and the
+protected roots retain exact nodes and successors, and the complete registry
+scan detects a second shell entry even if normal lookup still finds the first.
+
+Before reserve failure propagates, authenticated abort drains the acquired call
+and restores the pre-attempt Eshkol registry and root heads. Before native
+acquire succeeds, the bundle is the only newly rooted allocation. The test gate
+asserts earlier-owner preservation, native owner and I1 census, exact I1
+active-borrow details, cache and RNG bytes, all eight allocation extents and
+payloads, and same-call fixture-owned retry with a genuine foreign control.
+The earliest allocation failures are injected with the admitted allocation
+shim. The test observes the allocators independently of the Eshkol authority.
+
+`bash scripts/test-g3c4-p2g2-first-enrollment.sh /path/to/evidence` uses the
+pinned normal, repeat and ASan/UBSan/LSan strict AOT recipe on Ubuntu 22.04
+x86-64 with Eshkol `fe9dfd5` and Clang 21.1.8 under the shared build lock.
+The source gate checks exact accepted native and installed source projection.
+The admitted abort-only pending-anchor and carrier scripts remain predecessor
+gates. Compiled first-enrollment evidence is pending.
+
+The admitted constructor authenticates its private lexical root through its
+checker. A closed terminal success tail needs a separately reviewed one-use
+retirement seam that captures the constructor root successor and preserves the
+selected text. The fixture holder is development-only and proves I1 retry for
+this reservation. Actual owned-input preflight, production call-bound I1/A2
+release authority, terminal close, detached readers, and dispatch remain later
+gates.
+
 ## Actual same-region sampling, decode, and rollback
 
 Reserve the sole pending output before first sampling. Use the EOS-capable authentic first carrier on the original P2 input. Authenticate the complete LE i64 ID, then perform genuine same-registry T1 decode into the original first raw carrier; reauthenticate every original identity/edge and payload after each recoverable step. Do not provide logits, sampled IDs, RNG words, or cache candidates from Eshkol.

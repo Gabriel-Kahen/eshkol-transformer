@@ -3534,9 +3534,13 @@ publication, public G2 and continuation remain pending.
   The next Eshkol gate is the private reservation that binds the constructor's
   original carrier bundle at the sole output entry's first enrollment. The
   [reservation proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/6845bd0a81aad05f169b0c0e85fc8779b43c87a8)
-  defines that boundary. The private entry and its compiled proof remain
-  pending. Same-call terminal publication,
-  detached Eshkol output, public G2, and CLI adoption follow separately.
+  defines that boundary. [PR #268](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/268)
+  admitted the abort-only anchor and carrier prerequisites. The source-private
+  [first-enrollment witness](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#abort-only-first-enrollment-witness)
+  binds the original auxiliary pair to one entry and exercises pre-sampling
+  unwind and fixture-held I1 retry. Source checks pass and compiled qualification
+  is pending. Same-call terminal publication, detached Eshkol output, public G2,
+  and CLI adoption follow separately.
 
 - **Private P2/G2 terminal pending-allocation precursor:** The
   [abort-only anchor candidate](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
