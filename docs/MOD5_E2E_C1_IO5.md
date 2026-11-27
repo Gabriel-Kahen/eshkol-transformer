@@ -49,15 +49,14 @@ and provider identity.
 
 ## Proposed width-16 C2 gate
 
-The source baseline is `fa746a626`. [PR #266](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/266)
-at `9060e5ac` contains the native storage proof for the V=16 roster above.
-The private `et_i2_private_mod5_width16_storage_provider_v1()` returns I2 1.2
-with evidence
-`I2:bounded-exact-f32-storage.copy-v3` and adds `[8,16]`, `[16,16]`, `[16,32]`
-and `[32,16]` to the I2 1.1 copy rows. [PR #265](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/265)
-at `973db232` exercises C2 with nine distinct width-four parameters and
-18 moments through the existing K2 profile. These are pending predecessor
-receipts. This section proposes the next gates.
+[PR #266](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/266)
+merged the V=16 native storage proof as `7f8933034`. It admits the private
+I2 1.2 descriptor and its `[8,16]`, `[16,16]`, `[16,32]` and `[32,16]`
+copy rows. [PR #265](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/265)
+merged the separate width-four C2 witness as `e34a6a8e3`, exercising nine
+parameters and 18 moments through the standard K2 profile. The
+[V=256 storage-copy candidate](#v256-storage-copy-candidate) passed focused
+native tests. Opt-in K2 work follows its admission.
 
 K2 admission alone cannot qualify a coherent C2 image for the V=16 decoder.
 [`c2-d2-cursor-pair-internal`](../native/c2_d2_cursor_pair_extension.esk)
