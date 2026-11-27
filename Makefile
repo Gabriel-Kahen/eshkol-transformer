@@ -37,7 +37,8 @@ SHELL := /usr/bin/bash
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
-	benchmark-attention-supported test-amd4 test-dist5 test-dist5-mod5 test-eval5 clean
+	benchmark-attention-supported test-amd4 test-dist5 test-dist5-mod5 \
+	test-dist5-weighted-sgd test-eval5 clean
 
 toolchain:
 	/usr/bin/bash scripts/bootstrap-eshkol.sh
@@ -398,6 +399,9 @@ test-dist5:
 
 test-dist5-mod5:
 	/usr/bin/bash scripts/test-dist5-mod5.sh
+
+test-dist5-weighted-sgd:
+	/usr/bin/bash scripts/test-dist5-weighted-sgd.sh
 
 test-eval5:
 	/usr/bin/bash scripts/test-eval5.sh

@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define ET_DIST5_ABI_MAJOR 1u
-#define ET_DIST5_ABI_MINOR 0u
+#define ET_DIST5_ABI_MINOR 1u
 #define ET_DIST5_MAX_WORLD_SIZE 64u
 #define ET_DIST5_MAX_BUFFER_BYTES (64u * 1024u * 1024u)
 
@@ -85,6 +85,31 @@ et_dist5_status_t et_dist5_sync_gradients_f32(et_dist5_comm_t *comm,
                                               const float *local, float *mean,
                                               size_t count, uint64_t tag,
                                               int timeout_ms);
+
+/*
+ * ABI 1.1. Each nonempty rank supplies local_count effective tokens or
+ * integer units of sample weight, and local_mean[0] is its mean objective.
+ * local_mean[1..parameter_count] contains its mean parameter gradients in
+ * the same order as parameters[0..parameter_count-1]. For local_count == 0,
+ * local_mean is ignored and may be NULL. The global count must be positive
+ * and fit int64_t. Learning rate is positive, finite and identical across
+ * ranks, which must start with identical parameter values and layout.
+ *
+ * On success, writes the global objective and gradients to global_mean in
+ * the same layout, writes the exact global count, and applies a binary32
+ * SGD update to parameters. The three writable spans must be disjoint.
+ * local_mean may exactly alias global_mean, or must be disjoint from all
+ * writable spans. Each array holds naturally aligned native elements. The
+ * packed objective and gradients together are subject to the buffer cap.
+ *
+ * The whole step shares one timeout. Argument, count, or numeric rejection
+ * leaves every output unchanged and permits communicator reuse. The usual
+ * transport and final-COMMIT limitations apply.
+ */
+et_dist5_status_t et_dist5_weighted_sgd_f32(
+    et_dist5_comm_t *comm, int64_t local_count, const float *local_mean,
+    size_t parameter_count, float learning_rate, float *parameters,
+    float *global_mean, int64_t *global_count, uint64_t tag, int timeout_ms);
 
 #ifdef __cplusplus
 }
