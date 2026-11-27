@@ -3869,10 +3869,15 @@ static int exact_text(const char *actual, const char *expected) {
   return actual != NULL && strcmp(actual, expected) == 0;
 }
 
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
 static const et_kernel_capability_v1 provider_capability;
+#endif
 
-static int provider_shape_supported(const et_kernel_capability_v1 *capability,
-                                    size_t rank, const uint64_t *shape) {
+static int provider_shape_supported(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+    const et_kernel_capability_v1 *capability,
+#endif
+    size_t rank, const uint64_t *shape) {
   if (rank == 0u) {
     return shape == NULL;
   }
@@ -3884,6 +3889,7 @@ static int provider_shape_supported(const et_kernel_capability_v1 *capability,
   if (rank == 1u) {
     return shape[0] <= ET_F32_RANK1_MAX;
   }
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
   /* Both descriptors start with the scalar and rank-one rows. */
   for (size_t index = 2u; index < capability->shape_range_count; index++) {
     const et_kernel_dimension_range_v1 *dimensions =
@@ -3894,12 +3900,21 @@ static int provider_shape_supported(const et_kernel_capability_v1 *capability,
     }
   }
   return 0;
+#else
+  return (shape[0] == 2u && shape[1] == 4u) ||
+         (shape[0] == 4u && shape[1] == 4u) ||
+         (shape[0] == 4u && shape[1] == 8u) ||
+         (shape[0] == 8u && shape[1] == 4u) ||
+         (shape[0] == 256u && shape[1] == 4u);
+#endif
 }
 
-static int32_t provider_view(const et_kernel_capability_v1 *capability,
-                             const et_kernel_tensor_view_v1 *view,
-                             const et_kernel_request_v1 *request,
-                             et_kernel_error *error) {
+static int32_t provider_view(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+    const et_kernel_capability_v1 *capability,
+#endif
+    const et_kernel_tensor_view_v1 *view, const et_kernel_request_v1 *request,
+    et_kernel_error *error) {
   size_t expected = sizeof(float);
   if (!exact_text(view->dtype, "f32")) {
     return set_kernel_error(error, ET_KERNEL_ERROR_DTYPE_MISMATCH,
@@ -3918,7 +3933,11 @@ static int32_t provider_view(const et_kernel_capability_v1 *capability,
                             "storage.copy requires dense zero-offset views");
   }
   if (view->rank != request->rank ||
-      !provider_shape_supported(capability, view->rank, view->shape)) {
+      !provider_shape_supported(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+          capability,
+#endif
+          view->rank, view->shape)) {
     return set_kernel_error(error, ET_KERNEL_ERROR_SHAPE_MISMATCH,
                             ET_KERNEL_CODE_INVALID_SHAPE,
                             "storage.copy shape is unsupported");
@@ -3964,9 +3983,14 @@ static int32_t provider_view(const et_kernel_capability_v1 *capability,
   return 0;
 }
 
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
 static int32_t provider_call_for_capability(
     const et_kernel_capability_v1 *capability, const et_kernel_call_v1 *call,
     et_kernel_error *error) {
+#else
+static int32_t provider_call(const et_kernel_call_v1 *call,
+                             et_kernel_error *error) {
+#endif
   const et_kernel_tensor_view_v1 *input;
   const et_kernel_tensor_view_v1 *output;
   int32_t result;
@@ -3980,8 +4004,11 @@ static int32_t provider_call_for_capability(
       !exact_text(call->request->operation, "storage.copy") ||
       !exact_text(call->request->dtype, "f32") ||
       !exact_text(call->request->device, "cpu") ||
-      !provider_shape_supported(capability, call->request->rank,
-                                call->request->shape)) {
+      !provider_shape_supported(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+          capability,
+#endif
+          call->request->rank, call->request->shape)) {
     return set_kernel_error(error, ET_KERNEL_ERROR_UNSUPPORTED,
                             ET_KERNEL_CODE_PROVIDER_REJECTED,
                             "storage.copy request is outside I2 evidence");
@@ -3997,11 +4024,19 @@ static int32_t provider_call_for_capability(
   }
   input = (const et_kernel_tensor_view_v1 *)call->inputs;
   output = (const et_kernel_tensor_view_v1 *)call->outputs;
-  result = provider_view(capability, input, call->request, error);
+  result = provider_view(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+      capability,
+#endif
+      input, call->request, error);
   if (result != 0) {
     return result;
   }
-  result = provider_view(capability, output, call->request, error);
+  result = provider_view(
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+      capability,
+#endif
+      output, call->request, error);
   if (result != 0) {
     return result;
   }
@@ -4015,10 +4050,12 @@ static int32_t provider_call_for_capability(
   return 0;
 }
 
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
 static int32_t provider_call(const et_kernel_call_v1 *call,
                              et_kernel_error *error) {
   return provider_call_for_capability(&provider_capability, call, error);
 }
+#endif
 
 static void provider_invoke(const et_kernel_call_v1 *call) {
   const et_kernel_tensor_view_v1 *input =
@@ -4071,7 +4108,6 @@ static const et_kernel_dimension_range_v1 mod5_rank2_32x16_dimensions[] = {
 };
 #endif
 
-enum { PROVIDER_LEGACY_RANGE_COUNT = 7u };
 static const et_kernel_shape_range_v1 provider_ranges[] = {
     {.rank = 0u, .dimensions = NULL},
     {.rank = 1u, .dimensions = provider_rank1_dimensions},
@@ -4105,7 +4141,7 @@ static const et_kernel_capability_v1 provider_capability = {
     .dtypes = provider_dtypes,
     .device_count = 1u,
     .devices = provider_devices,
-    .shape_range_count = PROVIDER_LEGACY_RANGE_COUNT,
+    .shape_range_count = 7u,
     .shape_ranges = provider_ranges,
 };
 static const et_kernel_provider_v1 provider = {
