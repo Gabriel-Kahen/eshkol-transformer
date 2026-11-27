@@ -1,0 +1,144 @@
+;;; Opt-in same-aggregate runtime for the maintained DATA4-Q adapter.
+(load "t2_wave2_root.esk")
+(load "data4_corpus.esk")
+(load "data4_quality_corpus.esk")
+
+(extern void quality-test-fault i32 :real et_data4_quality_test_fault)
+(extern i32 quality-test-live :real et_data4_quality_test_live)
+
+(define (quality-test-check reason condition)
+  (if (not condition)
+      (begin (display "FAIL DATA4-Q adapter: ") (display reason) (newline) (exit 1))))
+
+(define (quality-test-reject reason category thunk)
+  (guard (caught
+          ((t1-core-error? caught)
+           (quality-test-check reason (eq? (t1-core-error-category caught) category)))
+          ((transformer-error? caught)
+           (quality-test-check reason (eq? (transformer-error-category caught) category)))
+          (else (quality-test-check reason #f)))
+    (thunk)
+    (quality-test-check reason #f))
+  (quality-test-check "session released after error" (= (quality-test-live) 0)))
+
+(define (quality-test-staging=? bytes tokens)
+  (and (= (bytevector-length bytes) (* (data4-bounded-length tokens data4-max-tokens) 8))
+       (let loop ((rest tokens) (offset 0))
+         (if (null? rest) #t
+             (and (= (t1-core-read-u64-le bytes offset) (car rest))
+                  (loop (cdr rest) (+ offset 8)))))))
+
+(define (quality-test-doc id text) (list id (string->utf8 text)))
+
+(define quality-test-config
+  (vector 3 64 3 64 0.8 0.5 1.0 1.0 3 (vector 1 4 4 11 0.8)))
+(define quality-test-tokenizer
+  (t2-private-register-core
+   (t2-bpe-train-core '() 0 1 'raw (list (list "bos" 'omit)) (list "bos") '())))
+
+(define (quality-test-write directory documents config ids tokens expected-shards)
+  (let* ((receipt (data4-quality-corpus-write! quality-test-tokenizer directory 4
+                                             documents config))
+         (summary (vector-ref receipt 0))
+         (validated (et-d1-private-token-corpus-validate directory 1048576 1048576 65536))
+         (staging (t2-token-corpus-read-i64-le quality-test-tokenizer directory
+                                               1048576 1048576 65536)))
+    (quality-test-check "session released after success" (= (quality-test-live) 0))
+    (quality-test-check "selected IDs in source order" (equal? (vector-ref receipt 2) ids))
+    (quality-test-check "D1 summary and readback"
+                        (and (= (et-d1-private-token-corpus-summary-total-tokens summary)
+                                (data4-bounded-length tokens data4-max-tokens))
+                             (= (et-d1-private-token-corpus-summary-total-tokens validated)
+                                (data4-bounded-length tokens data4-max-tokens))
+                             (= (et-d1-private-token-corpus-summary-shard-count validated)
+                                expected-shards)
+                             (string=?
+                              (et-d1-private-token-corpus-summary-tokenizer-fingerprint
+                               validated)
+                              (t2-private-tokenizer-fingerprint quality-test-tokenizer))
+                             (quality-test-staging=? staging tokens)))
+    (display (utf8->string (vector-ref receipt 1)))))
+
+(define (quality-test-invalid directory)
+  (let ((valid (list (quality-test-doc "ok" "apple"))))
+    (quality-test-reject "invalid shard limit" 'invalid-argument
+      (lambda () (data4-quality-corpus-write! quality-test-tokenizer directory 0 valid #f)))
+    (quality-test-reject "unregistered tokenizer" 'invalid-state
+      (lambda () (data4-quality-corpus-write! #f directory 8 valid #f)))
+    (quality-test-reject "malformed input" 'invalid-argument
+      (lambda () (data4-quality-corpus-write! quality-test-tokenizer directory 8
+                                             (cons (car valid) 7) #f)))
+    (quality-test-reject "invalid source ID" 'invalid-argument
+      (lambda () (data4-quality-corpus-write! quality-test-tokenizer directory 8
+                                             (list (quality-test-doc "bad id" "apple")) #f)))
+    (quality-test-reject "duplicate source ID" 'invalid-argument
+      (lambda () (data4-quality-corpus-write! quality-test-tokenizer directory 8
+                                             (list (car valid) (quality-test-doc "ok" "other"))
+                                             quality-test-config)))
+    (quality-test-reject "too many documents" 'invalid-argument
+      (lambda ()
+        (let loop ((count 129) (docs '()))
+          (if (= count 0)
+              (data4-quality-corpus-write! quality-test-tokenizer directory 8 docs #f)
+              (loop (- count 1) (cons (car valid) docs))))))
+    (quality-test-reject "too many raw bytes" 'invalid-argument
+      (lambda () (data4-quality-corpus-write! quality-test-tokenizer directory 8
+                                             (list (list "huge" (make-bytevector 65537 65)))
+                                             #f)))
+    (quality-test-reject "invalid native configuration" 'invalid-argument
+      (lambda () (data4-quality-corpus-write!
+                  quality-test-tokenizer directory 8 valid
+                  (vector 3 64 3 64 0.8 0.5 1.0 1.0 3
+                          (vector 1 4 3 11 0.8)))))
+    (quality-test-fault 1)
+    (quality-test-reject "tampered report rejected" 'corrupt-data
+      (lambda () (data4-quality-corpus-write! quality-test-tokenizer directory 8 valid #f)))
+    (quality-test-fault 2)
+    (quality-test-reject "staged report must match its session digest" 'corrupt-data
+      (lambda () (data4-quality-corpus-write! quality-test-tokenizer directory 8 valid #f)))
+    (quality-test-fault 0)
+    (quality-test-reject "tokenizer overhead counts against corpus token cap" 'invalid-argument
+      (lambda () (data4-quality-corpus-write!
+                  quality-test-tokenizer directory 8
+                  (list (list "at-byte-cap" (make-bytevector 65536 65)))
+                  #(0 65536 0 65536 0.0 0.0 1.0 1.0 5 #f))))
+    (display "DATA4-Q invalid inputs and tampered staging rejected before publication")
+    (newline)))
+
+(define quality-test-args (cdr (command-line)))
+(quality-test-check "expected MODE DIRECTORY" (equal? (data4-bounded-length quality-test-args 2) 2))
+(let ((mode (car quality-test-args)) (directory (cadr quality-test-args)))
+  (cond
+   ((string=? mode "mixed")
+    (quality-test-write
+     directory
+     (list (list "invalid-utf8" (bytevector 237 160 128 97 98))
+           (quality-test-doc "source.second" "apple")
+           (quality-test-doc "too-short" "ab")
+           (quality-test-doc "same" "apple")
+           (quality-test-doc "near" "pleap")
+           (quality-test-doc "low" "!?!?")
+           (list "source.last" (bytevector 99 97 102 101 204 129 13 10)))
+     quality-test-config
+     '("source.second" "source.last")
+     '(256 97 112 112 108 101 256 99 97 102 101 204 129 13 10) 4))
+   ((string=? mode "reordered")
+    (quality-test-write
+     directory
+     (list (quality-test-doc "near" "pleap") (quality-test-doc "same" "pleap")
+           (quality-test-doc "source.second" "apple"))
+     quality-test-config '("near") '(256 112 108 101 97 112) 2))
+   ((string=? mode "all-rejected")
+    (quality-test-write directory
+                        (list (quality-test-doc "too-short" "a")
+                              (quality-test-doc "low" "????"))
+                        quality-test-config '() '() 0))
+   ((string=? mode "empty")
+    (quality-test-write directory '() #f '() '() 0))
+   ((string=? mode "existing")
+    (quality-test-reject "existing D1 manifest" 'invalid-argument
+      (lambda () (data4-quality-corpus-write! quality-test-tokenizer directory 8
+                                             (list (quality-test-doc "ok" "apple"))
+                                             quality-test-config))))
+   ((string=? mode "invalid") (quality-test-invalid directory))
+   (else (quality-test-check "unknown mode" #f))))
