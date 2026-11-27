@@ -30,7 +30,7 @@ SHELL := /usr/bin/bash
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-t2-trainer test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
-	test-beam-cd-composition test-spec-paged-witness test-data4-quality-t2-d1 \
+	test-beam-cd-composition test-constrained-beam test-spec-paged-witness test-data4-quality-t2-d1 \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
@@ -415,6 +415,9 @@ test-spec-decode:
 
 test-beam-cd-composition:
 	/usr/bin/bash scripts/test-beam-cd-composition.sh
+
+test-constrained-beam:
+	/usr/bin/bash scripts/test-constrained-beam.sh
 
 test-spec-paged-witness:
 	/usr/bin/bash scripts/test-spec-paged-witness.sh
