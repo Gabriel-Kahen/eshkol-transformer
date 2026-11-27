@@ -17,7 +17,7 @@ ar rcsD "${scratch}/libeshkol_transformer_mp4.a" "${scratch}/mp4_mixed_precision
 
 exports="$(nm -g --defined-only "${scratch}/libeshkol_transformer_mp4.a" |
   awk 'NF >= 3 {print $(NF-1), $NF}' | LC_ALL=C sort)"
-expected=$'T et_mp4_kernel_provider_v1\nT et_mp4_loss_scaler_init\nT et_mp4_loss_scaler_update'
+expected=$'T et_mp4_kernel_provider_v1\nT et_mp4_loss_scaler_decode_v1\nT et_mp4_loss_scaler_encode_v1\nT et_mp4_loss_scaler_init\nT et_mp4_loss_scaler_update'
 if [[ "${exports}" != "${expected}" ]]; then
   printf 'unexpected MP4 exports:\n%s\n' "${exports}" >&2
   exit 1
