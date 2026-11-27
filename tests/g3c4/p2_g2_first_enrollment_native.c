@@ -12,6 +12,39 @@ static et_i64_tensor_borrow *lease_slot;
 static int64_t prefill_calls;
 static int64_t sample_calls;
 
+/* Scope the existing allocation hooks to the fixture's Eshkol entry.
+ * The native acquire is linked from that separate Eshkol object. */
+extern int64_t et_g3c4_call_entry_alloc_arm_v1(int64_t kind, int64_t before);
+extern int64_t et_g3c4_call_entry_alloc_disarm_v1(void);
+extern int64_t __real_et_g3c4_private_call_acquire_v1(
+    void *context, int64_t kind, int64_t budget);
+
+static int allocation_scope_armed;
+static int64_t allocation_count_at_acquire = -1;
+
+int64_t et_g3c4_first_enrollment_allocation_arm_v1(int64_t kind, int64_t cut) {
+  allocation_scope_armed = 1;
+  allocation_count_at_acquire = -1;
+  return et_g3c4_call_entry_alloc_arm_v1(kind, cut);
+}
+
+int64_t et_g3c4_first_enrollment_allocation_finish_v1(void) {
+  if (allocation_scope_armed) {
+    allocation_scope_armed = 0;
+    (void)et_g3c4_call_entry_alloc_disarm_v1();
+  }
+  return allocation_count_at_acquire;
+}
+
+int64_t __wrap_et_g3c4_private_call_acquire_v1(
+    void *context, int64_t kind, int64_t budget) {
+  if (allocation_scope_armed) {
+    allocation_scope_armed = 0;
+    allocation_count_at_acquire = et_g3c4_call_entry_alloc_disarm_v1();
+  }
+  return __real_et_g3c4_private_call_acquire_v1(context, kind, budget);
+}
+
 int64_t __wrap_et_g3c4_private_prompt_prefill_v1(
     void *context, void *input, float logits[256]) {
   (void)context;

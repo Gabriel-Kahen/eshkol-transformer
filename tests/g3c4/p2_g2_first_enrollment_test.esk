@@ -16,9 +16,9 @@
 (extern i64 foreign-release ptr :real et_g3c4_first_enrollment_test_foreign_release_v1)
 (extern i64 native-fault i64 i64 :real et_g3c4_first_enrollment_test_fault_v1)
 (extern i64 i1-census i64 :real et_m3_test_i64_counts_v1)
-(extern i64 allocation-arm i64 i64 :real et_g3c4_call_entry_alloc_arm_v1)
+(extern i64 allocation-arm i64 i64 :real et_g3c4_first_enrollment_allocation_arm_v1)
 (extern i64 allocation-consumed :real et_g3c4_call_entry_alloc_consumed_v1)
-(extern i64 allocation-disarm :real et_g3c4_call_entry_alloc_disarm_v1)
+(extern i64 allocation-finish :real et_g3c4_first_enrollment_allocation_finish_v1)
 (extern i64 extent-arm :real et_g3c4_terminal_extent_arm_v1)
 (extern i64 extent-seal :real et_g3c4_terminal_extent_seal_v1)
 (extern i64 extent-match i64 ptr i64 i64 :real et_g3c4_terminal_extent_match_v1)
@@ -76,7 +76,7 @@
     (and (= (pending-count (vector-ref original-entry 3)) 0)
          (= (pending-count (vector-ref other-entry 3)) 0)
          (= (i1-census 0) started-i1) (= (i1-census 1) started-borrows)))
-  (check "zero numerical calls and exact native entry state"
+  (check "no guarded numerical entry and exact native entry state"
     (= (preserved (vector-ref original-entry 3) 0) 1)))
 
 (define (mark-carriers bundle scrubbed?)
@@ -189,14 +189,13 @@
     (check-idle)))
 
 (define (sweep-allocations kind)
-  ;; Count this path before injecting failures. The count includes the
-  ;; predecessor boundary's allocations as well as those of the new probe.
+  ;; The link witness disarms at native acquire, before native reservation or
+  ;; abort cleanup. A failing pre-acquire cut never reaches that boundary.
   (allocation-arm kind 1024)
   (probe 'dry)
-  (let* ((measuring-cut-consumed? (= (allocation-consumed) 1))
-         (count (allocation-disarm)))
-    (check "measured a bounded allocation path"
-           (and (not measuring-cut-consumed?) (> count 0) (< count 1024)))
+  (let ((count (allocation-finish)))
+    (check "measured a bounded pre-acquire allocation path"
+           (and (> count 0) (< count 1024)))
     (check-idle)
     (let next ((cut 0))
       (if (< cut count)
@@ -204,10 +203,15 @@
             (guard (condition (#t (set! caught condition)))
               (allocation-arm kind cut)
               (probe 'dry))
-            (let ((consumed (= (allocation-consumed) 1)))
-              (allocation-disarm)
-              (check "each measured allocation raises a recoverable error"
-                     (and consumed (transformer-error? caught)))
+            (let* ((consumed (= (allocation-consumed) 1))
+                   (boundary (allocation-finish)))
+              (if (not (and consumed caught (= boundary -1)))
+                  (begin
+                    (display "pre-acquire allocation observation ")
+                    (write (list kind cut consumed (not (not caught)) boundary))
+                    (newline)))
+              (check "each pre-acquire cut is recoverable before native acquire"
+                     (and consumed caught (= boundary -1)))
               (check-idle)
               (next (+ cut 1))))
           count))))

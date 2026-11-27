@@ -43,8 +43,11 @@ acquire succeeds, the bundle is the only newly rooted allocation. The test gate
 asserts earlier-owner preservation, native owner and I1 census, exact I1
 active-borrow details, cache and RNG bytes, all eight allocation extents and
 payloads, and same-call fixture-owned retry with a genuine foreign control.
-The earliest allocation failures are injected with the admitted allocation
-shim. The test observes the allocators independently of the Eshkol authority.
+The admitted allocation shim measures and challenges pre-acquire Eshkol
+allocations. It disarms at the native call boundary so reservation and abort
+cleanup have their own tests. The link guards observe external prefill and
+token-frame entry points. Source call checks and the native cache, RNG and
+token-frame snapshots cover the state of the shared aggregate.
 
 `bash scripts/test-g3c4-p2g2-first-enrollment.sh /path/to/evidence` uses the
 pinned normal, repeat and ASan/UBSan/LSan strict AOT recipe on Ubuntu 22.04

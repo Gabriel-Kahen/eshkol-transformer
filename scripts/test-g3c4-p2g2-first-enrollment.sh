@@ -94,7 +94,7 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=arena_allocate_cons_with_header -Wl,--wrap=arena_allocate_aligned \\
   -Wl,--wrap=malloc -Wl,--wrap=eshkol_push_exception_handler \\
   -Wl,--wrap=et_kernel_runtime_dispatch -Wl,--wrap=et_g3c4_private_prompt_prefill_v1 \\
-  -Wl,--wrap=et_g3c4_private_token_frame_begin_last_v1
+  -Wl,--wrap=et_g3c4_private_token_frame_begin_last_v1 -Wl,--wrap=et_g3c4_private_call_acquire_v1
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
