@@ -242,3 +242,36 @@ docker run --rm --network none --cpuset-cpus 6 \
     python3 -m unittest -v tests.ci.test_attention_predecessor_pins
     bash scripts/check-ci-topology.sh'
 ```
+
+## Paired A2 joint execution
+
+`make test-pa4-wider-joint` links current A2, Wider reference and Wider
+online into one executable. It runs the ten singleton CPU-f32 shapes in
+A2's discovered K1 capability in lexicographic order. Each arm uses the
+same Wider fixture inputs, mask and positions. The `[1,4,2,3,3,2]` case
+also masks its last query row.
+
+Each iteration dispatches forward, derives `dO[i] = 0.5 * O[i] + c[i]`
+using that arm's output, and dispatches backward. The dyadic coefficients
+come from fixture seed 101. This is the gradient of the separable test
+loss `sum(O[i]^2 / 4 + c[i] * O[i])`. Forward and backward use the same
+Q, K and V but disjoint output and gradient buffers.
+
+The check compares every word of O, dO, dQ, dK and dV against A2. Wider
+reference must match exactly. Wider online reports bit differences and
+must meet the existing `3e-7 + 3e-6 * max(abs(A2), abs(online))` absolute
+tolerance. Online backward must also match A2 bit for bit when it receives
+the same A2 dO. For each arm, nonfinite dO on the empty query row must
+fail backward with all four output buffers intact. Restoring dO must
+reproduce the certified bits.
+
+On an otherwise idle host, `taskset -c 6 bash scripts/test-pa4-wider-joint.sh
+--time` checks all ten shapes before timing. For each shape it pairs A2
+with Wider reference, then A2 with Wider online. Each matchup uses
+12 pairs alternating AB and BA, with A2 as A. Each batch uses 100
+warmup iterations and 1,000 timed iterations, and its final O, dO, dQ, dK
+and dV must match that arm's checked bits. The timer includes both K1
+dispatches, dO calculation, and loop and clock overhead. The script
+prints all batch times, per-shape total-time ratios and order-specific
+ranges, and fixed-mix total-time ratios. These times describe standalone
+attention on the ten common shapes.
