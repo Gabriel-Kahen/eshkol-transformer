@@ -159,6 +159,29 @@ The gate seal is
 `/home/gabe/.codex/evidence/eshkol-transformer/paged-kv-exact-ceeb74f3.NVUTKL/SHA256SUMS`
 with SHA-256 `b79616cc9898ffe89ef3c029025bd7a25c521223579950b68d1bcd63afed5bda`.
 
+## Fixed model attention witness
+
+`make test-paged-kv-model-attention` runs the private G3-C4 fixed full-prefix
+model twice on each of two four-token prompts. Both routes use the same seeded
+model owner and the same forward schedule. A test-only link wrapper selects
+dense attention for the reference and paged attention for the comparison.
+The paged route consumes the model's real Q, K and V views of shape
+`[1, 2, 4, 2]` and checks contiguous positions and the triangular causal mask.
+It appends one K/V row at a time to two physical blocks, decodes at the
+current prefix length, and passes the resulting attention through the model's
+unchanged output projection, feed-forward block, normalization and tied head.
+
+Optimized and ASan/UBSan/LSan runs on Ubuntu 22.04 and Clang 21.1.8 matched
+stdout. The gate compared 32 attention values and 2,048 logits. Maximum absolute
+errors against the dense route were `2^-28` and `2^-26`, respectively.
+Changing the second block of tokens preserved all 512 prefix logits bit for
+bit, and an out-of-vocabulary token left the destination intact before
+attention. Each run released both paged blocks.
+
+The witness covers one layer with two equal query and KV head counts.
+Persistent generation cache ownership, batching, grouped-query model
+dispatch, and serving performance require separate qualification.
+
 ## Limitations and scope
 
 - Bounded CPU single-threaded binary32 KV storage with binary64 online-softmax
