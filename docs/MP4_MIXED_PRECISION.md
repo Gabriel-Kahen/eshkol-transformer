@@ -144,3 +144,28 @@ for binary16 and 0.0000161482 for bfloat16.
 This foundation covers bounded serial CPU storage conversions, f32 master
 gradients, and loss-scaling state. GPU tensor cores, other devices and shapes,
 TR3 trainer wiring, and checkpoint integration are outside this ABI.
+
+## MOD5 actual-gradient composition witness
+
+`make test-mp4-mod5` is a separate development-only gate on the accepted
+CPU-f32 MOD5 GQA block fixture. It computes real parameter gradients through
+MOD5's forward and backward provider calls, scales and stores each eight-value
+tile using MP4 f16 or bf16 K1 casts, and unscales through MP4 into f32 before
+updating f32 master weights. The four accepted SGD updates are compared with a
+direct f32 baseline at every active parameter and gradient. Tolerances are
+`atol=2e-5, rtol=0.005` for f16 and `atol=1e-4, rtol=0.02` for bf16.
+
+Between the second and third accepted updates, a deterministic target offset
+is calibrated against the real MOD5 gradient maximum. For f16, the scaled
+gradient exceeds 65,504; for bf16, it exceeds the finite-to-infinity rounding
+boundary `0x1.ffp127f`. The witness separately checks that every active raw gradient
+and every scaled f32 value is finite. MP4 narrowing rejects a finite out-of-range
+tile in each format. The optimized and
+sanitized gates both measured peak scaled values of 70,400 (f16) and
+`3.3995006e38` (bf16). The scaler backs off by half, all master parameters
+remain byte-identical, and the next normal attempt succeeds. The opt-in gate
+passed locally in optimized and ASan/UBSan/LSan builds with leak detection
+enabled; it leaves the standalone `test-mp4` and default test suites unchanged.
+This witnesses gradient storage and loss-scaler gating only: MOD5 forward and
+backward compute remain f32. It does not establish mixed compute, a production
+trainer, distributed synchronization, AOT, or checkpoint/resume support.
