@@ -3679,7 +3679,13 @@ publication, public G2 and continuation remain pending.
   [idle owned-input prerequisite](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#idle-owned-input-prerequisite)
   rechecks the exact registered owned prompt, raw T1 tokenizer, eval model and
   budget-two generator while idle. Source checks pass and the aggregate gate
-  is queued. Same-call terminal publication, detached Eshkol output, public G2,
+  is queued. The
+  [native call-bound I1 prerequisite](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#native-call-bound-i1-prerequisite)
+  retains the original pending output's actual typed borrow and releases it
+  while the same call is active. Its native gate exercises lease rejection,
+  abort retry, and equal-I1 substitution at prefix and terminal publication.
+  A2 release and Eshkol composition remain pending.
+  Same-call terminal publication, detached Eshkol output, public G2,
   and CLI adoption follow separately.
 
 - **Private P2/G2 terminal pending-allocation precursor:** The
