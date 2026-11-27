@@ -14,6 +14,14 @@ ROOT_FILE = ROOT / "native/g3r_c2_pair_file_read_root.esk"
 CLOSURE = ROOT / "native/g3r_c2_pair_file_read_source_closure.txt"
 PREDECESSOR = ROOT / "native/g3r_c2_sha_receipt_source_closure.txt"
 FIXTURE = ROOT / "tests/g3r/pair_file_read_runtime.esk"
+OVERSIZE_PATH_WITNESS = (
+    '(let double ((count 1) (text "é"))',
+    '(if (= count 2048) (string-append text "é")',
+    '(double (* count 2) (string-append text text))',
+    '(= (string-length oversized-utf8-path) 2049)',
+    '(= (bytevector-length (string->utf8 oversized-utf8-path)) 4098)',
+    '"oversized UTF-8 path"',
+)
 
 
 def verify(source: str, root: str, closure: str, predecessor: str,
@@ -57,9 +65,7 @@ def verify(source: str, root: str, closure: str, predecessor: str,
             '"valid.g3r"', '"wrong-digest.g3r"', '"torn.g3r"',
             '"short.g3r"', '"long.g3r"', '"link.g3r"', '"fifo.g3r"',
             '(string #\\nul)',
-            '(make-string 2049 (string-ref "é" 0))',
-            '(string->utf8 oversized-utf8-path)',
-            '"embedded-NUL path"', '"oversized UTF-8 path"',
+            '"embedded-NUL path"', *OVERSIZE_PATH_WITNESS,
             '(g3r-pair-file-io-fail 6 1 5)',
             '(g3r-pair-file-io-fail 7 1 5)',
             '(g3r-pair-file-io-fail 16 1 5)',
@@ -106,10 +112,8 @@ class FileReadSourceTest(unittest.TestCase):
             verify(self.source, self.root, self.closure,
                    self.predecessor,
                    self.fixture.replace('(g3r-pair-file-io-fail 7 1 5)', ''))
-        for marker in ('(string #\\nul)',
-                       '(make-string 2049 (string-ref "é" 0))',
-                       '(string->utf8 oversized-utf8-path)',
-                       '"embedded-NUL path"', '"oversized UTF-8 path"'):
+        for marker in ('(string #\\nul)', '"embedded-NUL path"',
+                       *OVERSIZE_PATH_WITNESS):
             with self.subTest(marker=marker), self.assertRaises(ValueError):
                 verify(self.source, self.root, self.closure,
                        self.predecessor, self.fixture.replace(marker, '', 1))
