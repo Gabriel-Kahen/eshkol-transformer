@@ -55,7 +55,7 @@ def wire(metadata=None, tensors=None, *, trailing=b""):
     return bytes(prefix) + trailing
 
 
-def unpack_export(raw):
+def unpack_export(raw, *, element_size=4):
     reader = gg.Reader(raw, c1.Limits())
     metadata = []
     count = struct.unpack_from("<Q", raw, 16)[0]
@@ -72,7 +72,7 @@ def unpack_export(raw):
     start = (reader.at + 31) // 32 * 32
     tensors = []
     for name, dims, kind, offset in infos:
-        size = 4
+        size = element_size
         for extent in dims:
             size *= extent
         tensors.append((name, dims, kind, offset, raw[start + offset:start + offset + size]))
