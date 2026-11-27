@@ -21,8 +21,8 @@ def ordered(text, fragments, label):
         position = found
 
 
-def without_conditional_feature(text, macro, keep_else=False):
-    """Remove a later feature block; optionally retain its baseline #else."""
+def without_conditional_feature(text, macro):
+    """Remove a positive feature guard and retain its feature-off #else."""
     kept = []
     depth = 0
     baseline = False
@@ -35,12 +35,10 @@ def without_conditional_feature(text, macro, keep_else=False):
             if opens:
                 depth += 1
             elif directive.startswith("#else") and depth == 1:
-                baseline = keep_else
+                baseline = True
                 continue
             elif directive.startswith("#elif") and depth == 1:
-                require(not keep_else,
-                        f"unsupported later-feature #elif: {macro}")
-                continue
+                raise ValueError(f"unsupported later-feature #elif: {macro}")
             elif directive.startswith("#endif"):
                 depth -= 1
                 if depth == 0:
@@ -49,7 +47,7 @@ def without_conditional_feature(text, macro, keep_else=False):
             if baseline:
                 kept.append(line)
             continue
-        if opens and macro in directive:
+        if directive.split() == ["#ifdef", macro]:
             depth = 1
             continue
         kept.append(line)
@@ -70,10 +68,9 @@ def step5_projection(source):
         "ET_G3C4_P2_G1_PENDING_PRIVATE",
         "ET_G3C4_P2_G1_PUBLICATION_PRIVATE",
         "ET_G3C4_P2_G1_COPYOUT_PRIVATE",
+        "ET_G3C4_P2_G2_TERMINAL_PRIVATE",
     ):
-        source = without_conditional_feature(
-            source, macro,
-            keep_else=(macro == "ET_G3C4_P2_G1_PUBLICATION_PRIVATE"))
+        source = without_conditional_feature(source, macro)
     return source
 
 
