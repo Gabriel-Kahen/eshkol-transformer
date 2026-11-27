@@ -34,6 +34,10 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   AdamW component continuation on the native MQA and GQA block fixtures.
   Fresh-process MOD5 checkpoint resume and additional device,
   dtype, and quantized paths remain open.
+- The [width-16 MOD5-C storage proof](MOD5_E2E_C1_IO5.md#width-16-c2-storage-prerequisite)
+  exercises a private I2 1.2 descriptor for the four missing matrix shapes.
+  Default K2 rejects those requests and the candidate descriptor. The K2
+  profile contract and supported C2 LOAD/SAVE qualification remain open.
 - [PR #251](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/251)
   merged the lossless MOD5 model mapping and live C1 interchange witness,
   the downloaded CLI3 artifact runner, and #249's three development witnesses
