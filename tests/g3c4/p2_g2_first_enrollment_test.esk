@@ -189,18 +189,28 @@
     (check-idle)))
 
 (define (sweep-allocations kind)
-  (let next ((cut 0))
-    (if (> cut 64) (exit 2))
-    (let ((caught #f))
-      (guard (condition (#t (set! caught condition)))
-        (allocation-arm kind cut)
-        (probe 'dry))
-      (let ((consumed (= (allocation-consumed) 1)))
-        (allocation-disarm)
-        (check-idle)
-        (if consumed
-            (begin (check "injected Eshkol allocation fails" caught) (next (+ cut 1)))
-            (begin (check "unconsumed allocation cut succeeds" (not caught)) cut))))))
+  ;; Count this path before injecting failures. The count includes the
+  ;; predecessor boundary's allocations as well as those of the new probe.
+  (allocation-arm kind 1024)
+  (probe 'dry)
+  (let* ((measuring-cut-consumed? (= (allocation-consumed) 1))
+         (count (allocation-disarm)))
+    (check "measured a bounded allocation path"
+           (and (not measuring-cut-consumed?) (> count 0) (< count 1024)))
+    (check-idle)
+    (let next ((cut 0))
+      (if (< cut count)
+          (let ((caught #f))
+            (guard (condition (#t (set! caught condition)))
+              (allocation-arm kind cut)
+              (probe 'dry))
+            (let ((consumed (= (allocation-consumed) 1)))
+              (allocation-disarm)
+              (check "each measured allocation raises a recoverable error"
+                     (and consumed (transformer-error? caught)))
+              (check-idle)
+              (next (+ cut 1))))
+          count))))
 
 (define (run)
   (check "allocator instrumentation armed" (= (extent-arm) 0))
@@ -220,7 +230,9 @@
   (let ((vector-cuts (sweep-allocations 1)) (cons-cuts (sweep-allocations 2))
         (bytevector-cuts (sweep-allocations 3)))
     (check "vectors, nodes, and all eight constructor allocations challenged"
-           (and (> vector-cuts 0) (> cons-cuts 0) (= bytevector-cuts 8))))
+           (and (> vector-cuts 0) (> cons-cuts 0) (= bytevector-cuts 8)))
+    (display "P2/G2 measured allocation paths ")
+    (write (list vector-cuts cons-cuts bytevector-cuts)) (newline))
   (vector-set! g3c4-p2g2-ownership-gate 0 #f)
   (check "off rejects before any enrollment"
     (rejects? (lambda () (probe 'dry)) 'invalid-argument))
