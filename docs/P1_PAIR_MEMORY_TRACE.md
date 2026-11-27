@@ -83,3 +83,14 @@ contention can differ. Report the two observed wall times, per-command peak
 RSS and sampled paired RSS with their own units and scope. A worker or
 container memory comparison requires a separately controlled experiment that
 records cgroup current, peak and swap for both schedules.
+
+## Verified paired receipt for the serial control
+
+The [paired run 45934920829](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934920829)
+passed the complete supported parameter-state suite and receipt collector on
+attempt 1. The downloaded seal and six raw process-group traces verified
+independently, including simultaneous positive RSS in every pair. The suite
+step took 4,091 seconds. Its timing inventory contains 67 compiler commands
+and 43 expected failures. Peak sampled paired process-group RSS was
+7,487,873,024 bytes. This control will collect the serial invocation timings
+using the same pinned source and runner configuration.
