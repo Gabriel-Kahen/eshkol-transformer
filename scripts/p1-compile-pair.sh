@@ -5,23 +5,41 @@
 p1_pair_pids=()
 p1_pair_timing_files=()
 
+p1_cgroup_has_pair_memory() {
+  local base="$1" group="$2" max_file="$3" used_file="$4"
+  local current limit used
+  [[ "${group}" == /* && "/${group#/}/" != */../* ]] || return 1
+  current="${base}${group%/}"
+  [[ -d "${current}" ]] || return 1
+  while :; do
+    if [[ -e "${current}/${max_file}" || -e "${current}/${used_file}" ]]; then
+      read -r limit <"${current}/${max_file}" || return 1
+      read -r used <"${current}/${used_file}" || return 1
+      [[ "${used}" =~ ^[0-9]+$ ]] || return 1
+      if [[ "${limit}" != max ]]; then
+        [[ "${limit}" =~ ^[0-9]+$ ]] || return 1
+        ((limit >= used && limit - used >= 8 * 1024 * 1024 * 1024)) || return 1
+      fi
+    fi
+    [[ "${current}" != "${base}" ]] || return 0
+    current="${current%/*}"
+  done
+}
+
 p1_require_pair_memory() {
-  local available_kib limit used
+  local available_kib hierarchy controllers group
   available_kib="$(awk '$1 == "MemAvailable:" { print $2 }' /proc/meminfo)"
   [[ "${available_kib}" =~ ^[0-9]+$ ]] || return 1
   ((available_kib >= 8 * 1024 * 1024)) || return 1
-  if [[ -r /sys/fs/cgroup/memory.max && -r /sys/fs/cgroup/memory.current ]]; then
-    read -r limit </sys/fs/cgroup/memory.max
-    read -r used </sys/fs/cgroup/memory.current
-    if [[ "${limit}" =~ ^[0-9]+$ && "${used}" =~ ^[0-9]+$ ]]; then
-      ((limit - used >= 8 * 1024 * 1024 * 1024)) || return 1
+  while IFS=: read -r hierarchy controllers group; do
+    if [[ ",${controllers}," == *,memory,* ]]; then
+      p1_cgroup_has_pair_memory /sys/fs/cgroup/memory "${group}" \
+        memory.limit_in_bytes memory.usage_in_bytes || return 1
+    elif [[ "${hierarchy}" == 0 && -z "${controllers}" ]]; then
+      p1_cgroup_has_pair_memory /sys/fs/cgroup "${group}" \
+        memory.max memory.current || return 1
     fi
-  elif [[ -r /sys/fs/cgroup/memory/memory.limit_in_bytes &&
-          -r /sys/fs/cgroup/memory/memory.usage_in_bytes ]]; then
-    read -r limit </sys/fs/cgroup/memory/memory.limit_in_bytes
-    read -r used </sys/fs/cgroup/memory/memory.usage_in_bytes
-    ((limit - used >= 8 * 1024 * 1024 * 1024)) || return 1
-  fi
+  done </proc/self/cgroup
 }
 
 p1_pair_selected() {
@@ -83,7 +101,7 @@ p1_compile_pair() {
       status=$?
     fi
     # A signal can interrupt wait before it assigns a completed child.
-    if [[ -z "${finished}" ]]; then
+    if [[ -z "${finished:-}" ]]; then
       [[ "${status}" != 0 ]] || status=1
       break
     fi

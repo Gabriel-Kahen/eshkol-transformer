@@ -6,6 +6,22 @@ p1_tmp="$(mktemp -d)"
 p1_timing="${p1_tmp}/timing.log"
 trap 'p1_stop_pair; rm -rf -- "${p1_tmp}"' EXIT
 
+cgroup="${p1_tmp}/cgroup"
+mkdir -p "${cgroup}/tenant/job"
+printf '%s\n' max >"${cgroup}/tenant/job/memory.max"
+printf '%s\n' 0 >"${cgroup}/tenant/job/memory.current"
+printf '%s\n' 10737418240 >"${cgroup}/tenant/memory.max"
+printf '%s\n' 2147483648 >"${cgroup}/tenant/memory.current"
+p1_cgroup_has_pair_memory "${cgroup}" /tenant/job memory.max memory.current
+printf '%s\n' 2147483649 >"${cgroup}/tenant/memory.current"
+if p1_cgroup_has_pair_memory "${cgroup}" /tenant/job memory.max memory.current; then exit 1; fi
+printf '%s\n' 8589934592 >"${cgroup}/tenant/memory.limit_in_bytes"
+printf '%s\n' 0 >"${cgroup}/tenant/memory.usage_in_bytes"
+p1_cgroup_has_pair_memory "${cgroup}" /tenant/job memory.limit_in_bytes memory.usage_in_bytes
+printf '%s\n' 1 >"${cgroup}/tenant/memory.usage_in_bytes"
+if p1_cgroup_has_pair_memory "${cgroup}" /tenant/job memory.limit_in_bytes memory.usage_in_bytes; then exit 1; fi
+if p1_cgroup_has_pair_memory "${cgroup}" /unresolved memory.max memory.current; then exit 1; fi
+
 p1_require_pair_memory() {
   printf '%s\n' checked >>"${p1_tmp}/memory-checks"
   return "${mock_memory_status}"
@@ -59,4 +75,18 @@ for marker in descendant.pid failed-descendant.pid; do
   fi
 done
 [[ "$(tail -n 1 "${p1_timing}")" == failure ]]
-printf 'P1 compile pair PASS: memory selection, overlap, timing order, exit status, child cleanup\n'
+
+(
+  wait() {
+    if [[ "$1" == -n ]]; then
+      unset -v finished
+      return 138
+    fi
+    builtin wait "$@"
+  }
+  status=0
+  p1_compile_pair sleep 30 -- sleep 30 || status=$?
+  [[ "${status}" == 138 ]]
+  [[ "${#p1_pair_pids[@]}" == 0 ]]
+)
+printf 'P1 compile pair PASS: memory selection, overlap, timing order, interrupted wait, child cleanup\n'
