@@ -30,6 +30,7 @@ SHELL := /usr/bin/bash
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
 	test-reference-formats test-t1 test-t2 test-t2-trainer test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
+	test-paged-kv-model-attention \
 	test-beam-cd-composition test-spec-paged-witness test-data4-quality-t2-d1 \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
@@ -406,6 +407,9 @@ test-constrained-decode:
 
 test-paged-kv:
 	/usr/bin/bash scripts/test-paged-kv.sh
+
+test-paged-kv-model-attention:
+	/usr/bin/bash scripts/test-paged-kv-model-attention.sh
 
 test-spec-decode:
 	/usr/bin/bash scripts/test-spec-decode.sh
