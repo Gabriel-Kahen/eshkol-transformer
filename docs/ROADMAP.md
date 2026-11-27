@@ -21,7 +21,9 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   [26 required jobs](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45755755178)
   passed, and the
   [main run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45764903430)
-  reused the exact-tree evidence. Optimizer resume and additional device,
+  reused the exact-tree evidence. The opt-in
+  [MOD5/O2 continuation gate](MOD5_O2_CONTINUATION.md) covers exact CPU-f32 AdamW component continuation on the native MQA and GQA
+  block fixtures. Fresh-process MOD5 checkpoint resume and additional device,
   dtype, and quantized paths remain open.
 - [PR #251](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/251)
   merged the lossless MOD5 model mapping and live C1 interchange witness,
