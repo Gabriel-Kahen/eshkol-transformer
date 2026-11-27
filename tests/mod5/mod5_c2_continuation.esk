@@ -83,11 +83,12 @@
                     "00000000"))))
 
 (define args (cdr (command-line)))
-(define arg-count (length args))
-(check "fixture argument count" (and (>= arg-count 2) (<= arg-count 4)))
-(define corpus (list-ref args 0))
-(define output (list-ref args 1))
-(define mode (if (= arg-count 2) "live" (list-ref args 2)))
+(check "fixture argument count" (and (pair? args) (pair? (cdr args))))
+(define corpus (car args))
+(define output (car (cdr args)))
+(define mode-args (cdr (cdr args)))
+(define mode (if (null? mode-args) "live" (car mode-args)))
+(define mode-parameters (if (null? mode-args) '() (cdr mode-args)))
 (define seed (if (string=? mode "produce-foreign") 1730 1729))
 (define resolved
   (x1-private-config-resolve
@@ -386,14 +387,15 @@
     (fresh-updates! live dataset context split-updates total-updates)))
 
 (define (run)
-  (cond ((= arg-count 2) (run-live))
-        ((and (= arg-count 3) (string=? mode "uninterrupted"))
+  (cond ((null? mode-args) (run-live))
+        ((and (null? mode-parameters) (string=? mode "uninterrupted"))
          (run-fresh-source total-updates))
-        ((and (= arg-count 3) (or (string=? mode "produce")
-                                 (string=? mode "produce-foreign")))
+        ((and (null? mode-parameters)
+              (or (string=? mode "produce") (string=? mode "produce-foreign")))
          (run-fresh-source split-updates))
-        ((and (= arg-count 4) (string=? mode "resume"))
-         (run-fresh-resume (list-ref args 3)))
+        ((and (string=? mode "resume") (pair? mode-parameters)
+              (null? (cdr mode-parameters)))
+         (run-fresh-resume (car mode-parameters)))
         (else (check "fixture mode and arguments" #f))))
 
 (guard (caught
@@ -415,5 +417,5 @@
 (display "MOD5/C2 PASS ")
 (display checks)
 (display " checks, ")
-(display (if (= arg-count 2) "2 + 4 updates, 27 exact tensors" mode))
+(display (if (null? mode-args) "2 + 4 updates, 27 exact tensors" mode))
 (newline)

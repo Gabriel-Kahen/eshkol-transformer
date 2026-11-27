@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 cd "${PROJECT_ROOT}"
-for command in ar cmp find git python3 rg sha256sum sort timeout xargs; do
+for command in ar cmp find git python3 rg sha256sum sort timeout wc xargs; do
   require_command "${command}"
 done
 export LC_ALL=C
@@ -138,6 +138,38 @@ for mode in uninterrupted produce resume produce-foreign; do
   rg -x "MOD5/C2 PASS [0-9]+ checks, ${mode}" "${fresh}/${mode}.stdout"
 done
 
+python3 - "${fresh}" <<'PYTHON'
+import math
+from pathlib import Path
+import struct
+import sys
+
+fresh = Path(sys.argv[1])
+for mode, checkpoints, losses in (
+    ("uninterrupted", range(1, 7), range(1, 7)),
+    ("produce", range(1, 3), range(1, 3)),
+    ("produce-foreign", range(1, 3), range(1, 3)),
+    ("resume", range(2, 7), range(3, 7)),
+):
+    output = fresh / mode
+    expected = {f"{step}.c2" for step in checkpoints}
+    expected.update(f"{step}.loss" for step in losses)
+    if {entry.name for entry in output.iterdir()} != expected:
+        raise SystemExit(f"unexpected {mode} artifact inventory")
+    for step in losses:
+        path = output / f"{step}.loss"
+        bits = path.read_bytes()
+        if len(bits) != 8:
+            raise SystemExit(f"expected an eight-byte binary64 loss: {path}")
+        loss, = struct.unpack("<d", bits)
+        if not math.isfinite(loss) or loss <= 0:
+            raise SystemExit(f"expected a positive finite AC4 loss: {path}")
+
+image = bytearray((fresh / "produce/2.c2").read_bytes())
+image[-1] ^= 1
+(fresh / "corrupt.c2").write_bytes(image)
+PYTHON
+
 for update in 1 2; do
   cmp "${fresh}/uninterrupted/${update}.c2" "${fresh}/produce/${update}.c2"
   cmp "${fresh}/uninterrupted/${update}.loss" "${fresh}/produce/${update}.loss"
@@ -147,15 +179,6 @@ for update in 3 4 5 6; do
   cmp "${fresh}/uninterrupted/${update}.c2" "${fresh}/resume/${update}.c2"
   cmp "${fresh}/uninterrupted/${update}.loss" "${fresh}/resume/${update}.loss"
 done
-
-python3 - "${fresh}/produce/2.c2" "${fresh}/corrupt.c2" <<'PYTHON'
-from pathlib import Path
-import sys
-
-image = bytearray(Path(sys.argv[1]).read_bytes())
-image[-1] ^= 1
-Path(sys.argv[2]).write_bytes(image)
-PYTHON
 
 reject_resume() {
   local label=$1 input=$2 status=$3 expected=$4
