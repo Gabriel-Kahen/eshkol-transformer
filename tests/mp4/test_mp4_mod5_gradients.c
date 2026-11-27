@@ -349,7 +349,10 @@ static void run_format(const et_kernel_runtime *mod5,
          fmt->dtype, accepted, fault_peak_scaled, control_loss);
 }
 
-int main(void) {
+#ifndef ET_MP4_MOD5_TEST_ENTRY
+#define ET_MP4_MOD5_TEST_ENTRY main
+#endif
+int ET_MP4_MOD5_TEST_ENTRY(void) {
   et_kernel_runtime *mod5 = discover_mod5();
   et_kernel_runtime *mp4 = NULL;
   et_kernel_error error;

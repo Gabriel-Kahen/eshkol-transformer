@@ -143,6 +143,33 @@ controls stable for the full call. `d_input`, predictions, and the result
 are published after the second pass. Forward-only calls use the same
 rolling stream as the other policies.
 
+## Native replay and AdamW witness
+
+The opt-in native gate uses the admitted three-layer GQA fixture with two
+batches, three tokens, four query heads, two KV heads, and head width two.
+It compares ordinary retained activations with bounded gradient replay at
+stride two, using separate workspaces and the same fixed seed and dropout
+rate of 0.2 at each of four steps. The packed AC4 roster maps to 27 distinct
+native F32 parameter tensors. Each successful AC4 call supplies one
+already-normalized gradient per tensor to the atomic F32 gradient plan.
+The accepted constant-schedule O2 AdamW step updates the parameters and
+both moments. The next AC4 step consumes the resulting native weight bits.
+
+Before the replay optimizer is enrolled, an activation cap one byte below
+the plan must reject. The gate checks unchanged AC4 outputs, workspace,
+native parameters and gradient state, and O2 enrollment counts. Restoring
+the cap retries the same input, seed, step, and workspace. Every successful
+step then compares predictions, loss, input and parameter gradients,
+updated weights, and both moment tensors byte for byte. Both moments have
+nonzero finite data for every destination.
+
+```bash
+bash scripts/test-ac4-o2-replay.sh
+```
+
+Normal, repeat, and native ASan/UBSan/LSan runs match the full binary trace.
+The witness covers this CPU F32 fixture and in-process optimizer trajectory.
+
 ## Measured results
 
 The composed AC4/MOD5-B benchmark used Ubuntu 22.04.5 LTS and Clang 21.1.8 in

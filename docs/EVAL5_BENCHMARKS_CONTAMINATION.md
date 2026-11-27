@@ -443,3 +443,47 @@ is retained in the local evidence stream.
 
 The sealed receipt is
 `/home/gabe/.codex/evidence/eshkol-eval5-live-manifest-20261127.LMcYvd/live.SHA256SUMS`.
+
+### V=256 one-shot runner parity
+
+The opt-in V256 witness prepares one set of live MOD5 logits after the
+standalone clean audit. It passes those logits, the authenticated document
+spans, all three owner fingerprints, and the two D1 and checked C1 digests
+to `et_eval5_run_benchmark`. The legacy scorer and manifest round-trip
+still produce the reference record in the same invocation. The witness
+requires exact equality of the canonical length and bytes including the
+trailing NUL before writing the score and manifest to its evidence stream.
+The independent Python comparator then checks field order, digest bindings,
+metric bits, and checksum. The contaminated control still stops before C1
+loading and inference.
+
+The focused C driver exercises the comparison with fixed logits and rejects
+individual fingerprint and digest mutations, a mismatched byte span, a
+changed extent or terminator, and contamination. The live comparison is
+gated by `EVAL5_V256_AOT_SLOT=1 bash scripts/test-eval5-v256-aot.sh`.
+
+## Native live G3-C4 multiple-choice witness
+
+The opt-in witness scores actual CPU F32 logits from the admitted seeded
+G3-C4 private model. It uses five complete four-byte T1 windows. With the
+shared prompt `Q=`, the short choice `1` takes its preceding row from
+`Q=1.`, and the long choice `11` takes two preceding rows from `Q=11`.
+Changing a scored target preserves the visible rows bit for bit, and
+changing later punctuation supplies an exact live tie. Each pair of
+windows agrees through its shared prefix and first differs at the
+changed token's row.
+
+A separate maximum-shifted long-double log-sum-exp oracle checks each
+selected choice and the aggregate metric. Raw NLL selects the short
+choice and length-normalized NLL selects the long one. Both modes choose
+the first entry on an exact tie. A malformed target in a later item
+returns the target error and preserves the complete metric output.
+
+```bash
+bash scripts/test-eval5-g3c4-live-mc.sh
+```
+
+Normal, repeat, and ASan/UBSan/LSan runs compare all generated logit bits.
+The fixed four-token development fixture supplies a seeded owner for
+`et_eval5_score_mc`. One-shot benchmark manifests require an authenticated
+checkpoint digest and corpus identities from their owning integrations.

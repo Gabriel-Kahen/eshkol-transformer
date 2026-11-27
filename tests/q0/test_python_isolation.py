@@ -49,6 +49,7 @@ G3C4_DEVELOPMENT_SCRIPTS = frozenset({
         "check-g3c4-p2g2-terminal-ids-clone.py",
         "check-g3c4-p2g2-terminal-pending-anchor.py",
         "check-g3c4-p2g2-terminal-carriers.py",
+        "check-g3c4-p2g2-terminal-carrier-retirement.py",
         "check-g3c4-terminal-carrier-failures.py",
         "check-g3c4-p2g2-ownership.py",
         "check-g3c4-p2g2-protected-scope.py",
