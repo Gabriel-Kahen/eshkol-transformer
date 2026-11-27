@@ -323,3 +323,22 @@ and rebuilt smoke. This was CachyOS/LLVM 22 compatibility evidence, not a repeat
 the full K2 or repository gate; local leak detection was not enabled. The full
 private identity, fork, retention, packaging and regression evidence remains in
 the supported runs above. No checkpoint or training completion is implied.
+
+## Private MOD5 width-16, V=256 profile
+
+The explicit development build selects I2 1.3 through a fixed resolver and a
+separate PID-bound K2 runtime slot. The initial audit covers the native
+provider tuple and the sorted eleven-row K1 report. Only `tensor.f32` is
+verified for deterministic CPU f32 `storage.copy`. The profile retains the
+baseline scalar, vector and rank-two ranges and adds `[8,16]`, `[16,16]`,
+`[16,32]`, `[32,16]` and `[256,16]`. The private source uses dedicated
+report, request and entry closure factories. It checks factory, carrier
+identity, process, generation, liveness and profile before native matching.
+An authentic ordinary report is rejected before either profile's matcher.
+The ordinary zero-argument discovery path continues to select I2 1.1.
+
+The focused script compiles the native checks in normal and sanitized modes,
+then repeats a strict AOT witness with matching and mismatched profile
+carriers, a transposed shape, invalidation and serialized fork rediscovery.
+This profile is development-only. The width-16 MOD5 C2 continuation gate
+also requires authentic tied and untied model and optimizer rosters.
