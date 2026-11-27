@@ -87,12 +87,13 @@ p1_compile_pair() {
       [[ "${status}" != 0 ]] || status=1
       break
     fi
+    # A failed group can still contain live compiler descendants.
+    [[ "${status}" == 0 ]] || break
     remaining=()
     for pid in "${p1_pair_pids[@]}"; do
       [[ "${pid}" == "${finished}" ]] || remaining+=("${pid}")
     done
     p1_pair_pids=("${remaining[@]}")
-    [[ "${status}" == 0 ]] || break
   done
   if [[ "${status}" != 0 ]]; then p1_stop_pair; fi
   # Deterministic planned order; each time invocation keeps its existing line.

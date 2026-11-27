@@ -36,6 +36,8 @@ p1_compile_pair mock_compile first second -- mock_compile second first
 [[ "${#p1_pair_pids[@]}" == 0 ]]
 
 mock_fail() {
+  sleep 30 &
+  printf '%s\n' "$!" >"${p1_tmp}/failed-descendant.pid"
   while [[ ! -s "${p1_tmp}/descendant.pid" ]]; do sleep 0.01; done
   printf '%s\n' failure >>"${p1_timing}"
   return 37
@@ -49,10 +51,12 @@ status=0
 p1_compile_pair mock_fail -- mock_slow || status=$?
 [[ "${status}" == 37 ]]
 [[ "${#p1_pair_pids[@]}" == 0 ]]
-pid="$(cat "${p1_tmp}/descendant.pid")"
-if ps -o stat= -p "${pid}" | grep -Eq '^[[:space:]]*[^Z[:space:]]'; then
-  printf 'P1 pair left a live compiler descendant: %s\n' "${pid}" >&2
-  exit 1
-fi
+for marker in descendant.pid failed-descendant.pid; do
+  pid="$(cat "${p1_tmp}/${marker}")"
+  if ps -o stat= -p "${pid}" | grep -Eq '^[[:space:]]*[^Z[:space:]]'; then
+    printf 'P1 pair left a live compiler descendant: %s\n' "${pid}" >&2
+    exit 1
+  fi
+done
 [[ "$(tail -n 1 "${p1_timing}")" == failure ]]
 printf 'P1 compile pair PASS: memory selection, overlap, timing order, exit status, child cleanup\n'
