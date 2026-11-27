@@ -443,3 +443,30 @@ is retained in the local evidence stream.
 
 The sealed receipt is
 `/home/gabe/.codex/evidence/eshkol-eval5-live-manifest-20261127.LMcYvd/live.SHA256SUMS`.
+
+
+## Native live G3-C4 multiple-choice witness
+
+The opt-in witness scores actual CPU F32 logits from the admitted seeded
+G3-C4 private model. It uses five complete four-byte T1 windows. With the
+shared prompt `Q=`, the short choice `1` takes its preceding row from
+`Q=1.`, and the long choice `11` takes two preceding rows from `Q=11`.
+Changing a scored target preserves the visible rows bit for bit, and
+changing later punctuation supplies an exact live tie. Each pair of
+windows agrees through its shared prefix and first differs at the
+changed token's row.
+
+A separate maximum-shifted long-double log-sum-exp oracle checks each
+selected choice and the aggregate metric. Raw NLL selects the short
+choice and length-normalized NLL selects the long one. Both modes choose
+the first entry on an exact tie. A malformed target in a later item
+returns the target error and preserves the complete metric output.
+
+```bash
+bash scripts/test-eval5-g3c4-live-mc.sh
+```
+
+Normal, repeat, and ASan/UBSan/LSan runs compare all generated logit bits.
+The fixed four-token development fixture supplies a seeded owner for
+`et_eval5_score_mc`. One-shot benchmark manifests require an authenticated
+checkpoint digest and corpus identities from their owning integrations.
