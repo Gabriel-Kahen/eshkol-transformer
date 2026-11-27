@@ -1,4 +1,4 @@
-"""Opt-in compiled M3 evaluation after mapped F16/BF16 safetensors ingress."""
+"""Opt-in compiled M3 evaluation after mapped narrow-weight IO5 ingress."""
 
 from dataclasses import replace
 import hashlib
@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "tools/io5"))
 import safetensors_interop as safe
 from test_live_c1_interop import first_safetensors_payload, flip
 from test_model_mapping import M3_ROWS, PROVIDER
+from test_gguf_interop import unpack_export, wire as gguf_wire
 
 TOOL = ROOT / "tools/io5/quantized_interchange.py"
 BRIDGE_ENV = "IO5_LIVE_QUANTIZED_BRIDGE"
@@ -150,6 +151,85 @@ class LiveQuantizedM3Tests(unittest.TestCase):
                 print(f"M3 {dtype}: {payload_bytes} wire payload bytes, max |Δweight|={weight_delta:.9g}, "
                       f"max |Δlogit|={logit_delta:.9g}, restored C1 SHA-256="
                       f"{hashlib.sha256(restored_bytes).hexdigest()}", flush=True)
+
+    def export_gguf(self):
+        wire = self.directory / "F16.gguf"
+        self.cli("c1-to-gguf", self.original, wire, "--dtype", "F16",
+                 "--profile", PROFILE, "--scheme", "gguf")
+        return wire
+
+    def test_mapped_gguf_f16_model_ingress(self):
+        original = safe.decode_c1(self.original_bytes)
+        self.assert_m3_state(original)
+        wire = self.export_gguf()
+        raw = wire.read_bytes()
+        metadata, tensors, _, _ = unpack_export(raw, element_size=2)
+        fields = {name: (kind, value) for name, kind, value in metadata}
+        self.assertEqual(len(fields), len(metadata))
+        self.assertEqual(fields["general.architecture"], (8, "eshkol"))
+        self.assertEqual(fields["general.alignment"], (4, 32))
+        self.assertEqual(fields["general.file_type"], (4, 1))
+        self.assertEqual(fields["eshkol.io5.profile"], (8, PROFILE))
+        self.assertEqual(fields["eshkol.io5.scheme"], (8, "gguf"))
+        self.assertEqual(fields["eshkol.io5.storage_dtype"], (8, "F16"))
+        self.assertEqual(fields["eshkol.io5.lossy"], (8, "true"))
+        self.assertEqual(fields["eshkol.io5.source_c1_sha256"],
+                         (8, hashlib.sha256(self.original_bytes).hexdigest()))
+
+        expected_tensors, expected_state = [], []
+        cursor = 0
+        weight_delta = 0
+        for (_, _, name, shape), source in zip(M3_ROWS, original.tensors, strict=True):
+            count = len(source.data) // 4
+            values = struct.unpack(f"<{count}f", source.data)
+            payload = struct.pack(f"<{count}e", *values)
+            widened = struct.unpack(f"<{count}e", payload)
+            expected_tensors.append((name, shape[::-1], 1, cursor, payload))
+            expected_state.append(replace(source, data=struct.pack(f"<{count}f", *widened)))
+            cursor += (len(payload) + 31) // 32 * 32
+            weight_delta = max(weight_delta, max(abs(a - b) for a, b in zip(values, widened, strict=True)))
+        self.assertEqual(tensors, expected_tensors)
+        self.assertEqual(raw, gguf_wire(metadata, expected_tensors))
+        self.assertEqual(fields["eshkol.io5.tensor_dtypes"][0], 8)
+        self.assertEqual(json.loads(fields["eshkol.io5.tensor_dtypes"][1]),
+                         {name: "F16" for _, _, name, _ in M3_ROWS})
+
+        restored = self.directory / "gguf-f16.etcp"
+        self.cli("gguf-to-c1", wire, restored)
+        restored_bytes = restored.read_bytes()
+        self.assert_m3_state(safe.decode_c1(restored_bytes))
+        self.assertEqual(restored_bytes, safe.encode_c1(replace(original, tensors=tuple(expected_state))))
+        observed = self.evaluate(restored, self.directory / "gguf-f16-readback.etcp")
+        logit_delta = max(abs(a - b) for a, b in zip(struct.unpack("<512f", self.baseline),
+                                                   struct.unpack("<512f", observed), strict=True))
+        self.assertGreater(weight_delta, 0)
+        self.assertLessEqual(weight_delta, 8.0e-6)
+        self.assertGreater(logit_delta, 0)
+        self.assertLessEqual(logit_delta, 5.0e-5)
+        payload_bytes = sum(len(tensor[-1]) for tensor in tensors)
+        self.assertEqual(payload_bytes * 2, sum(len(t.data) for t in original.tensors))
+        print(f"M3 GGUF F16: {len(raw)} file bytes, {payload_bytes} tensor bytes, "
+              f"max |Δweight|={weight_delta:.9g}, max |Δlogit|={logit_delta:.9g}, restored C1 SHA-256="
+              f"{hashlib.sha256(restored_bytes).hexdigest()}", flush=True)
+
+    def test_gguf_wire_corruption_does_not_publish_c1(self):
+        raw = self.export_gguf().read_bytes()
+        _, tensors, _, start = unpack_export(raw, element_size=2)
+        padding_at = next(start + offset + len(data) for _, _, _, offset, data in tensors if len(data) % 32)
+        self.assertEqual(raw[padding_at], 0)
+        for label, at, diagnostic in (("tensor-padding", padding_at, "GGUF nonzero tensor padding"),
+                                      ("payload", start, "payload SHA-256 mismatch")):
+            with self.subTest(case=label):
+                wire = self.directory / f"{label}.gguf"
+                wire.write_bytes(flip(raw, at))
+                destination = self.directory / f"{label}-rejected.etcp"
+                result = self.cli("gguf-to-c1", wire, destination, status=2)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertFalse(destination.exists())
+                destination.write_bytes(self.original_bytes)
+                result = self.cli("gguf-to-c1", wire, destination, "--overwrite", status=2)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertEqual(destination.read_bytes(), self.original_bytes)
 
     def test_wire_corruption_does_not_publish_c1(self):
         for dtype in ("F16", "BF16"):

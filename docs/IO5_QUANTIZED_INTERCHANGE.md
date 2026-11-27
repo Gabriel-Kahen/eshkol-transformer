@@ -226,6 +226,20 @@ a stale C1 payload checksum, a validly checksummed C1 file without the tie,
 and a validly checksummed C1 file with a wrong shape and unchanged element
 count fail the live load before logits or a model-state readback are published.
 
+### GGUF F16 evaluation
+
+The same target exercises mapped little-endian GGUF v3 with the
+`eshkol-m3-v1` profile and GGUF names. An independent wire builder checks
+the F16 type, reversed dimension order, 32-byte alignment and padding, and
+all 4,416 tensor payload bytes against the original F32 state rounded to F16.
+An independent F16 widening step checks the full restored C1 bytes before
+the C1 loader evaluates all 512 CPU F32 logits and saves the same tied state.
+The test requires maximum weight and logit deltas of at most `8.0e-6` and
+`5.0e-5`. Invalid tensor padding and a corrupted checksummed payload are
+rejected before creating or replacing the C1 destination. The fixed M3
+roster has no innermost dimension divisible by 32, so these results cover
+the F16 route. Live Q8_0 evaluation requires a compatible model profile.
+
 ## Limitations and scope
 
 - Bounded non-streaming interchange (reuses IO5 64 MiB file / 32 MiB tensor /
@@ -234,6 +248,7 @@ count fail the live load before logits or a model-state readback are published.
   4-bit/sub-byte GGML quantizers (`Q4_0`, `Q4_K`, etc.), sharded quantized
   indexes, live runtime dequantized matmul kernels, and GPU execution are
   outside this slice.
-- The M3 and MOD5 evaluation gates load F32 C1 checkpoints restored from
-  safetensors. Direct narrow loading, live GGUF evaluation, quantized training,
-  and CLI3 C2 optimizer resume remain open.
+- The M3 evaluation gate loads F32 C1 checkpoints restored from tagged
+  F16/BF16 safetensors or GGUF F16. The MOD5 gate covers tagged F16/BF16
+  safetensors. Direct narrow loading, live Q8_0 evaluation, quantized
+  training, and CLI3 C2 optimizer resume remain open.
