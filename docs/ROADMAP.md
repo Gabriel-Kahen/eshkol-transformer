@@ -1344,6 +1344,11 @@ compiled acceptance yet. The upstream typed
 foreign-pointer prerequisite remains unresolved; no generated-ASan,
 ordinary-object-parity or E3 §9 acceptance is claimed for this union.
 
+The offline retention policy replays check that publication copies both
+verified sanitizer inventories byte for byte and that the ordinary exact
+undefined-symbol allowlist check precedes E3 private-authority validation
+under the zero-discovery guard. Compiled retention acceptance remains pending.
+
 The frozen five-case gate at `2b74b534` built its package variants but
 stopped at the first runtime compile on an extra closing parenthesis in the
 argument check; no numerical runtime or mutant verdict was produced. The same
@@ -1512,6 +1517,10 @@ existing first-evaluation tuple. Independent source/tests review accepted this
 exact union. The pinned PyTorch-dependent reference test, supported
 compiled/sanitizer gates, and §9 matrix remain open; this source union does not
 establish E3 admission.
+The first-evaluation source test pins the current canonical `e3_frame.c` at
+SHA-256 `0e3e18952f11d736fd46d9c914a30310d9f9d54aa7e4be53c468c64829fc79ae`.
+Both retention tuples leave the guarded zero-model (PR #206), sum-order
+(PR #207), and padded-position (PR #211) additions disabled.
 The separate [host-monitor first-error candidate](e3/E3_HOST_MONITOR_FIRST_ERROR.md)
 records a bounded guest-relative cause for a transient unsafe-output scan;
 its successor now uses no-follow descriptor traversal, postscan identity
