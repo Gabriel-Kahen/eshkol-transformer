@@ -58,6 +58,11 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   admitted bounded F16/BF16 safetensors and F16/Q8_0 GGUF interchange. The
   required IO5 job passed 42 cases and the pinned GGML Q8_0 decoder witness
   at 192 exact F32 bits. Live model/state ingress remains open.
+- The [tagged MOD5 safetensors candidate](IO5_QUANTIZED_INTERCHANGE.md#tagged-mod5-safetensors)
+  adds F16 and BF16 IO5 interchange with explicit MOD5 identity, canonical
+  rosters and logical ties. Its live MOD5-C gate evaluates restored F32 C1
+  weights for both model variants. Quantized GGUF and external MOD5 import
+  remain outside this candidate.
 - CI topology unit discovery now runs O2's existing exact public facade and
   header-tree pin before the expensive suites. The O2 package command retains
   the same test and expected digest.

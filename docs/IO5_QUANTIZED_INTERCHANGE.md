@@ -5,8 +5,8 @@ canonical [C1 1.0](CHECKPOINT_FORMAT.md) CPU dense contiguous F32 checkpoints
 and lossy narrow/quantized wire formats:
 
 - **Safetensors** `F16` and `BF16` (2 bytes/element, 2:1 payload ratio vs F32),
-  with the merged `eshkol-m3-v1` and `eshkol-decoder-v1` mappings, or
-  unmapped C1 state.
+  with the `eshkol-m3-v1` and `eshkol-decoder-v1` mappings, tagged
+  `eshkol-mod5-v1` interchange, or unmapped C1 state.
 - **GGUF v3** `F16` (GGML type `1`) and `Q8_0` (GGML type `8`, 34 bytes per 32
   elements), with an explicit non-padding policy for 1D norms/biases and
   tensors whose innermost GGML row dimension (`ne[0]` / C1 `shape[-1]`) is not
@@ -72,6 +72,28 @@ explicitly forbidden in quantized/mixed-precision artifacts.
 | `eshkol.io5.manifest` | JSON object with `provider`, `entries`, `aliases` |
 | `eshkol.io5.mapping_version`, `eshkol.io5.profile`, `eshkol.io5.scheme` | Present together when mapped with a profile |
 
+### Tagged MOD5 safetensors
+
+Select `--profile eshkol-mod5-v1` on export. Import uses the embedded profile
+and scheme and checks any explicit selection against them. The [lossless model
+mapping](IO5_MODEL_MAPPING.md#profiles-and-names) supplies the complete
+canonical roster and its rank and positive-extent rules. Every entry uses the
+selected narrow dtype. The manifest retains the provider and either the
+head/embedding tie or untied entries, including untied entries with equal
+bytes. The C1 output restores finite CPU F32 weights and the manifest's
+parameter paths, shapes and aliases. Architecture-specific dimension checks
+remain the loader's responsibility.
+
+For this profile, start with the existing 32-byte framed payload SHA-256.
+The MOD5 `eshkol.io5.payload_sha256` hashes the concatenation of
+`eshkol.io5.quant.safetensors.mod5.v1` plus one NUL byte, the compact JSON array
+`[profile,scheme,source_c1_sha256]` encoded as ASCII, and those 32 digest bytes.
+The source checksum records provenance. Decoding verifies the stored identity
+and narrow payload against this digest.
+
+Both `huggingface` and `gguf` naming schemes are available for this safetensors
+route. MOD5 requests through the quantized GGUF and external import routes fail.
+
 ### GGUF v3 (`F16` / `Q8_0`)
 
 - Little-endian GGUF v3, `general.architecture = "eshkol"`,
@@ -126,6 +148,11 @@ python3 tools/io5/quantized_interchange.py safetensors-to-c1 model_bf16.safetens
 python3 tools/io5/quantized_interchange.py c1-to-gguf model.c1 model_q8.gguf \
   --dtype Q8_0 --q8-fallback F32 --profile eshkol-decoder-v1
 python3 tools/io5/quantized_interchange.py gguf-to-c1 model_q8.gguf restored_q8.c1
+
+python3 tools/io5/quantized_interchange.py c1-to-safetensors mod5.c1 mod5_f16.safetensors \
+  --dtype F16 --profile eshkol-mod5-v1
+python3 tools/io5/quantized_interchange.py safetensors-to-c1 mod5_f16.safetensors restored_mod5.c1 \
+  --profile eshkol-mod5-v1
 ```
 
 ## Focused validation evidence
@@ -179,7 +206,5 @@ Q8_0 fallback:
   4-bit/sub-byte GGML quantizers (`Q4_0`, `Q4_K`, etc.), sharded quantized
   indexes, live runtime dequantized matmul kernels, and GPU execution are
   outside this slice.
-- This quantized tool supports only M3 and decoder profiles. The separate
-  lossless `eshkol-mod5-v1` mapping does not enable quantized MOD5 export,
-  tagged import, or plain external import. This work does not add live model
-  ingress or change the lossless C1/IO5 contracts.
+- MOD5 live evaluation loads the restored F32 C1 checkpoint. Direct narrow
+  loading and quantized training or optimizer resume are outside the gate.

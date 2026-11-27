@@ -1,4 +1,4 @@
-"""Drive D1, live AOT training, C1, and all five IO5 CLI routes."""
+"""Drive D1, live AOT training, C1, and lossless and narrow IO5 CLI routes."""
 
 from dataclasses import replace
 import hashlib
@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools/io5"
 sys.path[:0] = [str(TOOLS), str(ROOT / "tests/c1")]
 import gguf_interop as gg
+import quantized_interchange as quant
 import safetensors_interop as safe
 from test_checkpoint_format import build_container
 
@@ -219,6 +220,41 @@ class Mod5EndToEndTests(unittest.TestCase):
                                 route, wire, directory / "rejected.etcp", "checksum",
                             )
                         print(f"MOD5 {variant} {label} bytes and fresh AOT evaluation: PASS", flush=True)
+
+    def test_narrow_safetensors_fresh_eval_for_each_trained_variant(self):
+        for variant in self.originals:
+            original, evaluation = self.train_eval(variant)
+            baseline = EVAL.fullmatch(evaluation.rstrip("\n"))
+            original_bytes = original.read_bytes()
+            for dtype, weight_limit, loss_limit in (("F16", 0.001, 0.002), ("BF16", 0.008, 0.010)):
+                with self.subTest(variant=variant, dtype=dtype):
+                    prefix = f"{variant}-{dtype}"
+                    wire = self.directory / f"{prefix}.safetensors"
+                    restored = self.directory / f"{prefix}.etcp"
+                    command = (sys.executable, TOOLS / "quantized_interchange.py")
+                    self.run_command(*command, "c1-to-safetensors", original, wire, "--dtype", dtype,
+                                     "--profile", PROFILE)
+                    self.run_command(*command, "safetensors-to-c1", wire, restored, "--profile", PROFILE)
+
+                    restored_bytes = restored.read_bytes()
+                    self.assertEqual(safe.decode_c1(restored_bytes).provider, PROVIDER)
+                    metrics = quant.measure_reconstruction_error(original_bytes, restored_bytes)
+                    weight_delta = metrics["__overall__"]["max_abs"]
+                    self.assertGreater(weight_delta, 0)
+                    self.assertLessEqual(weight_delta, weight_limit)
+
+                    result = self.run_command(self.binary, "--mode", "load-eval", restored)
+                    restored_eval = EVAL.fullmatch(result.stdout.rstrip("\n"))
+                    self.assertIsNotNone(restored_eval)
+                    new_loss = float.fromhex(restored_eval[2])
+                    self.assertTrue(math.isfinite(new_loss))
+                    self.assertEqual(new_loss, float(restored_eval[1]))
+                    self.assertNotEqual(restored_eval[3], baseline[3])
+                    loss_delta = abs(new_loss - float.fromhex(baseline[2]))
+                    self.assertLessEqual(loss_delta, loss_limit)
+                    self.assert_live_eval(restored, result.stdout)
+                    print(f"MOD5 {prefix} weight_max_abs={weight_delta:.9g} loss_abs={loss_delta:.9g} "
+                          f"logits_f32_sha256={restored_eval[3]}", flush=True)
 
     def test_external_roster_and_live_c1_tamper(self):
         original, evaluation = self.train_eval("untied")

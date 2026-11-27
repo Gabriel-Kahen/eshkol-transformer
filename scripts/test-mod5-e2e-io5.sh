@@ -21,6 +21,7 @@ trap 'rm -rf -- "${scratch}"' EXIT
 
 bash scripts/build-mod5.sh
 bash scripts/build-c1.sh
+CC="${cc}" bash scripts/build-io5-quant.sh
 bash scripts/build-p1-identity.sh "${scratch}/p1" normal trusted
 
 # Use the same trusted I2/C1 roots as the live IO5 witness, plus the MOD5
@@ -64,5 +65,7 @@ readelf -h "${scratch}/a/mod5-e2e" >/dev/null
 cmp "${scratch}/a/mod5-e2e" "${scratch}/b/mod5-e2e"
 (cd "${scratch}/a" && sha256sum mod5-e2e)
 printf 'MOD5 E2E two fresh AOT builds with byte-identical ELF: PASS\n'
-MOD5_E2E_AOT="${scratch}/a/mod5-e2e" python3 tests/mod5/test_mod5_e2e_io5.py -v
-printf 'MOD5 E2E corpus, training, C1, five IO5 routes per variant and fresh model reload: PASS\n'
+MOD5_E2E_AOT="${scratch}/a/mod5-e2e" \
+  ESHKOL_IO5_QUANT_LIB="${PROJECT_ROOT}/build/io5_quant/libeshkol_transformer_io5_quant.so" \
+  python3 tests/mod5/test_mod5_e2e_io5.py -v
+printf 'MOD5 E2E training, C1, five lossless and two narrow IO5 routes per variant and fresh model reload: PASS\n'
