@@ -105,8 +105,16 @@ static void unpack_heads(const float *packed, size_t heads, float *tokens) {
   }
 }
 
-static void attend(const et_kernel_runtime *runtime, size_t kv_heads,
-                   activations *a, activations *grad) {
+typedef struct attention_policy {
+  int64_t query_pos[BATCHES][TOKENS], key_pos[TOKENS];
+  uint8_t keep[TOKENS * TOKENS];
+  float slopes[HEADS];
+  int64_t window;
+} attention_policy;
+
+static void attend_with_policy(const et_kernel_runtime *runtime,
+                               size_t kv_heads, activations *a,
+                               activations *grad, attention_policy *policy) {
   const uint64_t shape[] = {1, HEADS, kv_heads, TOKENS, TOKENS, HEAD_WIDTH};
   const uint64_t q_shape[] = {1, HEADS, TOKENS, HEAD_WIDTH};
   const uint64_t kv_shape[] = {1, kv_heads, TOKENS, HEAD_WIDTH};
@@ -123,8 +131,6 @@ static void attend(const et_kernel_runtime *runtime, size_t kv_heads,
                                         shape,
                                         1u,
                                         {0}};
-  float slopes[] = {0.125f, 0.25f, 0.375f, 0.5f};
-  int64_t window = 3;
   const size_t kv_stride = TOKENS * kv_heads * HEAD_WIDTH;
   for (size_t batch = 0; batch < BATCHES; ++batch) {
     const size_t offset = batch * TOKENS * WIDTH;
@@ -132,9 +138,6 @@ static void attend(const et_kernel_runtime *runtime, size_t kv_heads,
     float q[TOKENS * WIDTH], k[TOKENS * WIDTH], v[TOKENS * WIDTH];
     float upstream[TOKENS * WIDTH], y[TOKENS * WIDTH];
     float dk[TOKENS * WIDTH], dv[TOKENS * WIDTH];
-    int64_t key_pos[] = {0, 1, 3};
-    int64_t query_pos[] = {0, 1, 3 + (int64_t)batch};
-    uint8_t mask[] = {1, 1, 1, 1, 1, 1, 1, 1, 1};
     pack_heads(a->q + offset, HEADS, q);
     pack_heads(a->k + kv_offset, kv_heads, k);
     pack_heads(a->v + kv_offset, kv_heads, v);
@@ -144,11 +147,11 @@ static void attend(const et_kernel_runtime *runtime, size_t kv_heads,
         test_view(q, "f32", 4u, q_shape),
         test_view(k, "f32", 4u, kv_shape),
         test_view(v, "f32", 4u, kv_shape),
-        test_view(query_pos, "i64", 2u, pos_shape),
-        test_view(key_pos, "i64", 2u, pos_shape),
-        test_view(mask, "bool", 3u, mask_shape),
-        test_view(slopes, "f32", 1u, slopes_shape),
-        test_view(&window, "i64", 0u, NULL),
+        test_view(policy->query_pos[batch], "i64", 2u, pos_shape),
+        test_view(policy->key_pos, "i64", 2u, pos_shape),
+        test_view(policy->keep, "bool", 3u, mask_shape),
+        test_view(policy->slopes, "f32", 1u, slopes_shape),
+        test_view(&policy->window, "i64", 0u, NULL),
         test_view(upstream, "f32", 4u, q_shape)};
     et_kernel_tensor_view_v1 out[] = {test_view(y, "f32", 4u, q_shape),
                                       test_view(dk, "f32", 4u, kv_shape),
@@ -165,6 +168,15 @@ static void attend(const et_kernel_runtime *runtime, size_t kv_heads,
       unpack_heads(y, HEADS, a->attention + offset);
     }
   }
+}
+
+static void attend(const et_kernel_runtime *runtime, size_t kv_heads,
+                   activations *a, activations *grad) {
+  attention_policy policy = {
+      .query_pos = {{0, 1, 3}, {0, 1, 4}}, .key_pos = {0, 1, 3},
+      .keep = {1, 1, 1, 1, 1, 1, 1, 1, 1},
+      .slopes = {0.125f, 0.25f, 0.375f, 0.5f}, .window = 3};
+  attend_with_policy(runtime, kv_heads, a, grad, &policy);
 }
 
 /* Test-only dense maps bridge the token-major residual stream to projected
@@ -193,14 +205,18 @@ static void project_backward(const float *x, const float *w, size_t width,
   }
 }
 
-static void block_forward(const et_kernel_runtime *runtime, size_t kv_heads,
-                          weights *w, float *x, activations *a) {
+typedef void (*attention_route)(const et_kernel_runtime *, size_t,
+                                activations *, activations *);
+
+static void block_forward_with_attention(const et_kernel_runtime *runtime,
+                                         size_t kv_heads, weights *w, float *x,
+                                         activations *a, attention_route route) {
   const size_t kv_width = kv_heads * HEAD_WIDTH;
   rms(runtime, x, w->data[GAMMA1], NULL, a->norm1, NULL);
   project(a->norm1, w->data[WQ], WIDTH, a->q);
   project(a->norm1, w->data[WK], kv_width, a->k);
   project(a->norm1, w->data[WV], kv_width, a->v);
-  attend(runtime, kv_heads, a, NULL);
+  route(runtime, kv_heads, a, NULL);
   project(a->attention, w->data[WO], WIDTH, a->projected);
   for (size_t i = 0; i < ELEMENTS; ++i)
     a->residual[i] = x[i] + a->projected[i];
@@ -211,6 +227,11 @@ static void block_forward(const et_kernel_runtime *runtime, size_t kv_heads,
   project(a->hidden, w->data[WDOWN], WIDTH, a->feedforward);
   for (size_t i = 0; i < ELEMENTS; ++i)
     a->output[i] = a->residual[i] + a->feedforward[i];
+}
+
+static void block_forward(const et_kernel_runtime *runtime, size_t kv_heads,
+                          weights *w, float *x, activations *a) {
+  block_forward_with_attention(runtime, kv_heads, w, x, a, attend);
 }
 
 static double block_loss(const et_kernel_runtime *runtime, size_t kv_heads,
@@ -296,20 +317,26 @@ static void train(const et_kernel_runtime *runtime, size_t kv_heads, weights *w,
   CHECK(loss[STEPS] < 0.9 * loss[0]);
 }
 
-static void train_variant(const et_kernel_runtime *runtime, size_t kv_heads) {
-  weights initial = {0};
-  weights dw;
-  float x[ELEMENTS], target[ELEMENTS], dx[ELEMENTS];
+static void initialize_fixture(size_t kv_heads, weights *initial,
+                               float x[ELEMENTS]) {
+  *initial = (weights){0};
   for (size_t p = 0; p < PARAMETERS; ++p) {
     for (size_t i = 0; i < param_size(p, kv_heads); ++i) {
       const int seed = (int)((p * 29u + i * 11u + i / 5u) % 37u) - 18;
-      initial.data[p][i] = (p >= GAMMA1 ? 1.0f : 0.0f) + (float)seed * 0x1p-7f;
+      initial->data[p][i] =
+          (p >= GAMMA1 ? 1.0f : 0.0f) + (float)seed * 0x1p-7f;
     }
   }
-  for (size_t i = 0; i < ELEMENTS; ++i) {
+  for (size_t i = 0; i < ELEMENTS; ++i)
     x[i] = (float)((int)((i * 7u + i / 5u) % 31u) - 15) * 0x1p-5f;
+}
+
+static void train_variant(const et_kernel_runtime *runtime, size_t kv_heads) {
+  weights initial, dw;
+  float x[ELEMENTS], target[ELEMENTS], dx[ELEMENTS];
+  initialize_fixture(kv_heads, &initial, x);
+  for (size_t i = 0; i < ELEMENTS; ++i)
     target[i] = 0.65f * x[i] + (float)((int)((i * 3u) % 13u) - 6) * 0x1p-6f;
-  }
   (void)block_loss(runtime, kv_heads, &initial, x, target, &dw, dx);
   for (size_t i = 0; i < ELEMENTS; ++i)
     check_gradient(runtime, kv_heads, &initial, x, target, &x[i], dx[i]);

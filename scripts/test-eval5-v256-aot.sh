@@ -131,4 +131,4 @@ grep -Fq 'D1 manifest SHA-256 mismatch' "${scratch}/split-bad.out"
   die "rejected input produced a SCORE line"
 ! grep -q '^MANIFEST_BEGIN' "${scratch}/t1-identity-bad.out" "${scratch}/c1-bad.out" "${scratch}/c1-identity-bad.out" "${scratch}/split-bad.out" ||
   die "rejected input produced a manifest"
-printf 'EVAL5 V256 AOT live audit/control, score, manifest, and T1/D1/C1 negatives: PASS\n'
+printf 'EVAL5 V256 AOT live audit/control, score, one-shot manifest parity, and T1/D1/C1 negatives: PASS\n'

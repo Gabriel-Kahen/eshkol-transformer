@@ -1,0 +1,7 @@
+include/eshkol_transformer/f32_tensor.h
+include/eshkol_transformer/kernel_abi.h
+native/f32_parameter_internal.h
+native/f32_tensor.c
+native/k2_capabilities.c
+native/k2_capabilities_internal.h
+native/kernel_abi.c

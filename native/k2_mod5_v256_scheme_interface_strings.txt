@@ -1,0 +1,6 @@
+I2:mod5-v256-exact-f32-storage.copy-v1
+k2-mod5-v256-query-v1
+mod5-width16-v256
+transformer.capability-entry:mod5-v256
+transformer.capability-report:mod5-v256
+transformer.capability-request:mod5-v256
