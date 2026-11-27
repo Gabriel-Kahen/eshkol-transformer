@@ -50,6 +50,24 @@ The prior [hosted resource probe](E3_HOSTED_QUALIFICATION_20261115.md) also
 fell below both RAM and swap floors. No currently measured authorized host
 qualifies; this branch does not launch the generated gate or dispatch CI.
 
+## Boxed-call diagnostic on the latest-main composition
+
+A pinned AOT diagnostic on `d7bc9cff`/tree `58819dab` exercised the production
+E1B box accessor with the Stage 3 caller's scenario, path and output carriers.
+The diagnostic dispatch echoed the scenario. Normal, repeat, poisoned and
+ASan/UBSan/LSan runs passed for both gradient flags with identical output.
+Restoring the original unboxed call reproduced SIGILL. Peak compiler RSS
+was 93,904 KiB.
+
+The retained `2223dea6` packages match the box-only source delta across
+100 audited closure paths. Their independent historical receipt covers the
+old normal executable and corpus manifest. The latest-main composition
+changes `internal/c1/lib/transformer/checkpoint_internal.esk` within the
+package closure, so the next Stage 3 run requires a fresh package build.
+The diagnostic receipt at
+`/home/gabe/.codex/evidence/eshkol-transformer/e3-stage3-box-abi-d7bc9cff-20261127.gD8A9t/SHA256SUMS`
+records the exact evidence and scope.
+
 ## Next executable gate
 
 On an authorized supported host that meets **all four floors at lock time**,

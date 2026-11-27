@@ -1707,6 +1707,12 @@ vector. This source-only successor boxes that mutable scenario for all three
 fault calls. The original failed result is retained; a fresh normal/repeat/
 poison/sanitizer execution and E3 §9 acceptance remain pending.
 
+On the latest-main Wave 3 composition `d7bc9cff`, a [pinned boxed-call
+diagnostic](e3/E3_STAGE3_WAVE3_RECONCILIATION_20261125.md#boxed-call-diagnostic-on-the-latest-main-composition)
+passed for both gradient flags and reproduced SIGILL with the old unboxed
+call. The latest-main C1 package closure differs from the retained build,
+so Stage 3 still requires a fresh supported package and runtime run.
+
 The source-private I2/f32 storage-overlap prerequisite for detached G3-C4
 P2/G1 copy-out is independently reviewed at `2f50ab7`/tree `7e048ce`.
 Its supported fe9 normal/repeat/sanitizer gate passed, including retained
