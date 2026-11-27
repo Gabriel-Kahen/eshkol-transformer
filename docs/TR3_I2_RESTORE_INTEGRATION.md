@@ -51,3 +51,30 @@ linearly with restore count. This is not constant-total retention. No native
 trainer, O2 restore participant, joint live restore, public evaluator, overfit,
 full-state resume, or end-to-end CLI acceptance is claimed here. The runtime
 union's inherited package gates and full CI remain separate acceptance gates.
+
+## Current-main standalone provenance
+
+On clean main `443dad4ba205f931211f821a86667c9cc91dd0e2`, tree
+`443b4fdcd1e672c219d2e694f8de766d6574492d`, the pinned image above reproduces
+all four historical feature-off F32 object matches between `b3e84641` and the
+three-initializer `d5fa9a7` predecessor. For the same Clang/GCC O0 and O2
+strict-aliasing comparisons, current main matches the accepted Wave 3 merge
+`5d2df96e` byte-for-byte and differs from the historical predecessor in all
+four cases. Defined symbol names match. The unconditional F32 retired-control
+index integrated by `ca21861e` adds `abort`, the sole added undefined symbol
+in each comparison. The unchanged `make test-tr3-c-i2-restore` exits at the
+first Clang O0 byte comparison.
+
+Both compilers also find `abort` missing from
+`native/f32_tensor_owned_match_undefined_symbols.txt`. The ordinary F32
+manifests and restore bridge manifests match. The standalone bridge's
+declaration-only object comparison still passes with both compilers.
+The 122-file local audit seal is
+`eshkol-tr3c-feature-off-443dad4b.0ElUoa/evidence/SHA256SUMS`
+(`330fd077d6a585a7c26d8dee83fcc4dd9457635fe0b19e4c17cafcab72e7ca7c`).
+
+A current-main successor needs independent review of an explicit immutable
+F32 baseline and its source and header inputs, plus the matcher manifest
+delta. It must replay the exact Clang/GCC O0 and O2 comparisons and the native
+restore runtime and coexistence assertions. The historical test recipe and
+its accepted input continue to identify the original proof.

@@ -53,6 +53,12 @@ September 22, 2026 artifact directory. Its 1,380-file checksum manifest is
 It includes exact commands, source hashes, raw output, the preservation-only
 patch and root merge-source audit. No Eshkol compiler rebuild was needed.
 
+At main `443dad4b`, the pinned Clang and GCC O0 optimizer objects still match
+`1c3745b1`, including the matcher declaration-only builds. The standalone O2
+runner invokes the I2 runner before its pass banner. The current-main audit
+reproduced the [I2 prerequisite failure](TR3_I2_RESTORE_INTEGRATION.md#current-main-standalone-provenance)
+and measured the O2 object checks. The O2 runtime gate awaits a successor run.
+
 ## Limits and remaining dependencies
 
 O2 retains 1,464 bytes of terminal control state per restore: total retention is
