@@ -14,7 +14,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools/io5"))
-import quantized_interchange as quant
 import safetensors_interop as safe
 from test_live_c1_interop import first_safetensors_payload, flip
 from test_model_mapping import M3_ROWS, PROVIDER
@@ -22,6 +21,20 @@ from test_model_mapping import M3_ROWS, PROVIDER
 TOOL = ROOT / "tools/io5/quantized_interchange.py"
 BRIDGE_ENV = "IO5_LIVE_QUANTIZED_BRIDGE"
 PROFILE = "eshkol-m3-v1"
+
+
+def reference_narrow(dtype, f32):
+    if dtype == "F16":
+        return b"".join(struct.pack("<e", value) for value, in struct.iter_unpack("<f", f32))
+    # Round to nearest BF16, using the retained low bit to break ties to even.
+    return b"".join(struct.pack("<H", (bits + 0x7FFF + ((bits >> 16) & 1)) >> 16)
+                    for bits, in struct.iter_unpack("<I", f32))
+
+
+def reference_widen(dtype, narrow):
+    if dtype == "F16":
+        return b"".join(struct.pack("<f", value) for value, in struct.iter_unpack("<e", narrow))
+    return b"".join(struct.pack("<I", bits << 16) for bits, in struct.iter_unpack("<H", narrow))
 
 
 class LiveQuantizedM3Tests(unittest.TestCase):
@@ -102,18 +115,31 @@ class LiveQuantizedM3Tests(unittest.TestCase):
                 self.assertEqual(metadata["eshkol.io5.lossy"], "true")
                 self.assertEqual(metadata["eshkol.io5.source_c1_sha256"], source_digest)
                 self.assertEqual(set(header), {name for _, name, _, _ in M3_ROWS})
-                for _, name, _, shape in M3_ROWS:
-                    self.assertEqual((header[name]["dtype"], header[name]["shape"]),
-                                     (dtype, list(shape)))
                 payload_bytes = len(raw) - payload_offset
                 self.assertEqual(payload_bytes * 2, sum(len(t.data) for t in original.tensors))
 
                 restored = self.directory / f"{dtype}.etcp"
                 self.cli("safetensors-to-c1", wire, restored)
                 restored_bytes = restored.read_bytes()
-                self.assert_m3_state(safe.decode_c1(restored_bytes))
-                metrics = quant.measure_reconstruction_error(self.original_bytes, restored_bytes)
-                weight_delta = metrics["__overall__"]["max_abs"]
+                restored_state = safe.decode_c1(restored_bytes)
+                self.assert_m3_state(restored_state)
+                weight_delta = 0
+                cursor = 0
+                for (_, name, _, shape), source, decoded in zip(
+                    M3_ROWS, original.tensors, restored_state.tensors, strict=True,
+                ):
+                    end = cursor + len(source.data) // 2
+                    self.assertEqual(header[name], {"dtype": dtype, "shape": list(shape),
+                                                    "data_offsets": [cursor, end]}, name)
+                    payload = raw[payload_offset + cursor:payload_offset + end]
+                    self.assertEqual(payload, reference_narrow(dtype, source.data), name)
+                    self.assertEqual(decoded.data, reference_widen(dtype, payload), name)
+                    source_values = struct.iter_unpack("<f", source.data)
+                    decoded_values = struct.iter_unpack("<f", decoded.data)
+                    weight_delta = max(weight_delta, max(
+                        abs(a - b) for (a,), (b,) in zip(source_values, decoded_values, strict=True)))
+                    cursor = end
+                self.assertEqual(cursor, payload_bytes)
                 observed = self.evaluate(restored, self.directory / f"{dtype}-readback.etcp")
                 observed_logits = struct.unpack("<512f", observed)
                 logit_delta = max(abs(a - b) for a, b in zip(reference_logits, observed_logits, strict=True))
@@ -143,10 +169,14 @@ class LiveQuantizedM3Tests(unittest.TestCase):
     def test_live_c1_rejections_do_not_publish_readback_or_logits(self):
         state = safe.decode_c1(self.original_bytes)
         payload_offset = struct.unpack_from("<Q", self.original_bytes, 64)[0]
+        # Same element count and valid C1 checksums exercise the module's shape guard.
+        wrong_shape = replace(state.tensors[0], shape=(2, 8))
         for label, raw, diagnostic in (
             ("payload", flip(self.original_bytes, payload_offset), "checksum"),
             ("missing-tie", safe.encode_c1(replace(state, aliases=())),
              "state alias graph does not match destination module"),
+            ("shape", safe.encode_c1(replace(state, tensors=(wrong_shape, *state.tensors[1:]))),
+             "state tensor shape mismatch"),
         ):
             with self.subTest(case=label):
                 path = self.directory / f"{label}.etcp"

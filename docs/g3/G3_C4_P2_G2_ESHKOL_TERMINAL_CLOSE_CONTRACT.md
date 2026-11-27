@@ -1,6 +1,15 @@
 # Private Eshkol P2/G2 terminal close and same-call coordinator contract
 
-Status: independently reviewed source-grounded private contract; source implementation, prerequisite integration, and compiled same-call proof remain pending. This does not authorize a public G2 facade. Native terminal source/tests `aae70bb57d597e13c1469fc02b7c655cd40226f5` and manifest-only successor `fd41dfdb135683889a7ffa974c23f1045dc59cf9` are independently accepted; PR184 integration remains pending. The logical I1 prerequisite contract is merged through PR185, while its native implementation is in progress. This contract composes those accepted APIs without changing P2/G1, the generic abort-required protected scope, or installed dispatch. Full Wave3 generation and continuation remain open until their separate acceptance evidence exists.
+Status: independently reviewed private contract. The native terminal commit
+and snapshot merged through
+[PR #184](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/184), and
+the native logical I1 clone, copy, and release merged through
+[PR #189](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/189).
+The pending-anchor and carrier prerequisites, constructor-bound reservation,
+and compiled Eshkol same-call proof are separate gates. The accepted private
+contract preserves the existing P2/G1 and generic abort-required protected
+scope. Public G2, installed dispatch, and continuation require separate
+acceptance.
 
 ## Existing authority and distinct private entry
 

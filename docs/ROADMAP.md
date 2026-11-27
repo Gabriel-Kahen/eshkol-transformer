@@ -3506,9 +3506,63 @@ publication, public G2 and continuation remain pending.
   [accepted same-call ownership contract](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md)
   specifies one original pending output entry, a surviving terminal anchor,
   authentic T1/EOS/second-token composition, and a preflighted no-failure close
-  after native commit. Native terminal integration and logical I1 clone code
-  are prerequisites; Eshkol implementation and compiled same-call proof remain
-  pending. No public G2 or continuation acceptance is claimed.
+  after native commit. The native commit and snapshot merged through
+  [PR #184](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/184), and
+  the native logical I1 clone through
+  [PR #189](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/189).
+  The next Eshkol gate is the private reservation that binds the constructor's
+  original carrier bundle at the sole output entry's first enrollment. The
+  [reservation proposal](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/6845bd0a81aad05f169b0c0e85fc8779b43c87a8)
+  defines that boundary. The private entry and its compiled proof remain
+  pending. Same-call terminal publication,
+  detached Eshkol output, public G2, and CLI adoption follow separately.
+
+- **Private P2/G2 terminal pending-allocation precursor:** The
+  [abort-only anchor candidate](g3/G3_C4_P2_G2_TERMINAL_PENDING_ANCHOR_LEAF.md)
+  reserves the original output and second/text carriers before sampling. An
+  independent lexical root detects paired carrier replacement and changed
+  list nodes/successors before abort. On the `c71d39a984` worktree candidate,
+  the pinned `fe9dfd5` Ubuntu 22.04/Clang 21 normal, repeat and sanitizer
+  fixtures pass 23 private and four feature-off checks with identical stdout
+  and empty stderr; seven static mutations pass. The runner's final Git check
+  failed because the container lacked the external worktree Git directory;
+  host postflight passed. Evidence is sealed under
+  `build/g3c4-p2g2-terminal-pending-anchor-20261114/SHA256SUMS` pending
+  independent result review and integration. Actual bytevector backing
+  extent, allocation failure cuts, same-call EOS/second-token publication,
+  detached clones, public G2 and save/reload remain open.
+
+- **Standalone P2/G2 constructor-owned carrier prerequisite:** The
+  [private carrier bundle candidate](g3/G3_C4_P2_G2_TERMINAL_CARRIERS_LEAF.md)
+  captures all eight literal constructor returns in an inaccessible lexical
+  root, authenticates original bundle/carrier identities and fixed extents,
+  and provides authenticated scrub/unlink retirement. Pinned normal, repeat
+  and sanitizer runs pass 530 identical checks each, including eight guarded
+  allocation cuts with earlier-bundle preservation and retry; sixteen
+  unguarded cuts match the exact pinned emergency exit 1 diagnostic.
+  Unchanged pending/feature-off predecessors pass 23/4 per mode; 22+7 static
+  mutations and Q0's four tests pass. Evidence is under
+  `build/g3c4-p2g2-terminal-carriers-20261115-attempt3/`; integration remains
+  pending. Its development allocator
+  witness is evidence only; the production helper never converts carriers
+  to native pointers. Existing protected/prefix wrappers and native ABI
+  remain unchanged. Composition into the sole native pending output and
+  actual terminal close, public G2, trained-G2 sanitizer acceptance and
+  save/reload remain open.
+
+  The standalone pending anchor and carrier bundle also passed their original
+  pinned Ubuntu 22.04/Clang 21.1.8 gates on the Wave 3 reconciliation
+  `12598d3bc01c155eab0eeb89b26c11304ee3fcbd` (tree `d6338d1b`), with
+  23 pending, four feature-off, and 530 carrier checks per mode. The
+  83-file seal is
+  `/home/gabe/.codex/evidence/eshkol-transformer/g3c4-carrier-wave3-12598d3-20261125/SHA256SUMS-RUN`
+  (`59496ab79d9a12ea718f83aef319f6da1d491e6da943008f90c6779d20651ba3`).
+  The replay on main `443dad4b` uses the same PA4 transitive-header pin
+  and passes Q0 isolation. Review found coordinated record/carrier substitution
+  and a forged completion tag in the pending probe. The replay binds the
+  exact record contents and roots at enrollment and checks completion through
+  the private root before unwinding. Both suites now verify and seal the full
+  input closure. The Wave 3 compiled receipt applies to its own tree.
 
 ## Wave 4 — practical pretraining and performance
 
@@ -3536,7 +3590,7 @@ contracts; live runtime composition remains open.
 
 | ID | Workstream | Depends on | Acceptance evidence | Status |
 |---|---|---|---|---|
-| IO5 | [Safetensors](IO5_SAFETENSORS.md) and [GGUF](IO5_GGUF.md) safe interchange | C1, M3 | Bounded data-only C1 1.0 CPU-f32 safetensors predecessor merged through PR #217. Reviewed GGUF v3 LE/F32/rank1–4 slice preserves semantic metadata/checksum and adds explicit plain import, checked offsets/alignment/padding and corruption negatives. [PR #222](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/222) requires the native reader/writer witness built from a SHA-256-pinned GGML source archive. The [supported IO5 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814/job/132956162216) passed all 22 IO5 tests with the native witness. That run fell short of aggregate acceptance at the separate D2 resource watchdog. Current-main reconciliation preserves the 22 compiled suites and adds IO5 to the required evidence inventory. The bounded converter and mandatory native gate merged through [PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240) after all 26 required jobs passed. The [mapped and sharded candidate](IO5_MODEL_MAPPING.md) passed 34 local IO5 tests and five isolation checks with the pinned Python references and native GGML witness on Ubuntu 22.04 and Clang 21. The successor pins the required IO5 CI discovery chain and mapping-suite inventory in topology mutation checks; the 34 IO5 and five isolation checks also pass locally with the pinned references and reused native witness under Clang 22. PR #243 merged the exact lossless mapped/sharded IO5 contract on main `417918d0`. The admitted bounded quantized IO5 slice carries F16/BF16 safetensors and F16/Q8_0 GGUF for bare C1 and the merged M3/decoder mappings, with framed payload checksums, fail-closed unmerged MOD5 requests, native C11 numeric/sanitizer tests, and a source-pinned independent GGML Q8_0 decoder witness. The premerge stacked integration passed 42 pinned-reference IO5 discovery tests (including eight quantized groups), five Python-isolation checks, 18 topology/O2/Q0 checks, Clang 21 C11/C++17 native and sanitizer checks, and the SHA-256-pinned GGML witness at 192 exact F32 bits. Independent source-and-test review approved the amended candidate. PR #247 merged it as `c96697ef`/tree `cd85d8f2` after [26-job hosted CI 45723832757](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45723832757) passed; the required IO5 job ran 42 cases and the pinned GGML decoder witness at 192 exact F32 bits. The focused [live C1 and lossless MOD5 mapping](IO5_LIVE_C1_INTEROP.md) gate passed two byte-identical native AOT builds, five round-trip routes, and corruption rejection on pinned Ubuntu. The quantized routes remain limited to M3 and decoder profiles. The opt-in [live M3 quantized gate](IO5_QUANTIZED_INTERCHANGE.md#opt-in-m3-model-evaluation) loads mapped F16/BF16 safetensors through the IO5-to-C1 path, checks tied-state readback, measures F32 weight and logit deltas, and rejects corrupted wire and C1 artifacts before publication. A separately reviewed MOD5-C candidate now passes a local live training and lossless IO5 round-trip gate on the accepted main contracts; admission remains pending. | active |
+| IO5 | [Safetensors](IO5_SAFETENSORS.md) and [GGUF](IO5_GGUF.md) safe interchange | C1, M3 | Bounded data-only C1 1.0 CPU-f32 safetensors predecessor merged through PR #217. Reviewed GGUF v3 LE/F32/rank1–4 slice preserves semantic metadata/checksum and adds explicit plain import, checked offsets/alignment/padding and corruption negatives. [PR #222](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/222) requires the native reader/writer witness built from a SHA-256-pinned GGML source archive. The [supported IO5 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/43761163814/job/132956162216) passed all 22 IO5 tests with the native witness. That run fell short of aggregate acceptance at the separate D2 resource watchdog. Current-main reconciliation preserves the 22 compiled suites and adds IO5 to the required evidence inventory. The bounded converter and mandatory native gate merged through [PR #240](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/240) after all 26 required jobs passed. The [mapped and sharded candidate](IO5_MODEL_MAPPING.md) passed 34 local IO5 tests and five isolation checks with the pinned Python references and native GGML witness on Ubuntu 22.04 and Clang 21. The successor pins the required IO5 CI discovery chain and mapping-suite inventory in topology mutation checks; the 34 IO5 and five isolation checks also pass locally with the pinned references and reused native witness under Clang 22. PR #243 merged the exact lossless mapped/sharded IO5 contract on main `417918d0`. The admitted bounded quantized IO5 slice carries F16/BF16 safetensors and F16/Q8_0 GGUF for bare C1 and the merged M3/decoder mappings, with framed payload checksums, fail-closed unmerged MOD5 requests, native C11 numeric/sanitizer tests, and a source-pinned independent GGML Q8_0 decoder witness. The premerge stacked integration passed 42 pinned-reference IO5 discovery tests (including eight quantized groups), five Python-isolation checks, 18 topology/O2/Q0 checks, Clang 21 C11/C++17 native and sanitizer checks, and the SHA-256-pinned GGML witness at 192 exact F32 bits. Independent source-and-test review approved the amended candidate. PR #247 merged it as `c96697ef`/tree `cd85d8f2` after [26-job hosted CI 45723832757](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45723832757) passed; the required IO5 job ran 42 cases and the pinned GGML decoder witness at 192 exact F32 bits. The focused [live C1 and lossless MOD5 mapping](IO5_LIVE_C1_INTEROP.md) gate passed two byte-identical native AOT builds, five round-trip routes, and corruption rejection on pinned Ubuntu. The quantized routes remain limited to M3 and decoder profiles. The opt-in [live M3 quantized gate](IO5_QUANTIZED_INTERCHANGE.md#opt-in-m3-model-evaluation) loads mapped F16/BF16 safetensors through the IO5-to-C1 path, checks mapped wire bytes and restored F32 weights against an independent reference, measures F32 weight and logit deltas, and rejects corrupted wire, invalid C1 checksums, a missing tie and a wrong tensor shape before publication. A separately reviewed MOD5-C candidate now passes a local live training and lossless IO5 round-trip gate on the accepted main contracts; admission remains pending. | active |
 | T2-N | [Opt-in native BPE trainer and AOT bridge](T2_BPE_TRAINER.md) | T2, D1 | The exact six-gate hosted diagnostic and 26 required jobs passed for PR #246. A follow-up private import candidate admits raw, special-free `ETBPE100` models with up to 256 merges into the accepted same-aggregate T2 constructor and bounded DATA4/D1 path. The focused `make test-t2-native-corpus` gate passed with pinned Eshkol and Clang 21, checking canonical T2 bytes, partitioned T2 encode, exact native token IDs, deterministic D1 files and failed publication. Integration remains open. | active |
 | DATA4-Q | [Native quality and near-duplicate filtering](DATA4_CORPUS_PIPELINE.md) | DATA4 | Reviewed leaf adds strict UTF-8, quality/repetition filters and optional MinHash/LSH with exact Jaccard confirmation. A pinned local development-only witness passes actual kept ordinals and original bytes through accepted T2 staging and D1 publication, checks selected IDs and exact 20-token readback, and confirms duplicate source IDs publish no corpus; its eight receipt hashes verify and independent delta review found no blocker. The quality report remains distinct from installed DATA4; PR #251 admitted the bounded development witness. The opt-in same-aggregate adapter is a candidate for a maintained path using bounded one-shot staging, an in-memory quality receipt and the existing D1 writer. Its pinned AOT gate and independent executable replay passed reordered selection, raw byte preservation, empty and all-rejected corpora, and no publication on invalid or tampered staging. | active |
 | BEAM5 | [Standalone deterministic beam search](BEAM_SEARCH_DECODING.md) | A0 | Reviewed mock-logit CPU binary64 leaf is included unchanged; PR #246 admitted the standalone gate; live model/tokenizer dispatch remains open. | active |
