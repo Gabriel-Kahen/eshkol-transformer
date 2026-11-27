@@ -57,10 +57,13 @@ from tests.x1.manifest_format import fingerprint
 out = Path(sys.argv[1])
 expected = json.loads((out / "fixture-verify.json").read_text())
 observed = out / "a"
-assert fingerprint((observed / "resolved-x1.json").read_bytes()) == expected["x1_fingerprint"]
-assert (observed / "tokenizer-fingerprint.txt").read_text() == expected["tokenizer_fingerprint"]
+if fingerprint((observed / "resolved-x1.json").read_bytes()) != expected["x1_fingerprint"]:
+    raise SystemExit("compiled X1 fingerprint differs from the independent reference")
+if (observed / "tokenizer-fingerprint.txt").read_text() != expected["tokenizer_fingerprint"]:
+    raise SystemExit("loaded tokenizer fingerprint differs from the independent reference")
 actual = [hashlib.sha256((observed / f"cursor-{n}.bin").read_bytes()).hexdigest()
           for n in range(expected["total_updates"] + 1)]
-assert actual == expected["oracle_cursor_sha256_by_next_ordinal"]
+if actual != expected["oracle_cursor_sha256_by_next_ordinal"]:
+    raise SystemExit("native D2 cursor bytes differ from the independent reference")
 PY
 grep -Fx 'MOD5 V256 X1/D2 PASS rows=6 split=2 suffix=4' "$out/a.stdout"
