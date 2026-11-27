@@ -47,6 +47,14 @@ static const uint32_t run_options[OPTION_COUNT] = {
     0x3c800000u, /* weight decay 0.015625 */
 };
 
+static const uint32_t fresh_options[OPTION_COUNT] = {
+    0x00000000u, /* learning rate 0 */
+    0x3f000000u, /* beta1 0.5 */
+    0x3f400000u, /* beta2 0.75 */
+    0x37800000u, /* epsilon 2^-16 */
+    0x00000000u, /* weight decay 0 */
+};
+
 static parameter_shape model_shape(size_t parameter, size_t kv_heads) {
   if (parameter >= GAMMA1)
     return (parameter_shape){1, {WIDTH, 0}};
@@ -83,12 +91,16 @@ static live_model create_model(const state_bits *state, size_t kv_heads,
     CHECK(et_f32_tensor_destroy_v1(&initial, NULL) == 0);
     CHECK(et_f32_parameter_bind_identity_v1(model.parameters[p],
                                             model.parameters[p], NULL) == 0);
+    uint32_t options[OPTION_COUNT];
+    for (size_t option = 0; option < OPTION_COUNT; ++option)
+      options[option] = fresh_optimizer
+                            ? fresh_options[option]
+                            : run_options[option] + (uint32_t)p * 0x4000u;
     CHECK(et_o2_optimizer_builder_set_v1(
               builder, p, model.parameters[p], model.parameters[p],
-              fresh_optimizer ? 0 : run_options[ET_O2_OPTION_LEARNING_RATE],
-              run_options[ET_O2_OPTION_BETA1], run_options[ET_O2_OPTION_BETA2],
-              run_options[ET_O2_OPTION_EPSILON],
-              run_options[ET_O2_OPTION_WEIGHT_DECAY], NULL) == 0);
+              options[ET_O2_OPTION_LEARNING_RATE], options[ET_O2_OPTION_BETA1],
+              options[ET_O2_OPTION_BETA2], options[ET_O2_OPTION_EPSILON],
+              options[ET_O2_OPTION_WEIGHT_DECAY], NULL) == 0);
   }
   CHECK(et_o2_optimizer_builder_finish_v1(&builder, &model.optimizer, NULL) ==
         0);

@@ -18,7 +18,8 @@ binary32 words and reads the optimizer options and completed-update count.
 It releases the source moment snapshot, creates new I2 parameter owners
 from the copied weights, and loads a new O2 owner via the C2 optimizer
 component's native reconstruction and load seams. The recipient starts
-with zero learning rates and a constant schedule. The gate compares all
+with a constant schedule and all five AdamW options distinct from the
+source. The source options vary by parameter. The gate compares all
 weight words, both moment tensors per parameter, scalar options, successful
 update count, and the next schedule factor against the uninterrupted owner
 at the restore boundary and after each remaining update.
