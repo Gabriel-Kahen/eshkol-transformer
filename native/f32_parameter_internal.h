@@ -18,6 +18,11 @@ typedef struct et_f32_parameter et_f32_parameter;
 typedef struct et_f32_gradient_plan et_f32_gradient_plan;
 typedef struct et_f32_gradient_reset_plan et_f32_gradient_reset_plan;
 
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+/* Development witness only. The canonical I2 accessor continues to return 1.1. */
+const et_kernel_provider_v1 *et_i2_private_mod5_width16_storage_provider_v1(void);
+#endif
+
 #ifdef ET_I2_PRIVATE_OWNED_CLONE_MATCH
 enum {
   ET_I2_PRIVATE_OWNED_RESULT_OK = 0,

@@ -3,6 +3,10 @@
 #include "eshkol_transformer/f32_tensor.h"
 #include "eshkol_transformer/kernel_abi.h"
 
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+#include "f32_parameter_internal.h"
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -976,6 +980,42 @@ static void test_exact_provider_audit(void) {
 #undef REJECT_PROVIDER
 }
 
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+static void test_mod5_width16_stays_outside_default_k2(void) {
+  static const uint64_t matrices[][2] = {
+      {8u, 16u}, {16u, 16u}, {16u, 32u}, {32u, 16u},
+  };
+  const et_kernel_provider_v1 *candidate =
+      et_i2_private_mod5_width16_storage_provider_v1();
+  et_kernel_provider_v1 relabeled = *candidate;
+  et_kernel_capability_v1 relabeled_row =
+      *(const et_kernel_capability_v1 *)candidate->capabilities;
+  const et_kernel_provider_v1 *legacy = et_f32_tensor_provider_v1();
+  aligned_error diagnostic;
+  et_k2_test_reset_v1();
+  initialize_error(&diagnostic, 0xa5u);
+  CHECK(et_k2_private_runtime_ensure_v1(&diagnostic, 264) == 0);
+  const int64_t generation = et_k2_private_runtime_generation_v1();
+  CHECK(generation > 0);
+  for (size_t i = 0u; i < sizeof(matrices) / sizeof(matrices[0]); i++) {
+    CHECK(require_request(generation, 9, "storage.copy", "f32", "cpu",
+                          matrices[i], 2, 1, &diagnostic) ==
+          ET_K2_STATUS_UNSUPPORTED);
+    check_k1_no_match(&diagnostic);
+  }
+  expect_provider_rejected(candidate, ET_K2_STATUS_VERSION_MISMATCH);
+  relabeled.version = legacy->version;
+  relabeled.evidence = legacy->evidence;
+  relabeled_row.version = legacy->version;
+  relabeled_row.evidence = legacy->evidence;
+  relabeled.capabilities = &relabeled_row;
+  expect_provider_rejected(&relabeled, ET_K2_STATUS_INTERNAL);
+  relabeled.validate_call = legacy->validate_call;
+  expect_provider_rejected(&relabeled, ET_K2_STATUS_INTERNAL);
+  et_k2_test_reset_v1();
+}
+#endif
+
 #ifdef ET_K2_ALLOCATOR_WRAP
 static void test_every_k1_discovery_allocation(void) {
   /*
@@ -1121,6 +1161,9 @@ int main(void) {
   test_discovery_and_matching();
   test_provider_and_partial_failure();
   test_exact_provider_audit();
+#ifdef ET_I2_PRIVATE_MOD5_WIDTH16_STORAGE_COPY
+  test_mod5_width16_stays_outside_default_k2();
+#endif
 #ifdef ET_K2_ALLOCATOR_WRAP
   test_every_k1_discovery_allocation();
 #endif
