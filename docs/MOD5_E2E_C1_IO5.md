@@ -153,6 +153,32 @@ evidence.
    against the exact source and artifact. A subsequent continuation gate can
    qualify a restored live receiver and a matched training suffix.
 
+### V256 cross-entropy gradient witness
+
+The bounded [gradient test](../tests/mod5/test-mod5-v256-gradient.sh) uses
+the accepted MOD5-C decoder and the EVAL5 V256 tokenizer, D1 split and C1
+roster. It reads the first validated held-out document as eight next-token
+rows with full loss weight. The untied image has separate `[256,16]` head
+and embedding tensors. The tied image uses the same roster, equal payloads
+and the canonical head/embedding alias group.
+
+The gradient test runs the real decoder backward on both models. It
+compares the separate head and embedding contributions on the shared
+weights with the decoder's tied result across all 4,096 elements. The
+combined gradient is placed at `head.weight` and the alias slot is cleared.
+Central differences perturb the untied head or embedding alone and both
+uses of the shared tensor together. A binary64 oracle built on the
+independent EVAL5 forward reference checks both losses and seven
+preselected nonzero coordinates, including source and target IDs above
+127. Each tied coordinate has nonzero contributions from both paths.
+
+On the pinned Ubuntu 22.04 and LLVM 21 toolchain, run the test with
+`MOD5_V256_GRADIENT_AOT_SLOT=1 bash tests/mod5/test-mod5-v256-gradient.sh FRESH_EVIDENCE_DIR`
+in an assigned build slot. The gate runs the compiled witness twice and
+compares its transcripts. The compiler-free fixture and oracle checks are
+complete. The supported AOT result and independent review remain open,
+along with K2 profile admission and C2/optimizer continuation.
+
 ## IO5 gate
 
 | Route | Import selection |

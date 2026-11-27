@@ -21,6 +21,11 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 - The [proposed V=256 MOD5 C2 gate](MOD5_E2E_C1_IO5.md#proposed-width-16-c2-gate)
   depends on exact native storage and K2 admission for `[256,16]` and a
   tied and untied C2 witness with matching T1, D2 and X1 identities.
+  The [independent V256 gradient witness](MOD5_E2E_C1_IO5.md#v256-cross-entropy-gradient-witness)
+  stages full-mask `T=8` cross-entropy, separate head and embedding gradients,
+  and canonical tied accumulation with seven preselected finite differences.
+  The compiler-free fixture and oracle checks pass. Supported AOT execution
+  and independent result review remain pending.
 
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,
