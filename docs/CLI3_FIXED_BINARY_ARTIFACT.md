@@ -2,7 +2,35 @@
 
 ## Current accepted scope
 
-Artifact `15095929578` (`cli3-fixed-binary-45773952998-1`, GitHub artifact
+PR #265 merged as `e34a6a8e3385bee6fb93a5339723f3d759c47758` on exact tree
+`e0dae2e168700c2416a8f7f32efd5f6801f9fe0c`. All 26 required CI jobs passed.
+Run `45941244549`, attempt 1, built synthetic merge
+`3b67453597898dd6d23aac590f974ff8c7d8116a` on the same tree. Its CLI3 job
+`140315873781` uploaded artifact `15173825352` (`cli3-fixed-binary-45941244549-1`).
+[Merge commit](https://github.com/Gabriel-Kahen/eshkol-transformer/commit/e34a6a8e3385bee6fb93a5339723f3d759c47758)
+[Hosted run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941244549)
+[CLI3 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941244549/job/140315873781)
+[Artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941244549/artifacts/15173825352)
+
+The download matched the GitHub ZIP SHA-256
+`9725683aadc6e802971e31c68ae1bf83632f90c01310db32a582b92fef21edea`,
+tarball SHA-256
+`d310f50edea0aafbb5fc991b159bd604289483a721f767d03bd2eced14d41bcf`,
+and tested executable SHA-256
+`cd1360b45ff7919eecba2e83b96167768d4cdd42fef115967f8865f0c2429611`.
+The downloaded artifact runner, smoke checks, and fixed-profile rejection
+checks passed on network-disabled Ubuntu 22.04 x86-64 without compiling.
+Four uninterrupted updates, one update followed by a three-update resume, and
+chained one-update resumes produced byte-identical C2 checkpoints with 14
+tokens, four updates, and two epochs. The checkpoint SHA-256 is
+`67ee14d747dfbaafeba1218eb03522b839c3d3339cd07290dc54eeefe12846ab`.
+All five installed D1 tests and ten installed DATA4 tests passed, including
+same-summary report-swap rejection. The independent replay omitted three
+DATA4 fault-injection cases. The qualification covers the fixed CPU-f32,
+context-two, byte-tokenizer profile with greedy `c5` and categorical `80`
+one-byte generation.
+
+Earlier artifact `15095929578` (`cli3-fixed-binary-45773952998-1`, GitHub artifact
 digest `sha256:e8da9eba8e829a181e2e68af644737717ab28a1bd23b1a68ff309ec9348eed75`)
 came from [PR #255 run 45773952998](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45773952998).
 GitHub built synthetic merge `6ca6e432e565bcf1e5e0e3393ae969159f06c81d`

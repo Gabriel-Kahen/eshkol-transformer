@@ -69,7 +69,8 @@ class ZeroControlContract(unittest.TestCase):
                 "tests/e3_private/zero_control_driver.esk",
                 "tests/e3_private/zero_control_negative_driver.esk",
             },
-            "undefined_symbols": {"fflush"},
+            "undefined_symbols": {"eshkol_tail_transfer_slot",
+                                  "eshkol_tensor_from_collection", "fflush"},
         }
         for suffix, added in additions.items():
             with self.subTest(suffix=suffix):
