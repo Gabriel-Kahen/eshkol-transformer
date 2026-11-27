@@ -31,6 +31,8 @@ trap 'rm -rf -- "${eval5_tmp}"' EXIT
 #include "eshkol_transformer/eval5_benchmark_abi.h"
 #include <type_traits>
 static_assert(std::is_standard_layout_v<et_eval5_manifest>);
+static_assert(std::is_standard_layout_v<et_eval5_benchmark_request>);
+static_assert(std::is_standard_layout_v<et_eval5_benchmark_result>);
 static_assert(std::is_same_v<et_eval5_status, int32_t>);
 CPP
 
@@ -54,6 +56,7 @@ et_eval5_manifest_format
 et_eval5_manifest_parse
 et_eval5_manifest_read_file
 et_eval5_manifest_write_atomic
+et_eval5_run_benchmark
 et_eval5_score_lm
 et_eval5_score_mc
 SYMBOLS

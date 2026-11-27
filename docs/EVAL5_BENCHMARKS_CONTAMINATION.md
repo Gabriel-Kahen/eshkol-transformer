@@ -65,6 +65,39 @@ out-of-range targets. Language modeling also rejects a zero byte count and
 perplexity overflow. Dimensions and element counts are checked before a
 sequence is read. The caller supplies buffers with the declared extents.
 
+## One-shot native runner
+
+`et_eval5_run_benchmark` accepts training and evaluation document spans, a
+tokenizer identity for each corpus, and the active tokenizer's identity. It
+requires complete T1/T2 fingerprint and vocabulary agreement across all
+three identities, then decodes the tokenizer digest for the manifest.
+In token-audit mode it checks that both corpora's token IDs are in vocabulary.
+The audit must pass before the runner reads any metric inputs.
+
+Set `metric_mask` for LM, MC, or both. Each scoring sequence uses exactly
+the admitted vocabulary width. LM takes one flat sequence of scored rows,
+its original target byte count, and the number of evaluation documents
+providing those rows. The document count cannot exceed either the audit
+evaluation count or the number of scored rows. Rows may span multiple
+model context windows. MC uses the caller's item and choice arrays. A nonzero
+`max_samples` caps each enabled metric's sample count independently. The
+audit always covers the supplied evaluation documents. Leave disabled
+adapter inputs empty.
+
+The result includes the parsed manifest with its checksum and the exact
+canonical bytes, with a convenience NUL outside the record length. Every
+error leaves the result buffer untouched. Call
+`et_eval5_manifest_write_atomic(path, &result.manifest)` after success to
+publish the same record to a file. To inspect rejected audit indices,
+call the audit API directly.
+
+The caller obtains the checkpoint and corpus digests and all three
+tokenizer identities from their validated owners. The caller also binds the
+supplied documents, logits, target IDs, original byte count, sample
+selection, and model context length to those owners. The runner checks
+agreement and declared dimensions at the native boundary. Ownership
+validation, loading, tokenization, and inference happen at the caller.
+
 ## Canonical manifest v1.0
 
 Initialize `et_eval5_manifest` with version 1.0, the benchmark suite, task
@@ -151,7 +184,9 @@ instrumented archives, checks their repeat-build SHA-256s and exports,
 runs the same driver under both builds, compares the resulting metrics and
 manifests byte for byte, and runs a stdlib Python oracle from `tests/eval5/`.
 The driver includes an intentional uint64 n-gram collision, malformed input
-fixtures, and an end-to-end audit, scoring, publication, and reload.
+fixtures, and byte-audit LM-only, token-audit MC-only, and combined runner
+cases. It checks audit-first rejection, untouched result buffers on failure,
+and byte-identical atomic publication of the combined result.
 
 The audit indexes documents and n-gram occurrences in memory before
 deduplication. Memory scales with the training document and window counts.

@@ -165,6 +165,59 @@ et_eval5_status et_eval5_manifest_write_atomic(const char *path,
 et_eval5_status et_eval5_manifest_read_file(const char *path,
                                            et_eval5_manifest *out);
 
+typedef struct {
+  const uint8_t *fingerprint;
+  size_t fingerprint_length;
+  uint32_t vocab_size;
+} et_eval5_tokenizer_identity;
+
+typedef struct {
+  const et_eval5_document *documents;
+  size_t document_count;
+  et_eval5_tokenizer_identity tokenizer;
+  uint8_t dataset_sha256[ET_EVAL5_SHA256_BYTES];
+} et_eval5_benchmark_corpus;
+
+typedef struct {
+  char suite[ET_EVAL5_NAME_MAX + 1u];
+  char task[ET_EVAL5_NAME_MAX + 1u];
+  char split[ET_EVAL5_NAME_MAX + 1u];
+  uint64_t context_length;
+  uint64_t max_samples;
+  et_eval5_contamination_config contamination;
+  et_eval5_tokenizer_identity tokenizer;
+  et_eval5_benchmark_corpus train;
+  et_eval5_benchmark_corpus eval;
+  uint8_t checkpoint_sha256[ET_EVAL5_SHA256_BYTES];
+  uint32_t metric_mask;
+  uint32_t mc_normalize_by_length;
+  const et_eval5_sequence *lm_sequence;
+  uint64_t lm_byte_count;
+  size_t lm_sample_count;
+  const et_eval5_choice_item *mc_items;
+  size_t mc_item_count;
+} et_eval5_benchmark_request;
+
+typedef struct {
+  et_eval5_manifest manifest;
+  size_t canonical_size;
+  char canonical_bytes[ET_EVAL5_MANIFEST_MAX_BYTES + 1u];
+} et_eval5_benchmark_result;
+
+/* The caller obtains the identities and digests from validated owners and
+ * binds them to the supplied documents, targets, logits and context length.
+ * The runner checks both corpus tokenizer identities against the tokenizer,
+ * validates token IDs in token-audit mode, and requires the audit to pass
+ * before inspecting metric inputs. All logit widths must equal vocab_size.
+ * LM rows may be flattened across windows; lm_sample_count counts evaluation
+ * documents providing scored rows. max_samples caps each enabled metric
+ * when nonzero. Disabled metric inputs must be NULL/zero.
+ * On success, out contains the parsed manifest including its checksum and
+ * canonical bytes, with a NUL after canonical_size bytes. Any failure leaves
+ * out untouched. Inputs must remain immutable and separate from out. */
+et_eval5_status et_eval5_run_benchmark(const et_eval5_benchmark_request *request,
+                                      et_eval5_benchmark_result *out);
+
 #ifdef __cplusplus
 }
 #endif

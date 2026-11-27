@@ -31,5 +31,6 @@ ASAN_OPTIONS="detect_leaks=${eval5_leaks}:halt_on_error=1" UBSAN_OPTIONS="halt_o
   "${eval5_tmp}/sanitize" "${eval5_tmp}/sanitize-data" > "${eval5_tmp}/sanitize-data/results"
 cmp "${eval5_tmp}/normal-data/results" "${eval5_tmp}/sanitize-data/results"
 cmp "${eval5_tmp}/normal-data/benchmark.manifest" "${eval5_tmp}/sanitize-data/benchmark.manifest"
+cmp "${eval5_tmp}/normal-data/one-shot.manifest" "${eval5_tmp}/sanitize-data/one-shot.manifest"
 printf 'EVAL5 C driver passed normally and under ASan/UBSan (detect_leaks=%s)\n' "${eval5_leaks}"
 python3 tests/eval5/test_eval5_oracle.py "${eval5_tmp}/normal" "${eval5_tmp}/normal-data"
