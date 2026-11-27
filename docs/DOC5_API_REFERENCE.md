@@ -1,11 +1,9 @@
 # Eshkol Transformer API reference
 
-Integration baseline `8d185344f3abaacb2fdd5ff75743f0ff02a92ab2`, with
-the DATA4-C and DOC5 candidate changes. Paths and commands are relative to
-the checkout root. Eshkol facades need the corresponding
-linked package. Native providers advertise supported operations and shapes
-through K1. Check the capability before dispatch and follow each contract's
-ownership and release rules.
+Paths and commands are relative to the checkout root. Eshkol facades need
+the corresponding linked package. Native providers advertise supported
+operations and shapes through K1. Check the capability before dispatch and
+follow each contract's ownership and release rules.
 
 The source column identifies the public facade or header where available.
 Rows marked private, diagnostic, or opt-in describe source and test entry
@@ -54,8 +52,8 @@ or shell command for the indicated component.
 | G3-S | `include/eshkol_transformer/g3s_sampling_abi.h` | `et_g3s_kernel_provider_v1` | `make test-g3s` | Bounded native sampling primitives. |
 | G3-C4 | `include/eshkol_transformer/g3c4_primitives_abi.h` | `et_g3c4_kernel_provider_v1` | `make test-g3c4` | Bounded native generation primitives. |
 | CLI3 | `src/eshkol_transformer/cli.esk` | `et_e1b_public_cli3_dispatch_v1`, `cli3-corpus-validate-command` | `make test-ci-cli3-after-build` | Eshkol executable entry for the installed command set. |
-| CLI3 | `native/cli3_extension.esk` | `tokenizer byte`, `tokenizer train-bpe`, `tokenizer inspect`, `corpus build`, `corpus inspect`, `checkpoint inspect`, `pretrain`, `evaluate` | `make test-ci-cli3-after-build` | Installed commands. Pretraining is a fixed CPU-f32 profile with 1–4 updates per invocation. |
-| CLI3 | `lib/transformer/cli3_corpus_validate.esk` | `corpus validate`, `cli3-corpus-validate-command` | `make test-ci-cli3-after-build` | D1 validation with explicit byte/token limits. |
+| CLI3 | `native/cli3_extension.esk` | `--help`, `--version`, `tokenizer byte`, `tokenizer train-bpe`, `tokenizer inspect`, `corpus build`, `corpus inspect`, `checkpoint inspect`, `pretrain`, `evaluate` | `make test-ci-cli3-after-build` | Installed commands. Pretraining is a fixed CPU-f32 profile with 1–4 updates per invocation. |
+| CLI3 | `lib/transformer/cli3_corpus_validate.esk` | `corpus validate`, `--max-manifest-bytes`, `--max-shard-bytes`, `--max-total-tokens`, `cli3-corpus-validate-command` | `make test-ci-cli3-after-build` | D1 validation with a positional corpus directory, optional limits and a plain-text summary. |
 | CLI3 | `native/cli3_generate_extension.esk` | `generate`, `--prompt-hex`, `--sampling` | `make test-ci-cli3-after-build` | Fixed-profile C2 restore and one-byte generation. |
 
 ## Bounded DATA4 installed slice
@@ -71,6 +69,7 @@ or shell command for the indicated component.
 | Component | Source | Key symbols or commands | Gate | Scope |
 | --- | --- | --- | --- | --- |
 | F0 / R0 | `toolchain/eshkol.lock` | `eshkol_commit`, `supported_os`, `clang_version` | `make toolchain`, `make configure`, `make build` | Pinned compiler identity and build entry points. |
+| CLI3 | `scripts/run-cli3-downloaded-artifact.py` | `--verify-only` | `make test-cli3-downloaded-artifact` | Sealed artifact verification and fixed-profile replay against a clean checkout of the recorded source tree. |
 | Q0 | `tests/q0/test_python_isolation.py` | — | `make test-q0`, `make test-python-isolation` | Validation harness and Python development/interop boundary. |
 | B0 | `scripts/test-b0.sh` | — | `make test-b0`, `make benchmark-attention-supported` | Benchmark evidence for the specifically measured host, build and shapes. |
 
