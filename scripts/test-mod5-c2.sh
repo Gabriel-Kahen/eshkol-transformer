@@ -22,10 +22,10 @@ fi
 diagnostics() {
   local status=$?
   if (( status != 0 )); then
-    for log in native-compile.stdout native-compile.stderr \
-               compile.stdout compile.stderr runtime.stdout runtime.stderr; do
-      if [[ -s "${work}/${log}" ]]; then
-        tail -n 80 "${work}/${log}" >&2
+    for log in "${work}"/{native-compile,compile,runtime}.{stdout,stderr} \
+               "${work}"/fresh/*.{stdout,stderr}; do
+      if [[ -s "${log}" ]]; then
+        tail -n 80 "${log}" >&2
       fi
     done
   fi
@@ -110,9 +110,13 @@ env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR -u ESHKOL_AOT_MODULE_CACHE_DIR \
     tests/mod5/mod5_c2_continuation.esk -o "${work}/mod5-c2" \
     >"${work}/compile.stdout" 2>"${work}/compile.stderr"
 test ! -s "${work}/compile.stderr"
-ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
-  120s "${work}/mod5-c2" "${work}/corpus" "${work}/checkpoints" \
-  >"${work}/runtime.stdout" 2>"${work}/runtime.stderr"
+run_fixture() {
+  local log=$1
+  shift
+  ESHKOL_ARENA_POISON=1 timeout --foreground --signal=TERM --kill-after=5s \
+    120s "${work}/mod5-c2" "${work}/corpus" "$@" >"${log}.stdout" 2>"${log}.stderr"
+}
+run_fixture "${work}/runtime" "${work}/checkpoints"
 test ! -s "${work}/runtime.stderr"
 rg -x 'MOD5/C2 PASS [0-9]+ checks, 2 \+ 4 updates, 27 exact tensors' \
   "${work}/runtime.stdout"
@@ -122,6 +126,56 @@ for update in 3 4 5 6; do
   cmp "${work}/checkpoints/source-${update}.c2" \
       "${work}/checkpoints/receiver-${update}.c2"
 done
+
+fresh="${work}/fresh"
+mkdir -p "${fresh}"/{uninterrupted,produce,resume,produce-foreign,reject-corrupt,reject-identity}
+for mode in uninterrupted produce produce-foreign; do
+  run_fixture "${fresh}/${mode}" "${fresh}/${mode}" "${mode}"
+done
+run_fixture "${fresh}/resume" "${fresh}/resume" resume "${fresh}/produce/2.c2"
+for mode in uninterrupted produce resume produce-foreign; do
+  test ! -s "${fresh}/${mode}.stderr"
+  rg -x "MOD5/C2 PASS [0-9]+ checks, ${mode}" "${fresh}/${mode}.stdout"
+done
+
+for update in 1 2; do
+  cmp "${fresh}/uninterrupted/${update}.c2" "${fresh}/produce/${update}.c2"
+  cmp "${fresh}/uninterrupted/${update}.loss" "${fresh}/produce/${update}.loss"
+done
+cmp "${fresh}/uninterrupted/2.c2" "${fresh}/resume/2.c2"
+for update in 3 4 5 6; do
+  cmp "${fresh}/uninterrupted/${update}.c2" "${fresh}/resume/${update}.c2"
+  cmp "${fresh}/uninterrupted/${update}.loss" "${fresh}/resume/${update}.loss"
+done
+
+python3 - "${fresh}/produce/2.c2" "${fresh}/corrupt.c2" <<'PYTHON'
+from pathlib import Path
+import sys
+
+image = bytearray(Path(sys.argv[1]).read_bytes())
+image[-1] ^= 1
+Path(sys.argv[2]).write_bytes(image)
+PYTHON
+
+reject_resume() {
+  local label=$1 input=$2 status=$3 expected=$4
+  if run_fixture "${fresh}/${label}" "${fresh}/${label}" resume "${input}"; then
+    die "unexpected success for ${label}"
+  else
+    [[ $? == "${status}" ]] || die "unexpected exit status for ${label}"
+  fi
+  test ! -s "${fresh}/${label}.stderr"
+  test "$(wc -l <"${fresh}/${label}.stdout")" -eq 1
+  rg -x "${expected}" "${fresh}/${label}.stdout"
+  [[ -z "$(find "${fresh}/${label}" -mindepth 1 -print -quit)" ]] || \
+    die "${label} published output"
+}
+reject_resume reject-corrupt "${fresh}/corrupt.c2" 2 \
+  'MOD5/C2 ERROR corrupt-data checkpoint-load .+'
+reject_resume reject-identity "${fresh}/produce-foreign/2.c2" 1 \
+  'MOD5/C2 FAIL X1 identity matches the initialized tokenizer and geometry'
+fresh_result="6 process runs, 7 exact C2 comparisons, 6 exact binary64 loss comparisons, 2 no-output rejections"
+printf 'MOD5/C2 fresh-process PASS %s\n' "${fresh_result}"
 
 if [[ -n "${MOD5_C2_EVIDENCE_DIR:-}" ]]; then
   head_after="$(source_snapshot after)"
@@ -141,6 +195,7 @@ if [[ -n "${MOD5_C2_EVIDENCE_DIR:-}" ]]; then
     fi
     printf 'runner_sha256\t%s\n' "${runner_checksum%% *}"
     printf 'result\t%s\n' "${result}"
+    printf 'fresh_result\t%s\n' "${fresh_result}"
   } >"${work}/manifest.tsv"
   (
     cd "${work}"
@@ -148,7 +203,7 @@ if [[ -n "${MOD5_C2_EVIDENCE_DIR:-}" ]]; then
       printf '%s\0' manifest.tsv source-before.status source-after.status \
         native/libmod5_c2_witness.a native-compile.stdout native-compile.stderr \
         mod5-c2 compile.stdout compile.stderr runtime.stdout runtime.stderr
-      find corpus checkpoints -type f -print0
+      find corpus checkpoints fresh -type f -print0
     } | sort -z | xargs -0 sha256sum >SHA256SUMS
   )
   seal_checksum="$(sha256sum <"${work}/SHA256SUMS")"

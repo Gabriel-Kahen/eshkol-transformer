@@ -110,8 +110,9 @@ static int embed(void *header, float output[TOKENS * WIDTH]) {
   return 1;
 }
 
-double et_mod5_c2_test_gradients_v1(
-    void *inputs, void *targets, et_f32_parameter *gamma1, et_f32_parameter *wq,
+int64_t et_mod5_c2_test_gradients_v1(
+    void *inputs, void *targets, void *loss_bytes, et_f32_parameter *gamma1,
+    et_f32_parameter *wq,
     et_f32_parameter *wk, et_f32_parameter *wv, et_f32_parameter *wo,
     et_f32_parameter *gamma2, et_f32_parameter *wgate, et_f32_parameter *wup,
     et_f32_parameter *wdown) {
@@ -120,8 +121,11 @@ double et_mod5_c2_test_gradients_v1(
   float input[TOKENS * WIDTH], target[TOKENS * WIDTH], output[TOKENS * WIDTH];
   float d_input[TOKENS * WIDTH], weights[PARAMETER_FLOATS];
   float gradients[PARAMETER_FLOATS];
-  if (!embed(inputs, input) || !embed(targets, target))
-    return -1.0;
+  uint64_t loss_bits;
+  _Static_assert(sizeof(loss_bits) == sizeof(double), "binary64 loss required");
+  unsigned char *loss = bytevector_payload(loss_bytes, sizeof(loss_bits));
+  if (!loss || !embed(inputs, input) || !embed(targets, target))
+    return -1;
   size_t offset = 0;
   for (size_t i = 0; i < PARAMETERS; ++i) {
     const et_f32_tensor *value = NULL;
@@ -129,7 +133,7 @@ double et_mod5_c2_test_gradients_v1(
     const size_t count = shapes[i].count;
     if (et_f32_parameter_value_tensor_v1(parameters[i], &value, NULL) != 0 ||
         et_f32_tensor_copy_bits_to_v1(value, words, count, NULL) != 0)
-      return -1.0;
+      return -1;
     memcpy(weights + offset, words, count * sizeof(words[0]));
     offset += count;
   }
@@ -142,10 +146,10 @@ double et_mod5_c2_test_gradients_v1(
   if (et_ac4_plan_v1(&config, &memory) != ET_AC4_OK ||
       memory.activation_floats != TOKENS * WIDTH ||
       memory.parameter_floats != offset || offset != PARAMETER_FLOATS)
-    return -1.0;
+    return -1;
   float *workspace = malloc(memory.workspace_bytes);
   if (!workspace)
-    return -1.0;
+    return -1;
   const et_ac4_io_v1 io = {
       .input = {input, TOKENS * WIDTH},
       .target = {target, TOKENS * WIDTH},
@@ -159,8 +163,8 @@ double et_mod5_c2_test_gradients_v1(
   et_ac4_result_v1 result;
   const et_ac4_status run_status = et_ac4_run_v1(&config, &io, &result);
   free(workspace);
-  if (run_status != ET_AC4_OK || !isfinite(result.loss))
-    return -1.0;
+  if (run_status != ET_AC4_OK || !isfinite(result.loss) || result.loss <= 0.0)
+    return -1;
 
   et_f32_tensor *numerators[PARAMETERS] = {NULL};
   et_f32_gradient_contribution_v1 contributions[PARAMETERS];
@@ -189,5 +193,10 @@ release:
   for (size_t i = 0; i < PARAMETERS; ++i)
     if (et_f32_tensor_destroy_v1(&numerators[i], NULL) != 0)
       status = -1;
-  return status == 0 ? result.loss : -1.0;
+  if (status != 0)
+    return -1;
+  memcpy(&loss_bits, &result.loss, sizeof(loss_bits));
+  for (size_t i = 0; i < sizeof(loss_bits); ++i)
+    loss[i] = (unsigned char)(loss_bits >> (8u * i));
+  return 0;
 }
