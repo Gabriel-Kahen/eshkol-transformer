@@ -62,6 +62,42 @@ and descriptor samples to help investigate a timeout. At expiration the test
 runner kills and reaps the child. Batch, native-lifetime, descriptor and arena
 assertions remain required.
 
+## Hosted toolchain cache
+
+The cache key includes `toolchain/eshkol.lock`, `scripts/bootstrap-eshkol.sh`,
+and `scripts/common.sh`. The warm-header fix `0d8bd51a` changed the key. Both
+completed PR runs below verified Eshkol `fe9dfd5241a1f4c4f58dee8442f44e4ff95e55b9`
+with LLVM 21.1.8. All 22 jobs per run with a `make toolchain` step restored the
+exact primary key with input hash `122802cd…`, completed CMake configure, and logged
+`ninja: no work to do.` Of those 44 jobs, 27 used Ubuntu 22.04 runner image
+`20261116.365.1` and 17 used `20261122.372.1`.
+
+| Canonical build | Checked-out PR merge commit | Runner image version | `make toolchain` log span |
+|---|---|---|---|
+| [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45883398570/job/140128396419) | `f5c3d2b6ea6d` | `20261122.372.1` | 2.78 s |
+| [PR #262](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45934721553/job/140295254465) | `217919a2a105` | `20261122.372.1` | 1.09 s |
+
+The spans run from `Run make toolchain` to `toolchain ready`. Cache restore and
+the subsequent clean Transformer build have separate steps. The PR #262 checkout
+tree is identical to merged main `fa746a626`.
+
+The November 22 canonical build restored the earlier exact key with input hash
+`8dae60b8…` and took 156.24 s in the same step. It verified the same Eshkol and
+LLVM pins, ran on `20261116.365.1`, and logged Ninja build commands `[1/154]`
+through `[153/154]`. [November 22 job log](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45068055065/job/137349299302)
+
+The September 28 producer missed that key, built cold, and saved it on image
+`20260920.303.1`. The producer and November 22 consumer used the same Clang/LLVM
+package revisions. The libpcre2, libpng, and OpenSSL development package revisions
+changed between those jobs.
+[September 28 job log](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/36491736586/job/109161786678)
+
+The historical logs omit Ninja's dirty-edge reasons. The two newer runs use a
+different cache key and archive, and their canonical jobs use a different image.
+Ninja dirty-edge diagnostics could identify which inputs caused a rebuild.
+Measuring wall-time savings from the fix requires a controlled comparison with
+the same starting cache, runner image, and host packages.
+
 ## Evidence reuse and failure handling
 
 Blocking CI and acceptance call the same reusable full engine. Manual acceptance
