@@ -299,6 +299,14 @@ static int output_overlaps_pool(const et_paged_kv_pool *pool, const void *out,
 
 /* ---- Prefix Hash Table Helpers (Zero Heap Allocation on Hot Path) ---- */
 
+static int prefix_context_matches(const et_paged_kv_prefix_context_v1 *a,
+                                  const et_paged_kv_prefix_context_v1 *b) {
+  return memcmp(a->model, b->model, sizeof(a->model)) == 0 &&
+         memcmp(a->tokenizer, b->tokenizer, sizeof(a->tokenizer)) == 0 &&
+         memcmp(a->producer_config, b->producer_config,
+                sizeof(a->producer_config)) == 0;
+}
+
 static uint32_t hash_slot_index(const uint8_t hash[ET_PAGED_KV_HASH_BYTES],
                                 uint32_t cap_mask) {
   uint32_t h = ((uint32_t)hash[0]) | ((uint32_t)hash[1] << 8u) |
@@ -1257,7 +1265,7 @@ et_paged_kv_status et_paged_kv_hash_token_block_with_context_v1(
     if (!aligned_span(previous_or_null, _Alignof(et_paged_kv_prefix_key_v1),
                       sizeof(*previous_or_null)))
       return ET_PAGED_KV_ERR_ALIGNMENT;
-    if (memcmp(context, &previous_or_null->context, sizeof(*context)) != 0)
+    if (!prefix_context_matches(context, &previous_or_null->context))
       return ET_PAGED_KV_ERR_CONTEXT;
     if (previous_or_null->block_size != block_size)
       return ET_PAGED_KV_ERR_SHAPE;
@@ -1366,7 +1374,7 @@ static et_paged_kv_status validate_pool_prefix_key(
     return ET_PAGED_KV_ERR_STATE;
   if (!aligned_span(key, _Alignof(et_paged_kv_prefix_key_v1), sizeof(*key)))
     return ET_PAGED_KV_ERR_ALIGNMENT;
-  if (memcmp(&pool->prefix_context, &key->context, sizeof(key->context)) != 0)
+  if (!prefix_context_matches(&pool->prefix_context, &key->context))
     return ET_PAGED_KV_ERR_CONTEXT;
   if (key->block_size != pool->cfg.block_size)
     return ET_PAGED_KV_ERR_SHAPE;
