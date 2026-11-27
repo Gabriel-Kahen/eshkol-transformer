@@ -157,7 +157,7 @@ class ExternalQuantizedM3Tests(unittest.TestCase):
                 destination = self.directory / f"{suffix}-rejected.etcp"
                 common = ("--external", "--scheme", scheme, "--tie-head-to-embedding")
                 profile, provider = ("--profile", PROFILE), ("--provider", PROVIDER)
-                self.assert_import_rejected(suffix, wire, destination, "explicit supported profile",
+                self.assert_import_rejected(suffix, wire, destination, "unsupported quantized profile",
                                             *common, *provider)
                 self.assert_import_rejected(suffix, wire, destination, "explicit external provider",
                                             *common, *profile)
