@@ -74,11 +74,15 @@
                pending)))
 (check "embedded-NUL path preserves destination and receipt"
   (and (untouched? pending) (receipt-idle? receipt)))
-(define oversized-utf8-path (make-string 2049 (string-ref "é" 0)))
-(check "oversized path has fewer than 4096 characters"
-  (< (string-length oversized-utf8-path) 4096))
-(check "oversized path has more than 4096 UTF-8 bytes"
-  (> (bytevector-length (string->utf8 oversized-utf8-path)) 4096))
+;; Repeat the UTF-8 string, since the pinned make-string truncates this fill.
+(define oversized-utf8-path
+  (let double ((count 1) (text "é"))
+    (if (= count 2048) (string-append text "é")
+        (double (* count 2) (string-append text text)))))
+(check "oversized path has 2049 characters"
+  (= (string-length oversized-utf8-path) 2049))
+(check "oversized path has 4098 UTF-8 bytes"
+  (= (bytevector-length (string->utf8 oversized-utf8-path)) 4098))
 (reject "oversized UTF-8 path" 'invalid-argument
   (lambda () (g3r-c2-pair-file-decode-internal!
                receipt oversized-utf8-path pending)))
