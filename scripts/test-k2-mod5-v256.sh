@@ -68,7 +68,7 @@ env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR -u ESHKOL_AOT_MODULE_CACHE_DIR \
   ESHKOL_JIT_CACHE=0 XDG_CACHE_HOME="$out/cache" ESHKOL_CXX_COMPILER="$cxx" \
   ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
   timeout --foreground --signal=TERM --kill-after=5s 600s \
-  "$runner" --strict-types --optimize 0 --no-stdlib \
+  "$runner" --strict-types --optimize 0 --no-stdlib --emit-depfile "$out/witness.d" \
   -I "$PROJECT_ROOT/native" -I "$PROJECT_ROOT/internal/p1/lib" \
   -I "$PROJECT_ROOT/internal/c1/lib" -I "$PROJECT_ROOT/internal/t1/lib" \
   -I "$PROJECT_ROOT/src" -L "$out" --lib eshkol_k2_mod5_v256_witness \
