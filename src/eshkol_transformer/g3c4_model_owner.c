@@ -1179,7 +1179,7 @@ typedef struct et_g3c4_context_internal {
 #ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
   struct {
     struct et_g3c4_output_internal *output;
-    et_a2_kv_cache *cache;
+    et_a2_kv_cache *cache; /* Original installed cache, including while idle. */
     et_a2_kv_cache_read_borrow *borrow;
     uint32_t used;
   } p2g2_a2_read;
@@ -1865,6 +1865,13 @@ static et_g3c4_context_internal *et_g3c4_admit_context(
         ET_G3C4_INVALID_ARGUMENT, ET_G3C4_CODE_IDENTITY);
     return NULL;
   }
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  et_g3c4_context_internal *context = (et_g3c4_context_internal *)header;
+  if (context->p2g2_a2_read.cache != context->cache) {
+    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+    return NULL;
+  }
+#endif
   return (et_g3c4_context_internal *)header;
 #else
   et_g3c4_context_internal *context;
@@ -2440,6 +2447,9 @@ void *et_g3c4_private_context_create_v1(void *candidate) {
   ET_G3C4_CONTEXT_BUSY(context) = 0u;
   context->owner = owner;
   context->cache = cache;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  context->p2g2_a2_read.cache = cache;
+#endif
 #ifdef ET_G3C4_GENERATOR_PRIVATE
   et_g3c4_enroll_context(context);
 #else
@@ -2490,6 +2500,9 @@ int64_t et_g3c4_private_context_close_v1(void *candidate) {
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  context->p2g2_a2_read.cache = NULL;
+#endif
   context->owner = NULL;
   ET_G3C4_CONTEXT_STATE(context) = ET_G3C4_CONTEXT_DEAD;
   return 0;
@@ -2804,6 +2817,9 @@ static void *et_g3c4_generator_create(
   context->transport.busy = ET_G3C4_CALL_IDLE;
   context->owner = owner;
   context->cache = cache;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  context->p2g2_a2_read.cache = cache;
+#endif
   context->generator_kind = 1u;
   context->generator_ready = 1u;
   context->generator_policy[0] = mode;
@@ -2881,6 +2897,10 @@ static int et_g3c4_generator_dead_exact(
          et_g3c4_pins_idle(&context->pins) &&
          et_g3c4_zero_i64_words(context->generator_policy, 6u) &&
          et_g3c4_zero_i64_words(context->generator_rng_words, 4u)
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+         && context->p2g2_a2_read.output == NULL &&
+         context->p2g2_a2_read.borrow == NULL && context->p2g2_a2_read.used == 0u
+#endif
 #ifdef ET_G3C4_PREFILL3_PRIVATE
          && et_g3c4_prefill_binding_valid(context) &&
          context->prefill_binding_ready == 0u
@@ -2936,6 +2956,9 @@ int64_t et_g3c4_private_generator_close_v1(void *candidate) {
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&context->cache, &error), &error) != 0)
     return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  context->p2g2_a2_read.cache = NULL;
+#endif
   memset(context->generator_policy, 0, sizeof(context->generator_policy));
   memset(context->generator_rng_words, 0,
          sizeof(context->generator_rng_words));
@@ -3022,7 +3045,6 @@ static et_g3c4_context_internal *et_g3c4_admit_idle_call(
 #endif
 #ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
       || context->p2g2_a2_read.output != NULL ||
-      context->p2g2_a2_read.cache != NULL ||
       context->p2g2_a2_read.borrow != NULL || context->p2g2_a2_read.used != 0u
 #endif
 #ifdef ET_G3C4_TOKEN_FRAME_PRIVATE
@@ -3070,12 +3092,6 @@ static et_g3c4_context_internal *et_g3c4_admit_active_call(
     (void)et_g3c4_fail(ET_G3C4_INTERNAL, ET_G3C4_CODE_INVARIANT);
     return NULL;
   }
-#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
-  if (context->budget == 2 && context->p2g2_a2_read.cache != context->cache) {
-    (void)et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
-    return NULL;
-  }
-#endif
   if (et_g3c4_capture_f32(
           et_g3c4_model_pins_check_internal(&context->pins, &error),
           &error) != 0)
@@ -3089,10 +3105,11 @@ static et_g3c4_context_internal *et_g3c4_admit_active_call(
  * A2 must report its genuine held-lease error before any mutation. */
 static int64_t et_g3c4_p2g2_a2_read_transition_preflight(
     et_g3c4_context_internal *context) {
-  if (context->budget != 2) return 0;
   if (context->p2g2_a2_read.cache != context->cache)
     return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
   if (context->p2g2_a2_read.borrow == NULL) return 0;
+  if (context->budget != 2)
+    return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
   et_g3c4_output_internal *pending = NULL;
   if (et_g3c4_pending_output_lookup(context, &pending) != 0)
     return et_g3c4_error_state.category;
@@ -3380,6 +3397,23 @@ int64_t et_g3c4_private_output_release_v1(void *candidate) {
   et_g3c4_error_reset_internal();
   output = et_g3c4_admit_output(candidate, 1);
   if (output == NULL) return et_g3c4_error_state.category;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  /* Recognize the original reservation before using its mutable parent or
+   * tuple. A replacement may be discarded but cannot inherit this lease. */
+  for (et_g3c4_transport_header_internal *entry = et_g3c4_transport_registry;
+       entry != NULL; entry = entry->registry_next) {
+    if (entry->kind != ET_G3C4_CONTEXT_KIND) continue;
+    et_g3c4_context_internal *owner = (et_g3c4_context_internal *)entry;
+    if (owner->p2g2_a2_read.output != output) continue;
+    if ((output->transport.state == 0u && output->parent_ctx != owner) ||
+        (owner->p2g2_a2_read.borrow != NULL &&
+         (owner->budget != 2 || output->transport.state != 0u)))
+      return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
+    if (owner->p2g2_a2_read.borrow != NULL)
+      return et_g3c4_p2g2_a2_read_transition_preflight(owner);
+    break;
+  }
+#endif
   if (output->transport.state == ET_G3C4_CONTEXT_DEAD) return 0;
 #ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
   if (output->transport.state == ET_G3C4_OUTPUT_PUBLISHED) {
@@ -3415,6 +3449,12 @@ int64_t et_g3c4_private_output_release_v1(void *candidate) {
     return 0;
   }
 #endif
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  et_g3c4_context_internal *context = et_g3c4_admit_context(output->parent_ctx);
+  if (context == NULL ||
+      et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    return et_g3c4_error_state.category;
+#endif
 #ifdef ET_G3C4_P2_G1_PUBLICATION_PRIVATE
   if (output->parent_ctx != NULL &&
       output->parent_ctx->token_frame_state >=
@@ -3423,16 +3463,6 @@ int64_t et_g3c4_private_output_release_v1(void *candidate) {
           ET_G3C4_TOKEN_FRAME_END_READY)
     return et_g3c4_fail(
         ET_G3C4_INVALID_STATE, ET_G3C4_CODE_LIFECYCLE);
-#endif
-#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
-  if (output->generated_length == 2) {
-    et_g3c4_context_internal *context = et_g3c4_admit_active_call(output->parent_ctx);
-    if (context == NULL) return et_g3c4_error_state.category;
-    if (context->p2g2_a2_read.output != output)
-      return et_g3c4_fail(ET_G3C4_INVALID_STATE, ET_G3C4_CODE_IDENTITY);
-    if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
-      return et_g3c4_error_state.category;
-  }
 #endif
   return et_g3c4_output_discard_pending(output);
 }
@@ -5004,12 +5034,19 @@ int64_t et_g3c4_private_prefill3_v1(
     goto fail;
   et_kernel_runtime_destroy(n2_runtime);
   n2_runtime = NULL;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    goto fail;
+#endif
   old_cache = context->cache;
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&old_cache, &error), &error) != 0)
     goto fail;
 
   context->cache = candidate_cache;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  context->p2g2_a2_read.cache = candidate_cache;
+#endif
   candidate_cache = NULL;
   memcpy(context->prefill_binding_identities, binding_identities,
          sizeof(binding_identities));
@@ -5344,12 +5381,19 @@ int64_t et_g3c4_private_prefill1_v1(
   n2_runtime = NULL;
   et_kernel_runtime_destroy(g3n_runtime);
   g3n_runtime = NULL;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  if (et_g3c4_p2g2_a2_read_transition_preflight(context) != 0)
+    goto fail;
+#endif
   old_cache = context->cache;
   if (et_g3c4_capture_kernel(
           et_a2_kv_cache_destroy_v1(&old_cache, &error), &error) != 0)
     goto fail;
 
   context->cache = candidate_cache;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  context->p2g2_a2_read.cache = candidate_cache;
+#endif
   candidate_cache = NULL;
   memcpy(context->prefill_binding_identities, binding_identities,
          sizeof(binding_identities));
@@ -5739,7 +5783,7 @@ static int64_t et_g3c4_prefill2_impl(
 
   context->cache = candidate_cache;
 #ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
-  if (context->budget == 2) context->p2g2_a2_read.cache = candidate_cache;
+  context->p2g2_a2_read.cache = candidate_cache;
 #endif
   candidate_cache = NULL;
   memcpy(context->prefill_binding_identities, binding_identities,
@@ -8264,9 +8308,16 @@ int64_t et_g3c4_private_frame_commit_v1(void *candidate) {
    * would otherwise expose a partially published cache. */
   if (et_a2_kv_cache_transaction_commit_v1(
           &frame->a2_transaction, &error) != 0) abort();
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  old_cache = context->p2g2_a2_read.cache;
+#else
   old_cache = context->cache;
+#endif
   if (et_a2_kv_cache_destroy_v1(&old_cache, &error) != 0) abort();
   context->cache = frame->a2_candidate;
+#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
+  context->p2g2_a2_read.cache = frame->a2_candidate;
+#endif
   frame->a2_candidate = NULL;
   if (frame->frame_kind == 1) {
     memcpy(context->prefill_binding_identities, frame->binding_identities,
@@ -8367,9 +8418,6 @@ int64_t et_g3c4_private_call_acquire_v1(
   if (et_g3c4_active_call_inject(context, 4u))
     return et_g3c4_error_state.category;
 #endif
-#ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
-  if (budget == 2) context->p2g2_a2_read.cache = context->cache;
-#endif
   return 0;
 }
 
@@ -8461,7 +8509,6 @@ static int64_t et_g3c4_active_call_drain(
 #ifdef ET_G3C4_P2_G2_CALL_A2_READ_PRIVATE
   if (context->p2g2_a2_read.borrow != NULL) abort();
   context->p2g2_a2_read.output = NULL;
-  context->p2g2_a2_read.cache = NULL;
   context->p2g2_a2_read.used = 0u;
 #endif
   et_g3c4_model_pins_end_internal(&context->pins);

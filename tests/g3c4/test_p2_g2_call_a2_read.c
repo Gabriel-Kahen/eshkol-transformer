@@ -161,6 +161,110 @@ static void committed_read(et_g3c4_model_owner_internal *owner,
   OK(et_g3c4_private_generator_close_v1(foreign));
 }
 
+static void cache_authority_starts_at_construction(
+    et_g3c4_model_owner_internal *owner,
+    et_g3c4_model_owner_internal *foreign_owner) {
+  const int64_t prompt[3] = {7, 11, 13};
+  et_g3c4_context_internal *context = p2g2_generator(owner, 0);
+  et_g3c4_context_internal *foreign = p2g2_generator(foreign_owner, 0);
+  et_a2_kv_cache *original_cache = context->cache;
+  CHECK(context->p2g2_a2_read.cache == original_cache);
+  CHECK(foreign->cache != original_cache);
+  cache_snapshot original, other, actual;
+  snapshot_cache(original_cache, &original);
+  snapshot_cache(foreign->cache, &other);
+  check_cache_snapshot_equal(&original, &other);
+  et_g3c4_input_internal *input = create_prompt(prompt, 2);
+  context->cache = foreign->cache;
+  CHECK(et_g3c4_private_prompt_prefill_preflight_v1(context, input, 2) ==
+        ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_IDENTITY);
+  CHECK(et_g3c4_private_call_acquire_v1(context, 2, 2) == ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_IDENTITY);
+  CHECK(et_g3c4_private_generator_close_v1(context) == ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_IDENTITY);
+  CHECK(context->p2g2_a2_read.cache == original_cache &&
+        context->owner->active == NULL && context->acquired_mask == 0u);
+  context->cache = original_cache;
+  snapshot_cache(context->cache, &actual);
+  check_cache_snapshot_equal(&original, &actual);
+  snapshot_cache(foreign->cache, &actual);
+  check_cache_snapshot_equal(&other, &actual);
+
+  /* A budget-two generator may legitimately replace its cache in another
+   * budget, then enter a later budget-two call against that exact cache. */
+  float logits[256];
+  OK(et_g3c4_private_call_acquire_v1(context, 0, 0));
+  OK(et_g3c4_private_prefill1_v1(context, prompt[0], logits));
+  CHECK(context->p2g2_a2_read.cache == context->cache);
+  snapshot_cache(context->cache, &actual);
+  CHECK(actual.length == 1);
+  OK(et_g3c4_private_call_abort_v1(context));
+  CHECK(context->p2g2_a2_read.cache == context->cache);
+  OK(et_g3c4_private_call_acquire_v1(context, 0, 0));
+  OK(et_g3c4_private_prefill3_v1(context, prompt, logits));
+  CHECK(context->p2g2_a2_read.cache == context->cache);
+  snapshot_cache(context->cache, &actual);
+  CHECK(actual.length == 3);
+  OK(et_g3c4_private_call_abort_v1(context));
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 2));
+  et_g3c4_output_internal *output = et_g3c4_private_output_reserve_v1(context, 2);
+  CHECK(output != NULL);
+  OK(et_g3c4_p2g2_a2_read_begin(context, output));
+  check_held_cache(context->p2g2_a2_read.borrow, &actual);
+  OK(et_g3c4_p2g2_a2_read_end(context, output));
+  close_pair(context, input, output);
+  CHECK(context->p2g2_a2_read.cache == NULL);
+  OK(et_g3c4_private_generator_close_v1(context));
+  OK(et_g3c4_private_generator_close_v1(foreign));
+}
+
+static void replacement_and_retagged_release(
+    et_g3c4_model_owner_internal *owner,
+    et_g3c4_model_owner_internal *foreign_owner) {
+  et_g3c4_context_internal *context = p2g2_generator(owner, 0);
+  et_g3c4_context_internal *foreign = create_generator(foreign_owner);
+  OK(et_g3c4_private_call_acquire_v1(context, 2, 2));
+  et_g3c4_output_internal *first = et_g3c4_private_output_reserve_v1(context, 2);
+  CHECK(first != NULL);
+  OK(et_g3c4_private_call_acquire_v1(foreign, 2, 1));
+  et_g3c4_output_internal *unrelated = et_g3c4_private_output_reserve_v1(foreign, 2);
+  CHECK(unrelated != NULL);
+  cache_snapshot cache;
+  snapshot_cache(context->cache, &cache);
+  OK(et_g3c4_p2g2_a2_read_begin(context, first));
+
+  first->generated_length = 1;
+  check_a2_error(et_g3c4_private_output_release_v1(first));
+  first->parent_ctx = foreign;
+  CHECK(et_g3c4_private_output_release_v1(first) == ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_IDENTITY);
+  first->parent_ctx = context;
+  first->generated_length = 2;
+  OK(et_g3c4_private_output_release_v1(unrelated));
+  check_dead_output(unrelated);
+  check_held_cache(context->p2g2_a2_read.borrow, &cache);
+
+  OK(et_g3c4_p2g2_a2_read_end(context, first));
+  OK(et_g3c4_private_output_release_v1(first));
+  check_dead_output(first);
+  OK(et_g3c4_private_output_release_v1(first));
+  et_g3c4_output_internal *next = et_g3c4_private_output_reserve_v1(context, 2);
+  CHECK(next != NULL && next != first);
+  CHECK(et_g3c4_p2g2_a2_read_begin(context, next) == ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_IDENTITY);
+  context->cache = foreign->cache;
+  CHECK(et_g3c4_private_output_release_v1(next) == ET_G3C4_INVALID_STATE);
+  CHECK(et_g3c4_private_last_error_code_v1() == ET_G3C4_CODE_IDENTITY);
+  context->cache = context->p2g2_a2_read.cache;
+  OK(et_g3c4_private_output_release_v1(next));
+  check_dead_output(next);
+  OK(et_g3c4_private_call_abort_v1(context));
+  OK(et_g3c4_private_call_abort_v1(foreign));
+  OK(et_g3c4_private_generator_close_v1(context));
+  OK(et_g3c4_private_generator_close_v1(foreign));
+}
+
 static void staged_transaction_is_distinct(et_g3c4_model_owner_internal *owner) {
   et_g3c4_context_internal *context;
   et_g3c4_input_internal *input;
@@ -221,6 +325,8 @@ int main(void) {
   committed_read(owner, foreign_owner, 0);
   committed_read(owner, foreign_owner, 2);
   committed_read(owner, foreign_owner, 3);
+  cache_authority_starts_at_construction(owner, foreign_owner);
+  replacement_and_retagged_release(owner, foreign_owner);
   staged_transaction_is_distinct(owner);
 #ifdef ET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
   release_a2_while_i1_is_held(owner);

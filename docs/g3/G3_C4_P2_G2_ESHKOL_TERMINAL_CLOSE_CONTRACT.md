@@ -131,10 +131,12 @@ and production A2 release authority are separate gates.
 
 ### Native call-bound A2 committed-read prerequisite
 
-The optional native aggregate records the committed cache admitted at
-budget-two call acquire. The trusted P2 prefill replacement transfers that
-identity when it installs the candidate cache. Reservation binds the first
-sole pending output to the same call. Begin requires the original output and
+The optional native aggregate records the cache at native construction.
+Only successful native P1/P2/P3 prefill or manual frame publication can
+replace that identity. Idle and active admission authenticate the installed
+cache before any provider operation. Call drain keeps that identity until
+successful close. Reservation binds the first sole pending output to the
+same call. Begin requires the original output and
 cache, a live budget-two call, and an idle token frame. It retains the
 actual typed A2 read borrow from the provider. Release authenticates the
 same context, pending owner and cache, and ends only the retained borrow.
@@ -145,10 +147,14 @@ The committed-read guard precedes prefill replacement, sampling, prefix
 and terminal publication, finish, pending output release, and abort. A
 genuine held borrow returns the provider's lease rejection before those
 paths change the active call or cache. A substituted owner or cache slot
-returns an identity error. The native gate covers committed lengths zero,
-two and three, real foreign and same-content controls, allocation cuts,
-preservation without publication, and exact release followed by abort
-retry. A separate combined run also holds the original output I1 borrow.
+returns an identity error. Pending output release locates the first
+reservation's owner independently of the mutable tuple and parent edge.
+Unleased same-call replacement outputs can still be released and cannot
+begin a lease. The native gate covers pre-acquire cache substitution,
+committed lengths zero through three, real foreign and same-content
+controls, retagged release attempts, allocation cuts, preservation without
+publication, and exact release followed by abort retry. A combined run
+holds the original output I1 borrow and includes P2/G1 publication.
 
 Run the focused host gate with
 `G3C4_CALL_A2_READ_WITNESS=1 CC=clang bash tests/g3c4/test-p2-g2-call-i1-lease.sh EVIDENCE_DIRECTORY`.

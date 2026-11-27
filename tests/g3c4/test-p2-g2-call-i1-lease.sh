@@ -92,7 +92,8 @@ if [[ "$a2_witness" == 1 ]]; then
     "${terminal_flags[@]}"
   run_fixture a2-i1 tests/g3c4/test_p2_g2_call_a2_read.c \
     '^G3-C4 P2/G2 call A2 committed read PASS: checks=[1-9][0-9]*$' \
-    "${terminal_flags[@]}" -DET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE
+    "${terminal_flags[@]}" -DET_G3C4_P2_G2_CALL_I1_LEASE_PRIVATE \
+    -DET_G3C4_P2_G1_PUBLICATION_PRIVATE
 else
   run_fixture lease tests/g3c4/test_p2_g2_call_i1_lease.c \
     '^G3-C4 P2/G2 call I1 lease PASS: checks=[1-9][0-9]*$'
