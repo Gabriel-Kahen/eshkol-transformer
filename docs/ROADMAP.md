@@ -1231,6 +1231,13 @@ generator was missing from the exact development-script allowlist. The focused
 Q0 and zero-control source tests pass after its exact path and near-miss checks
 were added; a fresh exact-head hosted run remains pending.
 
+The isolated N3 zero-package linkage candidate enables the existing I2 test
+provider in the exact noninstalled zero bridge and requires the allocator
+failpoint, allocator reset and live-builder census as local definitions after
+the aggregate link. The focused bridge checks cover the zero and uniform
+tuples and verify that ordinary E3 builds omit those definitions. The full
+normal and sanitizer inventory discovery and runtime matrices remain pending.
+
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
 the same `[3,197]` inputs and `11` mask and differs only in the second target.

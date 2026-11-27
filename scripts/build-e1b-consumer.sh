@@ -1790,7 +1790,8 @@ elif [[ "${package_policy}" == e3-private-aggregate ]]; then
   if [[ "${e3_public_tuple:-0}" != 1 ]]; then
     package_bridge_flags+=(-DET_E3_TESTING)
   fi
-  if [[ "${e3_tuple_kind}" == uniform ]]; then
+  if [[ "${e3_tuple_kind}" == uniform || "${e3_tuple_kind}" == zero ]]; then
+    # The package bridge includes the I2 builder fault and census provider.
     package_bridge_flags+=(-DET_F32_TENSOR_TESTING)
   fi
 elif [[ "${package_policy}" == m3-model-aggregate || \
@@ -2491,6 +2492,9 @@ if [[ "${package_policy}" == e3-private-aggregate ]]; then
         et_e3_private_zero_negative_run_cabi_v1
         et_e3_zero_gradient_metadata_v1
         et_e3_zero_control_census_v1
+        et_i2_test_fail_alloc_after_v1
+        et_i2_test_live_builder_counts_v1
+        et_i2_test_reset_allocator_v1
       )
     elif [[ "${e3_tuple_kind}" == mode-graph ]]; then
       e3_required_private+=(
