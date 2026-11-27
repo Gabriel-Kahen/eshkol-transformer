@@ -1294,9 +1294,14 @@ merged the manually dispatched workflow into `main`. The first hosted
 on `fa746a626` stopped at normal Eshkol AOT. Its manifest listed three hidden
 generated-source scratch copies that the uploader omitted. Their visible
 evidence copies verified. The workflow now moves private builder scratch
-outside the artifact root before sealing the visible evidence. Hosted
-receipt verification, the compiled zero-control runtime gates, and E3 §9
-qualification remain pending.
+outside the artifact root before sealing the visible evidence. The repaired
+[hosted run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45953148614)
+completed normal and sanitizer discovery on `686296ef`. Its
+[artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45953148614/artifacts/15178933242)
+matched the hosted ZIP hash and all 139 sealed files. The later linked
+`31ce137fa` inventory removed exactly the three I2 test imports in both
+modes. The sanitizer instrumentation list matches exactly. The compiled
+zero-control runtime gates and E3 §9 qualification remain pending.
 PR #206's hosted CI run `38445613534`
 stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
 generator was missing from the exact development-script allowlist. The focused
