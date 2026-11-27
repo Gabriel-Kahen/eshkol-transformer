@@ -1265,11 +1265,16 @@ Ubuntu-22.04/LLVM-21 zero-only inventory-discovery harness is source-staged:
 it retains the ordinary package authority checks, emits actual compiler
 closure and normal/sanitized import inventories into checksummed evidence, and
 never publishes an admitted object. Focused offline policy tests pass, and
-independent source/tests review accepted the exact `c4978ee` candidate.
+independent source and test review accepted the exact `c4978ee` candidate.
 [PR #206](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/206)
-merged the manually dispatched workflow into `main`. A qualifying runner can
-capture sealed inventories for independent review and exact sanitizer manifest
-pins. The compiled zero-control gates and E3 §9 qualification remain pending.
+merged the manually dispatched workflow into `main`. The first hosted
+[discovery run](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45948199739)
+on `fa746a626` stopped at normal Eshkol AOT. Its manifest listed three hidden
+generated-source scratch copies that the uploader omitted. Their visible
+evidence copies verified. The workflow now moves private builder scratch
+outside the artifact root before sealing the visible evidence. Hosted
+receipt verification, exact sanitizer inventory review and pinning, the
+compiled zero-control gates, and E3 §9 qualification remain pending.
 PR #206's hosted CI run `38445613534`
 stopped at Q0 Python isolation because the pinned, noninstalled zero P1 overlay
 generator was missing from the exact development-script allowlist. The focused
