@@ -14,14 +14,23 @@ OBSERVER = "et_e3_retention_region_used_v1"
 class RetentionUnresolvedPolicyTest(unittest.TestCase):
     def test_builder_passes_derived_exact_tuple_and_inventory(self) -> None:
         builder = (ROOT / "scripts/build-e1b-consumer.sh").read_text()
+        exact_inventory_check = (
+            'if [[ "${e3_zero_discovery}" != 1 ]] &&\n'
+            '     ! e1b_compare_exact_undefined_allowlist \\\n'
+            '       "${e1b_tmp}/expected-undefined.txt" "${e1b_tmp}/undefined.txt"; then\n'
+            '    die "E1B final object differs from the exact undefined-symbol allowlist"'
+        )
+        authority_check = (
+            'e3_reject_unresolved_private "${e3_tuple_kind}" \\\n'
+            '    "${e1b_tmp}/undefined.txt" "${e1b_tmp}/expected-undefined.txt"'
+        )
         self.assertIn('source "${PROJECT_ROOT}/scripts/e3-private-package-policy.sh"',
                       builder)
         self.assertIn('source "${PROJECT_ROOT}/scripts/e3-private-unresolved-policy.sh"',
                       builder)
-        self.assertIn('e3_reject_unresolved_private "${e3_tuple_kind}"', builder)
-        self.assertIn('"${e1b_tmp}/undefined.txt" "${e1b_tmp}/expected-undefined.txt"', builder)
-        self.assertLess(builder.index('if ! e1b_compare_exact_undefined_allowlist'),
-                        builder.index('e3_reject_unresolved_private'))
+        self.assertIn(exact_inventory_check, builder)
+        self.assertIn(authority_check, builder)
+        self.assertLess(builder.index(exact_inventory_check), builder.index(authority_check))
 
     def check_policy(self, kind: str, actual: list[str],
                      expected: list[str], accepted: bool) -> None:

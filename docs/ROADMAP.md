@@ -1344,6 +1344,11 @@ compiled acceptance yet. The upstream typed
 foreign-pointer prerequisite remains unresolved; no generated-ASan,
 ordinary-object-parity or E3 §9 acceptance is claimed for this union.
 
+The offline retention policy replays check that publication copies both
+verified sanitizer inventories byte for byte and that the ordinary exact
+undefined-symbol allowlist check precedes E3 private-authority validation
+under the zero-discovery guard. Compiled retention acceptance remains pending.
+
 The frozen five-case gate at `2b74b534` built its package variants but
 stopped at the first runtime compile on an extra closing parenthesis in the
 argument check; no numerical runtime or mutant verdict was produced. The same
