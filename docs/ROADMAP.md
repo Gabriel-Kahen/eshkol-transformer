@@ -4,6 +4,10 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 
 ## Current integration
 
+- The [proposed V=256 MOD5 C2 gate](MOD5_E2E_C1_IO5.md#proposed-width-16-c2-gate)
+  depends on exact native storage and K2 admission for `[256,16]` and a
+  tied and untied C2 witness with matching T1, D2 and X1 identities.
+
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,
   and V256 EVAL5 input-binding and live-scoring witness at `443dad4b` on
@@ -88,6 +92,9 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 - CI topology unit discovery now runs O2's existing exact public facade and
   header-tree pin before the expensive suites. The O2 package command retains
   the same test and expected digest.
+- CI topology unit discovery checks all seven predecessor source manifests
+  enforced by the required `native-numerics`, `g3n-forward`, `g3s-sampling`,
+  and `model-composition` suites. Stale pins fail before suite builds start.
 - Full CPU-v1 admission depends on trained save/reload and continuation,
   public terminal generation, and supported E3 numerical and resource
   evidence. The [Wave 3 candidate](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/214)
