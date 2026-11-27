@@ -37,6 +37,7 @@ SHELL := /usr/bin/bash
 	build-spec-paged-round test-spec-paged-round \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
+	test-tr3-c-i2-restore-current-main test-tr3-c-o2-restore-current-main \
 	smoke smoke-after-build benchmark benchmark-after-build benchmark-attention \
 	benchmark-attention-supported test-amd4 test-dist5 test-dist5-mod5 \
 	test-dist5-weighted-sgd test-eval5 clean
@@ -393,6 +394,12 @@ test-tr3-c-i2-restore:
 
 test-tr3-c-o2-restore:
 	/usr/bin/bash scripts/test-tr3-c-o2-restore.sh
+
+test-tr3-c-i2-restore-current-main:
+	/usr/bin/bash scripts/test-tr3-c-i2-restore.sh --current-main
+
+test-tr3-c-o2-restore-current-main:
+	/usr/bin/bash scripts/test-tr3-c-o2-restore.sh --current-main
 
 test-c1: build
 	/usr/bin/bash scripts/test-c1.sh
