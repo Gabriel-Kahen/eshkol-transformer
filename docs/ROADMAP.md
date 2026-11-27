@@ -706,12 +706,23 @@ the header and rebuilt six edges in 31.34 seconds. A fresh changed-input replay
 using final source commit `0d8bd51a` rebuilt the same six edges in 32.17 seconds
 and passed the unchanged provenance gate; its checked receipt is
 `/home/gabe/.codex/evidence/eshkol-f0-integration-preflight-20261125/SHA256SUMS`.
+The [matched warm replay](../toolchain/README.md#local-f0-warm-replay) ran
+`8d185344` and `0d8bd51a` from fresh copies of the same seed at the
+same paths in one supported image. CMake generated identical final header
+bytes in both runs. Only the fixed bootstrap restored the original mtime
+before Ninja. The predecessor ran six build commands in 35.89 seconds
+total. The fix ran zero in 0.71 seconds total. Both passed provenance
+verification. The receipt is
+`/home/gabe/.codex/evidence/eshkol-f0-matched-warm-replay-20261127/SHA256SUMS`.
 The CI cache key hashes both changed bootstrap scripts, so the first candidate
 job without an exact matching cache builds cold; later jobs can restore a cache
 once a successful job saves it. Concurrent jobs may also miss before that save.
 The pinned Eshkol source and workflow predecessor pins match current main.
-These local results do not explain the hosted 154-target cache-hit rebuild or
-establish hosted wall-time savings.
+[Hosted F0 evidence](CI_EFFICIENCY.md#hosted-toolchain-cache) records an exact-key
+restore and zero Ninja build commands in all 44 cache-backed jobs across PRs #259
+and #262, including 27 jobs on the historical rebuild's runner image. The cause
+of that rebuild remains unknown, and attributable hosted wall-time savings remain
+unmeasured.
 
 The B0 supported attention report-v2 extension and explicit manual CI mode passed
 independent source/test/report review. Exact-head supported diagnostic run
