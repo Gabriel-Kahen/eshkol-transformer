@@ -32,7 +32,7 @@ SHELL := /usr/bin/bash
 	test-reference-formats test-t1 test-t2 test-t2-trainer test-t2-native-corpus test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
 	test-paged-kv-model-attention \
-	test-beam-cd-composition test-beam-cd-live-cpu test-spec-paged-witness \
+	test-beam-cd-composition test-beam-cd-live-cpu test-spec-paged-witness test-spec-live-model \
 	test-data4-quality-t2-d1 \
 	test-tr3b test-tr3-c-d2-restore \
 	test-tr3-c-i2-restore test-tr3-c-o2-restore test-x1 \
@@ -433,6 +433,8 @@ test-beam-cd-live-cpu:
 
 test-spec-paged-witness:
 	/usr/bin/bash scripts/test-spec-paged-witness.sh
+test-spec-live-model:
+	/usr/bin/bash scripts/test-spec-live-model.sh
 
 test-data4-quality-t2-d1:
 	/usr/bin/bash scripts/test-data4-quality-t2-d1.sh

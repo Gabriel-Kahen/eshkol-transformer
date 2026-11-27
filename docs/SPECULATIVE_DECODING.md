@@ -183,3 +183,5 @@ toolchain via `bash scripts/test-spec-decode.sh`:
   before verification. Its `target_calls` count represents those synthetic
   batches; it does not measure live model calls or establish a cache rollback
   witness.
+- The [opt-in live G3-C4 witness](SPEC_LIVE_MODEL_WITNESS.md) composes the
+  greedy verifier with private target and draft forwards and paged K/V rollback.
