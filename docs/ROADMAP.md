@@ -58,6 +58,10 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   dispatch. Capability-driven shape dispatch requires the private build flag.
   Default K2 rejects those requests and the candidate descriptor. The K2
   profile contract and supported C2 LOAD/SAVE qualification remain open.
+- The [width-16 V=256 storage-copy candidate](MOD5_E2E_C1_IO5.md#v256-storage-copy-candidate)
+  adds the exact `[256,16]` head and embedding row through a separate hidden
+  I2 1.3 descriptor. The pinned native replay covers the synthetic bit-copy
+  contract and exact reports. K2 profile admission remains open.
 - [PR #251](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/251)
   merged the lossless MOD5 model mapping and live C1 interchange witness,
   the downloaded CLI3 artifact runner, and #249's three development witnesses
