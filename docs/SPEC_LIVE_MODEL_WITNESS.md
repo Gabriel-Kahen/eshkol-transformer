@@ -20,13 +20,15 @@ produced it. Only the initial prompt uses a one-hot token carrier.
 The coordinator forks both parents, stages the candidates, verifies them,
 and truncates its children. The callback reads the retained child prefixes
 by head and position and checks that only the live prefix blocks remain.
-It stages the copied K/V in fresh private A2 caches as `[1,2,length,2]` and
-forwards the correction or bonus in both models using the preceding target
-logit row. The callback passes one `[1,2,2]` K/V token per model back to the
-coordinator and saves the resulting logits in caller-owned scratch. The
-coordinator appends those K/V and returns the child sequence IDs. Where
-capacity permits, the witness uses the returned children and the new target
-logits for a greedy continuation in both models.
+It stages the copied K/V as `[1,2,length,2]` in the private A2 caches of two
+scratch generators created before each attempt. It forwards the correction
+or bonus using the preceding target logit row, returns one `[1,2,2]` K/V
+token per model, and saves the new logits in caller-owned scratch. The
+witness checks that the G3-C4 transport registry head stays unchanged across
+the coordinator call, then closes both scratch generators. On success the
+coordinator returns both child sequence IDs with the new K/V appended.
+Where capacity permits, the witness uses the returned children and the new
+target logits for a greedy continuation in both models.
 
 The independent controls drive each model using the target's greedy token
 at every position. Both models' K/V and logits match the controls bit for bit

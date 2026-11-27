@@ -58,7 +58,7 @@ typedef struct {
 } candidate_kv;
 
 typedef struct {
-  et_g3c4_model_owner_internal *owners[MODELS];
+  et_g3c4_context_internal *generators[MODELS];
   const float *target_logits;
   uint32_t horizon;
   int32_t injected_status;
@@ -198,17 +198,15 @@ static void check_prefix(const cache_prefix *actual, const cache_prefix *expecte
   }
 }
 
-static token_kv forward_from_prefix(et_g3c4_model_owner_internal *owner,
+static token_kv forward_from_prefix(et_g3c4_context_internal *context,
                                     const cache_prefix *prefix, uint32_t token,
                                     const logit_row selection, logit_row output) {
-  et_g3c4_context_internal *context = new_generator(owner);
   restore_a2(context, prefix);
   forward(context, token, selection, output);
   cache_prefix committed = read_a2(context);
   CHECK(committed.length == prefix->length + 1);
   committed.length = prefix->length;
   check_prefix(&committed, prefix);
-  OK(et_g3c4_private_generator_close_v1(context));
   return committed.tokens[prefix->length];
 }
 
@@ -236,17 +234,39 @@ static int32_t recompute(void *opaque, uint32_t token, uint32_t position,
           stats.used_blocks == 1 + (position + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
     token_kv *kv = &scratch->kv[i];
-    *kv = forward_from_prefix(scratch->owners[i], &scratch->prefixes[i],
+    *kv = forward_from_prefix(scratch->generators[i], &scratch->prefixes[i],
                               token, target_row, scratch->logits[i]);
     *out[i] = (et_spec_paged_kv_span_v1){kv->key, kv->value, TOKEN_FLOATS};
   }
   return scratch->injected_status;
 }
 
+static et_spec_paged_round_status_v1 run_round(
+    const model models[MODELS], const et_spec_paged_round_request_v1 *request,
+    et_spec_paged_round_result_v1 *result) {
+  round_scratch *scratch = request->context;
+  /* Each attempt commits into append-only A2 caches, so start with a fresh pair. */
+  for (size_t i = 0; i < MODELS; ++i)
+    scratch->generators[i] = new_generator(models[i].owner);
+
+  const et_g3c4_transport_header_internal *const registry_head = et_g3c4_transport_registry;
+  const et_spec_paged_round_status_v1 status =
+      et_spec_paged_round_greedy_v1(request, result);
+  CHECK(et_g3c4_transport_registry == registry_head);
+
+  for (size_t i = 0; i < MODELS; ++i) {
+    OK(et_g3c4_private_generator_close_v1(scratch->generators[i]));
+    scratch->generators[i] = NULL;
+  }
+  return status;
+}
+
 static void continue_paged(const model *m, uint32_t token,
                            const logit_row selection, logit_row output) {
   const cache_prefix prefix = read_paged(m->pool, m->branch);
-  const token_kv kv = forward_from_prefix(m->owner, &prefix, token, selection, output);
+  et_g3c4_context_internal *context = new_generator(m->owner);
+  const token_kv kv = forward_from_prefix(context, &prefix, token, selection, output);
+  OK(et_g3c4_private_generator_close_v1(context));
   OK(et_paged_kv_append_token(m->pool, m->branch, kv.key, kv.value));
 }
 
@@ -357,7 +377,6 @@ static void run_case(const char *label, et_g3c4_model_owner_internal *target_own
   }
 
   round_scratch scratch = {
-    .owners = {draft_owner, target_owner},
     .target_logits = target_logits,
     .horizon = horizon,
   };
@@ -385,7 +404,7 @@ static void run_case(const char *label, et_g3c4_model_owner_internal *target_own
     const uint32_t target_block = anchor_block(&models[TARGET]);
     scratch.injected_status = INJECTED_ERROR;
     const et_spec_paged_round_status_v1 status =
-        et_spec_paged_round_greedy_v1(&request, &result);
+        run_round(models, &request, &result);
     CHECK(status.kind == ET_SPEC_PAGED_ROUND_ERR_RECOMPUTE && status.code == INJECTED_ERROR);
     CHECK(scratch.calls == 1 && memcmp(&result, sentinel, sizeof(result)) == 0);
     check_failed_round(&models[DRAFT], draft_block);
@@ -393,7 +412,7 @@ static void run_case(const char *label, et_g3c4_model_owner_internal *target_own
     scratch.injected_status = 0;
   }
   const et_spec_paged_round_status_v1 status =
-      et_spec_paged_round_greedy_v1(&request, &result);
+      run_round(models, &request, &result);
   CHECK(status.kind == ET_SPEC_PAGED_ROUND_OK && status.code == 0);
   CHECK(scratch.calls == 1u + rejected);
   const et_spec_verify_result_v1 verify = result.verification;
