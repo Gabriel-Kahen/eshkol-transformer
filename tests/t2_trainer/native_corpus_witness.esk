@@ -1,0 +1,148 @@
+;;; Development gate for the raw native BPE import and the accepted corpus path.
+(load "t2_wave2_root.esk")
+(load "t2_native_bpe_import.esk")
+(load "data4_corpus.esk")
+
+(define (witness-fail message)
+  (display "FAIL T2 native corpus: ") (display message) (newline) (exit 1))
+
+(define (witness-check message ok?)
+  (if (not ok?) (witness-fail message)))
+
+(define (witness-expect-error category operation thunk)
+  (guard
+   (caught
+    ((and (transformer-error? caught)
+          (eq? category (transformer-error-category caught))
+          (eq? operation (transformer-error-operation caught))) #t)
+    (else (witness-fail (symbol->string operation))))
+   (thunk)
+   (witness-fail "expected structured error")))
+
+(define witness-raw (bytevector 0 255 0 255 237 160 128))
+(define witness-documents
+  (list (list "first" (string->utf8 "abababab"))
+        (list "second" (string->utf8 "babababa"))
+        (list "raw" witness-raw)
+        (list "empty" (bytevector))
+        (list "duplicate" (string->utf8 "abababab"))))
+
+(define (witness-read directory leaf maximum)
+  (let* ((operation 't2-native-corpus-witness)
+         (path (t2-d1-path directory leaf)))
+    (t2-d1-read-exact path (t2-d1-file-size path operation) maximum operation)))
+
+(define (witness-read-manifest directory)
+  (witness-read directory "manifest.etm" data4-manifest-maximum-bytes))
+
+(define (witness-publish tokenizer directory)
+  (data4-corpus-write! tokenizer directory 3
+                       (data4-corpus-prepare witness-documents 0 32)
+                       witness-read-manifest))
+
+(define (witness-import fixture leaf)
+  (t2-native-bpe-import (t2-d1-path fixture leaf)))
+
+(define (witness-write fixture directory)
+  (let* ((imported (witness-import fixture "trained.etbpe"))
+         (retrained
+          (t2-bpe-train-core
+           (list (list "abab" "abab") (list "babababa")
+                 (list witness-raw) '())
+           3 2 'raw '() '() '()))
+         (path (t2-d1-path directory "tokenizer.tsv"))
+         (policy (c1-wave2-persistence-policy 1048576 1048576 1048576 1 'cpu))
+         (first (string->utf8 "abababab"))
+         (encoder
+          (t2-stream-encoder-open
+           (t2-private-require-core imported 'witness-write 'internal)))
+         (push-first (t2-stream-encoder-push! encoder "a"))
+         (push-rest (t2-stream-encoder-push! encoder "bababab"))
+         (finish (t2-stream-encoder-finish! encoder))
+         (streamed (t1-core-concat (list push-first push-rest finish))))
+    (witness-check "canonical bytes match independently trained T2"
+                   (data4-bytes=? (t2-private-tokenizer-serialize imported)
+                                  (t2-tokenizer-core-serialize retrained)))
+    (witness-check "accepted T2 stream split across a learned pair"
+                   (data4-bytes=? streamed
+                                  (t2-private-tokenizer-encode-staging imported first)))
+    (witness-check "accepted tokenizer save" (t2-wave2-tokenizer-save imported path policy))
+    (let* ((loaded (t2-wave2-tokenizer-load path policy))
+           (published (witness-publish imported directory))
+           (summary (vector-ref published 0))
+           (staging (t2-token-corpus-read-i64-le loaded directory
+                                                1048576 1048576 65536))
+           (native-staging (witness-read fixture "native.i64" 256)))
+      (witness-check "D1 identity is accepted T2 identity"
+                     (string=? (et-d1-private-token-corpus-summary-tokenizer-fingerprint summary)
+                               (t2-tokenizer-core-fingerprint retrained)))
+      (witness-check "D1 shard count"
+                     (> (et-d1-private-token-corpus-summary-shard-count summary) 1))
+      (witness-check "every native and D1 token ID matches"
+                     (data4-bytes=? staging native-staging))
+      (let ((different
+             (t2-private-register-core
+              (t2-tokenizer-core-create
+               'strict '((0 256 97 98) (1 257 256 256) (2 258 257 257))
+               '() '() '()))))
+        (witness-check "wrong identity has matching vocabulary"
+                       (= (t2-private-tokenizer-vocab-size loaded)
+                          (t2-private-tokenizer-vocab-size different)))
+        (witness-expect-error 'invalid-argument 't2-token-corpus-read
+                              (lambda ()
+                                (t2-private-map-core-error
+                                 't2-token-corpus-read
+                                 (lambda ()
+                                   (t2-token-corpus-read-i64-le
+                                    different directory 1048576 1048576 65536))))))
+      (display "canonical T2, partitioned encode, native token IDs and D1 readback PASS")
+      (newline))))
+
+(define (witness-reject-import fixture directory leaf category)
+  (witness-expect-error category 't2-native-bpe-import
+                        (lambda ()
+                          (witness-publish (witness-import fixture leaf) directory))))
+
+(define (witness-negative fixture directory)
+  (witness-reject-import fixture directory "bad-checksum.etbpe" 'corrupt-data)
+  (witness-reject-import fixture directory "truncated.etbpe" 'corrupt-data)
+  (witness-reject-import fixture directory "wrong-version.etbpe" 'version-mismatch)
+  (witness-reject-import fixture directory "special.etbpe" 'unsupported)
+  (witness-reject-import fixture directory "over-limit.etbpe" 'unsupported)
+  (witness-reject-import fixture directory "link.etbpe" 'io)
+  (witness-reject-import fixture directory "missing.etbpe" 'io)
+  (witness-expect-error 'invalid-argument 't2-native-bpe-import
+                        (lambda () (t2-native-bpe-import (string #\nul))))
+  (let* ((empty (witness-import fixture "empty.etbpe"))
+         (limit (witness-import fixture "limit.etbpe"))
+         (edge (t2-private-tokenizer-encode-staging limit (bytevector 0 255))))
+    (witness-check "zero merges" (= (t2-private-tokenizer-vocab-size empty) 256))
+    (witness-check "256 merges, last merged ID"
+                   (and (= (t2-private-tokenizer-vocab-size limit) 512)
+                        (= (bytevector-length edge) 8)
+                        (= (t1-core-read-u64-le edge 0) 511))))
+  (display "ETBPE100 rejection and merge bounds PASS") (newline))
+
+(define witness-arguments (cdr (command-line)))
+(witness-check "expected MODE FIXTURE DIRECTORY"
+               (equal? (data4-bounded-length witness-arguments 3) 3))
+(let ((mode (car witness-arguments))
+      (fixture (cadr witness-arguments))
+      (directory (caddr witness-arguments)))
+  (cond ((string=? mode "write") (witness-write fixture directory))
+        ((string=? mode "negative") (witness-negative fixture directory))
+        ((string=? mode "blocked")
+         (witness-expect-error 'invalid-argument 'token-corpus-write!
+                               (lambda ()
+                                 (witness-publish
+                                  (witness-import fixture "trained.etbpe")
+                                  directory)))
+         (display "preexisting D1 target rejected PASS") (newline))
+        ((string=? mode "corrupt")
+         (witness-expect-error 'corrupt-data 'token-corpus-validate
+                               (lambda ()
+                                 (t2-token-corpus-read-i64-le
+                                  (witness-import fixture "trained.etbpe")
+                                  directory 1048576 1048576 65536)))
+         (display "D1 shard corruption detected PASS") (newline))
+        (else (witness-fail "unknown mode"))))

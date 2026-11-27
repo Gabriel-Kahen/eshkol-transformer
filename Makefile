@@ -28,7 +28,7 @@ SHELL := /usr/bin/bash
 	test-i1 test-i2 test-i2-native test-k1 test-k2 test-l2 test-l3s test-e3-metrics \
 	test-mod5 test-mod5-aot test-mp4 test-ac4 test-pa4-wider test-n2 test-n3k \
 	test-g3s test-o2 test-tr3-o test-p1 test-p1-native test-python-isolation test-q0 \
-	test-reference-formats test-t1 test-t2 test-t2-trainer test-data4-pipeline \
+	test-reference-formats test-t1 test-t2 test-t2-trainer test-t2-native-corpus test-data4-pipeline \
 	test-beam-search test-constrained-decode test-paged-kv test-spec-decode \
 	test-beam-cd-composition test-spec-paged-witness test-data4-quality-t2-d1 \
 	test-tr3b test-tr3-c-d2-restore \
@@ -477,6 +477,9 @@ test-t2: build
 
 test-t2-trainer:
 	/usr/bin/bash scripts/test-t2-trainer.sh
+
+test-t2-native-corpus:
+	/usr/bin/bash scripts/test-t2-native-corpus.sh
 
 test-data4-pipeline:
 	/usr/bin/bash scripts/test-data4-pipeline.sh
