@@ -34,6 +34,20 @@ class DecoderAdamWTests(unittest.TestCase):
         self.assertNotIn("k2-public", generated)
         self.assertNotIn("c2-public", generated)
 
+    def test_generated_source_uses_the_d2_owner_and_no_stdlib_lookups(self):
+        generated = (self.root / "witness.esk").read_text()
+        self.assertNotRegex(generated, r"\((?:assoc|list-ref|t1-private-tokenizer-[^ ]+) ")
+        tokenizer = section(generated, "(define (adamw-load-tokenizer ", "(define (adamw-witness ")
+        record = verify_training(self.root / "training")
+        self.assertIn("(define expected-adamw-tokenizer-sha " +
+                      witness.digest_literal(record["tokenizer_artifact_sha256"]) + ")", generated)
+        self.assertLess(tokenizer.index("(c1-sha256 bytes)"),
+                        tokenizer.index("(t2-private-tokenizer-parse bytes corpus-limit)"))
+        self.assertIn("(d2-tokenizer-identity tokenizer)", tokenizer)
+        self.assertEqual(generated.count("(t2-private-tokenizer-parse "), 1)
+        self.assertIn("(o2-list-ref paths whead)", generated)
+        self.assertIn("(adamw-branch (vector-ref branches 0) key)", generated)
+
     def synthetic_trace(self, variant):
         tied = variant == "tied"
         count = 11 if tied else 12

@@ -10,6 +10,7 @@
 (extern i64 adamw-moment ptr i64 i64 ptr i64 :real et_mod5_v256_adamw_moment_v1)
 
 (define expected-tied-sha @@TIED_SHA@@)
+(define expected-adamw-tokenizer-sha @@TOKENIZER_SHA@@)
 (define adamw-options '(@@OPTIONS@@))
 (define adamw-hex "0123456789abcdef")
 
@@ -19,13 +20,18 @@
       (display (string-ref adamw-hex (quotient word 16)))
       (display (string-ref adamw-hex (modulo word 16))))))
 
+(define (adamw-branch entries key)
+  (cond ((null? entries) #f)
+        ((equal? (caar entries) key) (cdr (car entries)))
+        (else (adamw-branch (cdr entries) key))))
+
 (define (adamw-parent root branches path)
   (let descend ((module root) (remaining path) (prefix '()))
     (if (null? (cdr remaining)) module
         (let* ((name (car remaining))
                (key (cons name prefix))
-               (found (assoc key (vector-ref branches 0)))
-               (child (if found (cdr found)
+               (found (adamw-branch (vector-ref branches 0) key))
+               (child (if found found
                           (let ((fresh (i2-module-create-internal)))
                             (module-register-child-internal! module name fresh)
                             (vector-set! branches 0
@@ -63,8 +69,8 @@
                               "native optimizer slot registration failed")))))))
     (let* ((tree (module-parameters root))
            (paths (map car roster))
-           (head (parameter-tree-handle tree (list-ref paths whead)))
-           (embedding (parameter-tree-handle tree (list-ref paths wembedding)))
+           (head (parameter-tree-handle tree (o2-list-ref paths whead)))
+           (embedding (parameter-tree-handle tree (o2-list-ref paths wembedding)))
            (selected (if tied? (i2-reverse (cdr (i2-reverse paths))) paths))
            (config (list 'transformer-optimizer-config 1 0 '() 'adamw 'f32 'cpu
                          '(none) '(constant)
@@ -72,7 +78,7 @@
       (check-data (and (equal? (parameter-tree-paths tree) paths)
                        (equal? (parameter-tree-tie-groups tree) (if tied? tied-aliases '()))
                        (eq? (eq? head embedding) tied?)
-                       (equal? (parameter-handle-path head) (list-ref paths whead)))
+                       (equal? (parameter-handle-path head) (o2-list-ref paths whead)))
                   "wrong canonical P1 topology")
       (vector native (o2-public-optimizer-create config tree)))))
 
@@ -186,14 +192,22 @@
         (adamw-emit-bytes ids) (display " ") (adamw-emit-bytes labels) (display " 8 ")
         (print-real "%.17g" loss) (display " ") (print-real "%.17g" after) (newline)))))
 
+(define (adamw-load-tokenizer path)
+  (let ((bytes (corpus-read-exact path corpus-limit 'mod5-adamw)))
+    (check-data (c1-bytes=? (c1-sha256 bytes) expected-adamw-tokenizer-sha)
+                "wrong training tokenizer artifact SHA-256")
+    (let* ((tokenizer (t2-private-tokenizer-parse bytes corpus-limit))
+           (identity (d2-tokenizer-identity tokenizer)))
+      (check-data (and (string=? (vector-ref identity 0) corpus-identity)
+                       (= (vector-ref identity 1) vocab))
+                  "wrong training tokenizer owner identity")
+      tokenizer)))
+
 (define (adamw-witness fixture model variant destination)
   (let* ((tied? (string=? variant "tied"))
          (weights (vector-ref (load-checked-weights
                                model (if tied? expected-tied-sha expected-model-sha)) 0))
-         (tokenizer-path (string-append fixture "/tokenizer.etok"))
-         (fingerprint (check-tokenizer tokenizer-path))
-         (tokenizer (t2-wave2-tokenizer-load tokenizer-path
-                      (c1-wave2-persistence-policy 1024 1024 1024 1 'cpu)))
+         (tokenizer (adamw-load-tokenizer (string-append fixture "/tokenizer.etok")))
          (count (if tied? 11 12))
          (slots (checked-allocate (* 8 count)))
          (packed (checked-allocate (* 4 (if tied? 6448 10544))))
@@ -209,10 +223,9 @@
                     tokenizer))
          (port (open-binary-output-file destination)))
     (check-data (and (= tokens 8) (= vocab 256)
-                     (string=? (vector-ref (d2-tokenizer-identity tokenizer) 0) fingerprint)
                      (eq? (eq? (vector-ref weights whead) (vector-ref weights wembedding)) tied?)
                      (= 0 (o2-optimizer-completed-updates-internal optimizer)))
-                "wrong tokenizer, decoder or optimizer initialization")
+                "wrong decoder or optimizer initialization")
     (display "PROFILE ") (display variant) (display " ") (display count) (newline)
     (adamw-refresh weights native count tied? #t port)
     (do ((update 0 (+ update 1))) ((= update 6))

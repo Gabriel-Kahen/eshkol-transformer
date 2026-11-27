@@ -392,7 +392,9 @@ Explicit K2 profile admission and tied/untied C2 LOAD/SAVE remain separate gates
 
 The opt-in witness reuses the pinned V256 decoder, C1 initial weights, and
 tied-gradient check from the EVAL5 and gradient generators. Its dataset
-comes from the existing V256 T1/D1/D2 fixture. Each profile opens a fresh D2
+comes from the existing V256 T1/D1/D2 fixture. The witness checks the
+tokenizer artifact SHA-256 and parses those same bytes through the D2
+aggregate's T2 owner. Each profile opens a fresh D2
 reader and consumes six full eight-token batches. The live borrowed input
 and target views supply the decoder tensors. The runtime checks each full
 mask and records the D2 cursor and token bytes for independent verification.
