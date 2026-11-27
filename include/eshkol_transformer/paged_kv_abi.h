@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #define ET_PAGED_KV_ABI_MAJOR 1u
-#define ET_PAGED_KV_ABI_MINOR 0u
+#define ET_PAGED_KV_ABI_MINOR 1u
 
 /* Bounded pool and tensor dimension limits (explicit, zero silent fallback). */
 #define ET_PAGED_KV_MAX_BLOCKS 4096u
@@ -44,7 +44,8 @@ enum {
   ET_PAGED_KV_ERR_INVALID_RANGE = -11,
   ET_PAGED_KV_ERR_NOMEM = -12,
   ET_PAGED_KV_ERR_OVERFLOW = -13,
-  ET_PAGED_KV_ERR_STATE = -14
+  ET_PAGED_KV_ERR_STATE = -14,
+  ET_PAGED_KV_ERR_CONTEXT = -15
 };
 
 /* Paged KV-cache pool configuration.
@@ -87,6 +88,21 @@ typedef struct et_paged_kv_stats {
   uint64_t prefix_cache_hits;    /* total prefix-cache hits on attach */
 } et_paged_kv_stats;
 
+/* Caller-supplied fingerprints of the loaded model (including adapters),
+ * tokenizer, and complete KV-producing configuration. Each field is 32 bytes.
+ * The caller owns fingerprint provenance and its association with the KV. */
+typedef struct et_paged_kv_prefix_context_v1 {
+  uint8_t model[ET_PAGED_KV_HASH_BYTES];
+  uint8_t tokenizer[ET_PAGED_KV_HASH_BYTES];
+  uint8_t producer_config[ET_PAGED_KV_HASH_BYTES];
+} et_paged_kv_prefix_context_v1;
+
+typedef struct et_paged_kv_prefix_key_v1 {
+  et_paged_kv_prefix_context_v1 context;
+  uint8_t digest[ET_PAGED_KV_HASH_BYTES];
+  uint32_t block_size;
+} et_paged_kv_prefix_key_v1;
+
 #if defined(__cplusplus)
 #define ET_PAGED_KV_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
 #else
@@ -100,6 +116,16 @@ ET_PAGED_KV_STATIC_ASSERT(sizeof(et_paged_kv_stats) == 40u &&
                               offsetof(et_paged_kv_stats, prefix_cache_hits) ==
                                   32u,
                           "et_paged_kv_stats ABI layout changed");
+ET_PAGED_KV_STATIC_ASSERT(
+    sizeof(et_paged_kv_prefix_context_v1) == 96u &&
+        offsetof(et_paged_kv_prefix_context_v1, tokenizer) == 32u &&
+        offsetof(et_paged_kv_prefix_context_v1, producer_config) == 64u,
+    "et_paged_kv_prefix_context_v1 ABI layout changed");
+ET_PAGED_KV_STATIC_ASSERT(
+    sizeof(et_paged_kv_prefix_key_v1) == 132u &&
+        offsetof(et_paged_kv_prefix_key_v1, digest) == 96u &&
+        offsetof(et_paged_kv_prefix_key_v1, block_size) == 128u,
+    "et_paged_kv_prefix_key_v1 ABI layout changed");
 #undef ET_PAGED_KV_STATIC_ASSERT
 
 typedef struct et_paged_kv_pool et_paged_kv_pool;
@@ -245,7 +271,7 @@ et_paged_kv_status et_paged_kv_decode_attention_v1_raw(
 /* Canonical SHA-256 chain hash for a full token block:
  *   SHA256("ETPKV1\0\0" || (prev_hash ? prev_hash[32] : zeros[32]) ||
  *          LE32(block_size) || LE32(token_ids[0..block_size-1])).
- * Chaining prev_hash binds causal KV contents to the full preceding prefix. */
+ * Chaining prev_hash incorporates the token IDs in the preceding prefix. */
 et_paged_kv_status et_paged_kv_hash_token_block(
     const uint8_t *prev_hash_or_null, const uint32_t *token_ids,
     uint32_t block_size, uint8_t out_hash[ET_PAGED_KV_HASH_BYTES]);
@@ -263,6 +289,41 @@ et_paged_kv_status et_paged_kv_prefix_cache_register(
 et_paged_kv_status et_paged_kv_prefix_cache_attach(
     et_paged_kv_pool *pool, uint32_t seq_id,
     const uint8_t prefix_hash[ET_PAGED_KV_HASH_BYTES], uint32_t *out_hit);
+
+/* Create a single-producer pool with an immutable copy of context. Reset
+ * clears cache contents and preserves that binding. Same storage contract
+ * as et_paged_kv_create; context must be non-null and disjoint from the
+ * external storage and out_pool. Failure leaves out_pool untouched. */
+et_paged_kv_status et_paged_kv_create_with_prefix_context_v1(
+    const et_paged_kv_config *cfg, const et_paged_kv_prefix_context_v1 *context,
+    float *external_pool, size_t external_pool_floats,
+    et_paged_kv_pool **out_pool);
+
+/* SHA256("ETPKV2\0\0" || model || tokenizer || producer_config ||
+ *        predecessor_present_byte || predecessor_digest_or_zeros ||
+ *        LE32(block_size) || LE32(token_ids[0..block_size-1])).
+ * A NULL predecessor starts a chain. A supplied predecessor must have the
+ * same context and block size. Failure leaves out_key untouched. out_key may
+ * equal previous_or_null to advance a chain in place. */
+et_paged_kv_status et_paged_kv_hash_token_block_with_context_v1(
+    const et_paged_kv_prefix_context_v1 *context,
+    const et_paged_kv_prefix_key_v1 *previous_or_null,
+    const uint32_t *token_ids, uint32_t block_size,
+    et_paged_kv_prefix_key_v1 *out_key);
+
+/* Same registration and attachment ownership as the legacy APIs. Use the
+ * matching API family for the pool mode (otherwise ET_PAGED_KV_ERR_STATE).
+ * Key context and block size must match the pool (ET_PAGED_KV_ERR_CONTEXT
+ * and ET_PAGED_KV_ERR_SHAPE respectively). Failures leave all pool state
+ * and out_hit untouched. Keys are caller-controlled data. The caller must
+ * supply the hash of the actual token chain and matching KV, with trustworthy
+ * context fingerprints. The caller owns provenance for the stored KV. */
+et_paged_kv_status et_paged_kv_prefix_cache_register_with_context_v1(
+    et_paged_kv_pool *pool, uint32_t seq_id, uint32_t logical_block,
+    const et_paged_kv_prefix_key_v1 *key);
+et_paged_kv_status et_paged_kv_prefix_cache_attach_with_context_v1(
+    et_paged_kv_pool *pool, uint32_t seq_id,
+    const et_paged_kv_prefix_key_v1 *key, uint32_t *out_hit);
 
 #ifdef __cplusplus
 }

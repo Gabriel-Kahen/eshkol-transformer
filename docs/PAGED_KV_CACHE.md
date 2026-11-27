@@ -90,7 +90,7 @@ Exact element offset for physical block `b`, layer `l`, side `is_v` (`0` for K,
 5. **Canonical SHA-256 prefix-block deduplication**:
    - `et_paged_kv_hash_token_block` computes:
      `SHA256("ETPKV1\0\0" || (prev_hash ? prev_hash[32] : zeros[32]) || LE32(block_size) || LE32(token_ids[0..block_size-1]))`.
-     Chaining `prev_hash` binds causal KV values to the full preceding prompt.
+     Chaining `prev_hash` incorporates the token IDs of the preceding prompt.
    - Only full blocks (`logical_block < seq_len / block_size`) may be registered
      via `et_paged_kv_prefix_cache_register`.
    - `et_paged_kv_prefix_cache_attach` attaches a cached physical block at a
@@ -103,6 +103,46 @@ Exact element offset for physical block `b`, layer `l`, side `is_v` (`0` for K,
 6. **Zero-leak cleanup (`et_paged_kv_seq_free`)**: Freeing all active sequences
    returns `active_seqs == 0`, `used_blocks == 0`, `shared_blocks == 0`,
    `prefix_cached_blocks == 0`, and `free_blocks == total_blocks`.
+
+## Context-bound prefix cache (opt-in C ABI 1.1)
+
+Create a pool with `et_paged_kv_create_with_prefix_context_v1` to bind it to
+one KV producer. The constructor copies three caller-supplied 32-byte
+fingerprints for the loaded model including weights and adapters, tokenizer
+including vocabulary and token-ID mapping, and the complete KV-producing
+configuration. Include every configuration input that can change KV, such as
+position handling, attention and mask policy, or inference numerics.
+Destroy and recreate the pool when the producer changes. Reset clears the
+cache and retains the context.
+
+Use `et_paged_kv_hash_token_block_with_context_v1` to make typed keys for full
+blocks. Every digest uses the following canonical preimage, with fixed field
+widths and little-endian 32-bit integers.
+
+~~~text
+SHA256("ETPKV2\0\0" || model[32] || tokenizer[32] || producer_config[32] ||
+       predecessor_present[1] || predecessor_digest_or_zeros[32] ||
+       LE32(block_size) || LE32(token_ids[0..block_size-1]))
+~~~
+
+The predecessor flag is zero for a root and one for a continuation. The
+hash helper rejects a predecessor with a different context or block size.
+Register and attach with the corresponding `_with_context_v1` functions.
+These validate all three fingerprints and the block size before using the
+pool's existing prefix index. Context mismatch returns
+`ET_PAGED_KV_ERR_CONTEXT` and preserves the sequence, index, refcounts,
+physical KV, counters, and caller's hit output.
+
+Each pool accepts the prefix API family selected at creation. The original
+constructors accept the raw token hash APIs with their original hash bytes
+and behavior. Context-bound pools accept typed keys with the same full-block,
+copy-on-write, and eviction rules. A key is caller-controlled data and can
+be constructed or copied. The caller is responsible for using authentic
+fingerprints, the correct chain for the logical position, and the actual KV
+produced from that context and prefix. The digest covers the context and
+token chain. The manager compares the supplied fingerprints and relies on
+the caller for fingerprint provenance and the association between the key
+and the stored KV.
 
 ## Exact Paged GQA Causal Decode Attention (`et_paged_kv_decode_attention_v1`)
 
@@ -188,10 +228,9 @@ dispatch, and serving performance require separate qualification.
   accumulation (`num_blocks <= 4096`, `num_layers <= 64`, `num_kv_heads <= 64`,
   `num_q_heads <= 64`, `block_size <= 64`, `head_dim <= 256`, `max_seqs <= 256`,
   pool <= 256 MiB).
-- Prefix-cache hashes bind token IDs and the preceding token hash, but do not
-  bind model weights, adapters, tokenizer identity, or KV content. A pool must
-  be scoped to one KV producer identity; cross-model or cross-adapter reuse
-  requires a separate identity-bound cache contract.
+- Each pool is scoped to one KV producer identity. Legacy pools rely solely
+  on caller scoping. Context-bound pools check caller-supplied fingerprints
+  without attesting to the producer or stored KV.
 - This manager and AOT verifier are opt-in. They are not connected to default
   model dispatch, and this gate does not measure live serving performance.
 - GPU paged-attention kernels, quantized KV caches (FP8/INT8/INT4), sliding

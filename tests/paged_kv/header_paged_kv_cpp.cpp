@@ -8,6 +8,8 @@
 
 static_assert(std::is_standard_layout_v<et_paged_kv_config>);
 static_assert(std::is_standard_layout_v<et_paged_kv_stats>);
+static_assert(std::is_standard_layout_v<et_paged_kv_prefix_context_v1>);
+static_assert(std::is_standard_layout_v<et_paged_kv_prefix_key_v1>);
 static_assert(std::is_same_v<et_paged_kv_status, int32_t>);
 
 int main() {
@@ -83,5 +85,24 @@ int main() {
       ctx == nullptr)
     return 13;
   et_paged_kv_aot_destroy(ctx);
+
+  const et_paged_kv_prefix_context_v1 context = {{1u}, {2u}, {3u}};
+  const uint32_t tokens[] = {1u, 2u, 3u, 4u};
+  et_paged_kv_prefix_key_v1 key = {};
+  if (et_paged_kv_hash_token_block_with_context_v1(
+          &context, nullptr, tokens, cfg.block_size, &key) != ET_PAGED_KV_OK)
+    return 14;
+  if (et_paged_kv_create_with_prefix_context_v1(
+          &cfg, &context, nullptr, 0u, &pool) != ET_PAGED_KV_OK)
+    return 15;
+  uint32_t hit = 1u;
+  const bool context_ok =
+      et_paged_kv_seq_alloc(pool, &s0) == ET_PAGED_KV_OK &&
+      et_paged_kv_prefix_cache_attach_with_context_v1(pool, s0, &key, &hit) ==
+          ET_PAGED_KV_OK &&
+      hit == 0u;
+  et_paged_kv_destroy(pool);
+  if (!context_ok)
+    return 16;
   return 0;
 }

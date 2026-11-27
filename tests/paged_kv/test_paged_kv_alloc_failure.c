@@ -26,8 +26,19 @@ void *__wrap_calloc(size_t count, size_t size) {
     }                                                                          \
   } while (0)
 
-static int test_core_create(int external) {
+static et_paged_kv_status create_test_pool(
+    const et_paged_kv_config *cfg, const et_paged_kv_prefix_context_v1 *context,
+    float *storage, size_t floats, et_paged_kv_pool **pool) {
+  if (context != NULL)
+    return et_paged_kv_create_with_prefix_context_v1(cfg, context, storage,
+                                                     floats, pool);
+  return et_paged_kv_create(cfg, storage, floats, pool);
+}
+
+static int test_core_create(int external, int context_bound) {
   const et_paged_kv_config cfg = {4u, 1u, 1u, 2u, 2u, 2u, 2u, 0u};
+  const et_paged_kv_prefix_context_v1 context = {
+      .model = {1u}, .tokenizer = {2u}, .producer_config = {3u}};
   size_t floats = 0u;
   CHECK(et_paged_kv_pool_float_count(&cfg, &floats) == ET_PAGED_KV_OK);
   float *storage = external ? (float *)calloc(floats, sizeof(float)) : NULL;
@@ -35,10 +46,12 @@ static int test_core_create(int external) {
   if (external)
     storage[0] = 17.0f;
 
+  const et_paged_kv_prefix_context_v1 *binding = context_bound ? &context : NULL;
+  const size_t storage_floats = external ? floats : 0u;
   et_paged_kv_pool *pool = NULL;
   call_count = 0u;
   fail_at = 0u;
-  CHECK(et_paged_kv_create(&cfg, storage, external ? floats : 0u, &pool) ==
+  CHECK(create_test_pool(&cfg, binding, storage, storage_floats, &pool) ==
         ET_PAGED_KV_OK);
   const size_t allocations = call_count;
   et_paged_kv_destroy(pool);
@@ -51,7 +64,7 @@ static int test_core_create(int external) {
     call_count = 0u;
     fail_at = cut;
     const et_paged_kv_status st =
-        et_paged_kv_create(&cfg, storage, external ? floats : 0u, &pool);
+        create_test_pool(&cfg, binding, storage, storage_floats, &pool);
     fail_at = 0u;
     CHECK(st == ET_PAGED_KV_ERR_NOMEM);
     CHECK(pool == (et_paged_kv_pool *)(uintptr_t)1u);
@@ -105,8 +118,10 @@ static int test_bridge_reset_failure(void) {
 }
 
 int main(void) {
-  CHECK(test_core_create(0) == 0);
-  CHECK(test_core_create(1) == 0);
+  CHECK(test_core_create(0, 0) == 0);
+  CHECK(test_core_create(1, 0) == 0);
+  CHECK(test_core_create(0, 1) == 0);
+  CHECK(test_core_create(1, 1) == 0);
   CHECK(test_bridge_create() == 0);
   CHECK(test_bridge_reset_failure() == 0);
   puts("PAGED_KV allocation cuts and reset rollback: PASS");
