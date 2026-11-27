@@ -240,9 +240,32 @@ selects the variant from the checkpoint alias group.
 
 This gate covers a single deterministic D1 window and this decoder shape on
 the pinned CPU toolchain. The checkpoint persists model weights and logical
-ties. Training resume, optimizer state, alternate devices or dtypes,
-quantized GGUF, and execution by HF or GGML model runtimes require separate
-validation.
+ties. Training resume, optimizer state, alternate devices, and execution by
+HF or GGML model runtimes require separate validation.
+
+## Trained Q8_0 GGUF scoring
+
+The same gate exports both trained variants as tagged `eshkol-decoder-v1`
+GGUF with explicit F32 fallback, then imports to C1 and scores the D1 window
+in fresh CPU F32 processes. The `[16,32]` FFN down projection occupies 16
+Q8_0 blocks (544 bytes). The eight other matrices and three RMSNorm vectors
+retain their exact F32 bits. Tensor payloads total 9,952 bytes versus 11,456
+bytes for F32. The importer restores each variant's C1 alias topology,
+including both head and embedding paths of the tied model.
+
+The test independently inspects the wire descriptors, scales and signed
+quants, then checks the decoded weights, repeatable scores, changed logits
+digests and mean-loss drift. A corrupt quant byte must fail import before
+creating a C1 file or replacing an existing one.
+
+Ubuntu 22.04 with Clang/LLVM 21.1.8 passed all five tests and produced two
+byte-identical AOT executables. The gate requires nonzero absolute mean-loss drift
+of at most 0.01 for both variants.
+
+| Variant | Imported mean loss | Absolute mean-loss drift | Maximum absolute weight delta |
+|---|---:|---:|---:|
+| Untied | 1.5492229154686037 | 1.686e-5 | 5.924e-4 |
+| Tied | 1.9232759077819499 | 3.613e-6 | 5.590e-4 |
 
 ## Width-16 C2 storage prerequisite
 
