@@ -19,8 +19,12 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   [Replay record](CLI3_FIXED_BINARY_ARTIFACT.md#current-accepted-scope)
 
 - The [proposed V=256 MOD5 C2 gate](MOD5_E2E_C1_IO5.md#proposed-width-16-c2-gate)
-  depends on exact native storage and K2 admission for `[256,16]` and a
-  tied and untied C2 witness with matching T1, D2 and X1 identities.
+  uses the admitted I2 1.3 exact native storage descriptor for `[256,16]`.
+  An opt-in K2 candidate audits that descriptor and its eleven-row K1 report
+  in an independent runtime slot. Profile-bound Eshkol report, request and
+  entry authority is exercised by `scripts/test-k2-mod5-v256.sh`. Hosted
+  admission and tied and untied C2 witnesses with authentic T1, D2 and X1
+  identities remain pending.
 
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,

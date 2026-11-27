@@ -74,6 +74,23 @@ int64_t et_k2_private_runtime_require_v1(
     const void *shape_u64le, int64_t shape_bytes, int64_t rank,
     int64_t deterministic, void *error_bytes, int64_t error_capacity);
 
+#ifdef ET_K2_PRIVATE_MOD5_V256
+int64_t et_k2_private_mod5_v256_ensure_v1(void *error_bytes,
+                                          int64_t error_capacity);
+int64_t et_k2_private_mod5_v256_generation_v1(void);
+int64_t et_k2_private_mod5_v256_require_v1(
+    int64_t expected_generation, int64_t sorted_entry_index,
+    const void *operation, int64_t operation_bytes, const void *dtype,
+    int64_t dtype_bytes, const void *device, int64_t device_bytes,
+    const void *shape_u64le, int64_t shape_bytes, int64_t rank,
+    int64_t deterministic, void *error_bytes, int64_t error_capacity);
+/* Factory kinds are report (0), request (1), and entry (2). */
+int64_t et_k2_private_mod5_v256_factory_register_v1(
+    int64_t kind, const void *closure);
+int64_t et_k2_private_mod5_v256_factory_authenticate_v1(
+    int64_t kind, const void *closure);
+#endif
+
 /* Register: 1 for new/idempotent; -1 malformed; -9 conflict/invariant. */
 int64_t et_k2_private_report_factory_register_v1(const void *closure);
 int64_t et_k2_private_request_factory_register_v1(const void *closure);
@@ -113,6 +130,10 @@ enum {
 
 void et_k2_test_reset_v1(void);
 void et_k2_test_runtime_drop_v1(void);
+#ifdef ET_K2_PRIVATE_MOD5_V256
+void et_k2_test_mod5_v256_drop_v1(void);
+uint64_t et_k2_test_mod5_v256_match_count_v1(void);
+#endif
 void et_k2_test_provider_override_v1(const et_kernel_provider_v1 *provider,
                                      int enabled);
 void et_k2_test_fail_stage_v1(int stage);
