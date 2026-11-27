@@ -68,7 +68,9 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   records the resource shortfall on the standard hosted runner. Both one-use
   SAVE and replay packages were prepared and reviewed for the frozen
   [source tree `19506579`](https://github.com/Gabriel-Kahen/eshkol-transformer/tree/4d31964456212f84837387c2ba2bb23803438f69).
-  They remain unclaimed. Launch requires at least 16 GiB available memory,
+  Replay passed on the frozen tree. The three SAVE attempts were consumed
+  and the latest stopped at the private reader fixture. A fresh reviewed
+  preparation is required. Launch requires at least 16 GiB available memory,
   8 GiB free swap, and 32 GiB free at each Docker and scratch location.
 - The [first CPU-v1 source reconciliation](CPU_V1_SOURCE_RECONCILIATION_20261125.md)
   combined the Wave 3 source, focused tests, and evidence repair over
@@ -77,8 +79,11 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   reconciliation onto `dd3a7792` keeps the frozen `4d319644` qualification
   tree intact. Forty focused G3-R tests, 50 E3/Q0 integration checks, and CI
   topology passed. The merged CLI3 cross-command script also passed a replay
-  of the previously published PR #255 binary. A fresh build for the
-  reconciled tree and the frozen generated Wave 3 gates are still pending.
+  of the previously published PR #255 binary. The exact `bcff170e` rehearsal
+  passed all 26 required checks in [hosted run 45879568970]
+  (https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45879568970).
+  The generated SAVE/reader, public terminal continuation and E3 section 9
+  gates remain open.
 - On accepted `8d185344`, [hosted run 45646675969](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45646675969)
   passed `parameter-state`: 100m16s in the suite, after 2m10s of pinned
   toolchain verification. Its log has a 90m52s gap after the sanitized identity
@@ -2632,6 +2637,18 @@ A source-only successor checks direct application `checkpoint-save!` calls,
 which occur twice in the producer IR and not in the no-SAVE control IR, while
 still requiring the producer's native bridge call. Compiled no-SAVE absence,
 fresh SAVE bytes and private reader modes remain unverified in that attempt.
+
+The `af74590e` SAVE attempt passed the repaired IR checks, the compiled
+no-SAVE control, and the 10-check public producer. The 3,039-byte roundtrip
+matched the seed. The private reader then stopped because the pinned
+`make-string` generated only 2,049 bytes for the oversized UTF-8 case.
+The repaired reader fixture concatenates the two-byte character and checks
+both lengths before exercising the existing 4,096-byte path guard. The
+pinned Eshkol/Clang 21.1.8 boundary witness measured 2,049 characters and
+4,098 bytes, and the generated T2 guard passed all six checks. A separate
+retained-archive reader build exceeded a 2 GiB diagnostic cap before linking.
+A fresh one-use SAVE with normal, repeat and sanitizer reader modes remains
+required.
 
 The source-only current-main union of these G3-R leaves starts from the
 reviewed CLI3 `baf0a03f` child of main `ee24ef4` and carries only G3 leaf
