@@ -3,8 +3,10 @@
 (define g3c4-p2g2-terminal-carriers-create #f)
 (define g3c4-p2g2-terminal-carriers-check #f)
 (define g3c4-p2g2-terminal-carriers-retire! #f)
+(define g3c4-p2g2-terminal-carriers-capture-retirement #f)
 
 (let ((roots (vector '())))
+  (define retirement-key (vector 'g3c4-private-carrier-retirement))
   (define (root-for bundle operation)
     (let find ((remaining (vector-ref roots 0)))
       (cond ((null? remaining)
@@ -63,7 +65,12 @@
                                     (if (vector-ref live 0) 'live 'dead))))
                      (g3c4-fail 'invalid-state operation
                                 "P2/G2 original carrier allocation changed"))
-                 (if retire
+                 (cond
+                   ((eq? retire retirement-key)
+                    (if (vector-ref live 0) live
+                        (g3c4-fail 'invalid-state operation
+                                   "P2/G2 original carriers are retired")))
+                   (retire
                      (begin
                        (if (vector-ref live 0)
                            (begin
@@ -79,16 +86,38 @@
                                      (scrub (+ i 1)))))
                              (vector-set! live 0 #f)
                              (vector-set! bundle 9 'dead)))
-                       #t)
+                       #t))
+                   (else
                      (if (vector-ref live 0) #t
                          (g3c4-fail 'invalid-state operation
-                                    "P2/G2 original carriers are retired"))))))
+                                    "P2/G2 original carriers are retired")))))))
         ;; Construct the root before publishing the bundle. No enrollment API
         ;; accepts external bytevectors.
         (vector-set! roots 0 (cons (cons bundle proof) (vector-ref roots 0)))
         bundle)))
   (set! g3c4-p2g2-terminal-carriers-check
     (lambda (bundle operation) ((root-for bundle operation) #f operation)))
+  (set! g3c4-p2g2-terminal-carriers-capture-retirement
+    (lambda (bundle logical-count operation)
+      (if (not (and (m3t-exact-i64? logical-count)
+                    (or (= logical-count 1) (= logical-count 2))))
+          (g3c4-fail 'invalid-argument operation "P2/G2 retirement needs one or two"))
+      (let ((head (vector-ref roots 0)))
+        (if (not (and (pair? head) (eq? bundle (car (car head)))))
+            (g3c4-fail 'invalid-state operation "P2/G2 retirement needs the original root head"))
+        (let* ((edge (car head))
+               (successor (cdr head))
+               (live ((cdr edge) retirement-key operation))
+               (one? (= logical-count 1)))
+          ;; The top node and successor are already rooted through this exact
+          ;; destination cell. No copied/synthesized successor is admitted.
+          (vector roots head edge successor bundle live
+                  (vector-ref bundle 0) (vector-ref bundle 1)
+                  (vector-ref bundle 2) (vector-ref bundle 3)
+                  (vector-ref bundle 4) (vector-ref bundle 5)
+                  (vector-ref bundle (if one? 6 7))
+                  (vector-ref bundle (if one? 7 6)) one?
+                  (make-bytevector 1 0) 'live 'dead)))))
   (set! g3c4-p2g2-terminal-carriers-retire!
     (lambda (bundle)
       (let* ((operation 'g3c4-p2g2-terminal-carriers-retire!)

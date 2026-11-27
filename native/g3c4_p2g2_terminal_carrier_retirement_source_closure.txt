@@ -1,0 +1,6 @@
+native/g3c4_p2g2_terminal_carrier_retirement_extension.esk
+native/g3c4_p2g2_terminal_carrier_retirement_source_closure.txt
+scripts/check-g3c4-p2g2-terminal-carrier-retirement.py
+scripts/test-g3c4-p2g2-terminal-carrier-retirement.sh
+tests/c2/test_handler_order.py
+tests/g3c4/p2_g2_terminal_carrier_retirement_test.esk

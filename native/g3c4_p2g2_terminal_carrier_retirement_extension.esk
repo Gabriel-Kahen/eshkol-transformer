@@ -1,0 +1,80 @@
+;;; Source-private terminal-success prerequisite. Load after the constructor.
+;;; The caller preflights in scope before native commit and activates only on
+;;; its irreversible success. The fixture uses a synthetic boundary.
+
+(extern void g3c4-p2g2-carrier-retirement-fail-stop i64 :real _Exit)
+
+(define-syntax g3c4-p2g2-scrub-eight-bytes!
+  (syntax-rules ()
+    ((_ carrier a b c d e f g h)
+     (begin
+       (bytevector-u8-set! carrier a 0)
+       (bytevector-u8-set! carrier b 0)
+       (bytevector-u8-set! carrier c 0)
+       (bytevector-u8-set! carrier d 0)
+       (bytevector-u8-set! carrier e 0)
+       (bytevector-u8-set! carrier f 0)
+       (bytevector-u8-set! carrier g 0)
+       (bytevector-u8-set! carrier h 0)))))
+
+(define (g3c4-p2g2-terminal-carrier-retirement-tail! (capture : vector))
+  (let ((phase (vector-ref capture 15)))
+    ;; Only the exact preallocated byte can transition from ready to active.
+    (if (eq? (bytevector-u8-ref phase 0) 0)
+        (bytevector-u8-set! phase 0 1)
+        (g3c4-p2g2-carrier-retirement-fail-stop 134))
+    (let* ((roots (vector-ref capture 0))
+           (head (vector-ref capture 1))
+           (successor (vector-ref capture 3))
+           (bundle (vector-ref capture 4))
+           (live (vector-ref capture 5))
+           (first-raw (vector-ref capture 6))
+           (first-staging (vector-ref capture 7))
+           (pending-raw (vector-ref capture 8))
+           (pending-staging (vector-ref capture 9))
+           (second-raw (vector-ref capture 10))
+           (second-staging (vector-ref capture 11))
+           (unused (vector-ref capture 13)))
+      ;; The private root pairs have no mutator, so the exact head also
+      ;; proves its captured edge and successor.
+      (if (not (and (eq? (vector-ref roots 0) head)
+                    (eq? (vector-ref live 0) #t)
+                    (eq? (vector-ref bundle 9) (vector-ref capture 16))))
+          (g3c4-p2g2-carrier-retirement-fail-stop 134))
+      (bytevector-u8-set! first-raw 0 0)
+      (g3c4-p2g2-scrub-eight-bytes! first-staging 0 1 2 3 4 5 6 7)
+      (bytevector-u8-set! pending-raw 0 0)
+      (bytevector-u8-set! pending-raw 1 0)
+      (g3c4-p2g2-scrub-eight-bytes! pending-staging 0 1 2 3 4 5 6 7)
+      (g3c4-p2g2-scrub-eight-bytes! pending-staging 8 9 10 11 12 13 14 15)
+      (bytevector-u8-set! second-raw 0 0)
+      (g3c4-p2g2-scrub-eight-bytes! second-staging 0 1 2 3 4 5 6 7)
+      (bytevector-u8-set! unused 0 0)
+      (if (vector-ref capture 14) (bytevector-u8-set! unused 1 0))
+      (vector-set! live 0 #f)
+      (vector-set! bundle 9 (vector-ref capture 17))
+      ;; Cdr of the exact head already rooted in this destination cell.
+      ;; It already outlives this store and needs no barrier promotion.
+      (vector-set! roots 0 successor)
+      #t)))
+
+(define-syntax g3c4-with-p2g2-terminal-carrier-retirement
+  (syntax-rules ()
+    ((_ bundle logical-count operation (selected retirement) body ...)
+     (let* ((retirement
+              (g3c4-p2g2-terminal-carriers-capture-retirement
+                bundle logical-count operation))
+            (selected (vector-ref retirement 12))
+            (phase (vector-ref retirement 15)))
+       ;; Installed before the caller's boundary. An ordinary exception after
+       ;; activation is fatal. Pinned runtime emergencies bypass Scheme guards.
+       (guard (caught
+                (#t (if (eq? (bytevector-u8-ref phase 0) 0)
+                        (begin
+                          (bytevector-u8-set! phase 0 2)
+                          (raise caught))
+                        (g3c4-p2g2-carrier-retirement-fail-stop 134))))
+         (let ((answer (begin body ...)))
+           (if (eq? (bytevector-u8-ref phase 0) 0)
+               (bytevector-u8-set! phase 0 2))
+           answer))))))
