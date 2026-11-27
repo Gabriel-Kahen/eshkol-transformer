@@ -20,7 +20,10 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 
 - The [proposed V=256 MOD5 C2 gate](MOD5_E2E_C1_IO5.md#proposed-width-16-c2-gate)
   depends on exact native storage and K2 admission for `[256,16]` and a
-  tied and untied C2 witness with matching T1, D2 and X1 identities.
+  tied and untied C2 witness with matching T1, D2 and X1 identities. The
+  [input fixture](MOD5_E2E_C1_IO5.md#v256-c2-continuation-input-fixture)
+  supplies six independent full-context rows, canonical X1 expectations,
+  and D2 cursor hashes for a two-update prefix and four-update suffix.
 
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,

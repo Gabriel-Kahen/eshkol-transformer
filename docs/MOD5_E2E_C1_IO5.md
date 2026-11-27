@@ -81,6 +81,10 @@ geometry-to-roster comparison belongs in the explicit profile gate because
 X1 1.0 lacks FFN and tie fields and generic C2 does not enforce a model-specific
 roster.
 
+The [continuation input fixture](#v256-c2-continuation-input-fixture) supplies
+the tokenizer, training corpus, X1 input, and independent cursor expectations.
+It follows the width-four witness's two-update prefix and four-update suffix.
+
 Both variants have 12 logical C1 entries. The untied variant has 12 unique
 parameters and 24 O2 moments, for 36 staged descriptors. The tied variant has
 equal-bit payloads at both paths and one logical `head.weight` /
@@ -152,6 +156,25 @@ evidence.
    K2/C2 package gates alongside the opt-in closure. Seal the supported receipt
    against the exact source and artifact. A subsequent continuation gate can
    qualify a restored live receiver and a matched training suffix.
+
+### V256 C2 continuation input fixture
+
+Run `python3 -m tests.mod5.mod5_v256_c2_fixture build DIR` with a fresh
+directory and use `verify DIR` to verify it. The fixture contains the
+canonical raw T1 tokenizer, six original nine-byte training documents,
+and one checksummed D1 shard per document. Unpacked D2 at batch size one
+and context eight produces six independent rows. All eight next-token
+targets contribute to the loss in every row. The fixture uses no data shuffle.
+
+The live witness should resolve `config.json` with X1 and compare the
+canonical result to `expected-x1.json`. Its fixed `run.seed` is 1729,
+the Philox key. Open the live D2 reader with the settings in
+`fixture.json`, then capture its epoch-start cursor at ordinal 0 and
+its current cursor after two updates. The record gives independent cursor
+hashes through ordinal 6 for comparison with that reader. The fixture
+tests exercise the data formats, row boundaries, masks and oracle seek.
+Live X1 and D2 integration, tied and untied C2 LOAD/SAVE, and the training
+suffix remain runtime gates.
 
 ## IO5 gate
 
