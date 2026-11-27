@@ -1326,8 +1326,15 @@ each I2 hook in both ELF objects. The exact emitted lists now pin 175 normal
 undefined symbols, 170 sanitizer noninstrumentation imports and 58 sanitizer
 instrumentation imports. The sealed discovery receipt SHA-256 is
 `46741a0cea7960df13369c4e35f543e1006a250a2d06e8384030bc5011a1f989`.
-Pinned Q0 generation and normal, repeat, poisoned and sanitizer runtime
-qualification remain pending.
+The supported `b1d2bf62` gate reached pinned Q0 and stopped at the first
+oracle generation because the accuracy check used the final corpus name for
+every case. The oracle now checks each corpus against its own controlled
+targets. Two pinned Python 3.14.6 and PyTorch 2.13.0+cpu generations produced
+byte-identical validated bundles and preserved the original D1 corpus files.
+The all-correct, all-wrong and mixed f32 accuracy words are `3f800000`,
+`00000000` and `3f19999a`, respectively, with D2 masks `11`, `11`, `10` in each
+case. Normal, repeat, poisoned and sanitizer runtime qualification remain
+pending.
 
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
