@@ -4,6 +4,10 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 
 ## Current integration
 
+- The [proposed V=256 MOD5 C2 gate](MOD5_E2E_C1_IO5.md#proposed-width-16-c2-gate)
+  depends on exact native storage and K2 admission for `[256,16]` and a
+  tied and untied C2 witness with matching T1, D2 and X1 identities.
+
 - [PR #259](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/259)
   merged the MOD5 gradient-storage witness, private C2 SHA span experiment,
   and V256 EVAL5 input-binding and live-scoring witness at `443dad4b` on
