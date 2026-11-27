@@ -171,6 +171,30 @@ Q8_0 fallback:
 | decoder, two layers | GGUF F16 | 85,548 | 45,888 | 4.883e-4 |
 | decoder, two layers | GGUF Q8_0 | 85,548 | 27,136 | 7.389e-3 |
 
+## Opt-in M3 model evaluation
+
+Run `make test-io5-live-quantized` with the pinned Eshkol toolchain.
+The gate saves a finite, seed-1729 M3 model through the Eshkol C1 writer, then
+uses the IO5 CLI to export and import mapped Hugging Face safetensors in F16
+and BF16. It loads each restored C1 checkpoint into a fresh seed-0 M3 model
+through the C1 reader and P1 module loader. The Eshkol M3 forward schedule
+evaluates the same `[1,2]` input `(3, 197)` in each model and returns all 512
+CPU F32 logits. The test measures finite, nonzero changes in weights and
+logits from the original F32 evaluation. Both dtypes use 4,416 wire payload
+bytes, half the F32 payload size. On Ubuntu 22.04 with LLVM and Clang 21.1.8,
+the gate measured these fixture-specific maximum absolute deltas.
+
+| Wire dtype | Weight delta | Logit delta | Test limits (weight, logit) |
+|---|---:|---:|---:|
+| F16 | 7.626e-6 | 2.932e-5 | 8.00e-6, 5.00e-5 |
+| BF16 | 6.096e-5 | 2.450e-4 | 6.25e-5, 4.00e-4 |
+
+The post-evaluation model snapshot must reserialize to the input C1 bytes,
+including the tied head and token embedding. A flipped safetensors payload
+byte fails import before creating or replacing a destination. Independently,
+a stale C1 payload checksum and a validly checksummed C1 file without the tie
+fail the live load before logits or a model-state readback are published.
+
 ## Limitations and scope
 
 - Bounded non-streaming interchange (reuses IO5 64 MiB file / 32 MiB tensor /
@@ -181,5 +205,7 @@ Q8_0 fallback:
   outside this slice.
 - This quantized tool supports only M3 and decoder profiles. The separate
   lossless `eshkol-mod5-v1` mapping does not enable quantized MOD5 export,
-  tagged import, or plain external import. This work does not add live model
-  ingress or change the lossless C1/IO5 contracts.
+  tagged import, or plain external import. The opt-in M3 evaluation covers
+  safetensors converted to F32 C1 before load. Direct safetensors loading,
+  live GGUF evaluation, CLI3 C2 ingress, and training resume are outside this
+  gate.

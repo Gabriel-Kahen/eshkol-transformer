@@ -1,0 +1,80 @@
+;;; One trusted C1/P1/I2/M3 identity universe for this test executable.
+(load "m3_package_root.esk")
+
+(define io5-quant-policy
+  (c1-persistence-policy-internal 1048576 524288 262144 64 'cpu))
+
+(define (io5-quant-model seed)
+  (let* ((config (x1-private-config-parse
+                   (string-append
+                     "{\"config-schema-major\":1,\"config-schema-minor\":0,"
+                     "\"model.context-length\":2,\"model.hidden-size\":4,"
+                     "\"model.layer-count\":1,\"model.query-head-count\":2,"
+                     "\"model.vocabulary-size\":256,\"run.seed\":"
+                     (number->string seed) "}")))
+         (resolved (x1-private-config-resolve config '())))
+    (m3t-public-model-create resolved (m3t-public-initializer-state seed))))
+
+(define (io5-quant-save model path)
+  (let ((state (module-state-dict model)))
+    (guard (caught
+             (#t (state-dict-release! state) (raise caught)))
+      (c1-checkpoint-save-state-internal!
+        state path io5-quant-policy i2-checkpoint-codec-internal #f))
+    (state-dict-release! state)))
+
+(define (io5-quant-eval model)
+  (module-eval! model)
+  (let ((input (m3t-public-input-create)))
+    (m3t-public-input-copy! input '(3 197))
+    (let* ((output (m3-public-model-forward model input '()))
+           (logits (m3-public-model-output-logits output))
+           (bits (m3-public-diagnostic-model-logits-bits logits)))
+      (m3-public-diagnostic-model-logits-release! logits)
+      (m3-public-model-output-release! output)
+      (m3t-public-input-release! input)
+      bits)))
+
+(define (io5-quant-print-logits bits)
+  (display "M3-LOGITS")
+  (let emit ((index 0))
+    (if (= index (bytevector-length bits))
+        (newline)
+        (begin
+          (display " ")
+          (display (bytevector-u8-ref bits index))
+          (emit (+ index 1))))))
+
+(let* ((args (command-line))
+       (count (c1-list-length-bounded args 5)))
+  (guard (caught
+           (#t
+             (display "IO5 QUANTIZED M3 ERROR: ")
+             (if (transformer-error? caught)
+                 (begin
+                   (display (transformer-error-category caught))
+                   (display " ")
+                   (display (transformer-error-operation caught))
+                   (display " ")
+                   (display (transformer-error-message caught)))
+                 (write caught))
+             (newline)
+             (exit 2)))
+    (cond
+      ((and (equal? count 3) (string=? (cadr args) "write"))
+       (let* ((model (io5-quant-model 1729))
+              (bits (io5-quant-eval model)))
+         (io5-quant-save model (caddr args))
+         (io5-quant-print-logits bits)))
+      ((and (equal? count 4) (string=? (cadr args) "evaluate"))
+       ;; Use a different initialization so it cannot stand in for the load.
+       (let ((model (io5-quant-model 0)))
+         (c1-checkpoint-load-module-internal!
+           model (caddr args) io5-quant-policy i2-checkpoint-codec-internal i2-provider-name)
+         (let ((bits (io5-quant-eval model)))
+           (io5-quant-save model (cadddr args))
+           (io5-quant-print-logits bits))))
+      (else
+       (display "Usage: io5-quantized-m3 write OUTPUT | evaluate INPUT READBACK")
+       (newline)
+       (exit 2)))))

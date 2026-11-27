@@ -393,9 +393,12 @@ test-dist5-mod5:
 test-eval5:
 	/usr/bin/bash scripts/test-eval5.sh
 
-.PHONY: test-io5-gguf
+.PHONY: test-io5-gguf test-io5-live-quantized
 test-io5-gguf:
 	/usr/bin/bash scripts/test-io5-gguf.sh
+
+test-io5-live-quantized:
+	/usr/bin/bash scripts/test-io5-live-quantized.sh
 
 # Optional Wave 5 leaf gates; no default build or CI suite consumes them.
 test-beam-search:
