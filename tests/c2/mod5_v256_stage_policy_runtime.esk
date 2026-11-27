@@ -1,0 +1,69 @@
+(load "c2_wave2_root.esk")
+(load "c2_mod5_v256_stage_policy.esk")
+
+(define (check label condition)
+  (if (not condition)
+      (begin (display "MOD5 V256 staged LOAD FAIL ") (display label)
+             (newline) (exit 1))))
+(define (read-file path)
+  (let* ((port (open-binary-input-file path))
+         (bytes (read-bytevector (file-size path) port)))
+    (close-port port)
+    bytes))
+(define (rejects? thunk expected)
+  (guard (caught (#t (and (transformer-error? caught)
+                          (eq? (transformer-error-category caught) expected)
+                          (eq? (transformer-error-operation caught) 'checkpoint-load))))
+    (thunk) #f))
+
+(define args (cdr (command-line)))
+(check 'arguments (= (c1-list-length-bounded args 4) 3))
+(define ordinary-path (car args))
+(define untied-model (read-file (cadr args)))
+(define tied-model (read-file (caddr args)))
+(define policy (c2-public-persistence-policy 1048576 1048576 1048576 64 'cpu))
+
+(check 'untied-model-roster (c2-mod5-v256-model-roster-match? untied-model #f))
+(check 'tied-model-roster (c2-mod5-v256-model-roster-match? tied-model #t))
+(check 'wrong-tie (not (c2-mod5-v256-model-roster-match? untied-model #t)))
+(check 'wrong-untie (not (c2-mod5-v256-model-roster-match? tied-model #f)))
+
+(define original-decoder c2-load-decode-model-internal)
+(define decode-calls 0)
+(set! c2-load-decode-model-internal
+  (lambda (bytes subpolicy)
+    (set! decode-calls (+ decode-calls 1))
+    (original-decoder bytes subpolicy)))
+(define expected-owners (c2-load-owner-counts-internal))
+
+(define (check-stage-cleanup expected-dead)
+  (check 'no-live-stage-or-payload
+    (equal? (c2-load-stage-counts-internal) (vector 0 0 expected-dead 0)))
+  (check 'no-owner-publication
+    (equal? (c2-load-owner-counts-internal) expected-owners))
+  (check 'no-model-decode (= decode-calls 0)))
+
+(check 'negative-admission-result
+  (rejects?
+    (lambda ()
+      (c2-checkpoint-load-with-admission-internal ordinary-path policy (stage descriptors)
+        #f))
+    'internal))
+(check-stage-cleanup 1)
+
+(check 'valid-foreign-geometry
+  (rejects?
+    (lambda ()
+      (c2-checkpoint-load-with-admission-internal ordinary-path policy (stage descriptors)
+        (c2-mod5-v256-check-stage! stage #f)))
+    'shape-mismatch))
+(check-stage-cleanup 2)
+
+(define report (k2-public-capability-discover))
+(define owner (c2-public-checkpoint-load ordinary-path policy report))
+(check 'ordinary-uses-decoder (= decode-calls 1))
+(check 'ordinary-consumes-stage
+  (equal? (c2-load-stage-counts-internal) (vector 0 0 3 0)))
+(check 'ordinary-owner-release (c2-public-trainer-state-release! owner))
+(display "MOD5 V256 staged LOAD PASS")
+(newline)

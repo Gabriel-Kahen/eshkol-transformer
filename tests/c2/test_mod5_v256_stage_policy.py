@@ -26,4 +26,7 @@ class Mod5V256StagePolicy(unittest.TestCase):
         )
         quote, aliases = definitions["c2-mod5-v256-tie"]
         self.assertEqual(quote, "quote")
-        self.assertEqual(aliases, [[rows[9][0], rows[11][0]]])
+        self.assertEqual(
+            tuple(PATHS[int(ordinal)] for ordinal in aliases),
+            ("head.weight", "token_embedding.weight"),
+        )

@@ -123,6 +123,17 @@ def lists(node):
 
 
 def definition(sources, name, path=None):
+    if name == "c2-checkpoint-load-with-admission-internal":
+        macros = [
+            node for key, roots in sources.items() if path is None or key == path
+            for node in roots if node[:2] == ["define-syntax", name]
+        ]
+        need(len(macros) == 1, "expected the one trusted C2 load macro")
+        rule = macros[0][2]
+        need(len(rule) == 3 and rule[:2] == ["syntax-rules", []]
+             and rule[2][0] == ["_", "path", "policy", ["stage", "descriptors"], "admission"],
+             "trusted C2 load macro argument contract")
+        return ["define", [name, "path", "policy"], rule[2][1]]
     found = [node for key, roots in sources.items() if path is None or key == path
              for node in lists(roots) if node[:1] == ["define"]
              and len(node) > 2 and isinstance(node[1], list) and node[1][:1] == [name]]
@@ -453,16 +464,17 @@ def validate(sources):
     protected(public, "(c2-checkpoint-load-stage-internal path policy)", 1,
               "(c2-checkpoint-load-staging-release-internal! stage)")
     protected(public, "(vector-set! stage-cell 0 stage)", 1)
-    protected(public, "(admit (vector-ref stage-cell 0) descriptors)", 1)
+    gate = "(not (eq? admission #t))"
+    protected(public, gate, 1)
     effects = [node for node, _ in events(public)]
     reconstruction = form("(c2-checkpoint-load-reconstruct-internal "
                           "(vector-ref stage-cell 0) 'checkpoint-load)")
-    need(effects.index(form("(admit (vector-ref stage-cell 0) descriptors)"))
-         < effects.index(reconstruction), "trusted load admission must precede reconstruction")
+    need(effects.index(form(gate)) < effects.index(reconstruction),
+         "trusted load admission must precede reconstruction")
     route = definition(sources, "c2-public-checkpoint-load")
     contains(route, "(c2-checkpoint-load-with-admission-internal path policy "
-                    "(lambda (stage descriptors) "
-                    "(c2-public-capability-admit-all report descriptors)))")
+                    "(stage descriptors) "
+                    "(c2-public-capability-admit-all report descriptors))")
     contains(public, "(c2-checkpoint-load-staging-dead-internal? (vector-ref stage-cell 0))")
     load = definition(sources, "c2-checkpoint-load-reconstruct-internal")
     guards = unique(load, "(vector-set! entry 2 'consuming)")[1]
