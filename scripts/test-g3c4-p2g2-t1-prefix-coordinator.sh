@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 verify_toolchain
-for command in ar cmp env git grep nm python3 sha256sum timeout; do
+for command in ar cmp env git grep nm python3 sha256sum sort timeout xargs; do
   require_command "$command"
 done
 cc= cxx=
@@ -12,14 +12,29 @@ resolve_provenance_compilers cc cxx \
 eshkol_runner="$(eshkol_build_dir)/eshkol-run"
 evidence="${1:-$(project_build_dir)/g3c4-p2g2-t1-prefix-coordinator-test}"
 mkdir -p "$evidence"
-python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-t1-prefix-coordinator.py" \
-  >"$evidence/static.stdout"
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
-  tests.q0.test_python_isolation >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
-bash "$PROJECT_ROOT/scripts/test-g3c4-p2g1-pending.sh" \
-  "$evidence/p2g1-predecessor" >"$evidence/p2g1-predecessor.stdout"
-bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-protected-scope.sh" \
-  "$evidence/protected-predecessor" >"$evidence/protected-predecessor.stdout"
+evidence="$(cd -- "$evidence" && pwd)"
+idle_input="${G3C4_P2G2_TERMINAL_IDLE_INPUT_WITNESS:-0}"
+[[ "$idle_input" == 0 || "$idle_input" == 1 ]] || exit 2
+if [[ "$idle_input" == 1 ]]; then
+  (cd "$PROJECT_ROOT" && python3 -B -m unittest tests.g3c4.test_p2_g2_terminal_idle_input) \
+    >"$evidence/static.stdout" 2>&1
+  (cd "$PROJECT_ROOT" && {
+    cat native/g3c4_p2g2_t1_prefix_coordinator_source_closure.txt
+    printf '%s\n' native/g3c4_p2g2_terminal_idle_input_extension.esk \
+      tests/c2/test_handler_order.py \
+      tests/g3c4/p2_g2_terminal_idle_input_test.esk \
+      tests/g3c4/test_p2_g2_terminal_idle_input.py
+  } | LC_ALL=C sort -u | xargs -d '\n' sha256sum --) >"$evidence/source.sha256"
+else
+  python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-t1-prefix-coordinator.py" \
+    >"$evidence/static.stdout"
+  PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v \
+    tests.q0.test_python_isolation >"$evidence/q0.stdout" 2>"$evidence/q0.stderr"
+  bash "$PROJECT_ROOT/scripts/test-g3c4-p2g1-pending.sh" \
+    "$evidence/p2g1-predecessor" >"$evidence/p2g1-predecessor.stdout"
+  bash "$PROJECT_ROOT/scripts/test-g3c4-p2g2-protected-scope.sh" \
+    "$evidence/protected-predecessor" >"$evidence/protected-predecessor.stdout"
+fi
 
 tmp="$(mktemp -d "$evidence/build.XXXXXX")"
 trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
@@ -111,7 +126,9 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
 WRAPPER
   chmod 0500 "$directory/cxx-wrap"
   local fixture prefix source expected log
-  for fixture in feature-off protected; do
+  local -a fixtures=(feature-off protected)
+  [[ "$idle_input" == 1 ]] && fixtures=(idle-input)
+  for fixture in "${fixtures[@]}"; do
     prefix=
     source="$PROJECT_ROOT/tests/g3c4/p2_g2_t1_prefix_coordinator_test.esk"
     expected='^G3-C4 P2/G2 T1 prefix PASS: checks=[1-9][0-9]* pending-only=1$'
@@ -119,6 +136,9 @@ WRAPPER
       prefix=feature-off-
       source="$PROJECT_ROOT/tests/g3c4/p2_g2_t1_prefix_coordinator_feature_off_test.esk"
       expected='^G3-C4 P2/G2 T1 prefix off PASS: checks=[1-9][0-9]*$'
+    elif [[ "$fixture" == idle-input ]]; then
+      source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_idle_input_test.esk"
+      expected='^P2/G2 terminal idle input PASS checks=[1-9][0-9]*$'
     fi
     mkdir -p "$directory/cache/$fixture"
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -147,26 +167,37 @@ WRAPPER
 }
 
 compile_mode normal
-python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_t1_prefix_oracle.py" \
-  "$evidence/normal-run.stdout" >"$evidence/oracle.stdout"
-ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-feature-off" \
-  >"$evidence/repeat-feature-off-run.stdout" \
-  2>"$evidence/repeat-feature-off-run.stderr"
-ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-protected" \
+repeat_fixture=protected
+if [[ "$idle_input" == 1 ]]; then
+  repeat_fixture=idle-input
+else
+  python3 "$PROJECT_ROOT/tests/g3c4/check_p2_g2_t1_prefix_oracle.py" \
+    "$evidence/normal-run.stdout" >"$evidence/oracle.stdout"
+  ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-feature-off" \
+    >"$evidence/repeat-feature-off-run.stdout" 2>"$evidence/repeat-feature-off-run.stderr"
+  test ! -s "$evidence/repeat-feature-off-run.stderr"
+fi
+ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-$repeat_fixture" \
   >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
-test ! -s "$evidence/repeat-feature-off-run.stderr"
 test ! -s "$evidence/repeat-run.stderr"
 compile_mode sanitize
-cmp "$evidence/normal-feature-off-run.stdout" \
-    "$evidence/repeat-feature-off-run.stdout"
-cmp "$evidence/normal-feature-off-run.stdout" \
-    "$evidence/sanitize-feature-off-run.stdout"
+if [[ "$idle_input" == 0 ]]; then
+  cmp "$evidence/normal-feature-off-run.stdout" \
+      "$evidence/repeat-feature-off-run.stdout"
+  cmp "$evidence/normal-feature-off-run.stdout" \
+      "$evidence/sanitize-feature-off-run.stdout"
+fi
 cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
 git -C "$PROJECT_ROOT" diff --check
 sha256sum "$PROJECT_ROOT/native/g3c4_p2g2_t1_prefix_coordinator_source_closure.txt" \
   >"$evidence/closure.sha256"
-cat "$evidence/static.stdout" "$evidence/oracle.stdout" \
-    "$evidence/normal-feature-off-run.stdout" \
-    "$evidence/normal-run.stdout"
+if [[ "$idle_input" == 1 ]]; then
+  (cd "$PROJECT_ROOT" && sha256sum -c --quiet "$evidence/source.sha256")
+  cat "$evidence/static.stdout" "$evidence/normal-run.stdout"
+else
+  cat "$evidence/static.stdout" "$evidence/oracle.stdout" \
+      "$evidence/normal-feature-off-run.stdout" \
+      "$evidence/normal-run.stdout"
+fi
 printf 'G3-C4 P2/G2 T1 prefix evidence: %s\n' "$evidence"

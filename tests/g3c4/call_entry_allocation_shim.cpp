@@ -33,6 +33,61 @@ static int handler_in_push;
 static int64_t handler_pushes;
 static void require(bool condition, const char *message);
 
+#ifdef ET_G3C4_TERMINAL_RETIREMENT_TESTING
+extern "C" void *__real_arena_allocate(arena_t *, size_t);
+extern "C" void *__real_arena_allocate_aligned(arena_t *, size_t, size_t);
+extern "C" eshkol_tensor_t *__real_arena_allocate_tensor_with_header(arena_t *);
+extern "C" int32_t __real_eshkol_region_write_barrier_checked_v1(
+    eshkol_tagged_value_t *, const void *, const eshkol_tagged_value_t *);
+static bool retirement_active;
+static int64_t retirement_barriers;
+
+static void retirement_no_allocate() {
+  if (retirement_active) std::_Exit(135);
+}
+
+extern "C" void et_g3c4_test_retirement_arm_v1() {
+  require(!retirement_active, "retirement arm idle");
+  retirement_barriers = 0;
+  retirement_active = true;
+}
+
+extern "C" int64_t et_g3c4_test_retirement_seal_v1() {
+  require(retirement_active, "retirement arm active");
+  retirement_active = false;
+  return retirement_barriers;
+}
+
+extern "C" void et_g3c4_test_retirement_flush_v1() {
+  std::fflush(stdout);
+}
+
+extern "C" void *__wrap_arena_allocate(arena_t *arena, size_t bytes) {
+  retirement_no_allocate();
+  return __real_arena_allocate(arena, bytes);
+}
+
+extern "C" void *__wrap_arena_allocate_aligned(
+    arena_t *arena, size_t bytes, size_t alignment) {
+  retirement_no_allocate();
+  return __real_arena_allocate_aligned(arena, bytes, alignment);
+}
+
+extern "C" eshkol_tensor_t *__wrap_arena_allocate_tensor_with_header(arena_t *arena) {
+  retirement_no_allocate();
+  return __real_arena_allocate_tensor_with_header(arena);
+}
+
+extern "C" int32_t __wrap_eshkol_region_write_barrier_checked_v1(
+    eshkol_tagged_value_t *out, const void *destination,
+    const eshkol_tagged_value_t *value) {
+  if (retirement_active) ++retirement_barriers;
+  return __real_eshkol_region_write_barrier_checked_v1(out, destination, value);
+}
+#else
+static void retirement_no_allocate() {}
+#endif
+
 #ifdef ET_G3C4_TERMINAL_EXTENT_TESTING
 // Test-only provenance. Capture the allocator request and its backing bump
 // allocation at construction, before an Eshkol record can expose a carrier.
@@ -175,12 +230,14 @@ static bool allocation_should_fail(int kind) {
 
 extern "C" void *__wrap_arena_allocate_vector_with_header(
     arena_t *arena, size_t capacity) {
+  retirement_no_allocate();
   return allocation_should_fail(1)
              ? nullptr
              : __real_arena_allocate_vector_with_header(arena, capacity);
 }
 
 extern "C" void *__wrap_arena_allocate_cons_with_header(arena_t *arena) {
+  retirement_no_allocate();
   return allocation_should_fail(2)
              ? nullptr
              : __real_arena_allocate_cons_with_header(arena);
@@ -188,6 +245,7 @@ extern "C" void *__wrap_arena_allocate_cons_with_header(arena_t *arena) {
 
 extern "C" void *__wrap_arena_allocate_with_header(
     arena_t *arena, size_t data_size, uint8_t subtype, uint8_t flags) {
+  retirement_no_allocate();
 #ifdef ET_G3C4_TERMINAL_EXTENT_TESTING
   if (extent_active && subtype == HEAP_SUBTYPE_BYTEVECTOR &&
       extent_count == extent_fail_index) {
@@ -257,6 +315,7 @@ extern "C" int64_t et_g3c4_call_entry_alloc_disarm_v1(void) {
 }
 
 extern "C" void *__wrap_malloc(size_t bytes) {
+  retirement_no_allocate();
   if (bytes == sizeof(eshkol_exception_handler_t) && handler_in_push) {
     if (handler_preparing) handler_fresh = 1;
     if (handler_armed && handler_pushes == 3) {

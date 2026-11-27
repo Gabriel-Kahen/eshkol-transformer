@@ -73,6 +73,8 @@ class TopologyTests(unittest.TestCase):
             (ENGINE, "A0_COMPILER_TIMEOUT_SECONDS: '60'", "A0_COMPILER_TIMEOUT_SECONDS: '600'"),
             (ENGINE, "P1_COMPILER_TIMEOUT_SECONDS: ${{ matrix.suite == 'parameter-state' && '1200' || '900' }}",
              "P1_COMPILER_TIMEOUT_SECONDS: '1200'"),
+            (ENGINE, "P1_TWO_COMPILERS: ${{ matrix.suite == 'parameter-state' && 'auto' || '0' }}",
+             "P1_TWO_COMPILERS: 'auto'"),
             (ENGINE, "P1_LSAN: '1'", "P1_LSAN: '0'"),
             (ENGINE, "L3S_ASAN_DETECT_LEAKS: '1'", "L3S_ASAN_DETECT_LEAKS: '0'"),
             (ENGINE, "G3S_ASAN_DETECT_LEAKS: '1'", "G3S_ASAN_DETECT_LEAKS: '0'"),
