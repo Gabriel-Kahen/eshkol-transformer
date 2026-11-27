@@ -25,6 +25,37 @@ The first/second raw[1] and staging[8], pending raw[2]/staging[16], and logical 
 
 The terminal anchor is separate from call/prefix anchor stacks and must survive their removal and `m3-call` return. A pending terminal anchor is rooted but cannot authorize reads or publication. It records the original output shell/entry/native handle, both original text carriers and their lengths, logical branch/count/cache expectations after authentication, and its own original record identity. No final RNG is available from the accepted Eshkol carriers before commit; leave it unknown here and obtain authentic final words only from a later native snapshot, not an invented precommit expectation. It does not retain an active-call/model/generator/tokenizer ownership edge after terminal success.
 
+### Idle owned-input prerequisite
+
+The source-private idle admission uses the existing fixed-budget native
+prefill preflight before creating a call or reserving output. The original
+P2 input is an owned `[1,2]` i64 copy created through the admitted
+same-aggregate T1 constructor. The generator's tokenizer is authenticated
+through the baseline raw V256 registry. Preflight captures the exact current
+registered generator, eval model and their native handles, tokenizer shell,
+entry and core, policy identity and values, and the owned input shell, entry
+and native handle. The returned lexical verifier takes the intended generator
+and input again after any unpublished preparation. It rechecks the same
+identities and runs native idle preflight before returning a fresh projection
+of the captured handles. The later coordinator must call it while idle.
+
+The native preflight authenticates its live idle generator, its internal
+sealed model owner, the live registered input and the fixed P2/budget-two
+tuple. The borrowed T1 source is copied at input construction, so the
+resulting owner has no source T1 shell or tokenizer field. The native
+preflight also receives no Scheme model or policy handle. The Scheme
+reference checks establish drift from the captured registry state. They
+supply no independent pre-construction provenance or call-bound release
+authority.
+
+The opt-in `G3C4_P2G2_TERMINAL_IDLE_INPUT_WITNESS=1` mode of
+`scripts/test-g3c4-p2g2-t1-prefix-coordinator.sh` reuses the admitted native
+aggregate and queues normal, repeat and sanitizer qualification. Its fixture
+tests exact positive identities, same-content copies, genuine foreign
+registrations, stage drift, released owners, and idle native model, RNG,
+binding and cache state. Source checks pass. Aggregate execution remains
+pending.
+
 ## Abort-only first-enrollment witness
 
 The add-only `g3c4-with-p2g2-first-enrollment-probe` is a development source
@@ -57,8 +88,9 @@ The admitted abort-only pending-anchor and carrier scripts remain predecessor
 gates. Compiled first-enrollment evidence is pending.
 
 The fixture holder is development-only and proves I1 retry for this
-reservation. Actual owned-input preflight, production call-bound I1/A2 release
-authority, terminal close, detached readers, and dispatch remain later gates.
+reservation. Integrating the idle owned-input prerequisite into reservation,
+production call-bound I1/A2 release authority, terminal close, detached
+readers, and dispatch remain later gates.
 
 ## Constructor retirement prerequisite
 

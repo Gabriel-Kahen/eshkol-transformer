@@ -1,0 +1,57 @@
+;;; Private pre-reservation admission. Load after the admitted P2 owned-input
+;;; and idle native preflight bindings. No call is acquired by this extension.
+(define (g3c4-p2g2-terminal-idle-input-preflight generator input operation)
+  (if (not (g3c4-call-tuple? 2 2))
+      (g3c4-fail 'invalid-argument operation "P2/G2 terminal input is disabled"))
+  (let* ((generator-entry (g3c4-generator-entry-call-ready generator operation))
+         (generator-native (vector-ref generator-entry 3))
+         (model-entry (vector-ref generator-entry 5))
+         (model (vector-ref model-entry 0))
+         (model-native (vector-ref model-entry 3))
+         (tokenizer (vector-ref generator-entry 6))
+         (tokenizer-entry
+           (g3c4-baseline-tokenizer-entry
+             tokenizer operation 'invalid-state 'invalid-state))
+         (core (car (cdr tokenizer-entry)))
+         (policy (vector-ref generator-entry 7))
+         (input-entry (g3c4-input-entry-live input operation))
+         (input-native (vector-ref input-entry 3)))
+    (define (native-idle!)
+      (g3c4-native-check
+        (g3c4-p2g2-native-prefill-preflight generator-native input-native 2)
+        operation))
+    (if (not (= (vector-ref policy 5) 2))
+        (g3c4-fail 'invalid-argument operation
+                   "P2/G2 terminal input needs exact budget two"))
+    (native-idle!)
+    (let ((policy-values (vector-copy policy)))
+      ;; A prospective caller can prepare unpublished owners, then recheck
+      ;; before native acquire. These lexical identities are the authority.
+      (lambda (current-generator current-input)
+        (if (not (and (g3c4-call-tuple? 2 2)
+                      (eq? current-generator generator)
+                      (eq? current-input input)
+                      (eq? (g3c4-generator-entry-call-ready
+                             current-generator operation) generator-entry)
+                      (eq? (vector-ref generator-entry 3) generator-native)
+                      (eq? (vector-ref generator-entry 5) model-entry)
+                      (eq? (vector-ref model-entry 0) model)
+                      (eq? (vector-ref model-entry 3) model-native)
+                      (eq? (vector-ref generator-entry 6) tokenizer)
+                      (eq? (g3c4-baseline-tokenizer-entry
+                             tokenizer operation 'invalid-state 'invalid-state)
+                           tokenizer-entry)
+                      (eq? (car (cdr tokenizer-entry)) core)
+                      (eq? (vector-ref generator-entry 7) policy)
+                      (equal? policy policy-values)
+                      (eq? (g3c4-input-entry-live
+                             current-input operation) input-entry)
+                      (eq? (vector-ref input-entry 3) input-native)))
+            (g3c4-fail 'invalid-state operation
+                       "P2/G2 terminal idle identities changed"))
+        (native-idle!)
+        ;; Return the original handles only after both registries pass. A new
+        ;; projection cannot rewrite the lexical identities on a later check.
+        (vector generator generator-entry generator-native
+                model model-entry model-native tokenizer tokenizer-entry core
+                policy input input-entry input-native)))))

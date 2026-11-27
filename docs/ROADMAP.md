@@ -3675,7 +3675,11 @@ publication, public G2 and continuation remain pending.
   unselected original carriers while preserving selected text identity and
   bytes. A small pinned harness passes both branches and the fail-stop cases
   with poisoned regions. Full aggregate emitted-code and sanitizer evidence is
-  queued. Same-call terminal publication, detached Eshkol output, public G2,
+  queued. The independent
+  [idle owned-input prerequisite](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#idle-owned-input-prerequisite)
+  rechecks the exact registered owned prompt, raw T1 tokenizer, eval model and
+  budget-two generator while idle. Source checks pass and the aggregate gate
+  is queued. Same-call terminal publication, detached Eshkol output, public G2,
   and CLI adoption follow separately.
 
 - **Private P2/G2 terminal pending-allocation precursor:** The
