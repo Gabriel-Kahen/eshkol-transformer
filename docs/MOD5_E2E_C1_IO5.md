@@ -104,8 +104,8 @@ compiled Eshkol resolver and loads the serialized T1 identity through the
 trusted tokenizer loader. It checks all six native D2 input, target and mask
 views, compares the seven real cursor snapshots against the independent D2
 oracle, and seeks a separately opened reader to the two-update split for
-four byte-exact cursor and row replays. This input gate does not train or
-restore a C2 owner. Compiled execution is pending.
+four byte-exact cursor and row replays. Compiled input verification, training
+and C2 owner restoration remain pending.
 
 ### Order of admission and evidence
 
