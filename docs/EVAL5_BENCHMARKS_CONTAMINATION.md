@@ -363,13 +363,9 @@ produce status `ET_EVAL5_ERR_CONTAMINATED` (`-7`), two exact and n-gram
 matches, all 14 windows matched, and matching indices `0,1`. That control
 returns without loading C1, computing logits, or writing a manifest.
 
-The bridge's direct C11 and ASan/UBSan tests and the generated-source and
-comparator checks pass locally. The source-only check orders the audit before
-C1 load. This is not yet a compiled Eshkol audit result. The next gate is a
-pinned, resource-coordinated AOT replay of the successor source, including
-the clean and rejected control outputs. A fixture-only canonical manifest
-format/parse round trip with live metrics and owner-sourced identity digests
-remains separate; neither path publishes an EVAL5 manifest or external claim.
+The audit bridge passed direct C11 and ASan/UBSan tests. Generated-source
+checks enforce audit before C1 load. The compiled composition below runs the
+same audit and retains the canonical manifest in the test evidence stream.
 
 ### In-memory V=256 manifest round-trip candidate
 
@@ -400,8 +396,15 @@ and `MANIFEST_END` on stdout and retained only in the test evidence stream.
 The comparator independently checks canonical field order, owner-sourced
 digests, exact binary64 metric bits, and final SHA-256. The contaminated
 control and T1/D1/C1 identity failures have no manifest-output call. This
-source has only light C/Python/source checks so far, including byte-for-byte
-parity between C-formatted text and the independent Python fixture comparator;
-a pinned AOT run and
-independent review are required before claiming a live compiled manifest
-round trip. No external publication is added.
+source at `b0593e4b` on tree `27b4c78d` passed a network-disabled Ubuntu
+22.04 and Clang/LLVM 21.1.8 AOT run using the pinned Eshkol compiler. The
+clean audit counted two documents and 14 windows with zero matches. Live
+LM and MC scores agreed with the reference within `6.982e-09` absolute error.
+The compiled manifest matched the independent canonical comparator. The
+contaminated control matched all 14 windows and emitted only its audit
+record. The wrong T1 owner, D1 split, and C1 shape and digest cases exited
+with status 2 before scoring or manifest output. The test-only manifest
+is retained in the local evidence stream.
+
+The sealed receipt is
+`/home/gabe/.codex/evidence/eshkol-eval5-live-manifest-20261127.LMcYvd/live.SHA256SUMS`.
