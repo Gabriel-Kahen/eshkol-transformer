@@ -4,6 +4,20 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
 
 ## Current integration
 
+- PR #265's installed CLI3 artifact `15173825352` from run `45941244549`,
+  attempt 1, passed offline Ubuntu 22.04 x86-64 replay on exact accepted tree
+  `e0dae2e168700c2416a8f7f32efd5f6801f9fe0c`. The executable SHA-256 is
+  `cd1360b45ff7919eecba2e83b96167768d4cdd42fef115967f8865f0c2429611`.
+  The uninterrupted, 1+3, and chained one-update paths produced the same
+  four-update C2 checkpoint, SHA-256
+  `67ee14d747dfbaafeba1218eb03522b839c3d3339cd07290dc54eeefe12846ab`.
+  Five installed D1 and ten installed DATA4 tests passed. The independent
+  replay omitted three DATA4 fault-injection cases and covers the fixed
+  CPU-f32, context-two, byte-tokenizer profile with one-byte generation.
+  [Hosted CLI3 job](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941244549/job/140315873781)
+  [Artifact](https://github.com/Gabriel-Kahen/eshkol-transformer/actions/runs/45941244549/artifacts/15173825352)
+  [Replay record](CLI3_FIXED_BINARY_ARTIFACT.md#current-accepted-scope)
+
 - The [proposed V=256 MOD5 C2 gate](MOD5_E2E_C1_IO5.md#proposed-width-16-c2-gate)
   depends on exact native storage and K2 admission for `[256,16]` and a
   tied and untied C2 witness with matching T1, D2 and X1 identities.
