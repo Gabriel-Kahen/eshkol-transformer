@@ -3647,7 +3647,13 @@ publication, public G2 and continuation remain pending.
   [first-enrollment witness](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#abort-only-first-enrollment-witness)
   binds the original auxiliary pair to one entry and exercises pre-sampling
   unwind and fixture-held I1 retry. Source checks pass and compiled qualification
-  is pending. Same-call terminal publication, detached Eshkol output, public G2,
+  is pending. The source-private
+  [constructor retirement prerequisite](g3/G3_C4_P2_G2_ESHKOL_TERMINAL_CLOSE_CONTRACT.md#constructor-retirement-prerequisite)
+  captures the exact rooted successor and consumes a one-use ticket to scrub
+  unselected original carriers while preserving selected text identity and
+  bytes. A small pinned harness passes both branches and the fail-stop cases
+  with poisoned regions. Full aggregate emitted-code and sanitizer evidence is
+  queued. Same-call terminal publication, detached Eshkol output, public G2,
   and CLI adoption follow separately.
 
 - **Private P2/G2 terminal pending-allocation precursor:** The

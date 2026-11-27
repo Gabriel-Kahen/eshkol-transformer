@@ -12,19 +12,28 @@ resolve_provenance_compilers cc cxx \
 eshkol_runner="$(eshkol_build_dir)/eshkol-run"
 evidence="${1:-$(project_build_dir)/g3c4-p2g2-terminal-pending-anchor-test}"
 extent_witness="${G3C4_TERMINAL_EXTENT_WITNESS:-0}"
-[[ "$extent_witness" == 0 || "$extent_witness" == 1 ]] || exit 2
+retirement_witness="${G3C4_TERMINAL_RETIREMENT_WITNESS:-0}"
+[[ "$extent_witness:$retirement_witness" == 0:0 ||
+   "$extent_witness:$retirement_witness" == 0:1 ||
+   "$extent_witness:$retirement_witness" == 1:0 ]] || exit 2
 mkdir -p "$evidence"
 evidence="$(cd -- "$evidence" && pwd)"
+retirement_checker="$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-carrier-retirement.py"
 python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-pending-anchor.py" \
   >"$evidence/static.stdout"
-# Both modes compile the same native inputs. Verify the shared transitive
-# closure even when only the pending and feature-off Eshkol fixtures run.
+# All fixture modes share these native inputs and the same transitive closure.
 python3 "$PROJECT_ROOT/scripts/check-g3c4-p2g2-terminal-carriers.py" \
   >>"$evidence/static.stdout"
 closure="$PROJECT_ROOT/native/g3c4_p2g2_terminal_carriers_source_closure.txt"
 sha256sum "$closure" >"$evidence/closure.sha256"
 (cd "$PROJECT_ROOT" && xargs -d '\n' sha256sum -- <"$closure") \
   >"$evidence/source.sha256"
+if [[ "$retirement_witness" == 1 ]]; then
+  python3 -B "$retirement_checker" >>"$evidence/static.stdout"
+  retirement_closure="$PROJECT_ROOT/native/g3c4_p2g2_terminal_carrier_retirement_source_closure.txt"
+  (cd "$PROJECT_ROOT" && xargs -d '\n' sha256sum -- <"$retirement_closure") \
+    >>"$evidence/source.sha256"
+fi
 
 tmp="$(mktemp -d "$evidence/build.XXXXXX")"
 trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
@@ -32,11 +41,19 @@ trap 'status=$?; if (( status == 0 )); then rm -rf -- "$tmp"; else
 
 compile_mode() {
   local mode=$1 directory="$tmp/$1" source
-  local -a optimization=(-O2) runtime=(env) extent_defines=()
-  local extent_link=
+  local -a optimization=(-O2) runtime=(env) witness_defines=()
+  local witness_link=
   if [[ "$extent_witness" == 1 ]]; then
-    extent_defines=(-DET_G3C4_TERMINAL_EXTENT_TESTING)
-    extent_link=-Wl,--wrap=arena_allocate_aligned
+    witness_defines=(-DET_G3C4_TERMINAL_EXTENT_TESTING)
+    witness_link=-Wl,--wrap=arena_allocate_aligned
+  fi
+  local -a emission=()
+  if [[ "$retirement_witness" == 1 ]]; then
+    witness_defines=(-DET_G3C4_TERMINAL_RETIREMENT_TESTING)
+    witness_link='-Wl,--wrap=arena_allocate_aligned -Wl,--wrap=arena_allocate
+      -Wl,--wrap=arena_allocate_tensor_with_header
+      -Wl,--wrap=eshkol_region_write_barrier_checked_v1'
+    emission=(--dump-ir)
   fi
   if [[ "$mode" == sanitize ]]; then
     optimization=(-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -64,7 +81,7 @@ compile_mode() {
     -o "$directory/objects/i2_native_helpers.o"
   "$cxx" -std=c++17 -Wall -Wextra -Werror -Wpedantic -fPIC \
     -fvisibility=hidden -fno-common -fstack-protector-all \
-    "${optimization[@]}" "${extent_defines[@]}" -I "$(eshkol_source_dir)/inc" \
+    "${optimization[@]}" "${witness_defines[@]}" -I "$(eshkol_source_dir)/inc" \
     -I "$(eshkol_source_dir)/lib/core" \
     -c "$PROJECT_ROOT/tests/g3c4/call_entry_allocation_shim.cpp" \
     -o "$directory/objects/call_entry_allocation_shim.o"
@@ -100,7 +117,7 @@ exec $(printf '%q' "$cxx") $sanitizer_link "\$@" \\
   -Wl,--wrap=arena_allocate_vector_with_header \\
   -Wl,--wrap=arena_allocate_with_header \\
   -Wl,--wrap=arena_allocate_cons_with_header \\
-  $extent_link \\
+  $witness_link \\
   -Wl,--wrap=malloc -Wl,--wrap=eshkol_push_exception_handler \\
   -Wl,--wrap=et_kernel_runtime_dispatch
 WRAPPER
@@ -108,6 +125,7 @@ WRAPPER
   local fixture prefix source expected log
   local -a fixtures=(feature-off protected)
   [[ "$extent_witness" == 1 ]] && fixtures=(extent)
+  [[ "$retirement_witness" == 1 ]] && fixtures=(retirement)
   for fixture in "${fixtures[@]}"; do
     prefix=
     source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_pending_anchor_test.esk"
@@ -119,6 +137,9 @@ WRAPPER
     elif [[ "$fixture" == extent ]]; then
       source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_carriers_test.esk"
       expected='^G3-C4 P2/G2 terminal carriers PASS: checks=[1-9][0-9]*$'
+    elif [[ "$fixture" == retirement ]]; then
+      source="$PROJECT_ROOT/tests/g3c4/p2_g2_terminal_carrier_retirement_test.esk"
+      expected='^P2/G2 retirement PASS checks=339$'
     fi
     mkdir -p "$directory/cache/$fixture"
     env -u ESHKOL_PATH -u ESHKOL_JIT_CACHE_DIR ESHKOL_JIT_CACHE=0 \
@@ -126,7 +147,7 @@ WRAPPER
       ESHKOL_CXX_COMPILER="$directory/cxx-wrap" \
       ESHKOL_LIB_DIR="$PROJECT_ROOT/lib" \
       timeout --foreground --signal=TERM --kill-after=5s 600s \
-      "$eshkol_runner" --strict-types --optimize 0 --no-stdlib \
+      "$eshkol_runner" --strict-types --optimize 0 --no-stdlib "${emission[@]}" \
       -I "$PROJECT_ROOT/internal/p1/lib" -I "$PROJECT_ROOT/internal/c1/lib" \
       -I "$PROJECT_ROOT/internal/t1/lib" -I "$PROJECT_ROOT/src" \
       -I "$PROJECT_ROOT/lib" -I "$PROJECT_ROOT/native" \
@@ -134,6 +155,11 @@ WRAPPER
       "$source" -o "$directory/p2g2-$fixture" \
       >"$directory/${prefix}compile.stdout" \
       2>"$directory/${prefix}compile.stderr"
+    if [[ "$fixture" == retirement ]]; then
+      python3 -B "$retirement_checker" "$directory/p2g2-retirement.ll" \
+        >"$evidence/$mode-emitted.stdout"
+      sha256sum "$directory/p2g2-retirement.ll" >"$evidence/$mode-emitted.sha256"
+    fi
     "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
       timeout --foreground --signal=TERM --kill-after=5s 120s \
       "$directory/p2g2-$fixture" >"$directory/${prefix}run.stdout" \
@@ -151,24 +177,35 @@ WRAPPER
       >"$evidence/$mode-allocation-classification.stdout"
   else
     local fault status log_prefix
-    for fault in return unwind inherited-abort; do
+    local failstop_fixture=protected
+    local -a faults=(return unwind inherited-abort)
+    if [[ "$retirement_witness" == 1 ]]; then
+      failstop_fixture=retirement
+      faults=(repeat stale expired unwind)
+    fi
+    for fault in "${faults[@]}"; do
       log_prefix="$evidence/$mode-failstop-$fault"
       status=0
       "${runtime[@]}" ESHKOL_ARENA_POISON=1 \
         timeout --foreground --signal=TERM --kill-after=5s 120s \
-        "$directory/p2g2-protected" "$fault" >"$log_prefix.stdout" \
+        "$directory/p2g2-$failstop_fixture" "$fault" >"$log_prefix.stdout" \
         2>"$log_prefix.stderr" || status=$?
       printf '%s\n' "$status" >"$log_prefix.exit"
       [[ "$status" == 134 ]]
-      grep -Fx "P2/G2 terminal cleanup fault injected: $fault" \
-        "$log_prefix.stdout" >/dev/null
+      if [[ "$retirement_witness" == 1 ]]; then
+        grep -Fx "P2/G2 retirement intentional $fault activation" \
+          "$log_prefix.stdout" >/dev/null
+      else
+        grep -Fx "P2/G2 terminal cleanup fault injected: $fault" \
+          "$log_prefix.stdout" >/dev/null
+      fi
       test ! -s "$log_prefix.stderr"
     done
   fi
 }
 
 compile_mode normal
-if [[ "$extent_witness" == 0 ]]; then
+if [[ "$extent_witness:$retirement_witness" == 0:0 ]]; then
   ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-feature-off" \
     >"$evidence/repeat-feature-off-run.stdout" \
     2>"$evidence/repeat-feature-off-run.stderr"
@@ -176,11 +213,12 @@ if [[ "$extent_witness" == 0 ]]; then
 fi
 repeat_fixture=protected
 [[ "$extent_witness" == 1 ]] && repeat_fixture=extent
+[[ "$retirement_witness" == 1 ]] && repeat_fixture=retirement
 ESHKOL_ARENA_POISON=1 "$tmp/normal/p2g2-$repeat_fixture" \
   >"$evidence/repeat-run.stdout" 2>"$evidence/repeat-run.stderr"
 test ! -s "$evidence/repeat-run.stderr"
 compile_mode sanitize
-if [[ "$extent_witness" == 0 ]]; then
+if [[ "$extent_witness:$retirement_witness" == 0:0 ]]; then
   cmp "$evidence/normal-feature-off-run.stdout" \
       "$evidence/repeat-feature-off-run.stdout"
   cmp "$evidence/normal-feature-off-run.stdout" \
@@ -190,7 +228,7 @@ cmp "$evidence/normal-run.stdout" "$evidence/repeat-run.stdout"
 cmp "$evidence/normal-run.stdout" "$evidence/sanitize-run.stdout"
 git -C "$PROJECT_ROOT" diff --check
 (cd "$PROJECT_ROOT" && sha256sum -c --quiet "$evidence/source.sha256")
-if [[ "$extent_witness" == 0 ]]; then
+if [[ "$extent_witness:$retirement_witness" == 0:0 ]]; then
   cat "$evidence/static.stdout" "$evidence/normal-feature-off-run.stdout" \
       "$evidence/normal-run.stdout"
 else
