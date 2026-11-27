@@ -38,7 +38,7 @@ def check():
     require(source.count(symbol) == 1 and header.count(symbol) == 1,
             "source-private prefill boundary changed")
     start = source.index(f"int64_t {symbol}")
-    end = source.index("\n#endif", start)
+    end = source.index("\n}\n", start)
     body = source[start:end]
     ordered(body, [
         "et_n2_kernel_provider_v1()",
