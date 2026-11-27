@@ -58,6 +58,10 @@ Status values: `planned`, `active`, `blocked`, `review`, `complete`.
   dispatch. Capability-driven shape dispatch requires the private build flag.
   Default K2 rejects those requests and the candidate descriptor. The K2
   profile contract and supported C2 LOAD/SAVE qualification remain open.
+- The [width-16 V=256 storage-copy candidate](MOD5_E2E_C1_IO5.md#v256-storage-copy-candidate)
+  adds the exact `[256,16]` head and embedding row through a separate hidden
+  I2 1.3 descriptor. The pinned native replay covers the synthetic bit-copy
+  contract and exact reports. K2 profile admission remains open.
 - [PR #251](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/251)
   merged the lossless MOD5 model mapping and live C1 interchange witness,
   the downloaded CLI3 artifact runner, and #249's three development witnesses
@@ -1326,8 +1330,15 @@ each I2 hook in both ELF objects. The exact emitted lists now pin 175 normal
 undefined symbols, 170 sanitizer noninstrumentation imports and 58 sanitizer
 instrumentation imports. The sealed discovery receipt SHA-256 is
 `46741a0cea7960df13369c4e35f543e1006a250a2d06e8384030bc5011a1f989`.
-Pinned Q0 generation and normal, repeat, poisoned and sanitizer runtime
-qualification remain pending.
+The supported `b1d2bf62` gate reached pinned Q0 and stopped at the first
+oracle generation because the accuracy check used the final corpus name for
+every case. The oracle now checks each corpus against its own controlled
+targets. Two pinned Python 3.14.6 and PyTorch 2.13.0+cpu generations produced
+byte-identical validated bundles and preserved the original D1 corpus files.
+The all-correct, all-wrong and mixed f32 accuracy words are `3f800000`,
+`00000000` and `3f19999a`, respectively, with D2 masks `11`, `11`, `10` in each
+case. Normal, repeat, poisoned and sanitizer runtime qualification remain
+pending.
 
 A bounded N3 target-offset source extension adds two generated, checksummed
 three-byte D1 corpora, `(3,197,0)` and `(3,197,7)`. Their packed D2 row has
@@ -3706,7 +3717,7 @@ mapping, explicit F32 fallback, and fresh CPU F32 scoring after C1 import.
 | CD5 | [Bounded constrained decoding](CONSTRAINED_DECODING_FSA.md) | T2/G3 contracts for dispatch | Reviewed byte DFA, token-mask and flat JSON schema leaf is included unchanged; PR #246 admitted the standalone gate; live dispatch remains open. | active |
 | BCD5 | Development-only beam + DFA composition witnesses | BEAM5, CD5 | PR #251 admitted `scripts/test-beam-cd-composition.sh`, which checks supplied logits, accepting-only EOS, nonfinite rejection and an empty vocabulary path. The opt-in [live CPU witness](CONSTRAINED_BEAM_STEP.md#live-cpu-witness) feeds `[2,3,4]` AC4/MOD5 forwards and a native 260-ID T2 vocabulary into the coordinator. It checks byte parity with manual composition after each step, an independent score oracle, split and multi-byte paths to EOS, and atomic rejection for a nonfinite row or EOS suppression. Incomplete budget exhaustion publishes no generation. Public model/tokenizer dispatch remains open. | complete |
 | BCD5 native step | [Opt-in native constrained beam step](CONSTRAINED_BEAM_STEP.md) | BEAM5, CD5 | PR #265 admitted the native leaf. It advances a caller-owned beam with dense CPU F32 candidate rows, replays generated histories through CD5, and uses the existing BEAM5 scoring and lifecycle. The pinned `make test-constrained-beam` gate covers optimized and sanitized native execution. Public model/tokenizer dispatch remains open. | active |
-| PKV5 | [Paged KV cache](PAGED_KV_CACHE.md) | A2 | PR #246 admitted the standalone ownership, copy-on-write, and AOT gate. The opt-in context-bound native candidate binds prefix keys to caller-supplied model, tokenizer, and KV configuration fingerprints in a single-producer pool. The opt-in [fixed CPU model witness](PAGED_KV_CACHE.md#fixed-model-attention-witness) passed 2,048 logit comparisons against dense replay. Persistent generation cache ownership remains open. | active |
+| PKV5 | [Paged KV cache](PAGED_KV_CACHE.md) | A2 | PR #246 admitted the standalone ownership, copy-on-write, and AOT gate. The opt-in context-bound native candidate binds prefix keys to caller-supplied model, tokenizer, and KV configuration fingerprints in a single-producer pool. The opt-in [fixed CPU model witness](PAGED_KV_CACHE.md#fixed-model-attention-witness) passed 2,048 logit comparisons against dense replay. The [live context-bound prefix reuse candidate](PAGED_KV_CACHE.md#live-context-bound-prefix-reuse) checks one physical prefix hit with zero copies, exact fresh paged parity, dense bounds, six context rejections, and full cleanup on the pinned native gate. Independent review and admission are pending. Persistent generation cache ownership remains open. | active |
 | SPEC5 | [Lossless speculative decoding](SPECULATIVE_DECODING.md) | Generation contracts | Reviewed standalone RNG/output-span leaf is included unchanged; PR #246 admitted the standalone gate. The bounded private witness exercises live target/draft forwards. Public generation remains open. | active |
 | SPEC5/PKV5 witness | [Development-only verifier/paged-cache composition](SPEC_PAGED_COMPOSITION_WITNESS.md) | SPEC5, PKV5 | Mock logits and K/V drive accepted and rejected greedy/seeded suffixes through actual paged truncate, correction/bonus append, uninterrupted-control parity and physical refcount accounting. The optional pinned Ubuntu 22.04/Clang 21 `make test-spec-paged-witness` gate passed optimized and ASan/UBSan/LSan cases; independent source/test review found no blocker. PR #251 admitted the bounded development witness. Live model forward and public generation remain open. | complete |
 | SPEC5 live model witness | [Greedy private G3-C4 model and paged KV composition](SPEC_LIVE_MODEL_WITNESS.md) | SPEC5, PKV5, G3-C4 token forward | PR #264 admitted the private witness. The bridge exercises the #265 coordinator with live draft/target K/V and target verification rows. The optional pinned Ubuntu 22.04.5/Clang 21.1.8 gate covers correction, bonus, continuation, and callback failure/retry with bitwise A2 and full-prefix parity. Bridge review and admission are pending. Public generation and direct paged attention remain open. | active |

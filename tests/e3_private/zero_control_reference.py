@@ -64,6 +64,12 @@ def create(output: Path) -> dict[str, object]:
         if observed_targets != targets:
             raise AssertionError("controlled active D2 target differs")
         synthetic, mathematical, loss_word = e3._synthetic_case(rows, parameters)
+        if any(word != "00000000" for row in synthetic["batches"]
+               for word in row["logits_f32"]):
+            raise AssertionError(f"{name}: independent zero M3 forward did not yield zero logits")
+        expected_accuracy = sum(value == 0 for value in targets) / len(targets)
+        if synthetic["final"]["metrics_f32"][3] != f32_bits(expected_accuracy):
+            raise AssertionError(f"{name}: independent zero M3 tie/correctness outcome changed")
         cases.append({"name": name, "corpus": {"name": name, "batches": rows},
                       "synthetic": synthetic, "mathematical": mathematical,
                       "mathematical_loss_f64": loss_word})
@@ -91,14 +97,6 @@ def create(output: Path) -> dict[str, object]:
         },
     }
     e3.validate_bundle(bundle)
-    for case in cases:
-        if any(word != "00000000" for row in case["synthetic"]["batches"]
-               for word in row["logits_f32"]):
-            raise AssertionError("independent zero M3 forward did not yield zero logits")
-        expected_accuracy = sum(value == 0 for value in
-                                next(row for row in CASES if row[0] == name)[2]) / 5
-        if case["synthetic"]["final"]["metrics_f32"][3] != f32_bits(expected_accuracy):
-            raise AssertionError("independent zero M3 tie/correctness outcome changed")
     (output / "reference.json").write_bytes(encode(bundle))
     record = {"kind": "e3-zero-control-corpora-v1", "model_parameter_sha256":
               bundle["model"]["parameter_f32_sha256"], "cases": physical}

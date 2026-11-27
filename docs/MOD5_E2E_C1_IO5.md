@@ -49,15 +49,14 @@ and provider identity.
 
 ## Proposed width-16 C2 gate
 
-The source baseline is `fa746a626`. [PR #266](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/266)
-at `9060e5ac` contains the native storage proof for the V=16 roster above.
-The private `et_i2_private_mod5_width16_storage_provider_v1()` returns I2 1.2
-with evidence
-`I2:bounded-exact-f32-storage.copy-v3` and adds `[8,16]`, `[16,16]`, `[16,32]`
-and `[32,16]` to the I2 1.1 copy rows. [PR #265](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/265)
-at `973db232` exercises C2 with nine distinct width-four parameters and
-18 moments through the existing K2 profile. These are pending predecessor
-receipts. This section proposes the next gates.
+[PR #266](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/266)
+merged the V=16 native storage proof as `7f8933034`. It admits the private
+I2 1.2 descriptor and its `[8,16]`, `[16,16]`, `[16,32]` and `[32,16]`
+copy rows. [PR #265](https://github.com/Gabriel-Kahen/eshkol-transformer/pull/265)
+merged the separate width-four C2 witness as `e34a6a8e3`, exercising nine
+parameters and 18 moments through the standard K2 profile. The
+[V=256 storage-copy candidate](#v256-storage-copy-candidate) passed focused
+native tests. Opt-in K2 work follows its admission.
 
 K2 admission alone cannot qualify a coherent C2 image for the V=16 decoder.
 [`c2-d2-cursor-pair-internal`](../native/c2_d2_cursor_pair_extension.esk)
@@ -297,3 +296,27 @@ and optimizer descriptor. The supported C2 witness must prove tied and untied
 LOAD, byte-identical SAVE, owner release, and early rejection of a forged or
 stale report, a report from the default profile, and unlisted shapes. Native
 storage admission alone does not establish optimizer or training resume.
+
+### V=256 storage-copy candidate
+
+The [V=256 scoring fixture](EVAL5_BENCHMARKS_CONTAMINATION.md#measured-v256-compiled-scoring-witness)
+keeps this decoder's width-16 block and uses the canonical T1 byte tokenizer.
+Its head and embedding both have shape `[256,16]`. The private flag
+`ET_I2_PRIVATE_MOD5_WIDTH16_V256_STORAGE_COPY` adds that exact row through
+`et_i2_private_mod5_width16_v256_storage_provider_v1()`. The hidden accessor
+returns `eshkol-transformer-f32` version `1.3`, evidence
+`I2:mod5-v256-exact-f32-storage.copy-v1`, and K1 ABI 1.0. Its deterministic
+`tensor.f32/storage.copy` row includes the complete I2 1.2 shape set plus
+`[256,16]`. The I2 1.1 and V=16 I2 1.2 descriptors both reject the added
+shape, including when built in the same object as I2 1.3.
+
+Run `CC=clang-21 bash scripts/test-mod5-width16-storage-copy.sh --v256
+[evidence-directory]` on the supported Ubuntu 22.04 x86-64 toolchain. The gate
+checks the generated V=256 roster, all admitted rows, byte-exact copies and
+untouched buffers on transposed, neighboring and equal-byte mismatched shapes.
+It pins standalone object symbols and rejects both opt-in descriptors at the
+default K2 audit, including relabeled variants. The optimized, repeated and
+ASan/UBSan/LSan V=256 K1 reports are 3,225 bytes with SHA-256
+`50e09d8e0bf757492e1a0c10aacaf58ba124d18f6e48b65cf3f21f41dd288ab6`.
+The combined build also checks the original I2 1.1 and I2 1.2 report hashes.
+Explicit K2 profile admission and tied/untied C2 LOAD/SAVE remain separate gates.
